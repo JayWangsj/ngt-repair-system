@@ -6,6 +6,11 @@ export function localeOf(value: unknown): Locale {
 }
 export const messages = { it, zh };
 const errors: Record<string, string> = {
+  "Telefoni duplicati.": "电话号码不能重复。",
+  "Massimo tre telefoni per cliente.": "每位客户最多三个电话号码。",
+  "Telefono già associato a un altro cliente.": "该电话号码已属于另一位客户。",
+  "Cliente eliminato: usa un altro telefono.":
+    "该号码属于已删除的客户，请先核对客户记录。",
   "Prezzi diversi per lo stesso intervento: distingui la specifica del ricambio.":
     "同一维修项目报价不同，请在项目名称中区分配件规格。",
   "Controlla i campi obbligatori e gli importi.": "请检查必填项和金额。",

@@ -14,6 +14,8 @@ import {
   type Actor,
 } from "./domain";
 import {
+  customerInput,
+  deviceInput,
   editInput,
   itemInput,
   quoteInput,
@@ -170,8 +172,13 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
       return tx.workOrder.findUniqueOrThrow({
         where: { id: previous.entityId },
       });
-    let customer = await tx.customer.findUnique({
-      where: { phone: data.phone },
+    let customer = await tx.customer.findFirst({
+      where: {
+        OR: [
+          { phone: data.phone },
+          { phones: { some: { phone: data.phone } } },
+        ],
+      },
     });
     if (!customer) {
       customer = await tx.customer.create({
@@ -188,9 +195,22 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
         data: { consentAt: new Date(), consentVersion: "1.0" },
       });
     }
+    if (customer.deletedAt)
+      throw new BusinessError("Cliente eliminato: usa un altro telefono.");
+    await syncPhones(
+      tx,
+      customer.id,
+      customer.phone,
+      data.additionalPhones,
+      true,
+    );
     const device = data.deviceId
       ? await tx.device.findFirst({
-          where: { id: data.deviceId, customerId: customer.id },
+          where: {
+            id: data.deviceId,
+            customerId: customer.id,
+            deletedAt: null,
+          },
         })
       : await tx.device.create({
           data: {
@@ -230,6 +250,7 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
     const order = await tx.workOrder.create({
       data: {
         deviceId: device.id,
+        customerName: customer.name,
         fault: [...faults, data.fault].filter(Boolean).join("; "),
         orderDiscount: decimal(cents(data.orderDiscount)),
         includeVat: data.includeVat,
@@ -434,11 +455,7 @@ export async function changeStatus(
       include: { items: true, payments: true },
     });
     assertTransition(order.status, data.status);
-    if (
-      ["REPAIRING", "READY", "COMPLETED"].includes(data.status) &&
-      !order.confirmedAt
-    )
-      throw new BusinessError("Registra prima la conferma del preventivo.");
+
     if (data.status === "CANCELLED" && order.payments.length)
       throw new BusinessError(
         "Sono presenti incassi: gestire il rimborso prima dell'annullamento. I rimborsi non sono inclusi nel MVP.",
@@ -554,5 +571,144 @@ export async function setUserEnabled(
       throw new BusinessError("Non puoi disattivare il tuo account.");
     await tx.user.update({ where: { id }, data: { enabled } });
     await audit(tx, actor, id, "USER_ACCESS_UPDATED", { enabled });
+  });
+}
+
+async function syncPhones(
+  tx: Tx,
+  id: string,
+  primary: string,
+  extra: string[],
+  merge = false,
+) {
+  const existing = merge
+    ? await tx.customerPhone.findMany({ where: { customerId: id } })
+    : [];
+  const phones = [
+    ...new Set([primary, ...existing.map((p) => p.phone), ...extra]),
+  ];
+  if (phones.length > 3)
+    throw new BusinessError("Massimo tre telefoni per cliente.");
+  const conflict = await tx.customer.findFirst({
+    where: {
+      id: { not: id },
+      OR: [
+        { phone: { in: phones } },
+        { phones: { some: { phone: { in: phones } } } },
+      ],
+    },
+  });
+  if (conflict)
+    throw new BusinessError("Telefono già associato a un altro cliente.");
+  await tx.customerPhone.deleteMany({
+    where: { customerId: id, phone: { notIn: phones } },
+  });
+  for (const phone of phones)
+    await tx.customerPhone.upsert({
+      where: { phone },
+      create: { phone, customerId: id },
+      update: {},
+    });
+}
+export async function saveCustomer(
+  actorInput: Actor,
+  id: string | null,
+  raw: unknown,
+) {
+  const data = customerInput.parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const customer = id
+      ? await tx.customer.findFirstOrThrow({ where: { id, deletedAt: null } })
+      : await tx.customer.create({
+          data: { name: data.name, phone: data.phone },
+        });
+    await syncPhones(tx, customer.id, data.phone, data.additionalPhones);
+    await tx.customer.update({
+      where: { id: customer.id },
+      data: { name: data.name, phone: data.phone },
+    });
+    await audit(
+      tx,
+      actor,
+      customer.id,
+      id ? "CUSTOMER_UPDATED" : "CUSTOMER_CREATED",
+    );
+    return { id: customer.id };
+  });
+}
+export async function deleteCustomer(actorInput: Actor, id: string) {
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    await tx.customer.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+    await tx.device.updateMany({
+      where: { customerId: id },
+      data: { deletedAt: new Date() },
+    });
+    await audit(tx, actor, id, "CUSTOMER_DELETED");
+  });
+}
+export async function saveDevice(actorInput: Actor, id: string, raw: unknown) {
+  const data = deviceInput.parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const before = await tx.device.findFirstOrThrow({
+      where: { id, deletedAt: null, customer: { deletedAt: null } },
+    });
+    await tx.device.update({ where: { id }, data });
+    await audit(tx, actor, id, "DEVICE_UPDATED", {
+      before: { brand: before.brand, model: before.model },
+      after: data,
+    });
+  });
+}
+export async function deleteDevice(actorInput: Actor, id: string) {
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    await tx.device.update({ where: { id }, data: { deletedAt: new Date() } });
+    await audit(tx, actor, id, "DEVICE_DELETED");
+  });
+}
+export async function deletePriceRules(actorInput: Actor, raw: unknown) {
+  const ids = z.array(z.string().min(1)).min(1).max(500).parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    assertOwner(actor);
+    const rules = await tx.priceRule.findMany({ where: { id: { in: ids } } });
+    await tx.workOrderItem.updateMany({
+      where: { ruleId: { in: ids } },
+      data: { ruleId: null },
+    });
+    await tx.priceRule.deleteMany({ where: { id: { in: ids } } });
+    for (const rule of rules)
+      await audit(tx, actor, rule.id, "PRICE_RULE_DELETED", {
+        project: rule.project,
+        suggested: rule.suggested.toString(),
+      });
+  });
+}
+export async function hideFault(
+  actorInput: Actor,
+  category: string,
+  name: string,
+) {
+  const data = z
+    .object({
+      category: deviceInput.shape.category,
+      name: z.string().trim().min(1).max(120),
+    })
+    .parse({ category, name });
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const key = data.name.toLowerCase();
+    const fault = await tx.faultOption.upsert({
+      where: { category_key: { category: data.category, key } },
+      create: { ...data, key, hidden: true },
+      update: { hidden: true },
+    });
+    await audit(tx, actor, fault.id, "FAULT_DELETED", data);
   });
 }

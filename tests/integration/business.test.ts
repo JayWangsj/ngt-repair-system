@@ -3,6 +3,12 @@ import { beforeAll, afterAll, beforeEach, describe, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import {
+  saveCustomer,
+  deleteCustomer,
+  saveDevice,
+  deleteDevice,
+  deletePriceRules,
+  hideFault,
   addPayment,
   changeStatus,
   confirmQuote,
@@ -188,11 +194,8 @@ describe("PostgreSQL workflow", () => {
       kind: "BALANCE",
     });
   });
-  it("requires customer confirmation before repair and resets confirmation after repricing", async () => {
+  it("allows repair without the removed quote confirmation field and preserves repricing history", async () => {
     const order = await createOrder(staff, input({ confirmed: false }));
-    await expect(
-      changeStatus(staff, order.id, { status: "REPAIRING" }),
-    ).rejects.toThrow("conferma");
     await confirmQuote(staff, order.id, "Confermato in negozio");
     await changeStatus(staff, order.id, { status: "REPAIRING" });
     await replaceQuote(staff, order.id, [
@@ -204,9 +207,7 @@ describe("PostgreSQL workflow", () => {
     });
     expect(updated.confirmedAt).toBeNull();
     expect(updated.items[0].final.toString()).toBe("90");
-    await expect(
-      changeStatus(staff, order.id, { status: "READY" }),
-    ).rejects.toThrow("conferma");
+    await changeStatus(staff, order.id, { status: "READY" });
     const log = await db.auditLog.findFirstOrThrow({
       where: { action: "QUOTE_UPDATED" },
     });
@@ -562,5 +563,137 @@ describe("single operator initialization", () => {
     expect(
       await db.user.count({ where: { email: "local-operator@ngt.invalid" } }),
     ).toBe(1);
+  });
+});
+
+describe("1.2 customer and catalog management", () => {
+  it("saves three numbers, resolves secondary phones and rejects cross-customer conflicts atomically", async () => {
+    const c = await saveCustomer(owner, null, {
+      name: "Multi",
+      phone: "3331111111",
+      additionalPhones: ["3332222222", "3333333333"],
+    });
+    const order = await createOrder(
+      owner,
+      input({ phone: "3332222222", customerName: "Multi" }),
+    );
+    const full = await db.workOrder.findUniqueOrThrow({
+      where: { id: order.id },
+      include: orderInclude,
+    });
+    expect(full.device.customerId).toBe(c.id);
+    expect(await db.customer.count()).toBe(1);
+    await expect(
+      saveCustomer(owner, null, {
+        name: "Conflict",
+        phone: "3334444444",
+        additionalPhones: ["3333333333"],
+      }),
+    ).rejects.toThrow("altro cliente");
+    expect(await db.customer.count()).toBe(1);
+    await expect(
+      createOrder(
+        owner,
+        input({ phone: "3331111111", additionalPhones: ["3335555555"] }),
+      ),
+    ).rejects.toThrow("tre telefoni");
+    expect(await db.workOrder.count()).toBe(1);
+    await saveCustomer(owner, c.id, {
+      name: "Edited",
+      phone: "3332222222",
+      additionalPhones: ["3335555555"],
+    });
+    expect(
+      (await db.customerPhone.findMany({ where: { customerId: c.id } }))
+        .map((p) => p.phone)
+        .sort(),
+    ).toEqual(["+393332222222", "+393335555555"]);
+    expect(
+      (await db.workOrder.findUniqueOrThrow({ where: { id: order.id } }))
+        .customerName,
+    ).toBe("Multi");
+  });
+  it("edits and removes customer devices without deleting historical orders or receipts", async () => {
+    const order = await createOrder(owner, input());
+    const full = await db.workOrder.findUniqueOrThrow({
+      where: { id: order.id },
+      include: orderInclude,
+    });
+    await saveDevice(owner, full.deviceId, {
+      category: "PHONE",
+      brand: "Samsung",
+      model: "S24",
+      imei: "123456",
+    });
+    expect(
+      (await db.device.findUniqueOrThrow({ where: { id: full.deviceId } }))
+        .model,
+    ).toBe("S24");
+    await deleteDevice(owner, full.deviceId);
+    await expect(
+      createOrder(owner, input({ deviceId: full.deviceId })),
+    ).rejects.toThrow("dispositivo");
+    await deleteCustomer(owner, full.device.customerId);
+    expect(await db.customer.count({ where: { deletedAt: null } })).toBe(0);
+    expect(await db.device.count({ where: { deletedAt: null } })).toBe(0);
+    expect(await db.workOrder.count()).toBe(1);
+    expect(await db.payment.count()).toBe(1);
+    await expect(createOrder(owner, input())).rejects.toThrow("eliminato");
+  });
+  it("deletes single and multiple quotes while preserving historical amounts", async () => {
+    const order = await createOrder(owner, input());
+    const before = await db.workOrderItem.findFirstOrThrow({
+      where: { orderId: order.id },
+    });
+    const second = await savePriceRule(owner, null, {
+      brand: "Apple",
+      model: "iPhone 14",
+      project: "Battery",
+      suggested: "45",
+    });
+    await deletePriceRules(owner, [before.ruleId!, second.id]);
+    expect(await db.priceRule.count()).toBe(0);
+    const after = await db.workOrderItem.findUniqueOrThrow({
+      where: { id: before.id },
+    });
+    expect(after.ruleId).toBeNull();
+    expect(after.final.toString()).toBe(before.final.toString());
+    expect(after.project).toBe(before.project);
+    const manual = await savePriceRule(owner, null, {
+      brand: "New",
+      model: "Model",
+      project: "Project",
+      suggested: "25",
+    });
+    await deletePriceRules(owner, [manual.id]);
+    expect(await db.priceRule.count()).toBe(0);
+  });
+  it("persists fault deletion for presets and saved faults without changing existing orders", async () => {
+    const order = await createOrder(
+      owner,
+      input({ faults: ["Display rotto"], fault: "" }),
+    );
+    await hideFault(owner, "PHONE", "Display rotto");
+    await hideFault(owner, "PHONE", "Non si accende");
+    expect(await db.faultOption.count({ where: { hidden: true } })).toBe(2);
+    expect(
+      (await db.workOrder.findUniqueOrThrow({ where: { id: order.id } })).fault,
+    ).toBe("Display rotto");
+  });
+  it("failed order creation does not write a new model or price", async () => {
+    await expect(
+      createOrder(
+        owner,
+        input({
+          model: "Never Saved",
+          items: [{ project: "Brand New", final: "10" }],
+          deposit: "11",
+        }),
+      ),
+    ).rejects.toThrow("supera");
+    expect(await db.priceRule.count({ where: { model: "never saved" } })).toBe(
+      0,
+    );
+    expect(await db.device.count()).toBe(0);
   });
 });

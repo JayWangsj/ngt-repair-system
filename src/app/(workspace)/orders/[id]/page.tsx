@@ -15,7 +15,6 @@ import {
 } from "@/lib/domain";
 import { Badge, PageHeader } from "@/components/common";
 import {
-  ConfirmForm,
   EditOrderForm,
   EditQuoteForm,
   PaymentForm,
@@ -163,16 +162,9 @@ export default async function Detail({
               orderDiscount={order.orderDiscount.toString()}
               includeVat={order.includeVat}
             />
-            <p
-              className={`message ${order.confirmedAt ? "success" : "warning"}`}
-            >
-              {order.confirmedAt
-                ? `${it.confirmed} · ${dateTime(order.confirmedAt)} · ${order.confirmationNote}`
-                : it.notConfirmed}
-            </p>
+
             {!closed && (
               <>
-                {!order.confirmedAt && <ConfirmForm id={id} />}
                 <details>
                   <summary>{it.editQuote}</summary>
                   <EditQuoteForm
@@ -254,6 +246,7 @@ export default async function Detail({
             <section className="panel padded">
               <h2>{it.updateStatus}</h2>
               <StatusForm
+                customerName={order.customerName || order.device.customer.name}
                 key={order.status}
                 id={id}
                 status={order.status}

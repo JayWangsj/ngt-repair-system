@@ -51,15 +51,25 @@ model User {
 }
 
 model Customer {
-  id             String    @id @default(cuid())
+  id             String          @id @default(cuid())
   name           String
-  phone          String    @unique
-  consentAt      DateTime? @db.Timestamptz(3)
+  phone          String          @unique
+  consentAt      DateTime?       @db.Timestamptz(3)
   consentVersion String?
   codiceFiscale  String?
   partitaIva     String?
-  createdAt      DateTime  @default(now()) @db.Timestamptz(3)
+  createdAt      DateTime        @default(now()) @db.Timestamptz(3)
   devices        Device[]
+  phones         CustomerPhone[]
+  deletedAt      DateTime?       @db.Timestamptz(3)
+}
+
+model CustomerPhone {
+  phone      String   @id
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
 }
 
 model Device {
@@ -74,6 +84,7 @@ model Device {
   appearance  String      @default("")
   accessories String      @default("")
   orders      WorkOrder[]
+  deletedAt   DateTime?   @db.Timestamptz(3)
 
   @@index([customerId])
 }
@@ -81,6 +92,7 @@ model Device {
 model WorkOrder {
   id               String          @id @default(cuid())
   number           Int             @unique @default(autoincrement())
+  customerName     String          @default("")
   deviceId         String
   device           Device          @relation(fields: [deviceId], references: [id])
   status           Status          @default(RECEIVED)
@@ -186,10 +198,11 @@ model AuditLog {
 }
 
 model FaultOption {
-  id       String @id @default(cuid())
+  id       String  @id @default(cuid())
   category String
   name     String
   key      String
+  hidden   Boolean @default(false)
 
   @@unique([category, key])
 }

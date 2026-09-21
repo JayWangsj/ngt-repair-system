@@ -11,13 +11,22 @@ export default async function NewOrder() {
     orderBy: { project: "asc" },
   });
   const [faultOptions, devices, customers] = await Promise.all([
-    db.faultOption.findMany({ select: { category: true, name: true } }),
+    db.faultOption.findMany({
+      select: { category: true, name: true, hidden: true },
+    }),
     db.device.findMany({
+      where: { deletedAt: null, customer: { deletedAt: null } },
       select: { category: true, brand: true, model: true },
       distinct: ["category", "brand", "model"],
     }),
     db.customer.findMany({
-      select: { name: true, phone: true },
+      where: { deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        phones: { select: { phone: true } },
+      },
       orderBy: { name: "asc" },
     }),
   ]);

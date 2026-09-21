@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireActor } from "@/lib/session";
 import { PageHeader, OrderTable } from "@/components/common";
-import { dateTime } from "@/lib/domain";
+import { CustomerForm, DeviceForm, DeleteRecord } from "@/components/forms";
 import { getMessages } from "@/lib/i18n-server";
 export default async function CustomerDetail({
   params,
@@ -14,7 +14,7 @@ export default async function CustomerDetail({
   const { id } = await params;
   const customer = await db.customer.findUnique({
     where: { id },
-    include: { devices: true },
+    include: { phones: true, devices: { where: { deletedAt: null } } },
   });
   if (!customer) notFound();
   const orders = await db.workOrder.findMany({
@@ -28,26 +28,14 @@ export default async function CustomerDetail({
   });
   return (
     <>
-      <PageHeader title={customer.name} description={customer.phone} action />
+      <PageHeader title={customer.name} description={customer.phone} />
       <section className="panel padded">
-        <dl className="detail-list">
-          <div>
-            <dt>{it.consent}</dt>
-            <dd>
-              {customer.consentAt
-                ? `${dateTime(customer.consentAt)} · v${customer.consentVersion}`
-                : it.notRecorded}
-            </dd>
-          </div>
-          <div>
-            <dt>{it.taxCode}</dt>
-            <dd>{customer.codiceFiscale ?? "—"}</dd>
-          </div>
-          <div>
-            <dt>{it.vat}</dt>
-            <dd>{customer.partitaIva ?? "—"}</dd>
-          </div>
-        </dl>
+        {!customer.deletedAt && (
+          <>
+            <CustomerForm customer={customer} />
+            <DeleteRecord id={id} kind="customer" />
+          </>
+        )}
       </section>
       <h2 className="spaced">{it.devices}</h2>
       <div className="device-grid">
@@ -57,7 +45,8 @@ export default async function CustomerDetail({
               {d.brand} {d.model}
             </h3>
             <p>{d.series}</p>
-            <small>IMEI: {d.imei ?? "—"}</small>
+            <DeviceForm device={d} />
+            <DeleteRecord id={d.id} kind="device" />
           </article>
         ))}
       </div>

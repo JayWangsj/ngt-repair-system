@@ -11,6 +11,8 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { EditableSelect } from "./editable-select";
+import { deviceProjects, uniqueOptions } from "@/lib/options";
 import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -45,6 +47,12 @@ import {
   updateOrderAction,
   quoteAction,
   ruleAction,
+  customerAction,
+  hideFaultAction,
+  deleteCustomerAction,
+  deviceAction,
+  deleteDeviceAction,
+  deleteRulesAction,
 } from "@/app/actions";
 
 export type RuleView = {
@@ -65,6 +73,7 @@ type ItemView = {
   adjustmentReason: string;
   discount?: string;
   saveRule?: boolean;
+  discountVisible?: boolean;
 };
 const blankItem = (): ItemView => ({
   project: "",
@@ -163,7 +172,8 @@ export function ItemsEditor({
     onChange(
       items.map((item) => ({
         ...item,
-        final: matchRule(rules, device, item.project)?.rule.suggested ?? "",
+        project: "",
+        final: "",
         discount: "0",
       })),
     );
@@ -174,33 +184,26 @@ export function ItemsEditor({
     );
   return (
     <div className="items-editor">
-      <datalist id="repair-projects">
-        {[...new Set(rules.map((r) => r.project))].map((p) => (
-          <option value={p} key={p} />
-        ))}
-      </datalist>
       {items.map((item, index) => {
         const match = matchRule(rules, device, item.project);
         return (
           <div className="quote-item" key={index}>
             <div className="form-grid">
-              <Field label={`${it.project} ${index + 1}`}>
-                <input
-                  value={item.project}
-                  list="repair-projects"
-                  required
-                  maxLength={120}
-                  onChange={(e) => {
-                    const project = e.target.value;
-                    const found = matchRule(rules, device, project);
-                    update(index, {
-                      project,
-                      final: found?.rule.suggested ?? item.final,
-                      saveRule: false,
-                    });
-                  }}
-                />
-              </Field>
+              <EditableSelect
+                label={`${it.project} ${index + 1}`}
+                value={item.project}
+                options={deviceProjects(rules, device)}
+                required
+                onChange={(project) => {
+                  const found = matchRule(rules, device, project);
+                  update(index, {
+                    project,
+                    final: found?.rule.suggested ?? "",
+                    discount: "0",
+                    saveRule: false,
+                  });
+                }}
+              />
               <Field label={`${it.final} ${index + 1}`}>
                 <input
                   inputMode="decimal"
@@ -221,17 +224,39 @@ export function ItemsEditor({
                 it.noMatch
               )}
             </p>
-            {discounts && (
-              <Field label={`${it.itemDiscount} ${index + 1}`}>
-                <input
-                  inputMode="decimal"
-                  required
-                  value={item.discount ?? "0"}
-                  onChange={(e) => update(index, { discount: e.target.value })}
-                />
-              </Field>
-            )}
+            {discounts &&
+              (item.discountVisible || numeric(item.discount ?? "0") > 0) && (
+                <Field label={`${it.itemDiscount} ${index + 1}`}>
+                  <input
+                    inputMode="decimal"
+                    required
+                    value={item.discount ?? "0"}
+                    onChange={(e) =>
+                      update(index, { discount: e.target.value })
+                    }
+                  />
+                </Field>
+              )}
             <div className="item-actions">
+              {discounts && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    update(index, {
+                      discountVisible: !(
+                        item.discountVisible ||
+                        numeric(item.discount ?? "0") > 0
+                      ),
+                      discount: "0",
+                    })
+                  }
+                >
+                  {item.discountVisible || numeric(item.discount ?? "0") > 0
+                    ? it.cancelDiscount
+                    : it.addItemDiscount}
+                </Button>
+              )}
               {items.length > 1 && (
                 <Button
                   type="button"
@@ -272,9 +297,14 @@ export function NewOrderForm({
 }: {
   rules: RuleView[];
   owner?: boolean;
-  faultOptions: { category: string; name: string }[];
+  faultOptions: { category: string; name: string; hidden: boolean }[];
   devices: { category: string; brand: string; model: string }[];
-  customers: { name: string; phone: string }[];
+  customers: {
+    id: string;
+    name: string;
+    phone: string;
+    phones: { phone: string }[];
+  }[];
 }) {
   const it = useMessages();
   const { locale } = useLanguage();
@@ -283,6 +313,8 @@ export function NewOrderForm({
   const [pending, setPending] = useState(false);
   const [customer, setCustomer] =
     useState<Awaited<ReturnType<typeof lookupCustomerAction>>>(null);
+  const [customerConfirmed, setCustomerConfirmed] = useState(false);
+  const [hiddenFaults, setHiddenFaults] = useState<string[]>([]);
   const [customFault, setCustomFault] = useState("");
   const [localFaults, setLocalFaults] = useState<string[]>([]);
   const [discountEnabled, setDiscountEnabled] = useState(false);
@@ -301,6 +333,7 @@ export function NewOrderForm({
         requestId,
         customerName: "",
         phone: "",
+        additionalPhones: [],
         privacyConsent: false,
         deviceId: "",
         category: "PHONE",
@@ -336,7 +369,11 @@ export function NewOrderForm({
           setCustomer(found);
           if (found) {
             setValue("customerName", found.name);
-            setValue("privacyConsent", !!found.consentAt);
+            setValue("phone", found.phone);
+            setValue(
+              "additionalPhones",
+              found.phones.map((p) => p.phone).filter((p) => p !== found.phone),
+            );
           }
         }
       } catch {
@@ -350,7 +387,11 @@ export function NewOrderForm({
   }, [values.phone, setValue]);
   const knownDevices = devices.filter((d) => d.category === category);
   const brandOptions = [
-    ...new Set([...brands[category], ...knownDevices.map((d) => d.brand)]),
+    ...new Set([
+      ...brands[category],
+      ...knownDevices.map((d) => d.brand),
+      ...rules.map((r) => r.brand),
+    ]),
   ];
   const modelOptions = [
     ...new Set([
@@ -387,6 +428,38 @@ export function NewOrderForm({
       ].map((f) => [f.name.toLowerCase(), f]),
     ).values(),
   ];
+  const visibleFaults = faults.filter(
+    (f) =>
+      !faultOptions.some(
+        (o) =>
+          o.category === category &&
+          o.hidden &&
+          o.name.toLowerCase() === f.name.toLowerCase(),
+      ) && !hiddenFaults.includes(category + ":" + f.name.toLowerCase()),
+  );
+  async function confirmCustomer() {
+    setError("");
+    try {
+      const found = await lookupCustomerAction(values.phone);
+      if (!found && !window.confirm(it.addCustomerPrompt)) return false;
+      const result = await customerAction(found?.id ?? null, {
+        name: values.customerName,
+        phone: found?.phone ?? values.phone,
+        additionalPhones: values.additionalPhones ?? [],
+      });
+      if (!result.ok) {
+        setError(result.error);
+        return false;
+      }
+      const saved = await lookupCustomerAction(values.phone);
+      setCustomer(saved);
+      setCustomerConfirmed(true);
+      return true;
+    } catch {
+      setError("Connessione non disponibile. Riprova.");
+      return false;
+    }
+  }
   const clearDevice = () => {
     setValue("deviceId", "");
     setValue("brand", "");
@@ -401,6 +474,7 @@ export function NewOrderForm({
         setPending(true);
         setError("");
         try {
+          if (!customerConfirmed && !(await confirmCustomer())) return;
           const result = await createOrderAction(data);
           if (result.ok) router.push(`/orders/${result.id}`);
           else setError(result.error);
@@ -413,31 +487,110 @@ export function NewOrderForm({
     >
       <Section number="01" title={it.customerSection}>
         <div className="form-grid">
-          <Field label={it.phone}>
-            <input
-              {...register("phone", {
-                onChange: () => {
-                  setCustomer(null);
-                  setValue("customerName", "");
-                  clearDevice();
-                },
-              })}
-              list="customer-options"
-              type="tel"
-              required
-              autoComplete="tel"
-            />
-            <datalist id="customer-options">
-              {customers.map((c) => (
-                <option key={c.phone} value={c.phone}>
-                  {c.name}
-                </option>
-              ))}
-            </datalist>
-          </Field>
-          <Field label={it.name}>
-            <input {...register("customerName")} required maxLength={120} />
-          </Field>
+          <EditableSelect
+            label={it.phone}
+            value={values.phone}
+            required
+            maxLength={30}
+            options={customers.flatMap((c) =>
+              uniqueOptions([c.phone, ...c.phones.map((p) => p.phone)]).map(
+                (phone) => ({ value: phone, label: phone + " · " + c.name }),
+              ),
+            )}
+            onChange={(phone) => {
+              setValue("phone", phone);
+              setCustomer(null);
+              setCustomerConfirmed(false);
+              setValue("customerName", "");
+              setValue("additionalPhones", []);
+              clearDevice();
+            }}
+          />
+          <EditableSelect
+            label={it.name}
+            value={values.customerName}
+            required
+            options={customers.map((c) => ({
+              value: c.id,
+              label: c.name + " · " + c.phone,
+            }))}
+            onChange={(value) => {
+              const found = customers.find((c) => c.id === value);
+              setValue("customerName", found?.name ?? value);
+              setCustomerConfirmed(false);
+              if (found) {
+                setValue("phone", found.phone);
+                clearDevice();
+              }
+            }}
+          />
+        </div>
+        {(values.additionalPhones ?? []).map((phone, index) => (
+          <div className="phone-row" key={index}>
+            <Field label={it.phone + " " + (index + 2)}>
+              <input
+                type="tel"
+                value={phone}
+                required
+                maxLength={30}
+                onChange={(e) => {
+                  setValue(
+                    "additionalPhones",
+                    (values.additionalPhones ?? []).map((p, i) =>
+                      i === index ? e.target.value : p,
+                    ),
+                  );
+                  setCustomerConfirmed(false);
+                }}
+              />
+            </Field>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setValue(
+                  "additionalPhones",
+                  (values.additionalPhones ?? []).filter((_, i) => i !== index),
+                );
+                setCustomerConfirmed(false);
+              }}
+            >
+              {it.remove}
+            </Button>
+          </div>
+        ))}
+        <div className="catalog-toolbar">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={(values.additionalPhones ?? []).length >= 2}
+            onClick={() => {
+              setValue("additionalPhones", [
+                ...(values.additionalPhones ?? []),
+                "",
+              ]);
+              setCustomerConfirmed(false);
+            }}
+          >
+            {it.addPhone}
+          </Button>
+          <Button
+            type="button"
+            disabled={pending}
+            onClick={async () => {
+              setPending(true);
+              try {
+                await confirmCustomer();
+              } finally {
+                setPending(false);
+              }
+            }}
+          >
+            {it.confirmCustomer}
+          </Button>
+          {customerConfirmed && (
+            <span role="status">{it.customerConfirmed}</span>
+          )}
         </div>
         {customer && <p className="quote-hint">{it.customerFound}</p>}
       </Section>
@@ -490,58 +643,73 @@ export function NewOrderForm({
               ))}
             </select>
           </Field>
-          <Field label={it.brand}>
-            <input
-              {...register("brand", {
-                onChange: () => {
-                  setValue("model", "");
-                  setValue("series", "");
-                },
-              })}
-              list="brand-options"
-              readOnly={!!values.deviceId}
-              required
-              maxLength={120}
-            />
-            <datalist id="brand-options">
-              {brandOptions.map((b) => (
-                <option key={b} value={b} />
-              ))}
-            </datalist>
-          </Field>
-          <Field label={it.model}>
-            <input
-              {...register("model")}
-              list="model-options"
-              readOnly={!!values.deviceId}
-              required
-              maxLength={120}
-            />
-            <datalist id="model-options">
-              {modelOptions.map((m) => (
-                <option key={m} value={m} />
-              ))}
-            </datalist>
-          </Field>
+          <EditableSelect
+            label={it.brand}
+            value={values.brand}
+            required
+            readOnly={!!values.deviceId}
+            options={uniqueOptions(brandOptions)}
+            onChange={(brand) => {
+              setValue("brand", brand);
+              setValue("model", "");
+              setValue("series", "");
+            }}
+          />
+          <EditableSelect
+            label={it.model}
+            value={values.model}
+            required
+            readOnly={!!values.deviceId}
+            options={uniqueOptions(modelOptions)}
+            onChange={(model) => setValue("model", model)}
+          />
         </div>
         <fieldset className="fault-options">
           <legend>{it.fault}</legend>
-          {faults.map((f) => (
-            <label className="checkbox" key={f.name}>
-              <input
-                type="checkbox"
-                checked={(values.faults ?? []).includes(f.name)}
-                onChange={(e) =>
-                  setValue(
-                    "faults",
-                    e.target.checked
-                      ? [...(values.faults ?? []), f.name]
-                      : (values.faults ?? []).filter((n) => n !== f.name),
-                  )
-                }
-              />
-              {f.label}
-            </label>
+          {visibleFaults.map((f) => (
+            <div className="fault-row" key={f.name}>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={(values.faults ?? []).includes(f.name)}
+                  onChange={(e) =>
+                    setValue(
+                      "faults",
+                      e.target.checked
+                        ? [...(values.faults ?? []), f.name]
+                        : (values.faults ?? []).filter((n) => n !== f.name),
+                    )
+                  }
+                />
+                {f.label}
+              </label>
+              <button
+                type="button"
+                aria-label={it.deleteFault + " " + f.label}
+                onClick={async () => {
+                  if (!window.confirm(it.deleteConfirm)) return;
+                  try {
+                    const result = await hideFaultAction(category, f.name);
+                    if (!result.ok) {
+                      setError(result.error);
+                      return;
+                    }
+                    setHiddenFaults([
+                      ...hiddenFaults,
+                      category + ":" + f.name.toLowerCase(),
+                    ]);
+                    setValue(
+                      "faults",
+                      (values.faults ?? []).filter((n) => n !== f.name),
+                    );
+                  } catch {
+                    setError("Connessione non disponibile. Riprova.");
+                  }
+                }}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
           ))}
         </fieldset>
         <div className="input-action">
@@ -574,57 +742,11 @@ export function NewOrderForm({
         <Field label={it.faultNotes}>
           <textarea {...register("fault")} maxLength={2000} rows={2} />
         </Field>
-        <details>
-          <summary>{it.extraDetails}</summary>
-          <div className="form-grid">
-            <Field label={it.imei}>
-              <input
-                {...register("imei")}
-                readOnly={!!values.deviceId}
-                maxLength={30}
-              />
-            </Field>
-            <Field label={it.series}>
-              <input
-                {...register("series")}
-                readOnly={!!values.deviceId}
-                maxLength={120}
-              />
-            </Field>
-            <Field label={it.dueDate}>
-              <input {...register("dueDate")} type="date" />
-            </Field>
-            <Field label={it.appearance}>
-              <input {...register("appearance")} maxLength={2000} />
-            </Field>
-          </div>
-          <Field label={it.notes}>
-            <textarea {...register("notes")} maxLength={2000} />
-          </Field>
-          <label className="checkbox">
-            <input type="checkbox" {...register("privacyConsent")} />
-            {it.privacy}
-          </label>
-        </details>
+        <Field label={it.dueDate}>
+          <input {...register("dueDate")} type="date" />
+        </Field>
       </Section>
       <Section number="03" title={it.quoteSection}>
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={discountEnabled}
-            onChange={(e) => {
-              setDiscountEnabled(e.target.checked);
-              if (!e.target.checked) {
-                setValue("orderDiscount", "0");
-                setValue(
-                  "items",
-                  values.items.map((i) => ({ ...i, discount: "0" })),
-                );
-              }
-            }}
-          />
-          {it.discountEnabled}
-        </label>
         <ItemsEditor
           items={values.items.map((i) => ({
             ...i,
@@ -637,8 +759,18 @@ export function NewOrderForm({
             series: values.series ?? "",
             model: values.model,
           }}
-          discounts={discountEnabled}
+          discounts
         />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setDiscountEnabled(!discountEnabled);
+            setValue("orderDiscount", "0");
+          }}
+        >
+          {discountEnabled ? it.cancelDiscount : it.addOrderDiscount}
+        </Button>
         {discountEnabled && (
           <Field label={it.orderDiscount}>
             <input
@@ -657,10 +789,6 @@ export function NewOrderForm({
           orderDiscount={values.orderDiscount ?? "0"}
           includeVat={values.includeVat ?? false}
         />
-        <label className="checkbox">
-          <input type="checkbox" {...register("confirmed")} />
-          {it.confirmed}
-        </label>
       </Section>
       <Section number="04" title={it.paymentSection}>
         <label className="checkbox">
@@ -679,12 +807,7 @@ export function NewOrderForm({
             <Field label={it.initialPayment}>
               <input {...register("deposit")} required inputMode="decimal" />
             </Field>
-            <Field label={it.kind}>
-              <select {...register("paymentKind")}>
-                <option value="DEPOSIT">{it.kinds.DEPOSIT}</option>
-                <option value="BALANCE">{it.kinds.BALANCE}</option>
-              </select>
-            </Field>
+
             <Field label={it.paymentMethod}>
               <select {...register("method")}>
                 {Object.entries(it.methods).map(([v, l]) => (
@@ -811,7 +934,7 @@ export function PaymentForm({
           requestId,
           amount: str(data, "amount"),
           method: str(data, "method"),
-          kind: str(data, "kind"),
+          kind: "BALANCE",
         })
       }
     >
@@ -834,26 +957,17 @@ export function PaymentForm({
           </select>
         </Field>
       </div>
-      <Field label={it.kind}>
-        <select name="kind" defaultValue="BALANCE">
-          {Object.entries(it.kinds)
-            .filter(([v]) => v !== "DEPOSIT")
-            .map(([v, l]) => (
-              <option value={v} key={v}>
-                {l}
-              </option>
-            ))}
-        </select>
-      </Field>
     </ActionForm>
   );
 }
 export function StatusForm({
+  customerName,
   id,
   status,
   remaining,
 }: {
   id: string;
+  customerName: string;
   status: OrderStatus;
   remaining: number;
   owner?: boolean;
@@ -889,7 +1003,12 @@ export function StatusForm({
       {selected === "COMPLETED" && (
         <>
           <Field label={it.pickedUpBy}>
-            <input name="pickedUpBy" required maxLength={120} />
+            <input
+              name="pickedUpBy"
+              defaultValue={customerName}
+              required
+              maxLength={120}
+            />
           </Field>
           {remaining > 0 && (
             <>
@@ -991,37 +1110,30 @@ export function EditQuoteForm({
   const [items, setItems] = useState(initial);
   const [orderDiscount, setOrderDiscount] = useState(initialDiscount);
   const [includeVat, setIncludeVat] = useState(initialVat);
-  const [discounts, setDiscounts] = useState(
-    numeric(initialDiscount) > 0 ||
-      initial.some((i) => numeric(i.discount ?? "0") > 0),
-  );
+  const [discounts, setDiscounts] = useState(numeric(initialDiscount) > 0);
   return (
     <ActionForm
       submit={it.save}
       action={() => quoteAction(id, { items, orderDiscount, includeVat })}
     >
       <p className="message warning">{it.quoteNotice}</p>
-      <label className="checkbox">
-        <input
-          type="checkbox"
-          checked={discounts}
-          onChange={(e) => {
-            setDiscounts(e.target.checked);
-            if (!e.target.checked) {
-              setOrderDiscount("0");
-              setItems(items.map((i) => ({ ...i, discount: "0" })));
-            }
-          }}
-        />
-        {it.discountEnabled}
-      </label>
       <ItemsEditor
         items={items}
         onChange={setItems}
         rules={rules}
         device={device}
-        discounts={discounts}
+        discounts
       />
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => {
+          setDiscounts(!discounts);
+          setOrderDiscount("0");
+        }}
+      >
+        {discounts ? it.cancelDiscount : it.addOrderDiscount}
+      </Button>
       {discounts && (
         <Field label={it.orderDiscount}>
           <input
@@ -1048,40 +1160,73 @@ export function EditQuoteForm({
     </ActionForm>
   );
 }
-export function RuleForm({ rule }: { rule?: RuleView }) {
+export function RuleForm({
+  rule,
+  rules = [],
+}: {
+  rule?: RuleView;
+  rules?: RuleView[];
+}) {
   const it = useMessages();
+  const [brand, setBrand] = useState(rule?.brand ?? "");
+  const [model, setModel] = useState(rule?.model ?? "");
+  const [project, setProject] = useState(rule?.project ?? "");
   return (
     <ActionForm
       submit={it.save}
       action={(data) =>
         ruleAction(rule?.id ?? null, {
           ...Object.fromEntries(data),
-          enabled: data.get("enabled") === "on",
+          brand,
+          model,
+          project,
+          series: model ? "" : (rule?.series ?? ""),
+          minutes: rule?.minutes ?? 60,
+          enabled: true,
         })
       }
     >
-      <p className="help">{it.ruleHelp}</p>
-      <div className="form-grid three">
-        <Field label={it.brand}>
-          <input name="brand" defaultValue={rule?.brand} maxLength={120} />
-        </Field>
-        <Field label={it.series}>
-          <input name="series" defaultValue={rule?.series} maxLength={120} />
-        </Field>
-        <Field label={it.model}>
-          <input name="model" defaultValue={rule?.model} maxLength={120} />
-        </Field>
-      </div>
-      <Field label={it.project}>
-        <input
-          name="project"
-          required
-          defaultValue={rule?.project}
-          maxLength={120}
+      <div className="form-grid">
+        <EditableSelect
+          label={it.brand}
+          value={brand}
+          onChange={(v) => {
+            setBrand(v);
+            setModel("");
+          }}
+          options={uniqueOptions([
+            ...Object.values(brands).flat(),
+            ...rules.map((r) => r.brand),
+          ])}
         />
-      </Field>
-      <div className="form-grid three">
-        <Field label={`${it.suggested} (€)`}>
+        <EditableSelect
+          label={it.model}
+          value={model}
+          onChange={setModel}
+          options={uniqueOptions(
+            rules
+              .filter((r) => r.brand.toLowerCase() === brand.toLowerCase())
+              .map((r) => r.model),
+          )}
+        />
+      </div>
+      <EditableSelect
+        label={it.project}
+        value={project}
+        onChange={setProject}
+        options={uniqueOptions(
+          rules
+            .filter(
+              (r) =>
+                r.brand.toLowerCase() === brand.toLowerCase() &&
+                r.model.toLowerCase() === model.toLowerCase(),
+            )
+            .map((r) => r.project),
+        )}
+        required
+      />
+      <div className="form-grid">
+        <Field label={it.suggested + " (€)"}>
           <input
             name="suggested"
             required
@@ -1096,28 +1241,259 @@ export function RuleForm({ rule }: { rule?: RuleView }) {
             defaultValue={rule?.cost ?? ""}
           />
         </Field>
-        <Field label={it.minutes}>
-          <input
-            name="minutes"
-            type="number"
-            min="0"
-            max="10000"
-            required
-            defaultValue={rule?.minutes ?? 60}
-          />
-        </Field>
       </div>
       <Field label={it.notes}>
         <input name="notes" defaultValue={rule?.notes} maxLength={2000} />
       </Field>
-      <label className="checkbox">
-        <input
-          type="checkbox"
-          name="enabled"
-          defaultChecked={rule?.enabled ?? true}
-        />
-        {it.enabled}
-      </label>
     </ActionForm>
+  );
+}
+
+export function CustomerForm({
+  customer,
+}: {
+  customer?: {
+    id: string;
+    name: string;
+    phone: string;
+    phones: { phone: string }[];
+  };
+}) {
+  const it = useMessages();
+  const router = useRouter();
+  const [phones, setPhones] = useState(
+    customer?.phones.map((p) => p.phone).filter((p) => p !== customer.phone) ??
+      [],
+  );
+  return (
+    <ActionForm
+      submit={it.save}
+      action={async (data) => {
+        const result = await customerAction(customer?.id ?? null, {
+          name: str(data, "name"),
+          phone: str(data, "phone"),
+          additionalPhones: phones,
+        });
+        if (result.ok && !customer) router.push("/customers/" + result.id);
+        return result;
+      }}
+    >
+      <Field label={it.name}>
+        <input
+          name="name"
+          defaultValue={customer?.name}
+          required
+          maxLength={120}
+        />
+      </Field>
+      <Field label={it.phone}>
+        <input
+          name="phone"
+          defaultValue={customer?.phone}
+          required
+          maxLength={30}
+        />
+      </Field>
+      {phones.map((phone, index) => (
+        <div className="phone-row" key={index}>
+          <Field label={it.phone + " " + (index + 2)}>
+            <input
+              value={phone}
+              required
+              maxLength={30}
+              onChange={(e) =>
+                setPhones(
+                  phones.map((p, i) => (i === index ? e.target.value : p)),
+                )
+              }
+            />
+          </Field>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setPhones(phones.filter((_, i) => i !== index))}
+          >
+            {it.remove}
+          </Button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        disabled={phones.length >= 2}
+        onClick={() => setPhones([...phones, ""])}
+      >
+        {it.addPhone}
+      </Button>
+    </ActionForm>
+  );
+}
+export function DeleteRecord({
+  id,
+  kind,
+}: {
+  id: string;
+  kind: "customer" | "device";
+}) {
+  const it = useMessages();
+  const router = useRouter();
+  return (
+    <ActionForm
+      submit={kind === "customer" ? it.deleteCustomer : it.deleteDevice}
+      action={async () => {
+        if (!window.confirm(it.deleteConfirm)) return { ok: false, error: "" };
+        const result = await (kind === "customer"
+          ? deleteCustomerAction(id)
+          : deleteDeviceAction(id));
+        if (result.ok && kind === "customer") router.push("/customers");
+        return result;
+      }}
+    >
+      <></>
+    </ActionForm>
+  );
+}
+export function DeviceForm({
+  device,
+}: {
+  device: {
+    id: string;
+    category: string;
+    brand: string;
+    model: string;
+    imei: string | null;
+  };
+}) {
+  const it = useMessages();
+  const { locale } = useLanguage();
+  const [brand, setBrand] = useState(device.brand);
+  const [model, setModel] = useState(device.model);
+  return (
+    <ActionForm
+      submit={it.save}
+      action={(data) =>
+        deviceAction(device.id, { ...Object.fromEntries(data), brand, model })
+      }
+    >
+      <Field label={it.deviceType}>
+        <select name="category" defaultValue={device.category}>
+          {Object.entries(categories).map(([key, names]) => (
+            <option key={key} value={key}>
+              {names[locale === "zh" ? 1 : 0]}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <EditableSelect
+        label={it.brand}
+        value={brand}
+        onChange={setBrand}
+        options={Object.values(brands).flat()}
+        required
+      />
+      <EditableSelect
+        label={it.model}
+        value={model}
+        onChange={setModel}
+        options={[]}
+        required
+      />
+      <Field label={it.imei}>
+        <input name="imei" defaultValue={device.imei ?? ""} maxLength={30} />
+      </Field>
+    </ActionForm>
+  );
+}
+export function PriceList({ rules }: { rules: RuleView[] }) {
+  const it = useMessages();
+  const router = useRouter();
+  const [selected, setSelected] = useState<string[]>([]);
+  const [error, setError] = useState("");
+  const [pending, setPending] = useState(false);
+  async function remove(ids: string[]) {
+    if (!window.confirm(it.deleteConfirm)) return;
+    setPending(true);
+    setError("");
+    try {
+      const result = await deleteRulesAction(ids);
+      if (!result.ok) setError(result.error);
+      else {
+        setSelected([]);
+        router.refresh();
+      }
+    } catch {
+      setError("Connessione non disponibile. Riprova.");
+    } finally {
+      setPending(false);
+    }
+  }
+  return (
+    <>
+      <div className="catalog-toolbar">
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={rules.length > 0 && selected.length === rules.length}
+            onChange={(e) =>
+              setSelected(e.target.checked ? rules.map((r) => r.id) : [])
+            }
+          />
+          {it.selectAll}
+        </label>
+        <Button
+          disabled={pending || !selected.length}
+          variant="outline"
+          onClick={() => remove(selected)}
+        >
+          {it.deleteSelected} ({selected.length})
+        </Button>
+      </div>
+      <Message error={error} />
+      <div className="rule-list">
+        {rules.map((r) => (
+          <article className="panel padded" key={r.id}>
+            <div className="catalog-toolbar">
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  aria-label={
+                    it.selectOption +
+                    " " +
+                    r.project +
+                    " " +
+                    r.brand +
+                    " " +
+                    r.model
+                  }
+                  checked={selected.includes(r.id)}
+                  onChange={(e) =>
+                    setSelected(
+                      e.target.checked
+                        ? [...selected, r.id]
+                        : selected.filter((id) => id !== r.id),
+                    )
+                  }
+                />
+                {r.brand} {r.model}
+              </label>
+              <Button
+                variant="ghost"
+                disabled={pending}
+                onClick={() => remove([r.id])}
+              >
+                {it.deleteRule}
+              </Button>
+            </div>
+            <details>
+              <summary className="rule-summary">
+                <strong>{r.project}</strong>
+                <span>{money(cents(r.suggested))}</span>
+              </summary>
+              <RuleForm rule={r} rules={rules} />
+            </details>
+          </article>
+        ))}
+      </div>
+    </>
   );
 }

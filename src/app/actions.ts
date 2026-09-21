@@ -72,14 +72,22 @@ export async function lookupCustomerAction(phone: string) {
   await requireActor();
   const parsed = phoneInput.safeParse(phone);
   if (!parsed.success) return null;
-  return db.customer.findUnique({
-    where: { phone: parsed.data },
+  return db.customer.findFirst({
+    where: {
+      deletedAt: null,
+      OR: [
+        { phone: parsed.data },
+        { phones: { some: { phone: parsed.data } } },
+      ],
+    },
     select: {
       id: true,
       name: true,
       phone: true,
       consentAt: true,
+      phones: { select: { phone: true } },
       devices: {
+        where: { deletedAt: null },
         select: {
           id: true,
           category: true,
@@ -93,4 +101,29 @@ export async function lookupCustomerAction(phone: string) {
       },
     },
   });
+}
+
+export async function customerAction(id: string | null, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.saveCustomer(actor, id, input));
+}
+export async function deleteCustomerAction(id: string) {
+  const actor = await requireActor();
+  return execute(() => service.deleteCustomer(actor, id));
+}
+export async function deviceAction(id: string, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.saveDevice(actor, id, input));
+}
+export async function deleteDeviceAction(id: string) {
+  const actor = await requireActor();
+  return execute(() => service.deleteDevice(actor, id));
+}
+export async function deleteRulesAction(ids: string[]) {
+  const actor = await requireActor();
+  return execute(() => service.deletePriceRules(actor, ids));
+}
+export async function hideFaultAction(category: string, name: string) {
+  const actor = await requireActor();
+  return execute(() => service.hideFault(actor, category, name));
 }

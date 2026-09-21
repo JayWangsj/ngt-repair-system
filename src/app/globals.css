@@ -1496,3 +1496,72 @@ details[open] > summary {
     padding: 14px;
   }
 }
+
+.editable-field {
+  min-width: 0;
+  margin-bottom: 17px;
+}
+.editable-field > label {
+  margin-bottom: 7px;
+}
+.editable-select {
+  position: relative;
+}
+.editable-select input {
+  padding-right: 46px;
+}
+.editable-select select {
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: 38px;
+  height: 100%;
+  padding: 0;
+  border-radius: 0 7px 7px 0;
+  color: transparent;
+  cursor: pointer;
+}
+.editable-select select option {
+  color: var(--ink);
+}
+.editable-select::after {
+  content: "▾";
+  position: absolute;
+  right: 13px;
+  top: 11px;
+  pointer-events: none;
+  color: var(--ink);
+}
+.fault-row {
+  display: flex;
+  align-items: start;
+  gap: 4px;
+}
+.fault-row label {
+  flex: 1;
+}
+.fault-row button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 4px;
+}
+.phone-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.phone-row label {
+  flex: 1;
+  min-width: 0;
+}
+.catalog-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+.catalog-toolbar label {
+  margin: 0;
+}

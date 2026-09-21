@@ -41,6 +41,7 @@ export const orderInput = z.object({
   requestId: z.string().uuid(),
   customerName: short,
   phone: phoneInput,
+  additionalPhones: z.array(phoneInput).max(2).default([]),
   privacyConsent: z.boolean().default(false),
   category: z
     .enum(["PHONE", "TABLET", "LAPTOP", "DESKTOP", "CONSOLE", "OTHER"])
@@ -92,8 +93,8 @@ export const ruleInput = z
     project: short,
     suggested: amountInput,
     cost: z.union([amountInput, z.literal("")]).default(""),
-    minutes: z.coerce.number().int().min(0).max(10000),
-    enabled: z.boolean(),
+    minutes: z.coerce.number().int().min(0).max(10000).default(60),
+    enabled: z.boolean().default(true),
     notes: text,
   })
   .superRefine((r, ctx) => {
@@ -120,4 +121,30 @@ export const quoteInput = z.object({
   items: z.array(itemInput).min(1).max(30),
   orderDiscount: amountInput.default("0"),
   includeVat: z.boolean().default(false),
+});
+
+export const customerInput = z
+  .object({
+    name: short,
+    phone: phoneInput,
+    additionalPhones: z.array(phoneInput).max(2).default([]),
+  })
+  .refine(
+    (v) =>
+      new Set([v.phone, ...v.additionalPhones]).size ===
+      1 + v.additionalPhones.length,
+    "Telefoni duplicati.",
+  );
+export const deviceInput = z.object({
+  category: z.enum([
+    "PHONE",
+    "TABLET",
+    "LAPTOP",
+    "DESKTOP",
+    "CONSOLE",
+    "OTHER",
+  ]),
+  brand: short,
+  model: short,
+  imei: z.string().trim().max(30).default(""),
 });

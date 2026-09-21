@@ -3,8 +3,9 @@ import { requireActor } from "@/lib/session";
 import { PageHeader } from "@/components/common";
 import { RuleForm } from "@/components/forms";
 import { money, cents } from "@/lib/domain";
-import { it } from "@/messages/it";
+import { getMessages } from "@/lib/i18n-server";
 export default async function Prices() {
+  const it = await getMessages();
   const actor = await requireActor();
   if (actor.role !== "OWNER")
     return <p className="message error">{it.restricted}</p>;

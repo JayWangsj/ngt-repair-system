@@ -9,16 +9,18 @@ import {
 import { db } from "@/lib/db";
 import {
   balance,
+  settlement,
   cents,
   isOverdue,
   money,
   romeDay,
   statuses,
 } from "@/lib/domain";
-import { it } from "@/messages/it";
+import { getLocale, getMessages } from "@/lib/i18n-server";
 import { OrderTable, PageHeader } from "@/components/common";
 import { requireActor } from "@/lib/session";
 export default async function Dashboard() {
+  const it = await getMessages();
   const actor = await requireActor();
   const orders = await db.workOrder.findMany({
     include: {
@@ -81,13 +83,16 @@ export default async function Dashboard() {
       />
       <div className="date-strip">
         <span className="live-dot" />
-        {new Intl.DateTimeFormat("it-IT", {
-          weekday: "long",
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-          timeZone: "Europe/Rome",
-        }).format(new Date())}
+        {new Intl.DateTimeFormat(
+          (await getLocale()) === "zh" ? "zh-CN" : "it-IT",
+          {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+            timeZone: "Europe/Rome",
+          },
+        ).format(new Date())}
       </div>
       <div className="metrics">
         {metrics.map(({ label, value, icon: Icon, color }) => (
@@ -140,7 +145,8 @@ export default async function Dashboard() {
             {
               orders.filter(
                 (o) =>
-                  o.status !== "CANCELLED" && balance(o.items, o.payments) > 0,
+                  o.status !== "CANCELLED" &&
+                  balance(o.items, o.payments, o) > 0,
               ).length
             }{" "}
             {it.nav.orders.toLowerCase()}
@@ -171,7 +177,7 @@ export default async function Dashboard() {
                 <small>{o.device.customer.name}</small>
               </span>
               <span className="recent-price">
-                {money(o.items.reduce((sum, i) => sum + cents(i.final), 0))}
+                {money(settlement(o.items, o).due)}
               </span>
               <ArrowUpRight size={16} />
             </Link>

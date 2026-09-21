@@ -10,11 +10,13 @@ import {
   decimal,
   matchRule,
   total,
+  settlement,
   type Actor,
 } from "./domain";
 import {
   editInput,
   itemInput,
+  quoteInput,
   orderInput,
   paymentInput,
   ruleInput,
@@ -81,40 +83,70 @@ async function snapshots(
   actor: Actor,
   device: { brand: string; series: string; model: string },
   input: z.infer<typeof itemInput>[],
+  previousItems?: {
+    project: string;
+    final: { toString(): string };
+    ruleId: string | null;
+  }[],
 ) {
   const rules = await tx.priceRule.findMany({
     where: { enabled: true },
     orderBy: { id: "asc" },
   });
   const results = [];
+  const projectPrices = new Map<string, number>();
   for (const item of input) {
     const match = matchRule(rules, device, item.project);
     const final = cents(item.final);
+    const projectKey = item.project.trim().toLowerCase();
     if (
-      (!match || cents(match.rule.suggested) !== final) &&
-      !item.adjustmentReason
+      projectPrices.has(projectKey) &&
+      projectPrices.get(projectKey) !== final
     )
       throw new BusinessError(
-        "Indica il motivo del prezzo manuale o modificato.",
+        "Prezzi diversi per lo stesso intervento: distingui la specifica del ricambio.",
       );
-    let ruleId = match?.rule.id;
-    if (item.saveRule && !match) {
-      assertOwner(actor);
-      const rule = await tx.priceRule.create({
-        data: {
-          brand: device.brand.toLowerCase(),
-          model: device.model.toLowerCase(),
-          project: item.project.toLowerCase(),
-          suggested: decimal(final),
-          minutes: 60,
+    projectPrices.set(projectKey, final);
+    const key = {
+      brand: device.brand.trim().toLowerCase(),
+      series: "",
+      model: device.model.trim().toLowerCase(),
+      project: item.project.trim().toLowerCase(),
+    };
+    const previous = await tx.priceRule.findUnique({
+      where: { brand_series_model_project: key },
+    });
+    const oldItem = previousItems?.find(
+      (i) => i.project.trim().toLowerCase() === key.project,
+    );
+    const unchanged = oldItem && cents(oldItem.final) === final;
+    const rule = unchanged
+      ? null
+      : await tx.priceRule.upsert({
+          where: { brand_series_model_project: key },
+          create: {
+            ...key,
+            suggested: decimal(final),
+            minutes: match?.rule.minutes ?? 60,
+          },
+          update: { suggested: decimal(final), enabled: true },
+        });
+    const ruleId = rule?.id ?? oldItem?.ruleId ?? match?.rule.id;
+    if (rule && (!previous || cents(previous.suggested) !== final))
+      await audit(
+        tx,
+        actor,
+        rule.id,
+        previous ? "PRICE_RULE_UPDATED" : "PRICE_RULE_CREATED",
+        {
+          before: previous?.suggested.toString() ?? null,
+          after: decimal(final),
         },
-      });
-      ruleId = rule.id;
-      await audit(tx, actor, rule.id, "PRICE_RULE_CREATED");
-    }
+      );
     results.push({
       project: item.project,
       final: decimal(final),
+      discount: decimal(cents(item.discount)),
       suggested: match?.rule.suggested ?? null,
       ruleId,
       matchLevel: match?.level ?? "MANUAL",
@@ -163,6 +195,7 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
       : await tx.device.create({
           data: {
             customerId: customer.id,
+            category: data.category,
             brand: data.brand,
             series: data.series,
             model: data.model,
@@ -176,12 +209,30 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
         "Il dispositivo non appartiene al cliente selezionato.",
       );
     const items = await snapshots(tx, actor, device, data.items);
-    if (cents(data.deposit) > total(items))
+    const quote = settlement(items, data);
+    if (cents(data.deposit) > quote.due)
       throw new BusinessError("L'acconto supera il totale.");
+    const faults = [
+      ...new Map(
+        data.faults.map((name) => [name.trim().toLowerCase(), name.trim()]),
+      ).values(),
+    ];
+    if (!faults.length && !data.fault)
+      throw new BusinessError("Indica il problema segnalato.");
+    for (const name of faults)
+      await tx.faultOption.upsert({
+        where: {
+          category_key: { category: device.category, key: name.toLowerCase() },
+        },
+        create: { category: device.category, name, key: name.toLowerCase() },
+        update: {},
+      });
     const order = await tx.workOrder.create({
       data: {
         deviceId: device.id,
-        fault: data.fault,
+        fault: [...faults, data.fault].filter(Boolean).join("; "),
+        orderDiscount: decimal(cents(data.orderDiscount)),
+        includeVat: data.includeVat,
         appearance: data.appearance,
         accessories: data.accessories,
         dueDate: data.dueDate || null,
@@ -199,7 +250,7 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
                   requestId: data.requestId,
                   amount: decimal(cents(data.deposit)),
                   method: data.method,
-                  kind: "DEPOSIT",
+                  kind: data.paymentKind,
                   actorId: actor.id,
                   actorName: actor.name,
                 },
@@ -216,7 +267,7 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
       await audit(tx, actor, order.id, "PAYMENT_ADDED", {
         amount: decimal(cents(data.deposit)),
         method: data.method,
-        kind: "DEPOSIT",
+        kind: data.paymentKind,
       });
     return order;
   });
@@ -240,7 +291,9 @@ export async function replaceQuote(
   id: string,
   raw: unknown,
 ) {
-  const itemsInput = z.array(itemInput).min(1).max(30).parse(raw);
+  const parsed = Array.isArray(raw) ? null : quoteInput.parse(raw);
+  const itemsInput =
+    parsed?.items ?? z.array(itemInput).min(1).max(30).parse(raw);
   return transact(async (tx) => {
     const actor = await currentActor(tx, actorInput);
     const order = await tx.workOrder.findUniqueOrThrow({
@@ -249,16 +302,32 @@ export async function replaceQuote(
     });
     if (["COMPLETED", "CANCELLED"].includes(order.status))
       throw new BusinessError("La scheda è chiusa.");
-    const items = await snapshots(tx, actor, order.device, itemsInput);
-    if (balance(items, order.payments) < 0)
+    const items = await snapshots(
+      tx,
+      actor,
+      order.device,
+      itemsInput,
+      order.items,
+    );
+    const options = parsed ?? order;
+    if (balance(items, order.payments, options) < 0)
       throw new BusinessError(
         "Il nuovo totale è inferiore agli incassi già registrati.",
       );
     await audit(tx, actor, id, "QUOTE_UPDATED", {
+      beforeOptions: {
+        orderDiscount: order.orderDiscount.toString(),
+        includeVat: order.includeVat,
+      },
+      afterOptions: {
+        orderDiscount: options.orderDiscount.toString(),
+        includeVat: options.includeVat,
+      },
       before: order.items.map((i) => ({
         project: i.project,
         suggested: i.suggested?.toString() ?? null,
         final: i.final.toString(),
+        discount: i.discount.toString(),
         matchLevel: i.matchLevel,
         adjustmentReason: i.adjustmentReason,
       })),
@@ -266,6 +335,7 @@ export async function replaceQuote(
         project: i.project,
         suggested: i.suggested?.toString() ?? null,
         final: i.final,
+        discount: i.discount,
         matchLevel: i.matchLevel,
         adjustmentReason: i.adjustmentReason,
       })),
@@ -275,6 +345,8 @@ export async function replaceQuote(
       where: { id },
       data: {
         items: { create: items },
+        orderDiscount: decimal(cents(options.orderDiscount)),
+        includeVat: options.includeVat,
         confirmedAt: null,
         confirmationNote: "",
       },
@@ -301,6 +373,10 @@ export async function confirmQuote(
 }
 export async function addPayment(actorInput: Actor, id: string, raw: unknown) {
   const data = paymentInput.parse(raw);
+  if (data.kind === "DEPOSIT")
+    throw new BusinessError(
+      "Acconto consentito solo alla creazione della scheda.",
+    );
   const amount = cents(data.amount);
   if (amount <= 0)
     throw new BusinessError("L'importo deve essere maggiore di zero.");
@@ -325,7 +401,7 @@ export async function addPayment(actorInput: Actor, id: string, raw: unknown) {
     });
     if (order.status === "CANCELLED")
       throw new BusinessError("La scheda è annullata.");
-    if (amount > balance(order.items, order.payments))
+    if (amount > balance(order.items, order.payments, order))
       throw new BusinessError("L'importo supera il saldo da pagare.");
     const payment = await tx.payment.create({
       data: {
@@ -372,7 +448,7 @@ export async function changeStatus(
         throw new BusinessError("Indica chi ritira il dispositivo.");
       assertDelivery(
         actor,
-        balance(order.items, order.payments),
+        balance(order.items, order.payments, order),
         data.override,
       );
     }
@@ -405,8 +481,8 @@ export async function changeStatus(
         to: data.status,
         unpaidOverride:
           data.status === "COMPLETED" &&
-          balance(order.items, order.payments) > 0,
-        balance: decimal(balance(order.items, order.payments)),
+          balance(order.items, order.payments, order) > 0,
+        balance: decimal(balance(order.items, order.payments, order)),
       },
     );
   });

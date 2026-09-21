@@ -1,25 +1,13 @@
 import { PrismaClient } from "@prisma/client";
-import { hash } from "bcryptjs";
 const db = new PrismaClient();
 async function main() {
-  const email = process.env.SEED_OWNER_EMAIL?.toLowerCase();
-  const password = process.env.SEED_OWNER_PASSWORD;
-  if (
-    !email ||
-    !password ||
-    password.length < 12 ||
-    password === "replace-with-a-strong-password"
-  )
-    throw new Error(
-      "Set SEED_OWNER_EMAIL and a unique SEED_OWNER_PASSWORD (12+ characters).",
-    );
   await db.user.upsert({
-    where: { email },
+    where: { email: "local-operator@ngt.invalid" },
     update: {},
     create: {
-      email,
-      name: process.env.SEED_OWNER_NAME || "Titolare",
-      passwordHash: await hash(password, 12),
+      email: "local-operator@ngt.invalid",
+      name: "NGT",
+      passwordHash: "!disabled",
       role: "OWNER",
     },
   });
@@ -67,7 +55,7 @@ async function main() {
       });
   }
   console.log(
-    "Initial account ready. Existing accounts and prices were preserved.",
+    "Local workspace ready. Historical records and prices were preserved.",
   );
 }
 main().finally(() => db.$disconnect());

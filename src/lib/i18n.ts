@@ -1,0 +1,48 @@
+import { it } from "@/messages/it";
+import { zh } from "@/messages/zh";
+export type Locale = "it" | "zh";
+export function localeOf(value: unknown): Locale {
+  return value === "zh" ? "zh" : "it";
+}
+export const messages = { it, zh };
+const errors: Record<string, string> = {
+  "Prezzi diversi per lo stesso intervento: distingui la specifica del ricambio.":
+    "同一维修项目报价不同，请在项目名称中区分配件规格。",
+  "Controlla i campi obbligatori e gli importi.": "请检查必填项和金额。",
+  "Lo sconto supera il prezzo.": "优惠金额不能超过原价。",
+  "Acconto consentito solo alla creazione della scheda.":
+    "预付款仅可在创建维修单时登记。",
+  "Indica il problema segnalato.": "请选择或填写报修故障。",
+  "L'acconto supera il totale.": "接单收款金额超过应收总额。",
+  "Il nuovo totale è inferiore agli incassi già registrati.":
+    "新的应收总额低于已收款，请先核对收款。",
+  "L'importo supera il saldo da pagare.": "收款金额超过待收余额。",
+  "L'importo deve essere maggiore di zero.": "收款金额必须大于零。",
+  "La scheda è chiusa.": "维修单已关闭。",
+  "La scheda è annullata.": "维修单已取消。",
+  "Registra prima la conferma del preventivo.": "请先登记客户报价确认。",
+  "Indica chi ritira il dispositivo.": "请填写取机人姓名。",
+  "Cambio di stato non consentito.": "不允许变更为该状态。",
+  "Saldo aperto: è necessaria la conferma esplicita del titolare.":
+    "存在未收余额，请明确确认后交付。",
+  "Il dispositivo non appartiene al cliente selezionato.":
+    "设备不属于当前客户。",
+  "Richiesta di pagamento già utilizzata.": "该付款请求已使用，请刷新后核对。",
+  "Sono presenti incassi: gestire il rimborso prima dell'annullamento. I rimborsi non sono inclusi nel MVP.":
+    "已有收款，取消前需处理退款；当前版本不支持退款。",
+  "Importo non valido (massimo 2 decimali).": "金额无效，最多两位小数。",
+  "Importo non valido.": "金额无效。",
+  "Numero di telefono non valido.": "电话号码无效。",
+  "Record già presente. Controlla i dati e riprova.":
+    "记录已存在，请核对后重试。",
+  "Operazione non riuscita. Aggiorna la pagina e riprova.":
+    "操作失败，请刷新后重试。",
+  "Connessione non disponibile. Riprova.": "连接失败，请重试。",
+  "Riprovare l'operazione.": "请重试。",
+  "Sessione non valida. Accedi di nuovo.": "本地操作记录不可用，请刷新后重试。",
+};
+export function translateError(message: string, locale: Locale) {
+  return locale === "it"
+    ? message
+    : (errors[message] ?? "操作失败，请检查填写内容后重试。");
+}

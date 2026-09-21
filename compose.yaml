@@ -37,9 +37,6 @@ services:
       - "127.0.0.1:3000:3000"
     environment:
       DATABASE_URL: postgresql://ngt:${POSTGRES_PASSWORD}@db:5432/ngt?schema=public
-      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET in .env}
-      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
-      AUTH_TRUST_HOST: "true"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -64,9 +61,6 @@ services:
     command: ["pnpm", "db:seed"]
     environment:
       DATABASE_URL: postgresql://ngt:${POSTGRES_PASSWORD}@db:5432/ngt?schema=public
-      SEED_OWNER_EMAIL: ${SEED_OWNER_EMAIL}
-      SEED_OWNER_NAME: ${SEED_OWNER_NAME:-Titolare}
-      SEED_OWNER_PASSWORD: ${SEED_OWNER_PASSWORD}
     depends_on:
       migrate:
         condition: service_completed_successfully

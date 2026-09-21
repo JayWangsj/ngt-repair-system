@@ -1,13 +1,13 @@
 @import "tailwindcss";
 :root {
-  --bg: #f7f8fa;
+  --bg: #fffdf5;
   --surface: #fff;
-  --ink: #1c2c2b;
-  --muted: #74807f;
-  --line: #e6ebea;
-  --teal: #18766c;
-  --teal-dark: #105d55;
-  --soft: #eaf4f0;
+  --ink: #29271e;
+  --muted: #706b58;
+  --line: #eae4ce;
+  --teal: #806000;
+  --teal-dark: #654900;
+  --soft: #fff1b6;
   --orange: #be743c;
   --radius: 14px;
 }
@@ -98,7 +98,7 @@ small {
   border: 0;
 }
 :focus-visible {
-  outline: 3px solid #4bab9f;
+  outline: 3px solid #a77b00;
   outline-offset: 3px;
 }
 .app-shell {
@@ -1355,5 +1355,144 @@ details[open] > summary {
   }
   .profile .icon-button {
     padding: 8px;
+  }
+}
+
+/* Yellow workspace theme and bilingual form controls. */
+.brand-mark,
+.button-primary {
+  background: #f4c62d;
+  color: #302600;
+  box-shadow: 0 3px 8px #bd93001a;
+}
+.button-primary:hover {
+  background: #e4b619;
+}
+.nav-item.active {
+  background: #ffed9b;
+  color: #574200;
+}
+.nav-item:hover,
+.button-outline:hover {
+  background: #fff8d9;
+}
+.insight,
+.teal {
+  background: #fff3bf;
+  color: #745800;
+}
+.insight:after {
+  color: #f0df95;
+}
+.balance-card {
+  background: #f4c62d;
+  color: #40340a;
+}
+.balance-card > strong {
+  color: #292309;
+}
+.balance-card > div {
+  border-color: #a9872550;
+}
+.quote-item {
+  background: #fffef8;
+}
+.language-switch {
+  display: flex;
+  gap: 5px;
+  margin-top: 25px;
+  flex-wrap: wrap;
+}
+.language-switch button {
+  border: 1px solid var(--line);
+  background: white;
+  border-radius: 7px;
+  padding: 8px 12px;
+  color: var(--ink);
+  font-size: 12px;
+}
+.language-switch button[aria-pressed="true"] {
+  background: #f4c62d;
+  border-color: #d1a70b;
+}
+.nav-label {
+  margin-top: 28px;
+}
+.fault-options {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 16px;
+  margin: 0 0 18px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.fault-options legend {
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.fault-options .checkbox {
+  margin: 0;
+  align-items: flex-start;
+}
+.fault-options input {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.input-action > label {
+  flex: 1;
+  min-width: 0;
+}
+.input-action > button {
+  align-self: center;
+}
+.quote-summary {
+  padding: 16px 20px;
+  background: #fff7d5;
+  border-radius: 9px;
+  margin: 20px 0;
+}
+.quote-summary > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 0;
+}
+.quote-summary dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.quote-summary > div:last-child {
+  font-size: 18px;
+  font-weight: 700;
+  border-top: 1px solid #e2d499;
+  margin-top: 8px;
+  padding-top: 14px;
+}
+@media (max-width: 900px) {
+  .language-switch {
+    position: absolute;
+    right: 20px;
+    top: 15px;
+    margin: 0;
+  }
+  .sidebar .brand {
+    padding-right: 135px;
+  }
+}
+@media (max-width: 600px) {
+  .fault-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .language-switch button {
+    padding: 7px 9px;
+  }
+  .brand small {
+    max-width: 125px;
+  }
+  .quote-summary {
+    padding: 14px;
   }
 }

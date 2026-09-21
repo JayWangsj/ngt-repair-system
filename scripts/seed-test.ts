@@ -12,6 +12,7 @@ async function main() {
   await db.device.deleteMany();
   await db.customer.deleteMany();
   await db.priceRule.deleteMany();
+  await db.faultOption.deleteMany();
   await db.user.deleteMany();
   const passwordHash = await hash("Test-Only-Password-2026", 12);
   await db.user.createMany({

@@ -2,12 +2,13 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireActor } from "@/lib/session";
 import { PageHeader, Empty } from "@/components/common";
-import { it } from "@/messages/it";
+import { getMessages } from "@/lib/i18n-server";
 export default async function Customers({
   searchParams,
 }: {
   searchParams: Promise<{ q?: string }>;
 }) {
+  const it = await getMessages();
   await requireActor();
   const { q = "" } = await searchParams;
   const customers = await db.customer.findMany({

@@ -1,12 +1,32 @@
 "use client";
-import { useState, type FormEvent, type ReactNode } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useId,
+  Children,
+  isValidElement,
+  cloneElement,
+  type ReactElement,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Trash2, Check, Search } from "lucide-react";
+import { Plus, Trash2, Check } from "lucide-react";
 import { Button } from "./ui/button";
-import { it } from "@/messages/it";
+import { useMessages, useLanguage } from "./language";
+import { translateError } from "@/lib/i18n";
+import {
+  categories,
+  brands,
+  models,
+  faultPresets,
+  type Category,
+} from "@/lib/catalog";
+import { settlement } from "@/lib/domain";
 import {
   cents,
   decimal,
@@ -25,8 +45,6 @@ import {
   updateOrderAction,
   quoteAction,
   ruleAction,
-  userAction,
-  userEnabledAction,
 } from "@/app/actions";
 
 export type RuleView = {
@@ -45,12 +63,14 @@ type ItemView = {
   project: string;
   final: string;
   adjustmentReason: string;
+  discount?: string;
   saveRule?: boolean;
 };
 const blankItem = (): ItemView => ({
   project: "",
   final: "",
   adjustmentReason: "",
+  discount: "0",
   saveRule: false,
 });
 function numeric(value: string) {
@@ -61,9 +81,11 @@ function numeric(value: string) {
   }
 }
 function Message({ error, success }: { error?: string; success?: boolean }) {
+  const it = useMessages();
+  const { locale } = useLanguage();
   return error ? (
     <p className="message error" role="alert">
-      {error}
+      {translateError(error, locale)}
     </p>
   ) : success ? (
     <p className="message success" role="status">
@@ -81,10 +103,20 @@ export function Field({
   children: ReactNode;
   className?: string;
 }) {
+  const id = useId();
   return (
     <label className={className}>
-      <span>{label}</span>
-      {children}
+      <span id={id}>{label}</span>
+      {Children.map(children, (child) =>
+        isValidElement(child) &&
+        typeof child.type === "string" &&
+        ["input", "select", "textarea"].includes(child.type)
+          ? cloneElement(
+              child as ReactElement<{ "aria-labelledby"?: string }>,
+              { "aria-labelledby": id },
+            )
+          : child,
+      )}
     </label>
   );
 }
@@ -113,14 +145,29 @@ export function ItemsEditor({
   onChange,
   rules,
   device,
-  owner,
+  discounts = false,
 }: {
+  discounts?: boolean;
   items: ItemView[];
   onChange: (items: ItemView[]) => void;
   rules: RuleView[];
   device: { brand: string; series: string; model: string };
-  owner: boolean;
+  owner?: boolean;
 }) {
+  const it = useMessages();
+  const deviceKey = [device.brand, device.series, device.model].join("|");
+  const previousDevice = useRef(deviceKey);
+  useEffect(() => {
+    if (previousDevice.current === deviceKey) return;
+    previousDevice.current = deviceKey;
+    onChange(
+      items.map((item) => ({
+        ...item,
+        final: matchRule(rules, device, item.project)?.rule.suggested ?? "",
+        discount: "0",
+      })),
+    );
+  }, [deviceKey, device, items, rules, onChange]);
   const update = (index: number, patch: Partial<ItemView>) =>
     onChange(
       items.map((item, i) => (i === index ? { ...item, ...patch } : item)),
@@ -174,32 +221,17 @@ export function ItemsEditor({
                 it.noMatch
               )}
             </p>
-            {(!match ||
-              numeric(item.final) !== cents(match.rule.suggested)) && (
-              <Field label={`${it.reason} ${index + 1}`}>
+            {discounts && (
+              <Field label={`${it.itemDiscount} ${index + 1}`}>
                 <input
-                  value={item.adjustmentReason}
+                  inputMode="decimal"
                   required
-                  maxLength={2000}
-                  onChange={(e) =>
-                    update(index, { adjustmentReason: e.target.value })
-                  }
+                  value={item.discount ?? "0"}
+                  onChange={(e) => update(index, { discount: e.target.value })}
                 />
               </Field>
             )}
             <div className="item-actions">
-              {!match && owner && (
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={!!item.saveRule}
-                    onChange={(e) =>
-                      update(index, { saveRule: e.target.checked })
-                    }
-                  />
-                  {it.saveRule}
-                </label>
-              )}
               {items.length > 1 && (
                 <Button
                   type="button"
@@ -223,7 +255,7 @@ export function ItemsEditor({
         {it.addItem}
       </Button>
       <div className="quote-total">
-        <span>{it.total}</span>
+        <span>{it.originalTotal}</span>
         <strong>
           {money(items.reduce((sum, item) => sum + numeric(item.final), 0))}
         </strong>
@@ -234,18 +266,27 @@ export function ItemsEditor({
 
 export function NewOrderForm({
   rules,
-  owner,
+  faultOptions,
+  devices,
+  customers,
 }: {
   rules: RuleView[];
-  owner: boolean;
+  owner?: boolean;
+  faultOptions: { category: string; name: string }[];
+  devices: { category: string; brand: string; model: string }[];
+  customers: { name: string; phone: string }[];
 }) {
+  const it = useMessages();
+  const { locale } = useLanguage();
   const router = useRouter();
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [customer, setCustomer] =
     useState<Awaited<ReturnType<typeof lookupCustomerAction>>>(null);
-  const [searched, setSearched] = useState(false);
-  const [lookupPending, setLookupPending] = useState(false);
+  const [customFault, setCustomFault] = useState("");
+  const [localFaults, setLocalFaults] = useState<string[]>([]);
+  const [discountEnabled, setDiscountEnabled] = useState(false);
+  const [paymentNow, setPaymentNow] = useState(false);
   const [requestId] = useState(() => crypto.randomUUID());
   const {
     register,
@@ -262,6 +303,7 @@ export function NewOrderForm({
         phone: "",
         privacyConsent: false,
         deviceId: "",
+        category: "PHONE",
         brand: "",
         series: "",
         model: "",
@@ -269,6 +311,7 @@ export function NewOrderForm({
         appearance: "",
         accessories: "",
         fault: "",
+        faults: [],
         notes: "",
         dueDate: "",
         confirmed: false,
@@ -276,10 +319,81 @@ export function NewOrderForm({
         items: [blankItem()],
         deposit: "0",
         method: "CASH",
+        paymentKind: "DEPOSIT",
+        orderDiscount: "0",
+        includeVat: false,
       },
     },
   );
   const values = useWatch({ control }) as z.input<typeof orderInput>;
+  const category = values.category ?? "PHONE";
+  useEffect(() => {
+    let active = true;
+    const timer = setTimeout(async () => {
+      try {
+        const found = await lookupCustomerAction(values.phone);
+        if (active) {
+          setCustomer(found);
+          if (found) {
+            setValue("customerName", found.name);
+            setValue("privacyConsent", !!found.consentAt);
+          }
+        }
+      } catch {
+        if (active) setError("Connessione non disponibile. Riprova.");
+      }
+    }, 300);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [values.phone, setValue]);
+  const knownDevices = devices.filter((d) => d.category === category);
+  const brandOptions = [
+    ...new Set([...brands[category], ...knownDevices.map((d) => d.brand)]),
+  ];
+  const modelOptions = [
+    ...new Set([
+      ...(models[category]?.[values.brand] ?? []),
+      ...knownDevices
+        .filter((d) => d.brand.toLowerCase() === values.brand.toLowerCase())
+        .map((d) => d.model),
+      ...rules
+        .filter(
+          (r) =>
+            r.brand.toLowerCase() === values.brand.toLowerCase() && r.model,
+        )
+        .map((r) => r.model),
+    ]),
+  ];
+  const presets = faultPresets(category);
+  const faults = [
+    ...new Map(
+      [
+        ...presets.map(([name, zh]) => ({
+          name,
+          label: locale === "zh" ? zh : name,
+        })),
+        ...faultOptions
+          .filter((f) => f.category === category)
+          .map((f) => ({
+            name: f.name,
+            label:
+              presets.find(([n]) => n.toLowerCase() === f.name.toLowerCase())?.[
+                locale === "zh" ? 1 : 0
+              ] ?? f.name,
+          })),
+        ...localFaults.map((name) => ({ name, label: name })),
+      ].map((f) => [f.name.toLowerCase(), f]),
+    ).values(),
+  ];
+  const clearDevice = () => {
+    setValue("deviceId", "");
+    setValue("brand", "");
+    setValue("series", "");
+    setValue("model", "");
+    setValue("imei", "");
+  };
   return (
     <form
       className="order-form"
@@ -300,59 +414,32 @@ export function NewOrderForm({
       <Section number="01" title={it.customerSection}>
         <div className="form-grid">
           <Field label={it.phone}>
-            <div className="input-action">
-              <input
-                aria-label={it.phone}
-                {...register("phone", {
-                  onChange: () => {
-                    setCustomer(null);
-                    setSearched(false);
-                    setValue("deviceId", "");
-                  },
-                })}
-                type="tel"
-                autoComplete="tel"
-                required
-              />
-              <Button
-                type="button"
-                variant="outline"
-                disabled={lookupPending}
-                onClick={async () => {
-                  setLookupPending(true);
-                  try {
-                    const found = await lookupCustomerAction(values.phone);
-                    setCustomer(found);
-                    setSearched(true);
-                    setValue("deviceId", "");
-                    if (found) {
-                      setValue("customerName", found.name);
-                      setValue("privacyConsent", !!found.consentAt);
-                    }
-                  } finally {
-                    setLookupPending(false);
-                  }
-                }}
-              >
-                <Search size={15} />
-                {it.lookup}
-              </Button>
-            </div>
+            <input
+              {...register("phone", {
+                onChange: () => {
+                  setCustomer(null);
+                  setValue("customerName", "");
+                  clearDevice();
+                },
+              })}
+              list="customer-options"
+              type="tel"
+              required
+              autoComplete="tel"
+            />
+            <datalist id="customer-options">
+              {customers.map((c) => (
+                <option key={c.phone} value={c.phone}>
+                  {c.name}
+                </option>
+              ))}
+            </datalist>
           </Field>
           <Field label={it.name}>
             <input {...register("customerName")} required maxLength={120} />
           </Field>
         </div>
-        {searched && (
-          <p className="quote-hint">
-            {customer ? it.customerFound : it.customerNew}
-          </p>
-        )}
-        <label className="checkbox">
-          <input type="checkbox" {...register("privacyConsent")} />
-          {it.privacy}
-        </label>
-        <p className="help">{it.privacyInfo}</p>
+        {customer && <p className="quote-hint">{it.customerFound}</p>}
       </Section>
       <Section number="02" title={it.deviceSection}>
         {customer && customer.devices.length > 0 && (
@@ -360,78 +447,184 @@ export function NewOrderForm({
             <select
               value={values.deviceId}
               onChange={(e) => {
-                setValue("deviceId", e.target.value);
                 const d = customer.devices.find((d) => d.id === e.target.value);
+                setValue("deviceId", e.target.value);
+                setValue("category", (d?.category ?? "PHONE") as Category);
                 for (const key of [
                   "brand",
                   "series",
                   "model",
                   "imei",
                   "appearance",
-                  "accessories",
                 ] as const)
                   setValue(key, d?.[key] ?? "");
+                setValue("faults", []);
+                setLocalFaults([]);
               }}
             >
               <option value="">{it.newDevice}</option>
               {customer.devices.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.brand} {d.model} {d.imei ? `· ${d.imei}` : ""}
+                <option value={d.id} key={d.id}>
+                  {d.brand} {d.model} {d.imei}
                 </option>
               ))}
             </select>
           </Field>
         )}
         <div className="form-grid three">
+          <Field label={it.deviceType}>
+            <select
+              {...register("category", {
+                onChange: () => {
+                  clearDevice();
+                  setValue("faults", []);
+                  setLocalFaults([]);
+                },
+              })}
+              disabled={!!values.deviceId}
+            >
+              {Object.entries(categories).map(([key, names]) => (
+                <option key={key} value={key}>
+                  {names[locale === "zh" ? 1 : 0]}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label={it.brand}>
             <input
-              {...register("brand")}
+              {...register("brand", {
+                onChange: () => {
+                  setValue("model", "");
+                  setValue("series", "");
+                },
+              })}
+              list="brand-options"
               readOnly={!!values.deviceId}
               required
               maxLength={120}
             />
-          </Field>
-          <Field label={it.series}>
-            <input
-              {...register("series")}
-              readOnly={!!values.deviceId}
-              maxLength={120}
-            />
+            <datalist id="brand-options">
+              {brandOptions.map((b) => (
+                <option key={b} value={b} />
+              ))}
+            </datalist>
           </Field>
           <Field label={it.model}>
             <input
               {...register("model")}
+              list="model-options"
               readOnly={!!values.deviceId}
               required
               maxLength={120}
             />
+            <datalist id="model-options">
+              {modelOptions.map((m) => (
+                <option key={m} value={m} />
+              ))}
+            </datalist>
           </Field>
         </div>
-        <div className="form-grid">
-          <Field label={it.imei}>
+        <fieldset className="fault-options">
+          <legend>{it.fault}</legend>
+          {faults.map((f) => (
+            <label className="checkbox" key={f.name}>
+              <input
+                type="checkbox"
+                checked={(values.faults ?? []).includes(f.name)}
+                onChange={(e) =>
+                  setValue(
+                    "faults",
+                    e.target.checked
+                      ? [...(values.faults ?? []), f.name]
+                      : (values.faults ?? []).filter((n) => n !== f.name),
+                  )
+                }
+              />
+              {f.label}
+            </label>
+          ))}
+        </fieldset>
+        <div className="input-action">
+          <Field label={it.faultOther}>
             <input
-              {...register("imei")}
-              readOnly={!!values.deviceId}
-              maxLength={30}
+              value={customFault}
+              maxLength={120}
+              onChange={(e) => setCustomFault(e.target.value)}
             />
           </Field>
-          <Field label={it.dueDate}>
-            <input {...register("dueDate")} type="date" />
-          </Field>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              const typed = customFault.trim();
+              if (!typed) return;
+              const name =
+                faults.find((f) => f.name.toLowerCase() === typed.toLowerCase())
+                  ?.name ?? typed;
+              setLocalFaults([...localFaults, name]);
+              setValue("faults", [
+                ...new Set([...(values.faults ?? []), name]),
+              ]);
+              setCustomFault("");
+            }}
+          >
+            {it.addFault}
+          </Button>
         </div>
-        <Field label={it.fault}>
-          <textarea {...register("fault")} required maxLength={2000} rows={3} />
+        <Field label={it.faultNotes}>
+          <textarea {...register("fault")} maxLength={2000} rows={2} />
         </Field>
-        <div className="form-grid">
-          <Field label={it.appearance}>
-            <input {...register("appearance")} maxLength={2000} />
+        <details>
+          <summary>{it.extraDetails}</summary>
+          <div className="form-grid">
+            <Field label={it.imei}>
+              <input
+                {...register("imei")}
+                readOnly={!!values.deviceId}
+                maxLength={30}
+              />
+            </Field>
+            <Field label={it.series}>
+              <input
+                {...register("series")}
+                readOnly={!!values.deviceId}
+                maxLength={120}
+              />
+            </Field>
+            <Field label={it.dueDate}>
+              <input {...register("dueDate")} type="date" />
+            </Field>
+            <Field label={it.appearance}>
+              <input {...register("appearance")} maxLength={2000} />
+            </Field>
+          </div>
+          <Field label={it.notes}>
+            <textarea {...register("notes")} maxLength={2000} />
           </Field>
-          <Field label={it.accessories}>
-            <input {...register("accessories")} maxLength={2000} />
-          </Field>
-        </div>
+          <label className="checkbox">
+            <input type="checkbox" {...register("privacyConsent")} />
+            {it.privacy}
+          </label>
+        </details>
       </Section>
       <Section number="03" title={it.quoteSection}>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={discountEnabled}
+            onChange={(e) => {
+              setDiscountEnabled(e.target.checked);
+              if (!e.target.checked) {
+                setValue("orderDiscount", "0");
+                setValue(
+                  "items",
+                  values.items.map((i) => ({ ...i, discount: "0" })),
+                );
+              }
+            }}
+          />
+          {it.discountEnabled}
+        </label>
         <ItemsEditor
           items={values.items.map((i) => ({
             ...i,
@@ -444,44 +637,69 @@ export function NewOrderForm({
             series: values.series ?? "",
             model: values.model,
           }}
-          owner={owner}
+          discounts={discountEnabled}
         />
-      </Section>
-      <Section number="04" title={it.paymentSection}>
-        <div className="form-grid">
-          <Field label={it.deposit}>
-            <input {...register("deposit")} inputMode="decimal" required />
+        {discountEnabled && (
+          <Field label={it.orderDiscount}>
+            <input
+              {...register("orderDiscount")}
+              required
+              inputMode="decimal"
+            />
           </Field>
-          <Field label={it.paymentMethod}>
-            <select {...register("method")}>
-              {Object.entries(it.methods).map(([value, label]) => (
-                <option value={value} key={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
+        )}
+        <label className="checkbox">
+          <input type="checkbox" {...register("includeVat")} />
+          {it.includeVat}
+        </label>
+        <QuoteSummary
+          items={values.items}
+          orderDiscount={values.orderDiscount ?? "0"}
+          includeVat={values.includeVat ?? false}
+        />
         <label className="checkbox">
           <input type="checkbox" {...register("confirmed")} />
           {it.confirmed}
         </label>
-        {values.confirmed && (
-          <Field label={it.confirmationNote}>
-            <input
-              {...register("confirmationNote")}
-              placeholder="In negozio / per telefono"
-              maxLength={2000}
-            />
-          </Field>
+      </Section>
+      <Section number="04" title={it.paymentSection}>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={paymentNow}
+            onChange={(e) => {
+              setPaymentNow(e.target.checked);
+              if (!e.target.checked) setValue("deposit", "0");
+            }}
+          />
+          {it.paymentNow}
+        </label>
+        {paymentNow && (
+          <div className="form-grid three">
+            <Field label={it.initialPayment}>
+              <input {...register("deposit")} required inputMode="decimal" />
+            </Field>
+            <Field label={it.kind}>
+              <select {...register("paymentKind")}>
+                <option value="DEPOSIT">{it.kinds.DEPOSIT}</option>
+                <option value="BALANCE">{it.kinds.BALANCE}</option>
+              </select>
+            </Field>
+            <Field label={it.paymentMethod}>
+              <select {...register("method")}>
+                {Object.entries(it.methods).map(([v, l]) => (
+                  <option key={v} value={v}>
+                    {l}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
         )}
-        <Field label={it.notes}>
-          <textarea {...register("notes")} rows={3} maxLength={2000} />
-        </Field>
       </Section>
       {Object.keys(errors).length > 0 && (
         <p className="message error" role="alert">
-          Controlla i campi: {Object.keys(errors).join(", ")}
+          {it.validationError}
         </p>
       )}
       <Message error={error} />
@@ -492,6 +710,41 @@ export function NewOrderForm({
         <Button disabled={pending}>{pending ? it.saving : it.create}</Button>
       </div>
     </form>
+  );
+}
+
+export function QuoteSummary({
+  items,
+  orderDiscount,
+  includeVat,
+}: {
+  items: { final: string; discount?: string }[];
+  orderDiscount: string;
+  includeVat: boolean;
+}) {
+  const it = useMessages();
+  let q;
+  try {
+    q = settlement(items, { orderDiscount, includeVat });
+  } catch {
+    return <p className="help">{it.validationError}</p>;
+  }
+  return (
+    <dl className="quote-summary">
+      {[
+        [it.originalTotal, q.gross],
+        [it.discountTotal, q.discount],
+        [it.netTotal, q.net],
+        [it.vatAmount, q.vat],
+        [it.withVat, q.withVat],
+        [it.total, q.due],
+      ].map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{money(Number(value))}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -507,6 +760,7 @@ function ActionForm({
   submit: string;
   onSuccess?: () => void;
 }) {
+  const it = useMessages();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -546,6 +800,7 @@ export function PaymentForm({
   id: string;
   remaining: number;
 }) {
+  const it = useMessages();
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   return (
     <ActionForm
@@ -581,11 +836,13 @@ export function PaymentForm({
       </div>
       <Field label={it.kind}>
         <select name="kind" defaultValue="BALANCE">
-          {Object.entries(it.kinds).map(([v, l]) => (
-            <option value={v} key={v}>
-              {l}
-            </option>
-          ))}
+          {Object.entries(it.kinds)
+            .filter(([v]) => v !== "DEPOSIT")
+            .map(([v, l]) => (
+              <option value={v} key={v}>
+                {l}
+              </option>
+            ))}
         </select>
       </Field>
     </ActionForm>
@@ -595,13 +852,13 @@ export function StatusForm({
   id,
   status,
   remaining,
-  owner,
 }: {
   id: string;
   status: OrderStatus;
   remaining: number;
-  owner: boolean;
+  owner?: boolean;
 }) {
+  const it = useMessages();
   const choices = transitions[status];
   const [selected, setSelected] = useState(choices[0] ?? "");
   if (!choices.length) return null;
@@ -639,7 +896,7 @@ export function StatusForm({
               <p className="message warning">
                 {it.deliveryWarning} {money(remaining)}
               </p>
-              {owner && (
+              {true && (
                 <label className="checkbox">
                   <input name="override" type="checkbox" required />
                   {it.override}
@@ -656,6 +913,7 @@ export function StatusForm({
   );
 }
 export function ConfirmForm({ id }: { id: string }) {
+  const it = useMessages();
   return (
     <ActionForm
       submit={it.confirm}
@@ -680,6 +938,7 @@ export function EditOrderForm({
     dueDate: string | null;
   };
 }) {
+  const it = useMessages();
   return (
     <ActionForm
       submit={it.save}
@@ -701,13 +960,7 @@ export function EditOrderForm({
             maxLength={2000}
           />
         </Field>
-        <Field label={it.accessories}>
-          <input
-            name="accessories"
-            defaultValue={values.accessories}
-            maxLength={2000}
-          />
-        </Field>
+        <input type="hidden" name="accessories" value={values.accessories} />
       </div>
       <Field label={it.dueDate}>
         <input type="date" name="dueDate" defaultValue={values.dueDate ?? ""} />
@@ -721,31 +974,82 @@ export function EditOrderForm({
 export function EditQuoteForm({
   id,
   initial,
+  initialDiscount = "0",
+  initialVat = false,
   rules,
   device,
-  owner,
 }: {
   id: string;
   initial: ItemView[];
+  initialDiscount?: string;
+  initialVat?: boolean;
   rules: RuleView[];
   device: { brand: string; series: string; model: string };
   owner: boolean;
 }) {
+  const it = useMessages();
   const [items, setItems] = useState(initial);
+  const [orderDiscount, setOrderDiscount] = useState(initialDiscount);
+  const [includeVat, setIncludeVat] = useState(initialVat);
+  const [discounts, setDiscounts] = useState(
+    numeric(initialDiscount) > 0 ||
+      initial.some((i) => numeric(i.discount ?? "0") > 0),
+  );
   return (
-    <ActionForm submit={it.save} action={() => quoteAction(id, items)}>
+    <ActionForm
+      submit={it.save}
+      action={() => quoteAction(id, { items, orderDiscount, includeVat })}
+    >
       <p className="message warning">{it.quoteNotice}</p>
+      <label className="checkbox">
+        <input
+          type="checkbox"
+          checked={discounts}
+          onChange={(e) => {
+            setDiscounts(e.target.checked);
+            if (!e.target.checked) {
+              setOrderDiscount("0");
+              setItems(items.map((i) => ({ ...i, discount: "0" })));
+            }
+          }}
+        />
+        {it.discountEnabled}
+      </label>
       <ItemsEditor
         items={items}
         onChange={setItems}
         rules={rules}
         device={device}
-        owner={owner}
+        discounts={discounts}
+      />
+      {discounts && (
+        <Field label={it.orderDiscount}>
+          <input
+            inputMode="decimal"
+            required
+            value={orderDiscount}
+            onChange={(e) => setOrderDiscount(e.target.value)}
+          />
+        </Field>
+      )}
+      <label className="checkbox">
+        <input
+          type="checkbox"
+          checked={includeVat}
+          onChange={(e) => setIncludeVat(e.target.checked)}
+        />
+        {it.includeVat}
+      </label>
+      <QuoteSummary
+        items={items}
+        orderDiscount={orderDiscount}
+        includeVat={includeVat}
       />
     </ActionForm>
   );
 }
 export function RuleForm({ rule }: { rule?: RuleView }) {
+  const it = useMessages();
   return (
     <ActionForm
       submit={it.save}
@@ -814,50 +1118,6 @@ export function RuleForm({ rule }: { rule?: RuleView }) {
         />
         {it.enabled}
       </label>
-    </ActionForm>
-  );
-}
-export function UserForm() {
-  return (
-    <ActionForm
-      submit={it.newUser}
-      action={(data) => userAction(Object.fromEntries(data))}
-    >
-      <div className="form-grid">
-        <Field label={it.name}>
-          <input name="name" required maxLength={120} />
-        </Field>
-        <Field label={it.email}>
-          <input name="email" type="email" required />
-        </Field>
-        <Field label={it.password}>
-          <input
-            name="password"
-            type="password"
-            required
-            minLength={12}
-            maxLength={128}
-            autoComplete="new-password"
-            placeholder={it.passwordHint}
-          />
-        </Field>
-        <Field label={it.role}>
-          <select name="role">
-            <option value="STAFF">{it.staff}</option>
-            <option value="OWNER">{it.owner}</option>
-          </select>
-        </Field>
-      </div>
-    </ActionForm>
-  );
-}
-export function UserToggle({ id, enabled }: { id: string; enabled: boolean }) {
-  return (
-    <ActionForm
-      submit={enabled ? it.disable : it.enable}
-      action={() => userEnabledAction(id, !enabled)}
-    >
-      <input type="hidden" value={id} readOnly />
     </ActionForm>
   );
 }

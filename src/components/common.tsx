@@ -7,18 +7,18 @@ import type {
   Payment,
 } from "@prisma/client";
 import { ArrowUpRight, Plus, Wrench } from "lucide-react";
-import { it } from "@/messages/it";
+import { getMessages } from "@/lib/i18n-server";
 import {
   balance,
   dateOnly,
   isOverdue,
   money,
   orderCode,
-  total,
+  settlement,
   type OrderStatus,
 } from "@/lib/domain";
 import { Button } from "./ui/button";
-export function PageHeader({
+export async function PageHeader({
   title,
   description,
   action = false,
@@ -27,6 +27,7 @@ export function PageHeader({
   description?: string;
   action?: boolean;
 }) {
+  const it = await getMessages();
   return (
     <header className="page-header">
       <div>
@@ -45,7 +46,8 @@ export function PageHeader({
     </header>
   );
 }
-export function Badge({ status }: { status: OrderStatus }) {
+export async function Badge({ status }: { status: OrderStatus }) {
+  const it = await getMessages();
   return (
     <span className={`badge status-${status.toLowerCase()}`}>
       <span />
@@ -53,11 +55,12 @@ export function Badge({ status }: { status: OrderStatus }) {
     </span>
   );
 }
-export function Empty({ text = it.empty }: { text?: string }) {
+export async function Empty({ text }: { text?: string }) {
+  const it = await getMessages();
   return (
     <div className="empty">
       <Wrench size={26} />
-      <p>{text}</p>
+      <p>{text ?? it.empty}</p>
     </div>
   );
 }
@@ -66,7 +69,8 @@ type Row = WorkOrder & {
   items: WorkOrderItem[];
   payments: Payment[];
 };
-export function OrderTable({ orders }: { orders: Row[] }) {
+export async function OrderTable({ orders }: { orders: Row[] }) {
+  const it = await getMessages();
   if (!orders.length) return <Empty />;
   return (
     <div className="table-scroll">
@@ -105,9 +109,11 @@ export function OrderTable({ orders }: { orders: Row[] }) {
                 {dateOnly(order.dueDate)}
                 {isOverdue(order) && <small>{it.overdue}</small>}
               </td>
-              <td className="numeric">{money(total(order.items))}</td>
               <td className="numeric">
-                {money(balance(order.items, order.payments))}
+                {money(settlement(order.items, order).due)}
+              </td>
+              <td className="numeric">
+                {money(balance(order.items, order.payments, order))}
               </td>
               <td>
                 <Link

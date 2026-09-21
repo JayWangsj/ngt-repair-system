@@ -2,12 +2,13 @@ import { db } from "@/lib/db";
 import { requireActor } from "@/lib/session";
 import { PageHeader, OrderTable } from "@/components/common";
 import { balance, cents, money, romeDay, statuses } from "@/lib/domain";
-import { it } from "@/messages/it";
+import { getMessages } from "@/lib/i18n-server";
 export default async function Reports({
   searchParams,
 }: {
   searchParams: Promise<{ day?: string }>;
 }) {
+  const it = await getMessages();
   const actor = await requireActor();
   if (actor.role !== "OWNER")
     return <p className="message error">{it.restricted}</p>;
@@ -24,7 +25,7 @@ export default async function Reports({
     .flatMap((o) => o.payments)
     .filter((p) => romeDay(p.receivedAt) === day);
   const unpaid = orders.filter(
-    (o) => o.status !== "CANCELLED" && balance(o.items, o.payments) > 0,
+    (o) => o.status !== "CANCELLED" && balance(o.items, o.payments, o) > 0,
   );
   return (
     <>
@@ -53,7 +54,7 @@ export default async function Reports({
           <span>{it.openBalance}</span>
           <strong>
             {money(
-              unpaid.reduce((s, o) => s + balance(o.items, o.payments), 0),
+              unpaid.reduce((s, o) => s + balance(o.items, o.payments, o), 0),
             )}
           </strong>
         </div>

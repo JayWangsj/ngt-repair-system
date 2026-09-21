@@ -1,11 +1,13 @@
 "use client";
+import { useMessages } from "@/components/language";
 export default function ErrorPage({ reset }: { reset: () => void }) {
+  const it = useMessages();
   return (
     <section className="standalone">
-      <h1>Impossibile caricare i dati</h1>
-      <p>Verifica la connessione e riprova.</p>
+      <h1>{it.errorTitle}</h1>
+      <p>{it.connectionError}</p>
       <button className="button button-primary" onClick={reset}>
-        Riprova
+        {it.retry}
       </button>
     </section>
   );

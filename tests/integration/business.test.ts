@@ -1,3 +1,4 @@
+import { requireActor } from "@/lib/session";
 import { beforeAll, afterAll, beforeEach, describe, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
@@ -45,6 +46,7 @@ beforeAll(async () => {
   await db.device.deleteMany();
   await db.customer.deleteMany();
   await db.priceRule.deleteMany();
+  await db.faultOption.deleteMany();
   await db.user.deleteMany();
   owner = await db.user.create({
     data: {
@@ -72,6 +74,7 @@ beforeEach(async () => {
   await db.device.deleteMany();
   await db.customer.deleteMany();
   await db.priceRule.deleteMany();
+  await db.faultOption.deleteMany();
   await db.user.updateMany({ data: { enabled: true } });
   await savePriceRule(owner, null, {
     brand: "Apple",
@@ -227,49 +230,169 @@ describe("PostgreSQL workflow", () => {
       ).final.toString(),
     ).toBe("100");
   });
-  it("requires manual reason, allows owner to save a new rule, denies staff", async () => {
-    await expect(
-      createOrder(
-        staff,
-        input({ items: [{ project: "Camera", final: "50" }] }),
-      ),
-    ).rejects.toThrow("motivo");
-    await expect(
-      createOrder(
-        staff,
-        input({
-          items: [
-            {
-              project: "Camera",
-              final: "50",
-              adjustmentReason: "Manuale",
-              saveRule: true,
-            },
-          ],
-        }),
-      ),
-    ).rejects.toThrow("titolare");
+  it("saves missing normal prices automatically without a manual reason", async () => {
     const created = await createOrder(
       owner,
       input({
-        items: [
-          {
-            project: "Camera",
-            final: "50",
-            adjustmentReason: "Manuale",
-            saveRule: true,
-          },
-        ],
+        items: [{ project: "Camera", final: "50", discount: "10" }],
+        orderDiscount: "5",
       }),
     );
     expect(
       (
-        await db.workOrderItem.findFirstOrThrow({
-          where: { orderId: created.id },
-        })
-      ).suggested,
-    ).toBeNull();
-    expect(await db.priceRule.count({ where: { project: "camera" } })).toBe(1);
+        await db.priceRule.findFirstOrThrow({ where: { project: "camera" } })
+      ).suggested.toString(),
+    ).toBe("50");
+    const saved = await db.workOrder.findUniqueOrThrow({
+      where: { id: created.id },
+      include: orderInclude,
+    });
+    expect(balance(saved.items, saved.payments, saved)).toBe(1500);
+    await createOrder(
+      owner,
+      input({ deposit: "0", items: [{ project: "Camera", final: "60" }] }),
+    );
+    expect(
+      (
+        await db.priceRule.findFirstOrThrow({ where: { project: "camera" } })
+      ).suggested.toString(),
+    ).toBe("60");
+    expect(saved.items[0].final.toString()).toBe("50");
+  });
+  it("adds IVA only when selected and blocks later deposits", async () => {
+    const created = await createOrder(
+      owner,
+      input({
+        items: [
+          { project: "Display", final: "100", discount: "10" },
+          { project: "Camera", final: "50" },
+        ],
+        orderDiscount: "5",
+        includeVat: true,
+      }),
+    );
+    const saved = await db.workOrder.findUniqueOrThrow({
+      where: { id: created.id },
+      include: orderInclude,
+    });
+    expect(balance(saved.items, saved.payments, saved)).toBe(14470);
+    await expect(
+      addPayment(owner, created.id, {
+        requestId: randomUUID(),
+        amount: "1",
+        method: "CASH",
+        kind: "DEPOSIT",
+      }),
+    ).rejects.toThrow("solo alla creazione");
+    await addPayment(owner, created.id, {
+      requestId: randomUUID(),
+      amount: "140",
+      method: "CARD",
+      kind: "BALANCE",
+    });
+    await expect(
+      replaceQuote(owner, created.id, {
+        items: [{ project: "Display", final: "150" }],
+        orderDiscount: "15",
+        includeVat: false,
+      }),
+    ).rejects.toThrow("inferiore");
+    expect(
+      (
+        await db.priceRule.findFirstOrThrow({ where: { project: "display" } })
+      ).suggested.toString(),
+    ).toBe("100");
+  });
+  it("persists deduplicated faults only after a valid order and separates categories", async () => {
+    await expect(
+      createOrder(
+        owner,
+        input({
+          faults: ["  Porta instabile  ", "porta instabile"],
+          deposit: "999",
+        }),
+      ),
+    ).rejects.toThrow();
+    expect(await db.faultOption.count()).toBe(0);
+    await createOrder(
+      owner,
+      input({ faults: ["  Porta instabile  ", "porta instabile"] }),
+    );
+    expect(await db.faultOption.count()).toBe(1);
+    await createOrder(
+      owner,
+      input({ category: "LAPTOP", faults: ["Porta instabile"] }),
+    );
+    expect(await db.faultOption.count()).toBe(2);
+  });
+  it("rolls back discounts exceeding original quote including dictionary and prices", async () => {
+    await expect(
+      createOrder(
+        owner,
+        input({
+          items: [{ project: "New repair", final: "20", discount: "21" }],
+          faults: ["New fault"],
+        }),
+      ),
+    ).rejects.toThrow("sconto");
+    expect(await db.customer.count()).toBe(0);
+    expect(await db.faultOption.count()).toBe(0);
+    expect(await db.priceRule.count()).toBe(1);
+  });
+  it("allows zero quotation and initial full payment without relabelling it as deposit", async () => {
+    await createOrder(
+      owner,
+      input({ items: [{ project: "Check", final: "0" }], deposit: "0" }),
+    );
+    const created = await createOrder(
+      owner,
+      input({ deposit: "100", paymentKind: "BALANCE" }),
+    );
+    expect(
+      (await db.payment.findFirstOrThrow({ where: { orderId: created.id } }))
+        .kind,
+    ).toBe("BALANCE");
+  });
+  it("does not replace newer list prices when only editing an old order discount", async () => {
+    const old = await createOrder(owner, input({ deposit: "0" }));
+    await createOrder(
+      owner,
+      input({ deposit: "0", items: [{ project: "Display", final: "120" }] }),
+    );
+    await replaceQuote(owner, old.id, {
+      items: [{ project: "Display", final: "100", discount: "10" }],
+      orderDiscount: "5",
+      includeVat: true,
+    });
+    expect(
+      (
+        await db.priceRule.findFirstOrThrow({ where: { project: "display" } })
+      ).suggested.toString(),
+    ).toBe("120");
+    const saved = await db.workOrder.findUniqueOrThrow({
+      where: { id: old.id },
+      include: orderInclude,
+    });
+    expect(balance(saved.items, saved.payments, saved)).toBe(10370);
+  });
+  it("rejects conflicting prices for the same project atomically", async () => {
+    await expect(
+      createOrder(
+        owner,
+        input({
+          items: [
+            { project: "Display", final: "100" },
+            { project: "display", final: "110" },
+          ],
+        }),
+      ),
+    ).rejects.toThrow("Prezzi diversi");
+    expect(await db.workOrder.count()).toBe(0);
+    expect(
+      (
+        await db.priceRule.findFirstOrThrow({ where: { project: "display" } })
+      ).suggested.toString(),
+    ).toBe("100");
   });
   it("blocks overpayment, zero and negative amounts", async () => {
     const order = await createOrder(staff, input());
@@ -424,5 +547,20 @@ describe("server-side access control", () => {
       where: { entityId: result.id },
     });
     expect(JSON.stringify(log.context)).not.toContain("password");
+  });
+});
+
+describe("single operator initialization", () => {
+  it("initializes exactly one audit actor during concurrent first requests", async () => {
+    const actors = await Promise.all(
+      Array.from({ length: 8 }, () => requireActor()),
+    );
+    expect(new Set(actors.map((actor) => actor.id)).size).toBe(1);
+    expect(
+      actors.every((actor) => actor.role === "OWNER" && actor.enabled),
+    ).toBe(true);
+    expect(
+      await db.user.count({ where: { email: "local-operator@ngt.invalid" } }),
+    ).toBe(1);
   });
 });

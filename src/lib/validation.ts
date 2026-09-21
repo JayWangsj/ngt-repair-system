@@ -34,13 +34,21 @@ export const itemInput = z.object({
   project: short,
   final: amountInput,
   adjustmentReason: text,
+  discount: amountInput.default("0"),
   saveRule: z.boolean().default(false),
 });
 export const orderInput = z.object({
   requestId: z.string().uuid(),
   customerName: short,
   phone: phoneInput,
-  privacyConsent: z.boolean(),
+  privacyConsent: z.boolean().default(false),
+  category: z
+    .enum(["PHONE", "TABLET", "LAPTOP", "DESKTOP", "CONSOLE", "OTHER"])
+    .default("PHONE"),
+  faults: z.array(short).max(30).default([]),
+  orderDiscount: amountInput.default("0"),
+  includeVat: z.boolean().default(false),
+  paymentKind: z.enum(["DEPOSIT", "BALANCE"]).default("DEPOSIT"),
   deviceId: z.string().max(100).default(""),
   brand: short,
   series: z.string().trim().max(120).default(""),
@@ -48,7 +56,7 @@ export const orderInput = z.object({
   imei: z.string().trim().max(30).default(""),
   appearance: text,
   accessories: text,
-  fault: z.string().trim().min(1).max(2000),
+  fault: z.string().trim().max(2000).default(""),
   notes: text,
   dueDate: day,
   confirmed: z.boolean().default(false),
@@ -106,4 +114,10 @@ export const userInput = z.object({
   email: z.string().email().toLowerCase(),
   password: z.string().min(12).max(128),
   role: z.enum(["OWNER", "STAFF"]),
+});
+
+export const quoteInput = z.object({
+  items: z.array(itemInput).min(1).max(30),
+  orderDiscount: amountInput.default("0"),
+  includeVat: z.boolean().default(false),
 });

@@ -1,3 +1,4 @@
+import { faultLabel } from "@/lib/catalog";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
@@ -10,7 +11,7 @@ import {
   dateTime,
   money,
   orderCode,
-  total,
+  settlement,
 } from "@/lib/domain";
 import { Badge, PageHeader } from "@/components/common";
 import {
@@ -19,13 +20,15 @@ import {
   EditQuoteForm,
   PaymentForm,
   StatusForm,
+  QuoteSummary,
 } from "@/components/forms";
-import { it } from "@/messages/it";
+import { getLocale, getMessages } from "@/lib/i18n-server";
 export default async function Detail({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const it = await getMessages();
   const actor = await requireActor();
   const { id } = await params;
   const order = await db.workOrder.findUnique({
@@ -40,7 +43,7 @@ export default async function Detail({
       orderBy: { createdAt: "desc" },
     }),
   ]);
-  const remaining = balance(order.items, order.payments);
+  const remaining = balance(order.items, order.payments, order);
   const closed = ["COMPLETED", "CANCELLED"].includes(order.status);
   return (
     <>
@@ -80,7 +83,7 @@ export default async function Detail({
               </div>
               <div>
                 <dt>{it.fault}</dt>
-                <dd>{order.fault}</dd>
+                <dd>{faultLabel(order.fault, await getLocale())}</dd>
               </div>
               <div>
                 <dt>{it.appearance}</dt>
@@ -152,10 +155,14 @@ export default async function Detail({
                 </tbody>
               </table>
             </div>
-            <div className="quote-total">
-              <span>{it.total}</span>
-              <strong>{money(total(order.items))}</strong>
-            </div>
+            <QuoteSummary
+              items={order.items.map((i) => ({
+                final: i.final.toString(),
+                discount: i.discount.toString(),
+              }))}
+              orderDiscount={order.orderDiscount.toString()}
+              includeVat={order.includeVat}
+            />
             <p
               className={`message ${order.confirmedAt ? "success" : "warning"}`}
             >
@@ -171,9 +178,12 @@ export default async function Detail({
                   <EditQuoteForm
                     key={order.updatedAt.toISOString()}
                     id={id}
+                    initialDiscount={order.orderDiscount.toString()}
+                    initialVat={order.includeVat}
                     initial={order.items.map((i) => ({
                       project: i.project,
                       final: i.final.toString(),
+                      discount: i.discount.toString(),
                       adjustmentReason: i.adjustmentReason,
                     }))}
                     device={{
@@ -232,10 +242,11 @@ export default async function Detail({
             <strong>{money(remaining)}</strong>
             <div>
               <span>
-                {it.total}: {money(total(order.items))}
+                {it.total}: {money(settlement(order.items, order).due)}
               </span>
               <span>
-                {it.paid}: {money(total(order.items) - remaining)}
+                {it.paid}:{" "}
+                {money(settlement(order.items, order).due - remaining)}
               </span>
             </div>
           </section>

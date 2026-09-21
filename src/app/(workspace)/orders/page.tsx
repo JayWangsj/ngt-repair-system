@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { it } from "@/messages/it";
+import { getMessages } from "@/lib/i18n-server";
 import { PageHeader, OrderTable } from "@/components/common";
 import { balance, isOverdue, statuses } from "@/lib/domain";
 import { requireActor } from "@/lib/session";
@@ -8,6 +8,7 @@ export default async function Orders({
 }: {
   searchParams: Promise<{ q?: string; status?: string; attention?: string }>;
 }) {
+  const it = await getMessages();
   await requireActor();
   const query = await searchParams;
   const q = query.q?.trim() ?? "";
@@ -41,7 +42,7 @@ export default async function Orders({
       (query.attention === "overdue"
         ? isOverdue(o)
         : query.attention === "unpaid"
-          ? o.status !== "CANCELLED" && balance(o.items, o.payments) > 0
+          ? o.status !== "CANCELLED" && balance(o.items, o.payments, o) > 0
           : true),
   );
   return (

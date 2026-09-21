@@ -21,9 +21,7 @@ async function execute(
     if (error instanceof ZodError)
       return {
         ok: false,
-        error: error.issues
-          .map((i) => `${i.path.join(".")}: ${i.message}`)
-          .join(" · "),
+        error: "Controlla i campi obbligatori e gli importi.",
       };
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -69,14 +67,7 @@ export async function ruleAction(id: string | null, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.savePriceRule(actor, id, input));
 }
-export async function userAction(input: unknown) {
-  const actor = await requireActor();
-  return execute(() => service.createUser(actor, input));
-}
-export async function userEnabledAction(id: string, enabled: boolean) {
-  const actor = await requireActor();
-  return execute(() => service.setUserEnabled(actor, id, enabled));
-}
+
 export async function lookupCustomerAction(phone: string) {
   await requireActor();
   const parsed = phoneInput.safeParse(phone);
@@ -91,6 +82,7 @@ export async function lookupCustomerAction(phone: string) {
       devices: {
         select: {
           id: true,
+          category: true,
           brand: true,
           series: true,
           model: true,

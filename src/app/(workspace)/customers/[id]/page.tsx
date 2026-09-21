@@ -3,12 +3,13 @@ import { db } from "@/lib/db";
 import { requireActor } from "@/lib/session";
 import { PageHeader, OrderTable } from "@/components/common";
 import { dateTime } from "@/lib/domain";
-import { it } from "@/messages/it";
+import { getMessages } from "@/lib/i18n-server";
 export default async function CustomerDetail({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const it = await getMessages();
   await requireActor();
   const { id } = await params;
   const customer = await db.customer.findUnique({

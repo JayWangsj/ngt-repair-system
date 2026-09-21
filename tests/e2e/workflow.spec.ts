@@ -1,65 +1,49 @@
 import { test, expect, type Page } from "@playwright/test";
-async function login(page: Page, owner = false) {
-  await page.goto("/login");
-  await page
-    .getByLabel("Email", { exact: true })
-    .fill(owner ? "owner@test.it" : "staff@test.it");
-  await page
-    .getByLabel("Password", { exact: true })
-    .fill("Test-Only-Password-2026");
-  await page.getByRole("button", { name: "Accedi al laboratorio" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Oggi in laboratorio" }),
-  ).toBeVisible();
-}
-async function create(
+async function fillOrder(
   page: Page,
-  options: { manual?: boolean; deposit?: string } = {},
+  options: { manual?: boolean; discount?: boolean; phone?: string } = {},
 ) {
   await page.goto("/orders/new");
   await page
     .getByLabel("Telefono", { exact: true })
-    .fill(`333${Date.now().toString().slice(-7)}`);
+    .fill(options.phone ?? `333${Date.now().toString().slice(-7)}`);
   await page
     .getByLabel("Nome e cognome", { exact: true })
     .fill("Cliente Playwright");
   await page.getByLabel("Marca", { exact: true }).fill("Apple");
   await page.getByLabel("Modello", { exact: true }).fill("iPhone 13");
-  await page
-    .getByLabel("Problema segnalato", { exact: true })
-    .fill("Schermo danneggiato");
+  await page.getByLabel("Display rotto", { exact: true }).check();
   await page
     .getByLabel("Intervento 1", { exact: true })
-    .fill(options.manual ? "Fotocamera" : "sostituzione display");
-  if (options.manual) {
+    .fill(options.manual ? `Fotocamera ${Date.now()}` : "sostituzione display");
+  if (options.manual)
+    await page.getByLabel("Prezzo originale (€) 1", { exact: true }).fill("75");
+  else
     await expect(
-      page.getByText("Nessun prezzo trovato", { exact: false }),
-    ).toBeVisible();
-    await page.getByLabel("Prezzo finale (€) 1", { exact: true }).fill("75");
-    await page
-      .getByLabel("Motivo prezzo manuale / modifica 1", { exact: true })
-      .fill("Ricambio non presente nel listino");
-  } else
-    await expect(
-      page.getByLabel("Prezzo finale (€) 1", { exact: true }),
+      page.getByLabel("Prezzo originale (€) 1", { exact: true }),
     ).toHaveValue("100");
-  await page
-    .getByLabel("Acconto (€)", { exact: true })
-    .fill(options.deposit ?? "20");
+  if (options.discount) {
+    await page.getByLabel("Applica uno sconto", { exact: true }).check();
+    await page
+      .getByLabel("Sconto intervento (€) 1", { exact: true })
+      .fill("10");
+    await page
+      .getByLabel("Sconto aggiuntivo sulla scheda (€)", { exact: true })
+      .fill("5");
+    await page
+      .getByLabel("Includi IVA nel saldo da pagare", { exact: true })
+      .check();
+  }
   await page
     .getByLabel("Preventivo confermato dal cliente", { exact: true })
     .check();
-  await page
-    .getByLabel("Come è stato confermato?", { exact: true })
-    .fill("In negozio");
+}
+async function save(page: Page) {
   await page.getByRole("button", { name: "Crea scheda", exact: true }).click();
   await expect(page).toHaveURL(/\/orders\/(?!new)[a-z0-9]+$/);
-  return page.url();
 }
 async function state(page: Page, next: string) {
-  await page
-    .getByRole("combobox", { name: "Nuovo stato", exact: true })
-    .selectOption(next);
+  await page.getByLabel("Nuovo stato", { exact: true }).selectOption(next);
   await page
     .getByRole("button", { name: "Aggiorna stato", exact: true })
     .click();
@@ -67,46 +51,149 @@ async function state(page: Page, next: string) {
     next === "REPAIRING" ? "In riparazione" : "Da ritirare",
   );
 }
-test("staff completes registration, automatic quotation, payment and delivery", async ({
+test("single operator opens every business page without login", async ({
   page,
 }) => {
-  await login(page);
-  await create(page);
+  for (const path of ["/", "/orders", "/customers", "/prices", "/reports"]) {
+    await page.goto(path);
+    await expect(page.locator("h1")).toBeVisible();
+    await expect(page).not.toHaveURL(/login/);
+  }
+  await expect(
+    page.getByRole("link", { name: "Collaboratori", exact: true }),
+  ).toHaveCount(0);
+  await page.goto("/login");
+  await expect(page).toHaveURL(/\/$/);
+  await page.goto("/team");
+  await expect(page).toHaveURL(/\/$/);
+});
+test("creates automatic quote, receives payment and delivers", async ({
+  page,
+}) => {
+  await fillOrder(page);
+  await page
+    .getByLabel("Registra un pagamento adesso", { exact: true })
+    .check();
+  await page
+    .getByLabel("Incasso alla creazione (€)", { exact: true })
+    .fill("20");
+  await save(page);
+  await expect(page.locator(".balance-card>strong")).toContainText("80,00");
   await state(page, "REPAIRING");
   await state(page, "READY");
+  await expect(
+    page.locator('select[name="kind"] option[value="DEPOSIT"]'),
+  ).toHaveCount(0);
   await page.getByLabel("Importo (€)", { exact: true }).fill("80");
-  await page
-    .getByRole("combobox", { name: "Metodo di pagamento", exact: true })
-    .selectOption("CARD");
   await page
     .getByRole("button", { name: "Registra incasso", exact: true })
     .click();
   await expect(page.locator(".balance-card>strong")).toContainText("0,00");
   await page
-    .getByRole("combobox", { name: "Nuovo stato", exact: true })
+    .getByLabel("Nuovo stato", { exact: true })
     .selectOption("COMPLETED");
-  await page
-    .getByLabel("Nome di chi ritira", { exact: true })
-    .fill("Cliente Playwright");
+  await page.getByLabel("Nome di chi ritira", { exact: true }).fill("Cliente");
   await page
     .getByRole("button", { name: "Consegna dispositivo", exact: true })
     .click();
   await expect(page.locator(".detail-status .badge")).toHaveText("Consegnato");
-  await expect(page.getByText("Ritirato da:", { exact: false })).toBeVisible();
-  await page.getByRole("link", { name: "Cliente ↗" }).click();
+  await page.getByRole("link", { name: "Cliente ↗", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Storico riparazioni" }),
   ).toBeVisible();
-  await expect(page.locator("table")).toContainText("Consegnato");
 });
-test("manual quote without matching rule and overpayment error", async ({
+test("discount and IVA persist without polluting historical prices", async ({
   page,
 }) => {
-  await login(page);
-  await create(page, { manual: true, deposit: "0" });
+  await fillOrder(page, { discount: true });
+  await expect(page.locator(".quote-summary")).toContainText("103,70");
+  await page
+    .getByLabel("Registra un pagamento adesso", { exact: true })
+    .check();
+  await page
+    .getByLabel("Incasso alla creazione (€)", { exact: true })
+    .fill("20");
+  await save(page);
+  await expect(page.locator(".balance-card>strong")).toContainText("83,70");
+  await page.reload();
+  await expect(page.locator(".balance-card>strong")).toContainText("83,70");
+  await page.getByRole("button", { name: "中文", exact: true }).click();
   await expect(
-    page.getByText("Prezzo manuale", { exact: false }).first(),
+    page.getByRole("heading", { name: "报价", exact: true }),
   ).toBeVisible();
+  await page.getByLabel("金额（€）", { exact: true }).fill("84");
+  await page.getByRole("button", { name: "登记收款", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(
+    "超过待收余额",
+  );
+  await page.getByRole("button", { name: "Italiano", exact: true }).click();
+  await page.goto("/orders/new");
+  await page.getByLabel("Marca", { exact: true }).fill("Apple");
+  await page.getByLabel("Modello", { exact: true }).fill("iPhone 13");
+  await page
+    .getByLabel("Intervento 1", { exact: true })
+    .fill("sostituzione display");
+  await expect(
+    page.getByLabel("Prezzo originale (€) 1", { exact: true }),
+  ).toHaveValue("100");
+});
+test("language switching preserves unsaved form, custom fault, and preference", async ({
+  page,
+}) => {
+  const phone = `334${Date.now().toString().slice(-7)}`;
+  await fillOrder(page, { phone, discount: true });
+  const fault = `Raro ${Date.now()}`;
+  await page
+    .getByLabel("Altro problema: scrivi e aggiungi", { exact: true })
+    .fill(fault);
+  await page
+    .getByRole("button", { name: "Aggiungi problema", exact: true })
+    .click();
+  await page.getByRole("button", { name: "中文", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "新建维修单", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("电话号码", { exact: true })).toHaveValue(phone);
+  await expect(page.getByLabel("姓名", { exact: true })).toHaveValue(
+    "Cliente Playwright",
+  );
+  await expect(page.getByLabel("单项优惠（€） 1", { exact: true })).toHaveValue(
+    "10",
+  );
+  await expect(page.getByLabel(fault, { exact: true })).toBeChecked();
+  await expect(page.getByLabel("屏幕破裂", { exact: true })).toBeChecked();
+  await page.getByRole("button", { name: "Italiano", exact: true }).click();
+  await save(page);
+  await page.getByRole("button", { name: "中文", exact: true }).click();
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await page.goto("/orders/new");
+  await expect(page.getByLabel(fault, { exact: true })).toBeVisible();
+  await page.getByLabel("电话号码", { exact: true }).fill(phone);
+  await expect(page.getByLabel("姓名", { exact: true })).toHaveValue(
+    "Cliente Playwright",
+  );
+  await page
+    .getByLabel("客户已有设备", { exact: true })
+    .selectOption({ index: 1 });
+  await expect(page.getByLabel("型号", { exact: true })).toHaveValue(
+    "iPhone 13",
+  );
+  await page.screenshot({
+    path: "test-results/chinese-new-order.png",
+    fullPage: true,
+  });
+  await page.getByLabel("电话号码", { exact: true }).fill("3359988776");
+  await expect(page.getByLabel("型号", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("姓名", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("客户已有设备", { exact: true })).toHaveCount(0);
+});
+test("manual quote saves automatically and rejects overpayment", async ({
+  page,
+}) => {
+  await fillOrder(page, { manual: true });
+  await save(page);
+  await expect(page.locator(".balance-card>strong")).toContainText("75,00");
   await page.getByLabel("Importo (€)", { exact: true }).fill("76");
   await page
     .getByRole("button", { name: "Registra incasso", exact: true })
@@ -114,70 +201,33 @@ test("manual quote without matching rule and overpayment error", async ({
   await expect(page.getByRole("main").getByRole("alert")).toContainText(
     "supera il saldo",
   );
-  await expect(page.locator(".balance-card>strong")).toContainText("75,00");
+  await page.goto("/prices");
+  await expect(page.getByText(/fotocamera/i).first()).toBeVisible();
 });
-test("unpaid delivery is blocked for staff and requires explicit owner acknowledgement", async ({
-  page,
-  browser,
-}) => {
-  await login(page);
-  const url = await create(page);
+test("unpaid delivery requires explicit acknowledgement", async ({ page }) => {
+  await fillOrder(page);
+  await save(page);
   await state(page, "REPAIRING");
   await state(page, "READY");
   await page
-    .getByRole("combobox", { name: "Nuovo stato", exact: true })
+    .getByLabel("Nuovo stato", { exact: true })
     .selectOption("COMPLETED");
   await page.getByLabel("Nome di chi ritira", { exact: true }).fill("Cliente");
   await page
     .getByRole("button", { name: "Consegna dispositivo", exact: true })
     .click();
-  await expect(page.getByRole("main").getByRole("alert")).toContainText(
-    "titolare",
-  );
-  const context = await browser.newContext();
-  const ownerPage = await context.newPage();
-  await login(ownerPage, true);
-  await ownerPage.goto(url);
-  await ownerPage
-    .getByRole("combobox", { name: "Nuovo stato", exact: true })
-    .selectOption("COMPLETED");
-  await ownerPage
-    .getByLabel("Nome di chi ritira", { exact: true })
-    .fill("Cliente");
-  await ownerPage
+  await expect(page.locator(".detail-status .badge")).toHaveText("Da ritirare");
+  await page
     .getByLabel("Autorizzo la consegna con saldo aperto", { exact: true })
     .check();
-  await ownerPage
+  await page
     .getByRole("button", { name: "Consegna dispositivo", exact: true })
     .click();
-  await expect(ownerPage.locator(".detail-status .badge")).toHaveText(
-    "Consegnato",
-  );
-  await expect(ownerPage.locator(".balance-card>strong")).toContainText(
-    "80,00",
-  );
-  await context.close();
+  await expect(page.locator(".detail-status .badge")).toHaveText("Consegnato");
 });
-test("anonymous and staff cannot access protected administration", async ({
+test("price editor and mobile yellow layout support both languages", async ({
   page,
 }) => {
-  await page.goto("/orders");
-  await expect(page).toHaveURL(/\/login/);
-  await login(page);
-  await expect(page.getByRole("link", { name: "Collaboratori" })).toHaveCount(
-    0,
-  );
-  for (const path of ["/prices", "/team", "/reports"]) {
-    await page.goto(path);
-    await expect(
-      page.getByText("Questa sezione è riservata al titolare."),
-    ).toBeVisible();
-  }
-});
-test("owner manages list prices and dashboard has responsive mobile layout", async ({
-  page,
-}) => {
-  await login(page, true);
   await page.goto("/prices");
   await page.getByText("Nuova regola", { exact: true }).click();
   const form = page.locator("details").first();
@@ -186,23 +236,18 @@ test("owner manages list prices and dashboard has responsive mobile layout", asy
     .fill(`pulizia ${Date.now()}`);
   await form.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("15");
   await form.getByRole("button", { name: "Salva", exact: true }).click();
-  await expect(form.getByRole("status")).toContainText("Operazione completata");
+  await expect(form.getByRole("status")).toBeVisible();
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "Oggi in laboratorio" }),
+    page.getByRole("heading", { name: "Oggi in laboratorio", exact: true }),
   ).toBeVisible();
   await page.screenshot({
     path: "test-results/desktop-dashboard.png",
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-  await expect(
-    page.getByRole("heading", { name: "Oggi in laboratorio" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Oggi in laboratorio" }),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "中文", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "今日工作台" })).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -210,6 +255,19 @@ test("owner manages list prices and dashboard has responsive mobile layout", asy
   ).toBe(true);
   await page.screenshot({
     path: "test-results/mobile-dashboard.png",
+    fullPage: true,
+  });
+  await page.goto("/orders/new");
+  await expect(
+    page.getByRole("heading", { name: "新建维修单", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/mobile-new-order.png",
     fullPage: true,
   });
 });

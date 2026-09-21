@@ -27,12 +27,37 @@ export function total(
 ): number {
   return items.reduce((sum, item) => sum + cents(item.final), 0);
 }
+type Amount = string | { toString(): string };
+export type QuoteItem = { final: Amount; discount?: Amount };
+export type QuoteOptions = { orderDiscount?: Amount; includeVat?: boolean };
+export function settlement(items: QuoteItem[], options: QuoteOptions = {}) {
+  const gross = total(items);
+  const itemDiscount = items.reduce((sum, item) => {
+    const discount = cents(item.discount ?? "0");
+    if (discount > cents(item.final))
+      throw new BusinessError("Lo sconto supera il prezzo.");
+    return sum + discount;
+  }, 0);
+  const discount = itemDiscount + cents(options.orderDiscount ?? "0");
+  if (discount > gross) throw new BusinessError("Lo sconto supera il prezzo.");
+  const net = gross - discount;
+  const vat = Math.round((net * 22) / 100);
+  return {
+    gross,
+    discount,
+    net,
+    vat,
+    withVat: net + vat,
+    due: net + (options.includeVat ? vat : 0),
+  };
+}
 export function balance(
-  items: { final: string | { toString(): string } }[],
+  items: QuoteItem[],
   payments: { amount: string | { toString(): string } }[],
+  options: QuoteOptions = {},
 ) {
   return (
-    total(items) -
+    settlement(items, options).due -
     payments.reduce((sum, payment) => sum + cents(payment.amount), 0)
   );
 }

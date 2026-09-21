@@ -1,0 +1,9 @@
+pnpm-lock.yaml
+docs/
+.next/
+node_modules/
+.local/
+test-results/
+playwright-report/
+next-env.d.ts
+prisma/migrations/

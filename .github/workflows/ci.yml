@@ -1,0 +1,51 @@
+name: Verify MVP
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: ngt
+          POSTGRES_PASSWORD: ci-test-password
+          POSTGRES_DB: ngt_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ngt -d ngt_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://ngt:ci-test-password@localhost:5432/ngt_test?schema=public
+      AUTH_SECRET: ci-only-secret-for-isolated-tests-2026
+      AUTH_URL: http://localhost:3000
+      AUTH_TRUST_HOST: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install -g pnpm@11.19.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: node scripts/verify.mjs
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-diagnostics
+          path: |
+            playwright-report/
+            test-results/
+      - name: Validate container build
+        run: docker build --target runner -t ngt-mvp:ci .

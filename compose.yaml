@@ -1,0 +1,74 @@
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: ngt
+      POSTGRES_DB: ngt
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ngt -d ngt"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    logging: &logging
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  migrate:
+    build:
+      context: .
+      target: tools
+    command: ["pnpm", "db:migrate"]
+    environment:
+      DATABASE_URL: postgresql://ngt:${POSTGRES_PASSWORD}@db:5432/ngt?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+    logging: *logging
+  app:
+    build:
+      context: .
+      target: runner
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      DATABASE_URL: postgresql://ngt:${POSTGRES_PASSWORD}@db:5432/ngt?schema=public
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET in .env}
+      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+      AUTH_TRUST_HOST: "true"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    logging: *logging
+  seed:
+    profiles: ["tools"]
+    build:
+      context: .
+      target: tools
+    command: ["pnpm", "db:seed"]
+    environment:
+      DATABASE_URL: postgresql://ngt:${POSTGRES_PASSWORD}@db:5432/ngt?schema=public
+      SEED_OWNER_EMAIL: ${SEED_OWNER_EMAIL}
+      SEED_OWNER_NAME: ${SEED_OWNER_NAME:-Titolare}
+      SEED_OWNER_PASSWORD: ${SEED_OWNER_PASSWORD}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+volumes:
+  postgres_data:

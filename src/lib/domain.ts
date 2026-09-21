@@ -1,0 +1,139 @@
+export const statuses = [
+  "RECEIVED",
+  "DIAGNOSING",
+  "WAITING_APPROVAL",
+  "REPAIRING",
+  "READY",
+  "COMPLETED",
+  "CANCELLED",
+] as const;
+export type OrderStatus = (typeof statuses)[number];
+export type Actor = { id: string; name: string; role: "OWNER" | "STAFF" };
+export class BusinessError extends Error {}
+export function cents(value: string | { toString(): string }): number {
+  const text = value.toString().trim().replace(",", ".");
+  if (!/^\d{1,8}(\.\d{1,2})?$/.test(text))
+    throw new BusinessError("Importo non valido (massimo 2 decimali).");
+  const [whole, decimal = ""] = text.split(".");
+  return Number(whole) * 100 + Number(decimal.padEnd(2, "0"));
+}
+export function decimal(value: number): string {
+  if (!Number.isSafeInteger(value) || value < 0)
+    throw new BusinessError("Importo non valido.");
+  return `${Math.floor(value / 100)}.${String(value % 100).padStart(2, "0")}`;
+}
+export function total(
+  items: { final: string | { toString(): string } }[],
+): number {
+  return items.reduce((sum, item) => sum + cents(item.final), 0);
+}
+export function balance(
+  items: { final: string | { toString(): string } }[],
+  payments: { amount: string | { toString(): string } }[],
+) {
+  return (
+    total(items) -
+    payments.reduce((sum, payment) => sum + cents(payment.amount), 0)
+  );
+}
+export const transitions: Record<OrderStatus, OrderStatus[]> = {
+  RECEIVED: ["DIAGNOSING", "WAITING_APPROVAL", "REPAIRING", "CANCELLED"],
+  DIAGNOSING: ["WAITING_APPROVAL", "REPAIRING", "READY", "CANCELLED"],
+  WAITING_APPROVAL: ["DIAGNOSING", "REPAIRING", "CANCELLED"],
+  REPAIRING: ["WAITING_APPROVAL", "READY", "CANCELLED"],
+  READY: ["REPAIRING", "COMPLETED"],
+  COMPLETED: [],
+  CANCELLED: [],
+};
+export function assertTransition(from: OrderStatus, to: OrderStatus) {
+  if (!transitions[from].includes(to))
+    throw new BusinessError("Cambio di stato non consentito.");
+}
+export function assertOwner(actor: Actor) {
+  if (actor.role !== "OWNER")
+    throw new BusinessError("Operazione riservata al titolare.");
+}
+export function assertDelivery(
+  actor: Actor,
+  remaining: number,
+  override: boolean,
+) {
+  if (remaining > 0 && (actor.role !== "OWNER" || !override))
+    throw new BusinessError(
+      "Saldo aperto: è necessaria la conferma esplicita del titolare.",
+    );
+}
+export function normalizePhone(phone: string) {
+  const clean = phone.replace(/[\s().-]/g, "").replace(/^00/, "+");
+  if (!/^\+?\d{6,15}$/.test(clean))
+    throw new BusinessError("Numero di telefono non valido.");
+  return clean.startsWith("+") ? clean : `+39${clean}`;
+}
+export type MatchableRule = {
+  id: string;
+  brand: string;
+  series: string;
+  model: string;
+  project: string;
+  enabled: boolean;
+};
+const norm = (s: string) => s.trim().toLocaleLowerCase("it");
+export function matchRule<T extends MatchableRule>(
+  rules: T[],
+  device: { brand: string; series: string; model: string },
+  project: string,
+): { rule: T; level: string } | null {
+  const eligible = rules.filter(
+    (r) => r.enabled && norm(r.project) === norm(project),
+  );
+  const exact = eligible.find(
+    (r) =>
+      r.model &&
+      norm(r.brand) === norm(device.brand) &&
+      norm(r.model) === norm(device.model),
+  );
+  if (exact) return { rule: exact, level: "MODEL" };
+  const series = eligible.find(
+    (r) =>
+      !r.model &&
+      r.brand &&
+      norm(r.brand) === norm(device.brand) &&
+      r.series &&
+      norm(r.series) === norm(device.series),
+  );
+  if (series) return { rule: series, level: "SERIES" };
+  const generic = eligible.find((r) => !r.brand && !r.series && !r.model);
+  return generic ? { rule: generic, level: "GENERIC" } : null;
+}
+export function romeDay(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+export function isOverdue(
+  order: { status: string; dueDate: string | null },
+  today = romeDay(),
+) {
+  return (
+    !["COMPLETED", "CANCELLED"].includes(order.status) &&
+    !!order.dueDate &&
+    order.dueDate < today
+  );
+}
+export const money = (amount: number) =>
+  new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(
+    amount / 100,
+  );
+export const dateTime = (date: Date | string) =>
+  new Intl.DateTimeFormat("it-IT", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "Europe/Rome",
+  }).format(new Date(date));
+export const dateOnly = (date: string | null) =>
+  date ? date.split("-").reverse().join("/") : "—";
+export const orderCode = (number: number) =>
+  `NGT-${String(number).padStart(5, "0")}`;

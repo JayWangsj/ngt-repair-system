@@ -1,0 +1,104 @@
+"use server";
+import { requireActor } from "@/lib/session";
+import * as service from "@/lib/service";
+import { BusinessError } from "@/lib/domain";
+import { ZodError } from "zod";
+import { Prisma } from "@prisma/client";
+import { revalidatePath } from "next/cache";
+import { db } from "@/lib/db";
+import { phoneInput } from "@/lib/validation";
+type Result = { ok: true; id?: string } | { ok: false; error: string };
+async function execute(
+  work: () => Promise<{ id?: string } | void>,
+): Promise<Result> {
+  try {
+    const result = await work();
+    revalidatePath("/", "layout");
+    return { ok: true, id: result?.id };
+  } catch (error) {
+    if (error instanceof BusinessError)
+      return { ok: false, error: error.message };
+    if (error instanceof ZodError)
+      return {
+        ok: false,
+        error: error.issues
+          .map((i) => `${i.path.join(".")}: ${i.message}`)
+          .join(" · "),
+      };
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    )
+      return {
+        ok: false,
+        error: "Record già presente. Controlla i dati e riprova.",
+      };
+    // Redirect errors must propagate; infrastructure errors are deliberately not logged with PII.
+    if (error instanceof Error && "digest" in error) throw error;
+    return {
+      ok: false,
+      error: "Operazione non riuscita. Aggiorna la pagina e riprova.",
+    };
+  }
+}
+export async function createOrderAction(input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.createOrder(actor, input));
+}
+export async function updateOrderAction(id: string, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.updateOrder(actor, id, input));
+}
+export async function quoteAction(id: string, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.replaceQuote(actor, id, input));
+}
+export async function confirmAction(id: string, note: string) {
+  const actor = await requireActor();
+  return execute(() => service.confirmQuote(actor, id, note));
+}
+export async function paymentAction(id: string, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.addPayment(actor, id, input));
+}
+export async function statusAction(id: string, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.changeStatus(actor, id, input));
+}
+export async function ruleAction(id: string | null, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.savePriceRule(actor, id, input));
+}
+export async function userAction(input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.createUser(actor, input));
+}
+export async function userEnabledAction(id: string, enabled: boolean) {
+  const actor = await requireActor();
+  return execute(() => service.setUserEnabled(actor, id, enabled));
+}
+export async function lookupCustomerAction(phone: string) {
+  await requireActor();
+  const parsed = phoneInput.safeParse(phone);
+  if (!parsed.success) return null;
+  return db.customer.findUnique({
+    where: { phone: parsed.data },
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      consentAt: true,
+      devices: {
+        select: {
+          id: true,
+          brand: true,
+          series: true,
+          model: true,
+          imei: true,
+          appearance: true,
+          accessories: true,
+        },
+      },
+    },
+  });
+}

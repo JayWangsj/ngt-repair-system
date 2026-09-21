@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+enum Role {
+  OWNER
+  STAFF
+}
+enum Status {
+  RECEIVED
+  DIAGNOSING
+  WAITING_APPROVAL
+  REPAIRING
+  READY
+  COMPLETED
+  CANCELLED
+}
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+  OTHER
+}
+enum PaymentKind {
+  DEPOSIT
+  BALANCE
+  OTHER
+}
+model User {
+  id             String @id @default(cuid())
+  email          String @unique
+  name           String
+  passwordHash   String
+  role           Role @default(STAFF)
+  enabled        Boolean @default(true)
+  failedAttempts Int @default(0)
+  lockedUntil    DateTime? @db.Timestamptz(3)
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  payments       Payment[]
+  statuses       StatusHistory[]
+  audits         AuditLog[]
+}
+model Customer {
+  id             String @id @default(cuid())
+  name           String
+  phone          String @unique
+  consentAt      DateTime? @db.Timestamptz(3)
+  consentVersion String?
+  codiceFiscale  String?
+  partitaIva     String?
+  createdAt      DateTime @default(now()) @db.Timestamptz(3)
+  devices        Device[]
+}
+model Device {
+  id         String @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id])
+  brand      String
+  series     String @default("")
+  model      String
+  imei       String?
+  appearance String @default("")
+  accessories String @default("")
+  orders     WorkOrder[]
+  @@index([customerId])
+}
+model WorkOrder {
+  id          String @id @default(cuid())
+  number      Int @unique @default(autoincrement())
+  deviceId    String
+  device      Device @relation(fields: [deviceId], references: [id])
+  status      Status @default(RECEIVED)
+  fault       String
+  appearance  String @default("")
+  accessories String @default("")
+  notes       String @default("")
+  dueDate     String?
+  confirmedAt DateTime? @db.Timestamptz(3)
+  confirmationNote String @default("")
+  pickedUpAt  DateTime? @db.Timestamptz(3)
+  pickedUpBy  String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+  items       WorkOrderItem[]
+  payments    Payment[]
+  history     StatusHistory[]
+  @@index([status, dueDate])
+  @@index([deviceId])
+  @@index([createdAt])
+}
+model PriceRule {
+  id           String @id @default(cuid())
+  brand        String @default("")
+  series       String @default("")
+  model        String @default("")
+  project      String
+  suggested    Decimal @db.Decimal(12, 2)
+  cost         Decimal? @db.Decimal(12, 2)
+  minutes      Int @default(60)
+  enabled      Boolean @default(true)
+  notes        String @default("")
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+  items        WorkOrderItem[]
+  @@unique([brand, series, model, project])
+}
+model WorkOrderItem {
+  id           String @id @default(cuid())
+  orderId      String
+  order        WorkOrder @relation(fields: [orderId], references: [id])
+  ruleId       String?
+  rule         PriceRule? @relation(fields: [ruleId], references: [id])
+  project      String
+  suggested    Decimal? @db.Decimal(12, 2)
+  final        Decimal @db.Decimal(12, 2)
+  matchLevel   String
+  adjustmentReason String @default("")
+  minutes      Int @default(0)
+  @@index([orderId])
+}
+model Payment {
+  id           String @id @default(cuid())
+  requestId    String @unique
+  orderId      String
+  order        WorkOrder @relation(fields: [orderId], references: [id])
+  amount       Decimal @db.Decimal(12, 2)
+  method       PaymentMethod
+  kind         PaymentKind
+  receivedAt   DateTime @default(now()) @db.Timestamptz(3)
+  actorId      String
+  actor        User @relation(fields: [actorId], references: [id])
+  actorName    String
+  @@index([orderId])
+  @@index([receivedAt])
+}
+model StatusHistory {
+  id          String @id @default(cuid())
+  orderId     String
+  order       WorkOrder @relation(fields: [orderId], references: [id])
+  from        Status?
+  to          Status
+  actorId     String
+  actor       User @relation(fields: [actorId], references: [id])
+  actorName   String
+  note        String @default("")
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  @@index([orderId])
+}
+model AuditLog {
+  id         String @id @default(cuid())
+  entityId   String
+  action     String
+  actorId    String
+  actor      User @relation(fields: [actorId], references: [id])
+  actorName  String
+  context    Json
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  @@index([entityId, createdAt])
+}

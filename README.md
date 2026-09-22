@@ -42,6 +42,22 @@ pnpm dev
 
 也可以自行配置 PostgreSQL：复制 `.env.example` 为 `.env`，填入数据库连接串，跳过本机数据库脚本。
 
+## Windows 登录自动启动
+
+以当前 Windows 用户安装登录自启动任务：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-windows-startup.ps1
+```
+
+任务名称为 `NGT Management System`，会持续监控数据库和应用；服务退出时自动重新启动。安装后以及以后每次登录 Windows，直接访问 <http://localhost:3000>。
+
+如需移除自动启动任务：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-windows-startup.ps1
+```
+
 ## Docker Compose
 
 在 `.env` 填写 `POSTGRES_PASSWORD`（建议随机十六进制字符串），无需账号或认证配置。

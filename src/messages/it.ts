@@ -211,6 +211,11 @@ export const it = {
   vat: "Partita IVA",
   priceDescription:
     "Prezzi coerenti. Preventivi veloci. Il tuo listino sempre aggiornato.",
+  batchManage: "Gestisci selezione",
+  finishBatch: "Fine selezione",
+  moreActions: "Altre azioni",
+  addProject: "Intervento",
+  editRule: "Modifica",
   newRule: "Nuova regola",
   scope: "Marca / serie / modello",
   generic: "Tutti i dispositivi",

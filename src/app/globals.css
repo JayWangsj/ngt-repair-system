@@ -968,25 +968,8 @@ details[open] > summary {
   margin-bottom: 18px;
 }
 .rule-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  margin-top: 24px;
-}
-.rule-summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 15px;
-}
-.rule-summary small {
-  display: block;
-  color: var(--muted);
-  font-weight: 400;
-  margin-top: 4px;
-}
-.rule-summary strong {
-  text-transform: capitalize;
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
 }
 .device-grid {
   display: grid;
@@ -1298,10 +1281,7 @@ details[open] > summary {
   .detail-grid > .stack:last-child {
     display: flex;
   }
-  .rule-summary {
-    align-items: flex-start;
-    flex-direction: column;
-  }
+
   .login-page {
     display: block;
   }
@@ -1590,20 +1570,6 @@ details[open] > summary {
 .price-group-heading span {
   color: var(--muted);
 }
-.rule-price {
-  display: grid;
-  gap: 4px;
-}
-.rule-price small {
-  color: var(--muted);
-  font-size: 12px;
-}
-.rule-edit-button {
-  pointer-events: none;
-  min-height: 34px;
-  padding: 8px 12px;
-  font-size: 11px;
-}
 .settings-grid {
   display: grid;
   gap: 22px;
@@ -1702,4 +1668,70 @@ details[open] > summary {
   gap: 12px;
   padding-top: 16px;
   border-top: 1px solid #e5e5e5;
+}
+
+.price-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.price-rule-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.price-rule-row .rule-price {
+  white-space: nowrap;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+}
+.price-rule-row > input[type="checkbox"] {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+}
+.price-rule-row .button,
+.price-add-project {
+  min-height: 36px;
+  padding: 6px 10px;
+  flex-shrink: 0;
+}
+.price-rule-more {
+  position: relative;
+  flex-shrink: 0;
+}
+.price-rule-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 10;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: white;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
+  white-space: nowrap;
+}
+.price-rule-menu .button {
+  color: #8f3f36;
+}
+.price-batch-toolbar {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+@media (max-width: 600px) {
+  .price-rule-row {
+    gap: 6px;
+  }
+  .price-rule-row .button {
+    padding: 6px;
+    min-height: 40px;
+  }
+  .price-rule-row .rule-price {
+    font-size: 12px;
+  }
 }

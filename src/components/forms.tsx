@@ -24,7 +24,7 @@ import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Trash2, Check } from "lucide-react";
+import { Plus, Trash2, Check, MoreHorizontal } from "lucide-react";
 import { Button } from "./ui/button";
 import { useMessages, useLanguage } from "./language";
 import { translateError } from "@/lib/i18n";
@@ -1491,6 +1491,72 @@ export function DeviceForm({
     </ActionForm>
   );
 }
+function PriceRuleMore({
+  project,
+  disabled,
+  onDelete,
+}: {
+  project: string;
+  disabled: boolean;
+  onDelete: () => void;
+}) {
+  const it = useMessages();
+  const [open, setOpen] = useState(false);
+  const container = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const id = useId();
+  useEffect(() => {
+    if (!open) return;
+    function dismiss(event: PointerEvent) {
+      if (!container.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener("pointerdown", dismiss);
+    return () => document.removeEventListener("pointerdown", dismiss);
+  }, [open]);
+  return (
+    <div
+      className="price-rule-more"
+      ref={container}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.preventDefault();
+          setOpen(false);
+          trigger.current?.focus();
+        }
+      }}
+    >
+      <Button
+        ref={trigger}
+        variant="ghost"
+        disabled={disabled}
+        aria-label={it.moreActions + " " + project}
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen(!open)}
+      >
+        <MoreHorizontal size={18} />
+      </Button>
+      {open && (
+        <div id={id} className="price-rule-menu">
+          <Button
+            variant="ghost"
+            disabled={disabled}
+            onClick={() => {
+              setOpen(false);
+              onDelete();
+            }}
+          >
+            {it.deleteRule}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PriceList({ rules }: { rules: RuleView[] }) {
   const it = useMessages();
   const { locale } = useLanguage();
@@ -1500,6 +1566,8 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
   const [pending, setPending] = useState(false);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<string[]>([]);
+  const [batchMode, setBatchMode] = useState(false);
+  const [editing, setEditing] = useState<RuleView | null>(null);
   const [creating, setCreating] = useState<Partial<RuleView> | null>(null);
   const [saved, setSaved] = useState(false);
   const reveal = useRef("");
@@ -1525,7 +1593,7 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
         : [...current, key],
     );
   }
-  const heading = (key: string, label: string, initial: Partial<RuleView>) => (
+  const heading = (key: string, label: string, initial?: Partial<RuleView>) => (
     <div className="catalog-toolbar price-tree-heading">
       <button
         type="button"
@@ -1539,15 +1607,19 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
         </span>{" "}
         {label}
       </button>
-      <Button
-        variant="outline"
-        onClick={() => {
-          setSaved(false);
-          setCreating(initial);
-        }}
-      >
-        {it.newRule}
-      </Button>
+      {initial && (
+        <Button
+          variant="ghost"
+          className="price-add-project"
+          onClick={() => {
+            setSaved(false);
+            setCreating(initial);
+          }}
+        >
+          <Plus size={16} />
+          {it.addProject}
+        </Button>
+      )}
     </div>
   );
 
@@ -1597,6 +1669,18 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
           />
         </Field>
       </div>
+      {editing && (
+        <FormDialog title={it.editProject} onClose={() => setEditing(null)}>
+          <RuleForm
+            rule={editing}
+            rules={rules}
+            onSuccess={() => {
+              setEditing(null);
+              setSaved(true);
+            }}
+          />
+        </FormDialog>
+      )}
       {creating && (
         <FormDialog title={it.newRule} onClose={() => setCreating(null)}>
           <RuleForm
@@ -1619,35 +1703,49 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
         </FormDialog>
       )}
       <Message success={saved} />
-      <div className="catalog-toolbar">
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={
-              visibleIds.length > 0 && selectedIds.length === visibleIds.length
-            }
-            onChange={(event) =>
-              setSelected(event.target.checked ? visibleIds : [])
-            }
-          />
-          {it.selectAll}
-        </label>
+      <div className="catalog-toolbar price-batch-toolbar">
         <Button
-          disabled={pending || !selectedIds.length}
           variant="outline"
-          onClick={() => remove(selectedIds)}
+          disabled={pending}
+          aria-pressed={batchMode}
+          onClick={() => {
+            setBatchMode(!batchMode);
+            setSelected([]);
+          }}
         >
-          {it.deleteSelected} ({selectedIds.length})
+          {batchMode ? it.finishBatch : it.batchManage}
         </Button>
+        {batchMode && (
+          <>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={
+                  visibleIds.length > 0 &&
+                  selectedIds.length === visibleIds.length
+                }
+                onChange={(event) =>
+                  setSelected(event.target.checked ? visibleIds : [])
+                }
+              />
+              {it.selectAll}
+            </label>
+            <Button
+              disabled={pending || !selectedIds.length}
+              variant="outline"
+              onClick={() => remove(selectedIds)}
+            >
+              {it.deleteSelected} ({selectedIds.length})
+            </Button>
+          </>
+        )}
       </div>
       <Message error={error} />
       <div className="price-groups">
         {groups.length === 0 && <p className="empty">{it.noPriceResults}</p>}
         {groups.map((brand) => (
           <section className="price-group" key={brand.key}>
-            {heading(brand.key, brand.brand || it.generic, {
-              brand: brand.brand,
-            })}
+            {heading(brand.key, brand.brand || it.generic)}
             <div
               id={"group-" + brand.key}
               hidden={!query.trim() && !expanded.includes(brand.key)}
@@ -1659,7 +1757,6 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
                     categories[category.category as Category]?.[
                       locale === "zh" ? 1 : 0
                     ] ?? category.category,
-                    { brand: brand.brand, category: category.category },
                   )}
                   <div
                     id={"group-" + category.key}
@@ -1680,55 +1777,52 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
                         >
                           <div className="rule-list">
                             {group.rules.map((rule) => (
-                              <article className="panel padded" key={rule.id}>
-                                <div className="catalog-toolbar">
-                                  <label className="checkbox">
-                                    <input
-                                      type="checkbox"
-                                      aria-label={
-                                        it.selectOption +
-                                        " " +
-                                        rule.project +
-                                        " " +
-                                        rule.brand +
-                                        " " +
-                                        rule.model
-                                      }
-                                      checked={selected.includes(rule.id)}
-                                      onChange={(event) =>
-                                        setSelected(
-                                          event.target.checked
-                                            ? [...selected, rule.id]
-                                            : selected.filter(
-                                                (id) => id !== rule.id,
-                                              ),
-                                        )
-                                      }
-                                    />
-                                    {rule.project}
-                                  </label>
-                                  <Button
-                                    variant="ghost"
-                                    disabled={pending}
-                                    onClick={() => remove([rule.id])}
-                                  >
-                                    {it.deleteRule}
-                                  </Button>
-                                </div>
-                                <details>
-                                  <summary className="rule-summary">
-                                    <span className="rule-price">
-                                      <strong>{rule.project}</strong>
-                                      <small>
-                                        {money(cents(rule.suggested))}
-                                      </small>
-                                    </span>
-                                    <span className="button button-outline rule-edit-button">
-                                      {it.editProject}
-                                    </span>
-                                  </summary>
-                                  <RuleForm rule={rule} rules={rules} />
-                                </details>
+                              <article className="price-rule-row" key={rule.id}>
+                                {batchMode && (
+                                  <input
+                                    type="checkbox"
+                                    aria-label={
+                                      it.selectOption +
+                                      " " +
+                                      rule.project +
+                                      " " +
+                                      rule.brand +
+                                      " " +
+                                      rule.model
+                                    }
+                                    checked={selected.includes(rule.id)}
+                                    onChange={(event) =>
+                                      setSelected(
+                                        event.target.checked
+                                          ? [...selected, rule.id]
+                                          : selected.filter(
+                                              (id) => id !== rule.id,
+                                            ),
+                                      )
+                                    }
+                                  />
+                                )}
+                                <strong className="price-rule-name">
+                                  {rule.project}
+                                </strong>
+                                <span className="rule-price">
+                                  {money(cents(rule.suggested))}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  disabled={pending}
+                                  onClick={() => {
+                                    setSaved(false);
+                                    setEditing(rule);
+                                  }}
+                                >
+                                  {it.editRule}
+                                </Button>
+                                <PriceRuleMore
+                                  project={rule.project}
+                                  disabled={pending}
+                                  onDelete={() => remove([rule.id])}
+                                />
                               </article>
                             ))}
                           </div>

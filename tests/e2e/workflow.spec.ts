@@ -519,9 +519,7 @@ test("quote tree supports contextual dialogs, search, editing and empty branch r
     .filter({ has: page.locator(".price-toggle", { hasText: "Watch Modal" }) })
     .last();
   await expect(model.locator("article")).toBeVisible();
-  await model
-    .getByRole("button", { name: "Nuova regola", exact: true })
-    .click();
+  await model.getByRole("button", { name: "Intervento", exact: true }).click();
   dialog = page.getByRole("dialog");
   await expect(
     dialog.getByLabel("Tipo dispositivo", { exact: true }),
@@ -539,7 +537,7 @@ test("quote tree supports contextual dialogs, search, editing and empty branch r
   await expect(model.locator("article")).toHaveCount(2);
   await page.getByLabel("Cerca", { exact: true }).fill("Test battery");
   await expect(page.locator(".rule-list > article")).toHaveCount(1);
-  await page.locator(".rule-summary").click();
+  await page.getByRole("button", { name: "Modifica", exact: true }).click();
   await page.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("45");
   await page.getByRole("button", { name: "Salva", exact: true }).click();
   await expect(page.locator(".rule-price")).toContainText("45,00");
@@ -547,6 +545,9 @@ test("quote tree supports contextual dialogs, search, editing and empty branch r
     "Test battery",
   );
   await page.getByLabel("Cerca", { exact: true }).fill("Watch Modal");
+  await page
+    .getByRole("button", { name: "Gestisci selezione", exact: true })
+    .click();
   await page.getByLabel("Seleziona tutti", { exact: true }).check();
   page.once("dialog", (d) => d.accept());
   await page
@@ -598,6 +599,104 @@ test("removes a saved fault and keeps it removed after reload", async ({
     0,
   );
 });
+
+test("compact price rows support editing, selection and dismissible actions on mobile", async ({
+  page,
+}) => {
+  await page.goto("/prices");
+  await page.getByLabel("Cerca", { exact: true }).fill("iPhone 13");
+  const rows = page.locator(".price-rule-row");
+  const row = rows.first();
+  await expect(row).toBeVisible();
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Elimina preventivo", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Nuova regola", exact: true }),
+  ).toHaveCount(1);
+  const originalPrice = await row.locator(".rule-price").innerText();
+  const edit = row.getByRole("button", { name: "Modifica", exact: true });
+  await edit.click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("999");
+  await dialog.getByRole("button", { name: "Annulla", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(edit).toBeFocused();
+  await expect(row.locator(".rule-price")).toHaveText(originalPrice);
+  await edit.click();
+  await dialog.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("bad");
+  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toBeVisible();
+  const longName =
+    "Sostituzione componente con descrizione molto lunga per verifica mobile";
+  await dialog.getByLabel("Intervento", { exact: true }).fill(longName);
+  await dialog
+    .getByLabel("Prezzo suggerito (€)", { exact: true })
+    .fill("123.45");
+  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByLabel("Cerca", { exact: true })).toHaveValue(
+    "iPhone 13",
+  );
+  const changed = rows.filter({ hasText: longName });
+  await expect(changed.locator(".price-rule-name")).toHaveCount(1);
+  await expect(changed.locator(".rule-price")).toContainText("123,45");
+  const more = changed.getByRole("button", { name: /^Altre azioni/ });
+  await more.click();
+  await expect(
+    changed.getByRole("button", { name: "Elimina preventivo", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(more).toBeFocused();
+  await expect(more).toHaveAttribute("aria-expanded", "false");
+  await more.click();
+  await page.locator("h1").click();
+  await expect(more).toHaveAttribute("aria-expanded", "false");
+  await page
+    .getByRole("button", { name: "Gestisci selezione", exact: true })
+    .click();
+  await changed.getByRole("checkbox").check();
+  await expect(
+    page.getByRole("button", { name: /Elimina preventivi selezionati/ }),
+  ).toContainText("(1)");
+  await page
+    .getByRole("button", { name: "Fine selezione", exact: true })
+    .click();
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await changed.scrollIntoViewIfNeeded();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await expect(
+    changed.getByRole("button", { name: "Modifica", exact: true }),
+  ).toBeInViewport();
+  await page.screenshot({
+    path: "test-results/compact-prices-mobile.png",
+    fullPage: true,
+  });
+  await page
+    .getByRole("button", { name: "Gestisci selezione", exact: true })
+    .click();
+  await expect(changed.getByRole("checkbox")).not.toBeChecked();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.getByLabel("Seleziona tutti", { exact: true }).check();
+  await page.getByLabel("Cerca", { exact: true }).fill("no-such-project");
+  await expect(
+    page.getByRole("button", { name: /Elimina preventivi selezionati/ }),
+  ).toBeDisabled();
+  await expect(
+    page.getByLabel("Seleziona tutti", { exact: true }),
+  ).not.toBeChecked();
+});
+
 test("price editor supports individual and batch deletion", async ({
   page,
 }) => {
@@ -607,12 +706,19 @@ test("price editor supports individual and batch deletion", async ({
   await page.getByRole("button", { name: "iPhone 13", exact: true }).click();
   const before = await page.locator(".rule-list > article").count();
   expect(before).toBeGreaterThan(1);
+  await page
+    .getByRole("button", { name: /^Altre azioni/ })
+    .first()
+    .click();
   page.once("dialog", (d) => d.accept());
   await page
     .getByRole("button", { name: "Elimina preventivo", exact: true })
     .first()
     .click();
   await expect(page.locator(".rule-list > article")).toHaveCount(before - 1);
+  await page
+    .getByRole("button", { name: "Gestisci selezione", exact: true })
+    .click();
   await page.getByLabel("Seleziona tutti", { exact: true }).check();
   page.once("dialog", (d) => d.accept());
   await page

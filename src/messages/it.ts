@@ -1,5 +1,6 @@
 // Italian interface dictionary.
 export const it = {
+  priceSearch: "Cerca marca, modello o intervento",
   addCustomer: "Nuovo cliente",
   confirmCustomer: "Conferma cliente",
   addCustomerPrompt: "Cliente non presente. Aggiungerlo alla rubrica?",

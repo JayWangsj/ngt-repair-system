@@ -1,5 +1,6 @@
 import type { it } from "./it";
 export const zh: typeof it = {
+  priceSearch: "搜索品牌、型号或维修项目",
   addCustomer: "新增客户",
   confirmCustomer: "确认客户",
   addCustomerPrompt: "客户尚未登记，是否添加到客户表？",

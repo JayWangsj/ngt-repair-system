@@ -7,7 +7,9 @@ export default function NotFound() {
     <main className="standalone">
       <h1>404</h1>
       <p>{it.notFound}</p>
-      <Link href="/">{it.backHome}</Link>
+      <Link className="button button-outline" href="/">
+        {it.backHome}
+      </Link>
     </main>
   );
 }

@@ -40,7 +40,7 @@ export default async function Detail({
   const closed = ["COMPLETED", "CANCELLED"].includes(order.status);
   return (
     <>
-      <Link className="back-link" href="/orders">
+      <Link className="button button-outline back-link" href="/orders">
         ← {it.nav.orders}
       </Link>
       <PageHeader

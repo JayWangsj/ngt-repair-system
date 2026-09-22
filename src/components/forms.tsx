@@ -37,7 +37,7 @@ import {
   normalizeBrand,
   normalizeModel,
 } from "@/lib/catalog";
-import { settlement } from "@/lib/domain";
+import { romeDay, settlement } from "@/lib/domain";
 import {
   cents,
   decimal,
@@ -515,6 +515,7 @@ export function NewOrderForm({
               ),
             )}
             onChange={(phone) => {
+              if (phone === values.phone) return;
               setValue("phone", phone);
               setCustomer(null);
               setCustomerConfirmed(false);
@@ -762,7 +763,7 @@ export function NewOrderForm({
           <textarea {...register("fault")} maxLength={2000} rows={2} />
         </Field>
         <Field label={it.dueDate}>
-          <input {...register("dueDate")} type="date" />
+          <input {...register("dueDate")} type="date" min={romeDay()} />
         </Field>
       </Section>
       <Section number="03" title={it.quoteSection}>
@@ -1109,7 +1110,12 @@ export function EditOrderForm({
       </Field>
       <input type="hidden" name="accessories" value={values.accessories} />
       <Field label={it.dueDate}>
-        <input type="date" name="dueDate" defaultValue={values.dueDate ?? ""} />
+        <input
+          type="date"
+          name="dueDate"
+          min={romeDay()}
+          defaultValue={values.dueDate ?? ""}
+        />
       </Field>
       <Field label={it.notes}>
         <textarea name="notes" defaultValue={values.notes} maxLength={2000} />
@@ -1661,16 +1667,19 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
           {it.newRule}
         </Button>
       </header>
-      <div className="catalog-toolbar">
-        <Field label={it.search}>
+      <div className="filters price-filters">
+        <label className="grow">
+          <span className="sr-only">{it.search}</span>
           <input
+            type="search"
+            placeholder={it.priceSearch}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
               setSelected([]);
             }}
           />
-        </Field>
+        </label>
       </div>
       {editing && (
         <FormDialog title={it.editProject} onClose={() => setEditing(null)}>

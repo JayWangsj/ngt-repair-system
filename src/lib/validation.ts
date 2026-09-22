@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { normalizePhone, statuses } from "./domain";
+import { normalizePhone, romeDay, statuses } from "./domain";
 const short = z.string().trim().min(1, "Campo obbligatorio").max(120);
 const text = z.string().trim().max(2000).default("");
 export const amountInput = z
@@ -28,6 +28,10 @@ const day = z
         !Number.isNaN(Date.parse(value)) &&
         new Date(value).toISOString().slice(0, 10) === value),
     "Data non valida",
+  )
+  .refine(
+    (value) => !value || value >= romeDay(),
+    "La consegna non può precedere oggi.",
   )
   .default("");
 export const itemInput = z.object({

@@ -33,7 +33,7 @@ export default async function CustomerDetail({
   });
   return (
     <>
-      <Link className="customer-back" href={returnTo}>
+      <Link className="button button-outline customer-back" href={returnTo}>
         ← {it.backCustomers}
       </Link>
       <PageHeader title={customer.name} />

@@ -1922,3 +1922,77 @@ details[open] > summary {
     min-width: 40px;
   }
 }
+
+/* Shared action affordances across business pages. */
+.button {
+  min-height: 40px;
+  font-size: 13px;
+}
+.button-outline,
+.button-ghost,
+.icon-button,
+details summary {
+  border: 1px solid #b8ae8d;
+  background: #fffdf5;
+  color: #574200;
+  border-radius: 8px;
+}
+.button-danger {
+  border-color: #d58a87;
+}
+.button-ghost:hover,
+.icon-button:hover,
+details summary:hover {
+  background: #fff1b6;
+  border-color: #806000;
+}
+.back-link.button,
+.customer-back.button {
+  display: inline-flex;
+  padding: 9px 14px;
+  margin-bottom: 18px;
+  font-size: 13px;
+  font-weight: 600;
+}
+details summary {
+  width: fit-content;
+  padding: 9px 14px;
+  min-height: 40px;
+  font-size: 13px;
+}
+.order-link,
+.section-heading > a:not(.button) {
+  color: #715300;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.price-filters input {
+  width: 100%;
+}
+
+.price-toggle,
+.fault-row button,
+.language-switch button:not([aria-pressed="true"]) {
+  border: 1px solid #b8ae8d;
+  border-radius: 8px;
+  background: #fffdf5;
+  color: #574200;
+}
+.price-toggle {
+  padding: 9px 12px;
+  min-height: 40px;
+}
+.fault-row button {
+  padding: 3px 8px;
+  min-width: 28px;
+  min-height: 28px;
+}
+.price-toggle:hover,
+.fault-row button:hover {
+  background: #fff1b6;
+  border-color: #806000;
+}
+.button-ghost.danger-text {
+  color: #ab4444;
+  border-color: #d58a87;
+}

@@ -337,6 +337,22 @@ test("confirms a new customer with three numbers and selects that customer by na
   await expect(page.getByLabel("Nome e cognome", { exact: true })).toHaveValue(
     "Tre telefoni",
   );
+
+  // The lookup canonicalizes phone 2 to phone 1; selecting phone 1 again
+  // must not clear the name without triggering another lookup.
+  await expect(page.getByLabel("Telefono", { exact: true })).toHaveValue(
+    "+39" + phone,
+  );
+  await page
+    .getByLabel("Seleziona Telefono", { exact: true })
+    .selectOption("+39" + phone);
+  await expect(page.getByLabel("Nome e cognome", { exact: true })).toHaveValue(
+    "Tre telefoni",
+  );
+  await page.getByLabel("Telefono", { exact: true }).fill(phone);
+  await expect(page.getByLabel("Nome e cognome", { exact: true })).toHaveValue(
+    "Tre telefoni",
+  );
 });
 test("native quote choices populate prices, clear on model changes and discounts are optional", async ({
   page,
@@ -984,3 +1000,38 @@ for (const width of [1280, 390]) {
     }
   });
 }
+
+test("shared action affordances, price search and delivery date limit", async ({
+  page,
+}) => {
+  await page.goto("/prices");
+  const search = page.getByRole("searchbox", { name: "Cerca", exact: true });
+  await expect(search).toHaveAttribute(
+    "placeholder",
+    "Cerca marca, modello o intervento",
+  );
+  await expect(page.locator(".filters").filter({ has: search })).toBeVisible();
+  await page.goto("/orders/new");
+  const date = page.locator('input[name="dueDate"]');
+  const today = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Rome",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+  await expect(date).toHaveAttribute("min", today);
+  await date.fill("2000-01-01");
+  expect(
+    await date.evaluate((el: HTMLInputElement) => el.validity.rangeUnderflow),
+  ).toBe(true);
+  await date.fill(today);
+  expect(await date.evaluate((el: HTMLInputElement) => el.validity.valid)).toBe(
+    true,
+  );
+  await page.goto("/customers");
+  await page.locator(".customer-table .order-link").first().click();
+  const back = page.locator(".customer-back");
+  await expect(back).toHaveClass(/button-outline/);
+  await expect(back).toHaveCSS("border-top-style", "solid");
+  await expect(back).toHaveCSS("display", "inline-flex");
+});

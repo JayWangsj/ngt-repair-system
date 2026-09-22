@@ -411,6 +411,174 @@ test("native quote choices populate prices, clear on model changes and discounts
     "iPhone 18 Pro Max",
   );
 });
+
+test("customer list searches instantly, preserves navigation and supports compact editing", async ({
+  page,
+  context,
+}) => {
+  const phone = "336" + Date.now().toString().slice(-7);
+  const extra = "337" + Date.now().toString().slice(-7);
+  const name =
+    "Cliente interfaccia molto lungo per verifica della disposizione";
+  await fillOrder(page, { phone });
+  await page.getByLabel("Nome e cognome", { exact: true }).fill(name);
+  await save(page);
+  await page.goto("/customers");
+  await page.getByLabel("Cerca", { exact: true }).fill(phone);
+  const row = page.locator(".customer-table tbody tr");
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText(name);
+  await expect(page).toHaveURL(new RegExp("q=" + phone + "$"));
+  await row.getByRole("link", { name, exact: true }).click();
+  await expect(
+    page.getByRole("link", { name: "Torna ai clienti" }),
+  ).toHaveAttribute("href", "/customers?q=" + phone);
+  await expect(page.locator("main input")).toHaveCount(0);
+  await expect(page.locator(".customer-device-row")).toHaveCount(1);
+  await expect(
+    page.getByRole("heading", { name: "Storico riparazioni" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Modifica cliente", exact: true })
+    .click();
+  let dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Telefono", { exact: true }).fill("bad");
+  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toBeVisible();
+  await dialog.getByLabel("Telefono", { exact: true }).fill(phone);
+  await dialog
+    .getByRole("button", { name: "Aggiungi telefono", exact: true })
+    .click();
+  await dialog.getByLabel("Telefono 2", { exact: true }).fill(extra);
+  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator(".customer-summary .customer-phone")).toHaveCount(
+    2,
+  );
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const firstPhone = page.locator(".customer-summary .customer-phone").first();
+  const storedPhone = await firstPhone.locator("a").innerText();
+  await firstPhone.getByRole("button").click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+    .toBe(storedPhone);
+  await expect(firstPhone.locator("a")).toHaveAttribute(
+    "href",
+    "tel:" + storedPhone,
+  );
+  await page
+    .getByRole("button", { name: "Modifica dispositivo", exact: true })
+    .click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Modello", { exact: true }).fill("Unsaved model");
+  await dialog.getByRole("button", { name: "Annulla", exact: true }).click();
+  await expect(page.locator(".customer-device-row")).not.toContainText(
+    "Unsaved model",
+  );
+  await expect(
+    page.getByRole("button", { name: "Modifica dispositivo", exact: true }),
+  ).toBeFocused();
+  await page
+    .getByRole("button", { name: "Modifica dispositivo", exact: true })
+    .click();
+  await dialog
+    .getByLabel("IMEI (facoltativo)", { exact: true })
+    .fill("123456789012345");
+  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator(".customer-device-row")).toContainText(
+    "123456789012345",
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/customer-detail-mobile.png",
+    fullPage: true,
+  });
+  await page.getByRole("link", { name: "Torna ai clienti" }).click();
+  await expect(page.getByLabel("Cerca", { exact: true })).toHaveValue(phone);
+  await expect(row).toHaveCount(1);
+  await page.getByLabel("Cerca", { exact: true }).fill(extra);
+  await expect(row).toHaveCount(1);
+  await expect(row.locator(".customer-phone")).toHaveCount(2);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/customer-list-mobile.png",
+    fullPage: true,
+  });
+  await row.getByRole("button", { name: /^Altre azioni/ }).click();
+  await row
+    .getByRole("button", { name: "Modifica cliente", exact: true })
+    .click();
+  await dialog
+    .getByLabel("Nome e cognome", { exact: true })
+    .fill("Discard this change");
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(row).toContainText(name);
+  await expect(
+    row.getByRole("button", { name: /^Altre azioni/ }),
+  ).toBeFocused();
+  await row.getByRole("button", { name: /^Altre azioni/ }).click();
+  await page.keyboard.press("Escape");
+  await expect(
+    row.getByRole("button", { name: /^Altre azioni/ }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await page.getByLabel("Cerca", { exact: true }).fill("no matching customer");
+  await expect(
+    page.getByText("Nessun cliente corrispondente", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Cancella ricerca", exact: true })
+    .first()
+    .click();
+  await expect(page.getByLabel("Cerca", { exact: true })).toHaveValue("");
+  await page.getByLabel("Cerca", { exact: true }).fill(extra);
+  await page.reload();
+  await expect(page.getByLabel("Cerca", { exact: true })).toHaveValue(extra);
+  await expect(row).toHaveCount(1);
+  await page.setViewportSize({ width: 1280, height: 844 });
+  await page.screenshot({
+    path: "test-results/customer-list-desktop.png",
+    fullPage: true,
+  });
+  await row.getByRole("link", { name, exact: true }).click();
+  const device = page.locator(".customer-device-row");
+  await device.getByRole("button", { name: /^Altre azioni/ }).click();
+  page.once("dialog", (d) => d.accept());
+  await device
+    .getByRole("button", { name: "Elimina dispositivo", exact: true })
+    .click();
+  await expect(device).toHaveCount(0);
+  await expect(
+    page.getByText("Nessun dispositivo registrato", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".table-panel tbody tr")).toHaveCount(1);
+  await page.getByRole("link", { name: "Torna ai clienti" }).click();
+  await expect(row.locator(".customer-device-count")).toContainText("0");
+  await row.getByRole("button", { name: /^Altre azioni/ }).click();
+  page.once("dialog", (d) => d.dismiss());
+  await row
+    .getByRole("button", { name: "Elimina cliente", exact: true })
+    .click();
+  await expect(row).toHaveCount(1);
+  await row.getByRole("button", { name: /^Altre azioni/ }).click();
+  page.once("dialog", (d) => d.accept());
+  await row
+    .getByRole("button", { name: "Elimina cliente", exact: true })
+    .click();
+  await expect(row).toHaveCount(0);
+  await expect(page.getByLabel("Cerca", { exact: true })).toHaveValue(extra);
+});
+
 test("customer page adds, edits and deletes a customer", async ({ page }) => {
   const phone = "339" + Date.now().toString().slice(-7);
   await page.goto("/customers");
@@ -426,10 +594,17 @@ test("customer page adds, edits and deletes a customer", async ({ page }) => {
   await expect(page).toHaveURL(/customers$/);
   await page.getByRole("link", { name: "Da modificare", exact: true }).click();
   await page
+    .getByRole("button", { name: "Modifica cliente", exact: true })
+    .click();
+  await page
     .getByLabel("Nome e cognome", { exact: true })
     .fill("Cliente modificato");
   await page.getByRole("button", { name: "Salva", exact: true }).click();
   await expect(page.locator("h1")).toHaveText("Cliente modificato");
+  await page
+    .getByRole("button", { name: /^Altre azioni/ })
+    .first()
+    .click();
   page.once("dialog", (d) => d.accept());
   await page
     .getByRole("button", { name: "Elimina cliente", exact: true })
@@ -462,11 +637,15 @@ test("customer dialog keeps filters and inputs on errors and allows deleted numb
   await expect(dialog).not.toBeVisible();
   await expect(page).toHaveURL(/customers\?q=ModalCustomer$/);
   await page.getByRole("link", { name: "ModalCustomer", exact: true }).click();
+  await page
+    .getByRole("button", { name: /^Altre azioni/ })
+    .first()
+    .click();
   page.once("dialog", (d) => d.accept());
   await page
     .getByRole("button", { name: "Elimina cliente", exact: true })
     .click();
-  await expect(page).toHaveURL(/customers$/);
+  await expect(page).toHaveURL(/customers\?q=ModalCustomer$/);
   await open();
   dialog = page.getByRole("dialog");
   await dialog

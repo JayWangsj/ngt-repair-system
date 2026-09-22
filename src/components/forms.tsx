@@ -1429,7 +1429,9 @@ export function DeleteRecord({
 }
 export function DeviceForm({
   device,
+  onSuccess,
 }: {
+  onSuccess?: () => void;
   device: {
     id: string;
     category: string;
@@ -1448,6 +1450,7 @@ export function DeviceForm({
   return (
     <ActionForm
       submit={it.save}
+      onSuccess={onSuccess}
       action={(data) =>
         deviceAction(device.id, { ...Object.fromEntries(data), brand, model })
       }
@@ -1840,7 +1843,7 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
   );
 }
 
-function FormDialog({
+export function FormDialog({
   title,
   onClose,
   children,

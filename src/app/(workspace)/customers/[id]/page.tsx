@@ -1,17 +1,22 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireActor } from "@/lib/session";
 import { PageHeader, OrderTable } from "@/components/common";
-import { CustomerForm, DeviceForm, DeleteRecord } from "@/components/forms";
+import { CustomerSummary, CustomerDevices } from "@/components/customers";
 import { getMessages } from "@/lib/i18n-server";
 export default async function CustomerDetail({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ q?: string }>;
 }) {
   const it = await getMessages();
   await requireActor();
   const { id } = await params;
+  const { q = "" } = await searchParams;
+  const returnTo = q ? `/customers?q=${encodeURIComponent(q)}` : "/customers";
   const customer = await db.customer.findUnique({
     where: { id },
     include: { phones: true, devices: { where: { deletedAt: null } } },
@@ -28,28 +33,33 @@ export default async function CustomerDetail({
   });
   return (
     <>
-      <PageHeader title={customer.name} description={customer.phone} />
-      <section className="panel padded">
-        {!customer.deletedAt && (
-          <>
-            <CustomerForm customer={customer} />
-            <DeleteRecord id={id} kind="customer" />
-          </>
-        )}
-      </section>
-      <h2 className="spaced">{it.devices}</h2>
-      <div className="device-grid">
-        {customer.devices.map((d) => (
-          <article className="panel padded" key={d.id}>
-            <h3>
-              {d.brand} {d.model}
-            </h3>
-            <p>{d.series}</p>
-            <DeviceForm device={d} />
-            <DeleteRecord id={d.id} kind="device" />
-          </article>
-        ))}
-      </div>
+      <Link className="customer-back" href={returnTo}>
+        ← {it.backCustomers}
+      </Link>
+      <PageHeader title={customer.name} />
+      <CustomerSummary
+        customer={{
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+          phones: customer.phones.map((p) => ({ phone: p.phone })),
+        }}
+        query={q}
+        deleted={Boolean(customer.deletedAt)}
+      />
+      <h2 className="spaced">
+        {it.devices} ({customer.devices.length})
+      </h2>
+      <CustomerDevices
+        devices={customer.devices.map((d) => ({
+          id: d.id,
+          category: d.category,
+          brand: d.brand,
+          model: d.model,
+          imei: d.imei,
+        }))}
+        readOnly={Boolean(customer.deletedAt)}
+      />
       <h2 className="spaced">{it.customerHistory}</h2>
       <section className="panel table-panel">
         <OrderTable orders={orders} />

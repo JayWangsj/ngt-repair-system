@@ -7,6 +7,7 @@ import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { phoneInput } from "@/lib/validation";
+import { clearBusinessData } from "@/lib/data-transfer";
 type Result = { ok: true; id?: string } | { ok: false; error: string };
 async function execute(
   work: () => Promise<{ id?: string } | void>,
@@ -126,4 +127,8 @@ export async function deleteRulesAction(ids: string[]) {
 export async function hideFaultAction(category: string, name: string) {
   const actor = await requireActor();
   return execute(() => service.hideFault(actor, category, name));
+}
+export async function clearDataAction() {
+  const actor = await requireActor();
+  return execute(() => clearBusinessData(actor));
 }

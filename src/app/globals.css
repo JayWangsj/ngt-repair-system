@@ -1565,3 +1565,84 @@ details[open] > summary {
 .catalog-toolbar label {
   margin: 0;
 }
+
+.table-action {
+  min-height: 34px;
+  padding: 8px 12px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.price-groups {
+  display: grid;
+  gap: 26px;
+}
+.price-group {
+  display: grid;
+  gap: 12px;
+}
+.price-group-heading {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+}
+.price-group-heading span {
+  color: var(--muted);
+}
+.rule-price {
+  display: grid;
+  gap: 4px;
+}
+.rule-price small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.rule-edit-button {
+  pointer-events: none;
+  min-height: 34px;
+  padding: 8px 12px;
+  font-size: 11px;
+}
+.settings-grid {
+  display: grid;
+  gap: 22px;
+}
+.settings-card {
+  display: grid;
+  gap: 18px;
+}
+.settings-card h2 {
+  margin: 0;
+}
+.settings-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+}
+.settings-action p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.settings-action .button {
+  flex: 0 0 auto;
+}
+.danger-zone {
+  color: #8f3f36;
+}
+@media (max-width: 700px) {
+  .settings-action {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+}
+
+.settings-card .language-switch {
+  position: static;
+  margin: 0;
+}

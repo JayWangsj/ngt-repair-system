@@ -8,8 +8,9 @@ import {
   Tags,
   ChartNoAxesCombined,
   Smartphone,
+  Settings,
 } from "lucide-react";
-import { useMessages, LanguageSwitch } from "./language";
+import { useMessages } from "./language";
 export function Sidebar() {
   const it = useMessages();
   const path = usePathname();
@@ -19,6 +20,7 @@ export function Sidebar() {
     { href: "/customers", label: it.nav.customers, icon: Users },
     { href: "/prices", label: it.nav.prices, icon: Tags },
     { href: "/reports", label: it.nav.reports, icon: ChartNoAxesCombined },
+    { href: "/settings", label: it.nav.settings, icon: Settings },
   ];
   return (
     <aside className="sidebar">
@@ -30,7 +32,6 @@ export function Sidebar() {
           NGT<small>{it.subtitle}</small>
         </span>
       </Link>
-      <LanguageSwitch />
       <div className="nav-label">{it.navigation}</div>
       <nav aria-label={it.navigation}>
         {links.map(({ href, label, icon: Icon }) => (

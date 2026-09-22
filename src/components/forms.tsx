@@ -1065,7 +1065,6 @@ export function EditOrderForm({
   values: {
     fault: string;
     notes: string;
-    appearance: string;
     accessories: string;
     dueDate: string | null;
   };
@@ -1084,16 +1083,7 @@ export function EditOrderForm({
           maxLength={2000}
         />
       </Field>
-      <div className="form-grid">
-        <Field label={it.appearance}>
-          <input
-            name="appearance"
-            defaultValue={values.appearance}
-            maxLength={2000}
-          />
-        </Field>
-        <input type="hidden" name="accessories" value={values.accessories} />
-      </div>
+      <input type="hidden" name="accessories" value={values.accessories} />
       <Field label={it.dueDate}>
         <input type="date" name="dueDate" defaultValue={values.dueDate ?? ""} />
       </Field>
@@ -1465,6 +1455,29 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  const groups = rules.reduce<
+    {
+      key: string;
+      category: string;
+      brand: string;
+      model: string;
+      rules: RuleView[];
+    }[]
+  >((result, rule) => {
+    const key = [rule.category, rule.brand, rule.model].join("|");
+    const previous = result.at(-1);
+    if (previous?.key === key) previous.rules.push(rule);
+    else
+      result.push({
+        key,
+        category: rule.category,
+        brand: rule.brand,
+        model: rule.model,
+        rules: [rule],
+      });
+    return result;
+  }, []);
+
   async function remove(ids: string[]) {
     if (!window.confirm(it.deleteConfirm)) return;
     setPending(true);
@@ -1489,8 +1502,10 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
           <input
             type="checkbox"
             checked={rules.length > 0 && selected.length === rules.length}
-            onChange={(e) =>
-              setSelected(e.target.checked ? rules.map((r) => r.id) : [])
+            onChange={(event) =>
+              setSelected(
+                event.target.checked ? rules.map((rule) => rule.id) : [],
+              )
             }
           />
           {it.selectAll}
@@ -1504,50 +1519,69 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
         </Button>
       </div>
       <Message error={error} />
-      <div className="rule-list">
-        {rules.map((r) => (
-          <article className="panel padded" key={r.id}>
-            <div className="catalog-toolbar">
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  aria-label={
-                    it.selectOption +
-                    " " +
-                    r.project +
-                    " " +
-                    r.brand +
-                    " " +
-                    r.model
-                  }
-                  checked={selected.includes(r.id)}
-                  onChange={(e) =>
-                    setSelected(
-                      e.target.checked
-                        ? [...selected, r.id]
-                        : selected.filter((id) => id !== r.id),
-                    )
-                  }
-                />
-                {categories[r.category as Category]?.[locale === "zh" ? 1 : 0]}{" "}
-                · {r.brand} {r.model}
-              </label>
-              <Button
-                variant="ghost"
-                disabled={pending}
-                onClick={() => remove([r.id])}
-              >
-                {it.deleteRule}
-              </Button>
+      <div className="price-groups">
+        {groups.map((group) => (
+          <section className="price-group" key={group.key}>
+            <h2 className="price-group-heading">
+              {
+                categories[group.category as Category]?.[
+                  locale === "zh" ? 1 : 0
+                ]
+              }
+              <span>·</span>
+              {group.brand} {group.model}
+            </h2>
+            <div className="rule-list">
+              {group.rules.map((rule) => (
+                <article className="panel padded" key={rule.id}>
+                  <div className="catalog-toolbar">
+                    <label className="checkbox">
+                      <input
+                        type="checkbox"
+                        aria-label={
+                          it.selectOption +
+                          " " +
+                          rule.project +
+                          " " +
+                          rule.brand +
+                          " " +
+                          rule.model
+                        }
+                        checked={selected.includes(rule.id)}
+                        onChange={(event) =>
+                          setSelected(
+                            event.target.checked
+                              ? [...selected, rule.id]
+                              : selected.filter((id) => id !== rule.id),
+                          )
+                        }
+                      />
+                      {rule.project}
+                    </label>
+                    <Button
+                      variant="ghost"
+                      disabled={pending}
+                      onClick={() => remove([rule.id])}
+                    >
+                      {it.deleteRule}
+                    </Button>
+                  </div>
+                  <details>
+                    <summary className="rule-summary">
+                      <span className="rule-price">
+                        <strong>{rule.project}</strong>
+                        <small>{money(cents(rule.suggested))}</small>
+                      </span>
+                      <span className="button button-outline rule-edit-button">
+                        {it.editProject}
+                      </span>
+                    </summary>
+                    <RuleForm rule={rule} rules={rules} />
+                  </details>
+                </article>
+              ))}
             </div>
-            <details>
-              <summary className="rule-summary">
-                <strong>{r.project}</strong>
-                <span>{money(cents(r.suggested))}</span>
-              </summary>
-              <RuleForm rule={r} rules={rules} />
-            </details>
-          </article>
+          </section>
         ))}
       </div>
     </>

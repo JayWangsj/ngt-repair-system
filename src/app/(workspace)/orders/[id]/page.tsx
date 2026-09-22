@@ -35,13 +35,7 @@ export default async function Detail({
     include: orderInclude,
   });
   if (!order) notFound();
-  const [rules, logs] = await Promise.all([
-    db.priceRule.findMany({ where: { enabled: true } }),
-    db.auditLog.findMany({
-      where: { entityId: id },
-      orderBy: { createdAt: "desc" },
-    }),
-  ]);
+  const rules = await db.priceRule.findMany({ where: { enabled: true } });
   const remaining = balance(order.items, order.payments, order);
   const closed = ["COMPLETED", "CANCELLED"].includes(order.status);
   return (
@@ -77,16 +71,8 @@ export default async function Detail({
                 <dd>{order.device.customer.phone}</dd>
               </div>
               <div>
-                <dt>{it.imei}</dt>
-                <dd>{order.device.imei ?? "—"}</dd>
-              </div>
-              <div>
                 <dt>{it.fault}</dt>
                 <dd>{faultLabel(order.fault, await getLocale())}</dd>
-              </div>
-              <div>
-                <dt>{it.appearance}</dt>
-                <dd>{order.appearance || "—"}</dd>
               </div>
               <div>
                 <dt>{it.accessories}</dt>
@@ -105,7 +91,6 @@ export default async function Detail({
                   values={{
                     fault: order.fault,
                     notes: order.notes,
-                    appearance: order.appearance,
                     accessories: order.accessories,
                     dueDate: order.dueDate,
                   }}
@@ -210,23 +195,6 @@ export default async function Detail({
                 </li>
               ))}
             </ol>
-            <details>
-              <summary>{it.audit}</summary>
-              {logs.map((log) => (
-                <div className="audit-row" key={log.id}>
-                  <strong>
-                    {it.actions[log.action as keyof typeof it.actions] ??
-                      log.action}
-                  </strong>
-                  <small>
-                    {dateTime(log.createdAt)} · {log.actorName}
-                  </small>
-                  {log.action === "QUOTE_UPDATED" && (
-                    <pre>{JSON.stringify(log.context, null, 2)}</pre>
-                  )}
-                </div>
-              ))}
-            </details>
           </section>
         </div>
         <div className="stack">

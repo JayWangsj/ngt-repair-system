@@ -72,7 +72,12 @@ export default async function Customers({
                     </td>
                     <td>{c._count.devices}</td>
                     <td>
-                      <Link href={`/customers/${c.id}`}>{it.details} ↗</Link>
+                      <Link
+                        className="button button-outline table-action"
+                        href={`/customers/${c.id}`}
+                      >
+                        {it.viewDetails}
+                      </Link>
                     </td>
                   </tr>
                 ))}

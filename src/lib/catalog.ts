@@ -17,9 +17,14 @@ export function normalizeModel(value: string) {
   const model = value
     .trim()
     .replace(/\s+/g, " ")
-    .replace(/iphone/gi, "iPhone")
-    .replace(/\bpro\b/gi, "Pro")
-    .replace(/\bmax\b/gi, "Max");
+    .replace(/i\s*phone/gi, "iPhone")
+    .replace(/pro/gi, " Pro ")
+    .replace(/max/gi, " Max ")
+    .replace(/iPhone\s*(?=\d)/g, "iPhone ")
+    .replace(/(\d)(?=Pro|Max)/g, "$1 ")
+    .replace(/Pro(?=Max)/g, "Pro ")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!model || model.startsWith("iPhone")) return model;
   return model[0].toLocaleUpperCase("it") + model.slice(1);
 }

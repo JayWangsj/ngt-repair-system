@@ -6,7 +6,7 @@ import type {
   WorkOrderItem,
   Payment,
 } from "@prisma/client";
-import { ArrowUpRight, Plus, Wrench } from "lucide-react";
+import { Plus, Wrench } from "lucide-react";
 import { getMessages } from "@/lib/i18n-server";
 import {
   balance,
@@ -121,10 +121,11 @@ export async function OrderTable({ orders }: { orders: Row[] }) {
               </td>
               <td>
                 <Link
-                  aria-label={`${it.details} ${orderCode(order.number)}`}
+                  className="button button-outline table-action"
+                  aria-label={`${it.viewOrder} ${orderCode(order.number)}`}
                   href={`/orders/${order.id}`}
                 >
-                  <ArrowUpRight size={18} />
+                  {it.viewOrder}
                 </Link>
               </td>
             </tr>

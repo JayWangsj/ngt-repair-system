@@ -52,6 +52,7 @@ export const it = {
     customers: "Clienti",
     prices: "Listino prezzi",
     reports: "Andamento",
+    settings: "Impostazioni",
     team: "Collaboratori",
   },
   status: {
@@ -85,6 +86,25 @@ export const it = {
     STATUS_CHANGED: "Stato aggiornato",
     ORDER_DELIVERED: "Dispositivo consegnato",
   },
+  viewOrder: "Apri scheda",
+  viewDetails: "Vedi dettagli",
+  editProject: "Vedi / modifica intervento",
+  settingsDescription: "Lingua, backup e gestione dei dati.",
+  language: "Lingua",
+  dataManagement: "Dati",
+  exportData: "Esporta dati",
+  exportHelp: "Scarica un file compatibile con le versioni future.",
+  importData: "Importa dati",
+  importHelp:
+    "I dati esistenti restano invariati; i duplicati vengono ignorati.",
+  importSuccess: "Importazione completata.",
+  clearData: "Cancella tutti i dati",
+  clearDataHelp:
+    "Elimina clienti, dispositivi, schede, pagamenti, listino e problemi salvati.",
+  clearDataConfirm:
+    "Eliminare definitivamente tutti i dati? Gli account interni resteranno attivi.",
+  clearDataSuccess: "Tutti i dati sono stati cancellati.",
+  chooseBackup: "Scegli file di backup",
   newOrder: "Nuova riparazione",
   save: "Salva",
   saving: "Salvataggio…",

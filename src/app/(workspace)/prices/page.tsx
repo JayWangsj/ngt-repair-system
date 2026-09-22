@@ -14,7 +14,12 @@ export default async function Prices({
     return <p className="message error">{it.restricted}</p>;
   const showNew = (await searchParams).new === "1";
   const rules = await db.priceRule.findMany({
-    orderBy: [{ project: "asc" }, { brand: "asc" }],
+    orderBy: [
+      { category: "asc" },
+      { brand: "asc" },
+      { model: "asc" },
+      { project: "asc" },
+    ],
   });
   const views = rules.map((r) => ({
     ...r,

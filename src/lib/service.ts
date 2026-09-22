@@ -273,7 +273,10 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
                   requestId: data.requestId,
                   amount: decimal(cents(data.deposit)),
                   method: data.method,
-                  kind: data.paymentKind,
+                  kind:
+                    cents(data.deposit) === quote.due
+                      ? "BALANCE"
+                      : data.paymentKind,
                   actorId: actor.id,
                   actorName: actor.name,
                 },
@@ -290,7 +293,7 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
       await audit(tx, actor, order.id, "PAYMENT_ADDED", {
         amount: decimal(cents(data.deposit)),
         method: data.method,
-        kind: data.paymentKind,
+        kind: cents(data.deposit) === quote.due ? "BALANCE" : data.paymentKind,
       });
     return order;
   });

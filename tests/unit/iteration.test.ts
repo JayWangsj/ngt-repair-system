@@ -35,6 +35,8 @@ describe("customer phone validation", () => {
     expect(normalizeBrand(" apple ")).toBe("Apple");
     expect(normalizeBrand("SAMSUNG")).toBe("Samsung");
     expect(normalizeModel("iphone 16 pro max")).toBe("iPhone 16 Pro Max");
+    expect(normalizeModel("iphone18promax")).toBe("iPhone 18 Pro Max");
+    expect(normalizeModel("i phone18pro max")).toBe("iPhone 18 Pro Max");
     expect(normalizeModel("a17")).toBe("A17");
     expect(normalizeModel("galaxy a17")).toBe("Galaxy a17");
   });

@@ -60,7 +60,14 @@ async function state(page: Page, next: string) {
 test("single operator opens every business page without login", async ({
   page,
 }) => {
-  for (const path of ["/", "/orders", "/customers", "/prices", "/reports"]) {
+  for (const path of [
+    "/",
+    "/orders",
+    "/customers",
+    "/prices",
+    "/reports",
+    "/settings",
+  ]) {
     await page.goto(path);
     await expect(page.locator("h1")).toBeVisible();
     await expect(page).not.toHaveURL(/login/);
@@ -68,6 +75,13 @@ test("single operator opens every business page without login", async ({
   await expect(
     page.getByRole("link", { name: "Collaboratori", exact: true }),
   ).toHaveCount(0);
+  await page.goto("/settings");
+  await expect(
+    page.getByRole("group", { name: "Lingua / 语言", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Cancella tutti i dati", exact: true }),
+  ).toBeVisible();
   for (const [path, name] of [
     ["/orders", "Nuova riparazione"],
     ["/customers", "Nuovo cliente"],
@@ -135,7 +149,10 @@ test("discount and IVA persist without polluting historical prices", async ({
   await expect(page.locator(".balance-card>strong")).toContainText("83,70");
   await page.reload();
   await expect(page.locator(".balance-card>strong")).toContainText("83,70");
+  const detailUrl = page.url();
+  await page.goto("/settings");
   await page.getByRole("button", { name: "中文", exact: true }).click();
+  await page.goto(detailUrl);
   await expect(
     page.getByRole("heading", { name: "报价", exact: true }),
   ).toBeVisible();
@@ -144,6 +161,7 @@ test("discount and IVA persist without polluting historical prices", async ({
   await expect(page.getByRole("main").getByRole("alert")).toContainText(
     "超过待收余额",
   );
+  await page.goto("/settings");
   await page.getByRole("button", { name: "Italiano", exact: true }).click();
   await page.goto("/orders/new");
   await page.getByLabel("Marca", { exact: true }).fill("Apple");
@@ -155,56 +173,27 @@ test("discount and IVA persist without polluting historical prices", async ({
     page.getByLabel("Prezzo originale (€) 1", { exact: true }),
   ).toHaveValue("100");
 });
-test("language switching preserves unsaved form, custom fault, and preference", async ({
+test("language switching from settings persists across business pages", async ({
   page,
 }) => {
-  const phone = `334${Date.now().toString().slice(-7)}`;
-  await fillOrder(page, { phone, discount: true });
-  const fault = `Raro ${Date.now()}`;
-  await page
-    .getByLabel("Altro problema: scrivi e aggiungi", { exact: true })
-    .fill(fault);
-  await page
-    .getByRole("button", { name: "Aggiungi problema", exact: true })
-    .click();
+  await page.goto("/settings");
   await page.getByRole("button", { name: "中文", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "设置", exact: true }),
+  ).toBeVisible();
+  await page.goto("/orders/new");
   await expect(
     page.getByRole("heading", { name: "新建维修单", exact: true }),
   ).toBeVisible();
-  await expect(page.getByLabel("电话号码", { exact: true })).toHaveValue(phone);
-  await expect(page.getByLabel("姓名", { exact: true })).toHaveValue(
-    "Cliente Playwright",
-  );
-  await expect(page.getByLabel("单项优惠（€） 1", { exact: true })).toHaveValue(
-    "10",
-  );
-  await expect(page.getByLabel(fault, { exact: true })).toBeChecked();
-  await expect(page.getByLabel("屏幕破裂", { exact: true })).toBeChecked();
-  await page.getByRole("button", { name: "Italiano", exact: true }).click();
-  await save(page);
-  await page.getByRole("button", { name: "中文", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Italiano", exact: true }).click();
   await page.goto("/orders/new");
-  await expect(page.getByLabel(fault, { exact: true })).toBeVisible();
-  await page.getByLabel("电话号码", { exact: true }).fill(phone);
-  await expect(page.getByLabel("姓名", { exact: true })).toHaveValue(
-    "Cliente Playwright",
-  );
-  await page
-    .getByLabel("客户已有设备", { exact: true })
-    .selectOption({ index: 1 });
-  await expect(page.getByLabel("型号", { exact: true })).toHaveValue(
-    "iPhone 13",
-  );
-  await page.screenshot({
-    path: "test-results/chinese-new-order.png",
-    fullPage: true,
-  });
-  await page.getByLabel("电话号码", { exact: true }).fill("3359988776");
-  await expect(page.getByLabel("型号", { exact: true })).toHaveValue("");
-  await expect(page.getByLabel("姓名", { exact: true })).toHaveValue("");
-  await expect(page.getByLabel("客户已有设备", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Nuova riparazione", exact: true }),
+  ).toBeVisible();
 });
 test("manual quote saves automatically and rejects overpayment", async ({
   page,
@@ -264,7 +253,9 @@ test("price editor and mobile yellow layout support both languages", async ({
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/settings");
   await page.getByRole("button", { name: "中文", exact: true }).click();
+  await page.goto("/");
   await expect(page.getByRole("heading", { name: "今日工作台" })).toBeVisible();
   expect(
     await page.evaluate(
@@ -404,6 +395,11 @@ test("native quote choices populate prices, clear on model changes and discounts
   await expect(
     page.getByText("Altri dettagli (facoltativi)", { exact: true }),
   ).toHaveCount(0);
+  await page.getByLabel("Modello", { exact: true }).fill("iphone18promax");
+  await page.getByLabel("Modello", { exact: true }).blur();
+  await expect(page.getByLabel("Modello", { exact: true })).toHaveValue(
+    "iPhone 18 Pro Max",
+  );
 });
 test("customer page adds, edits and deletes a customer", async ({ page }) => {
   const phone = "339" + Date.now().toString().slice(-7);
@@ -466,4 +462,25 @@ test("price editor supports individual and batch deletion", async ({
     .getByRole("button", { name: /Elimina preventivi selezionati/ })
     .click();
   await expect(page.locator(".rule-list > article")).toHaveCount(0);
+});
+
+test("settings exports data and re-import skips existing records", async ({
+  page,
+}) => {
+  await page.goto("/settings");
+  const exported = await page.request.get("/api/data/export");
+  expect(exported.ok()).toBe(true);
+  expect(exported.headers()["content-disposition"]).toContain("ngt-backup-");
+  const backup = await exported.json();
+  expect(backup).toMatchObject({
+    format: "ngt-repair-data",
+    version: 1,
+  });
+  const imported = await page.request.post("/api/data/import", {
+    data: backup,
+  });
+  expect(imported.ok()).toBe(true);
+  const result = await imported.json();
+  expect(result.imported).toBe(0);
+  expect(result.skipped).toBeGreaterThan(0);
 });

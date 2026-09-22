@@ -21,6 +21,11 @@ import {
   updateOrder,
 } from "@/lib/service";
 import { balance, type Actor } from "@/lib/domain";
+import {
+  clearBusinessData,
+  exportBusinessData,
+  importBusinessData,
+} from "@/lib/data-transfer";
 let owner: Actor;
 let staff: Actor;
 function input(patch: Record<string, unknown> = {}) {
@@ -340,15 +345,12 @@ describe("PostgreSQL workflow", () => {
     expect(await db.faultOption.count()).toBe(0);
     expect(await db.priceRule.count()).toBe(1);
   });
-  it("allows zero quotation and initial full payment without relabelling it as deposit", async () => {
+  it("records an initial full payment as repair payment instead of deposit", async () => {
     await createOrder(
       owner,
       input({ items: [{ project: "Check", final: "0" }], deposit: "0" }),
     );
-    const created = await createOrder(
-      owner,
-      input({ deposit: "100", paymentKind: "BALANCE" }),
-    );
+    const created = await createOrder(owner, input({ deposit: "100" }));
     expect(
       (await db.payment.findFirstOrThrow({ where: { orderId: created.id } }))
         .kind,
@@ -695,6 +697,22 @@ describe("1.2 customer and catalog management", () => {
     });
     expect(storedPhone.device.brand).toBe("Apple");
     expect(storedPhone.device.model).toBe("iPhone 16 Pro Max");
+    const compact = await createOrder(
+      owner,
+      input({
+        phone: "3338888888",
+        model: "iphone18promax",
+        items: [{ project: "Battery", final: "60" }],
+      }),
+    );
+    expect(
+      (
+        await db.workOrder.findUniqueOrThrow({
+          where: { id: compact.id },
+          include: { device: true },
+        })
+      ).device.model,
+    ).toBe("iPhone 18 Pro Max");
     const tablet = await savePriceRule(owner, null, {
       category: "TABLET",
       brand: "APPLE",
@@ -732,5 +750,79 @@ describe("1.2 customer and catalog management", () => {
       0,
     );
     expect(await db.device.count()).toBe(0);
+  });
+});
+
+describe("versioned data backup and merge import", () => {
+  it("exports, clears, restores and skips an identical second import", async () => {
+    const usersBefore = await db.user.count();
+    await createOrder(
+      owner,
+      input({
+        model: "iphone18promax",
+        faults: ["Backup fault"],
+        deposit: "100",
+      }),
+    );
+    const backup = await exportBusinessData();
+    expect(backup).toMatchObject({
+      format: "ngt-repair-data",
+      version: 1,
+    });
+    expect(backup.data.orders).toHaveLength(1);
+    expect(backup.data.payments[0].kind).toBe("BALANCE");
+
+    const conflict = structuredClone(backup);
+    const originalOrderId = conflict.data.orders[0].id;
+    const conflictingOrderId = randomUUID();
+    conflict.data.orders[0].id = conflictingOrderId;
+    for (const item of conflict.data.items) {
+      if (item.orderId === originalOrderId) {
+        item.id = randomUUID();
+        item.orderId = conflictingOrderId;
+      }
+    }
+    for (const payment of conflict.data.payments) {
+      if (payment.orderId === originalOrderId) {
+        payment.id = randomUUID();
+        payment.requestId = randomUUID();
+        payment.orderId = conflictingOrderId;
+      }
+    }
+    for (const history of conflict.data.histories) {
+      if (history.orderId === originalOrderId) {
+        history.id = randomUUID();
+        history.orderId = conflictingOrderId;
+      }
+    }
+    for (const audit of conflict.data.audits) {
+      if (audit.entityId === originalOrderId) {
+        audit.id = randomUUID();
+        audit.entityId = conflictingOrderId;
+      }
+    }
+    const conflictResult = await importBusinessData(owner, conflict);
+    expect(conflictResult.imported).toBe(0);
+    expect(await db.workOrder.count()).toBe(1);
+    expect(await db.workOrderItem.count()).toBe(1);
+
+    await clearBusinessData(owner);
+    expect(await db.workOrder.count()).toBe(0);
+    expect(await db.customer.count()).toBe(0);
+    expect(await db.user.count()).toBe(usersBefore);
+
+    const first = await importBusinessData(owner, backup);
+    expect(first.imported).toBeGreaterThan(0);
+    expect(await db.workOrder.count()).toBe(1);
+    expect(await db.customer.count()).toBe(1);
+    expect((await db.device.findFirstOrThrow()).model).toBe(
+      "iPhone 18 Pro Max",
+    );
+
+    const second = await importBusinessData(owner, backup);
+    expect(second.imported).toBe(0);
+    expect(second.skipped).toBeGreaterThan(0);
+    expect(await db.workOrder.count()).toBe(1);
+    expect(await db.customer.count()).toBe(1);
   });
 });

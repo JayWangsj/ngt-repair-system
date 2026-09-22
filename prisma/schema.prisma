@@ -120,6 +120,7 @@ model WorkOrder {
 
 model PriceRule {
   id        String          @id @default(cuid())
+  category  String          @default("PHONE")
   brand     String          @default("")
   series    String          @default("")
   model     String          @default("")
@@ -132,7 +133,7 @@ model PriceRule {
   updatedAt DateTime        @updatedAt @db.Timestamptz(3)
   items     WorkOrderItem[]
 
-  @@unique([brand, series, model, project])
+  @@unique([category, brand, series, model, project])
 }
 
 model WorkOrderItem {

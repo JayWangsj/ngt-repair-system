@@ -27,6 +27,7 @@ import {
 } from "./validation";
 import { z } from "zod";
 import { hash } from "bcryptjs";
+import { normalizeBrand, normalizeModel } from "./catalog";
 
 type Tx = Prisma.TransactionClient;
 export const orderInclude = {
@@ -83,7 +84,7 @@ async function audit(
 async function snapshots(
   tx: Tx,
   actor: Actor,
-  device: { brand: string; series: string; model: string },
+  device: { category: string; brand: string; series: string; model: string },
   input: z.infer<typeof itemInput>[],
   previousItems?: {
     project: string;
@@ -110,13 +111,14 @@ async function snapshots(
       );
     projectPrices.set(projectKey, final);
     const key = {
-      brand: device.brand.trim().toLowerCase(),
+      category: device.category,
+      brand: normalizeBrand(device.brand),
       series: "",
-      model: device.model.trim().toLowerCase(),
+      model: normalizeModel(device.model),
       project: item.project.trim().toLowerCase(),
     };
     const previous = await tx.priceRule.findUnique({
-      where: { brand_series_model_project: key },
+      where: { category_brand_series_model_project: key },
     });
     const oldItem = previousItems?.find(
       (i) => i.project.trim().toLowerCase() === key.project,
@@ -125,7 +127,7 @@ async function snapshots(
     const rule = unchanged
       ? null
       : await tx.priceRule.upsert({
-          where: { brand_series_model_project: key },
+          where: { category_brand_series_model_project: key },
           create: {
             ...key,
             suggested: decimal(final),
@@ -216,9 +218,9 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
           data: {
             customerId: customer.id,
             category: data.category,
-            brand: data.brand,
-            series: data.series,
-            model: data.model,
+            brand: normalizeBrand(data.brand),
+            series: normalizeModel(data.series),
+            model: normalizeModel(data.model),
             imei: data.imei || null,
             appearance: data.appearance,
             accessories: data.accessories,
@@ -515,9 +517,10 @@ export async function savePriceRule(
     assertOwner(actor);
     const data = {
       ...input,
-      brand: input.brand.toLowerCase(),
-      series: input.series.toLowerCase(),
-      model: input.model.toLowerCase(),
+      category: input.category,
+      brand: normalizeBrand(input.brand),
+      series: normalizeModel(input.series),
+      model: normalizeModel(input.model),
       project: input.project.toLowerCase(),
       suggested: decimal(cents(input.suggested)),
       cost: input.cost ? decimal(cents(input.cost)) : null,
@@ -652,7 +655,12 @@ export async function deleteCustomer(actorInput: Actor, id: string) {
   });
 }
 export async function saveDevice(actorInput: Actor, id: string, raw: unknown) {
-  const data = deviceInput.parse(raw);
+  const parsed = deviceInput.parse(raw);
+  const data = {
+    ...parsed,
+    brand: normalizeBrand(parsed.brand),
+    model: normalizeModel(parsed.model),
+  };
   return transact(async (tx) => {
     const actor = await currentActor(tx, actorInput);
     const before = await tx.device.findFirstOrThrow({

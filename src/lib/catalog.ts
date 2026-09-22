@@ -7,6 +7,22 @@ export const categories = {
   OTHER: ["Altro", "其他设备"],
 } as const;
 export type Category = keyof typeof categories;
+export function normalizeBrand(value: string) {
+  const brand = value.trim().replace(/\s+/g, " ");
+  if (/^apple$/i.test(brand)) return "Apple";
+  if (/^samsung$/i.test(brand)) return "Samsung";
+  return brand ? brand[0].toLocaleUpperCase("it") + brand.slice(1) : "";
+}
+export function normalizeModel(value: string) {
+  const model = value
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/iphone/gi, "iPhone")
+    .replace(/\bpro\b/gi, "Pro")
+    .replace(/\bmax\b/gi, "Max");
+  if (!model || model.startsWith("iPhone")) return model;
+  return model[0].toLocaleUpperCase("it") + model.slice(1);
+}
 export const brands: Record<Category, string[]> = {
   PHONE: [
     "Apple",

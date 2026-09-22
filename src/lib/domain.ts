@@ -96,6 +96,7 @@ export function normalizePhone(phone: string) {
 }
 export type MatchableRule = {
   id: string;
+  category: string;
   brand: string;
   series: string;
   model: string;
@@ -105,11 +106,14 @@ export type MatchableRule = {
 const norm = (s: string) => s.trim().toLocaleLowerCase("it");
 export function matchRule<T extends MatchableRule>(
   rules: T[],
-  device: { brand: string; series: string; model: string },
+  device: { category: string; brand: string; series: string; model: string },
   project: string,
 ): { rule: T; level: string } | null {
   const eligible = rules.filter(
-    (r) => r.enabled && norm(r.project) === norm(project),
+    (r) =>
+      r.enabled &&
+      r.category === device.category &&
+      norm(r.project) === norm(project),
   );
   const exact = eligible.find(
     (r) =>

@@ -179,6 +179,7 @@ export default async function Detail({
                       adjustmentReason: i.adjustmentReason,
                     }))}
                     device={{
+                      category: order.device.category,
                       brand: order.device.brand,
                       series: order.device.series,
                       model: order.device.model,

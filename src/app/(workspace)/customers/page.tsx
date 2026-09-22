@@ -35,10 +35,9 @@ export default async function Customers({
       <PageHeader
         title={it.nav.customers}
         description={it.customersDescription}
+        actionHref="/customers/new"
+        actionLabel={it.addCustomer}
       />
-      <Link className="button" href="/customers/new">
-        {it.addCustomer}
-      </Link>
       <form className="filters">
         <label className="grow">
           <span className="sr-only">{it.search}</span>

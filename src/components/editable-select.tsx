@@ -1,5 +1,5 @@
 "use client";
-import { useId, useRef } from "react";
+import { useId } from "react";
 import { useMessages } from "./language";
 import { uniqueOptions } from "@/lib/options";
 /** Same native option menu as device type, with a text field for new values. */
@@ -12,6 +12,7 @@ export function EditableSelect({
   readOnly = false,
   name,
   maxLength = 120,
+  normalize,
 }: {
   label: string;
   value: string;
@@ -21,10 +22,10 @@ export function EditableSelect({
   readOnly?: boolean;
   name?: string;
   maxLength?: number;
+  normalize?: (value: string) => string;
 }) {
   const it = useMessages();
   const id = useId();
-  const input = useRef<HTMLInputElement>(null);
   const normalized = options.map((o) =>
     typeof o === "string" ? { value: o, label: o } : o,
   );
@@ -34,11 +35,11 @@ export function EditableSelect({
       <label htmlFor={id}>{label}</label>
       <div className="editable-select">
         <input
-          ref={input}
           id={id}
           name={name}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onBlur={(e) => normalize && onChange(normalize(e.target.value))}
           required={required}
           readOnly={readOnly}
           maxLength={maxLength}
@@ -50,8 +51,8 @@ export function EditableSelect({
           disabled={readOnly}
           value=""
           onChange={(e) => {
-            if (e.target.value) onChange(e.target.value);
-            input.current?.focus();
+            if (e.target.value)
+              onChange(normalize ? normalize(e.target.value) : e.target.value);
           }}
         >
           <option value="">{it.selectOption}</option>

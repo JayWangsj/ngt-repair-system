@@ -27,6 +27,8 @@ import {
   models,
   faultPresets,
   type Category,
+  normalizeBrand,
+  normalizeModel,
 } from "@/lib/catalog";
 import { settlement } from "@/lib/domain";
 import {
@@ -57,6 +59,7 @@ import {
 
 export type RuleView = {
   id: string;
+  category: string;
   brand: string;
   series: string;
   model: string;
@@ -160,11 +163,16 @@ export function ItemsEditor({
   items: ItemView[];
   onChange: (items: ItemView[]) => void;
   rules: RuleView[];
-  device: { brand: string; series: string; model: string };
+  device: { category: string; brand: string; series: string; model: string };
   owner?: boolean;
 }) {
   const it = useMessages();
-  const deviceKey = [device.brand, device.series, device.model].join("|");
+  const deviceKey = [
+    device.category,
+    device.brand,
+    device.series,
+    device.model,
+  ].join("|");
   const previousDevice = useRef(deviceKey);
   useEffect(() => {
     if (previousDevice.current === deviceKey) return;
@@ -390,7 +398,7 @@ export function NewOrderForm({
     ...new Set([
       ...brands[category],
       ...knownDevices.map((d) => d.brand),
-      ...rules.map((r) => r.brand),
+      ...rules.filter((r) => r.category === category).map((r) => r.brand),
     ]),
   ];
   const modelOptions = [
@@ -402,7 +410,9 @@ export function NewOrderForm({
       ...rules
         .filter(
           (r) =>
-            r.brand.toLowerCase() === values.brand.toLowerCase() && r.model,
+            r.category === category &&
+            r.brand.toLowerCase() === values.brand.toLowerCase() &&
+            r.model,
         )
         .map((r) => r.model),
     ]),
@@ -649,6 +659,7 @@ export function NewOrderForm({
             required
             readOnly={!!values.deviceId}
             options={uniqueOptions(brandOptions)}
+            normalize={normalizeBrand}
             onChange={(brand) => {
               setValue("brand", brand);
               setValue("model", "");
@@ -661,6 +672,7 @@ export function NewOrderForm({
             required
             readOnly={!!values.deviceId}
             options={uniqueOptions(modelOptions)}
+            normalize={normalizeModel}
             onChange={(model) => setValue("model", model)}
           />
         </div>
@@ -755,6 +767,7 @@ export function NewOrderForm({
           onChange={(items) => setValue("items", items)}
           rules={rules}
           device={{
+            category,
             brand: values.brand,
             series: values.series ?? "",
             model: values.model,
@@ -1103,7 +1116,7 @@ export function EditQuoteForm({
   initialDiscount?: string;
   initialVat?: boolean;
   rules: RuleView[];
-  device: { brand: string; series: string; model: string };
+  device: { category: string; brand: string; series: string; model: string };
   owner: boolean;
 }) {
   const it = useMessages();
@@ -1168,6 +1181,10 @@ export function RuleForm({
   rules?: RuleView[];
 }) {
   const it = useMessages();
+  const { locale } = useLanguage();
+  const [category, setCategory] = useState<Category>(
+    (rule?.category as Category) ?? "PHONE",
+  );
   const [brand, setBrand] = useState(rule?.brand ?? "");
   const [model, setModel] = useState(rule?.model ?? "");
   const [project, setProject] = useState(rule?.project ?? "");
@@ -1177,6 +1194,7 @@ export function RuleForm({
       action={(data) =>
         ruleAction(rule?.id ?? null, {
           ...Object.fromEntries(data),
+          category,
           brand,
           model,
           project,
@@ -1186,7 +1204,23 @@ export function RuleForm({
         })
       }
     >
-      <div className="form-grid">
+      <div className="form-grid three">
+        <Field label={it.deviceType}>
+          <select
+            value={category}
+            onChange={(e) => {
+              setCategory(e.target.value as Category);
+              setBrand("");
+              setModel("");
+            }}
+          >
+            {Object.entries(categories).map(([key, names]) => (
+              <option key={key} value={key}>
+                {names[locale === "zh" ? 1 : 0]}
+              </option>
+            ))}
+          </select>
+        </Field>
         <EditableSelect
           label={it.brand}
           value={brand}
@@ -1195,9 +1229,10 @@ export function RuleForm({
             setModel("");
           }}
           options={uniqueOptions([
-            ...Object.values(brands).flat(),
-            ...rules.map((r) => r.brand),
+            ...brands[category],
+            ...rules.filter((r) => r.category === category).map((r) => r.brand),
           ])}
+          normalize={normalizeBrand}
         />
         <EditableSelect
           label={it.model}
@@ -1205,9 +1240,14 @@ export function RuleForm({
           onChange={setModel}
           options={uniqueOptions(
             rules
-              .filter((r) => r.brand.toLowerCase() === brand.toLowerCase())
+              .filter(
+                (r) =>
+                  r.category === category &&
+                  r.brand.toLowerCase() === brand.toLowerCase(),
+              )
               .map((r) => r.model),
           )}
+          normalize={normalizeModel}
         />
       </div>
       <EditableSelect
@@ -1218,6 +1258,7 @@ export function RuleForm({
           rules
             .filter(
               (r) =>
+                r.category === category &&
                 r.brand.toLowerCase() === brand.toLowerCase() &&
                 r.model.toLowerCase() === model.toLowerCase(),
             )
@@ -1366,6 +1407,9 @@ export function DeviceForm({
 }) {
   const it = useMessages();
   const { locale } = useLanguage();
+  const [category, setCategory] = useState<Category>(
+    device.category as Category,
+  );
   const [brand, setBrand] = useState(device.brand);
   const [model, setModel] = useState(device.model);
   return (
@@ -1376,7 +1420,15 @@ export function DeviceForm({
       }
     >
       <Field label={it.deviceType}>
-        <select name="category" defaultValue={device.category}>
+        <select
+          name="category"
+          value={category}
+          onChange={(e) => {
+            setCategory(e.target.value as Category);
+            setBrand("");
+            setModel("");
+          }}
+        >
           {Object.entries(categories).map(([key, names]) => (
             <option key={key} value={key}>
               {names[locale === "zh" ? 1 : 0]}
@@ -1388,14 +1440,16 @@ export function DeviceForm({
         label={it.brand}
         value={brand}
         onChange={setBrand}
-        options={Object.values(brands).flat()}
+        options={brands[category] ?? []}
+        normalize={normalizeBrand}
         required
       />
       <EditableSelect
         label={it.model}
         value={model}
         onChange={setModel}
-        options={[]}
+        options={models[category]?.[brand] ?? []}
+        normalize={normalizeModel}
         required
       />
       <Field label={it.imei}>
@@ -1406,6 +1460,7 @@ export function DeviceForm({
 }
 export function PriceList({ rules }: { rules: RuleView[] }) {
   const it = useMessages();
+  const { locale } = useLanguage();
   const router = useRouter();
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState("");
@@ -1474,7 +1529,8 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
                     )
                   }
                 />
-                {r.brand} {r.model}
+                {categories[r.category as Category]?.[locale === "zh" ? 1 : 0]}{" "}
+                · {r.brand} {r.model}
               </label>
               <Button
                 variant="ghost"

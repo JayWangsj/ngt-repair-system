@@ -7,13 +7,20 @@ export function uniqueOptions(values: string[]) {
   ];
 }
 export function deviceProjects<
-  T extends { brand: string; model: string; project: string; enabled: boolean },
->(rules: T[], device: { brand: string; model: string }) {
+  T extends {
+    category: string;
+    brand: string;
+    model: string;
+    project: string;
+    enabled: boolean;
+  },
+>(rules: T[], device: { category: string; brand: string; model: string }) {
   return uniqueOptions(
     rules
       .filter(
         (r) =>
           r.enabled &&
+          r.category === device.category &&
           r.brand.toLowerCase() === device.brand.trim().toLowerCase() &&
           r.model.toLowerCase() === device.model.trim().toLowerCase(),
       )

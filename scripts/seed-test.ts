@@ -23,8 +23,9 @@ async function main() {
   });
   await db.priceRule.create({
     data: {
-      brand: "apple",
-      model: "iphone 13",
+      category: "PHONE",
+      brand: "Apple",
+      model: "iPhone 13",
       project: "sostituzione display",
       suggested: "100",
       minutes: 60,

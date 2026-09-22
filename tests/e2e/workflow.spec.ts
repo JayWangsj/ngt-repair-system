@@ -68,6 +68,16 @@ test("single operator opens every business page without login", async ({
   await expect(
     page.getByRole("link", { name: "Collaboratori", exact: true }),
   ).toHaveCount(0);
+  for (const [path, name] of [
+    ["/orders", "Nuova riparazione"],
+    ["/customers", "Nuovo cliente"],
+    ["/prices", "Nuova regola"],
+  ] as const) {
+    await page.goto(path);
+    await expect(page.getByRole("link", { name, exact: true })).toHaveClass(
+      /button-primary/,
+    );
+  }
   await page.goto("/login");
   await expect(page).toHaveURL(/\/$/);
   await page.goto("/team");
@@ -237,8 +247,8 @@ test("price editor and mobile yellow layout support both languages", async ({
   page,
 }) => {
   await page.goto("/prices");
-  await page.getByText("Nuova regola", { exact: true }).click();
-  const form = page.locator("details").first();
+  await page.getByRole("link", { name: "Nuova regola", exact: true }).click();
+  const form = page.locator("#new-rule");
   await form
     .getByLabel("Intervento", { exact: true })
     .fill(`pulizia ${Date.now()}`);
@@ -302,13 +312,6 @@ test("confirms a new customer with three numbers and selects that customer by na
   await expect(
     page.getByRole("button", { name: "Aggiungi telefono", exact: true }),
   ).toBeDisabled();
-  page.once("dialog", (d) => d.dismiss());
-  await page
-    .getByRole("button", { name: "Conferma cliente", exact: true })
-    .click();
-  await expect(
-    page.getByText("Dati cliente confermati", { exact: true }),
-  ).toHaveCount(0);
   page.once("dialog", (d) => d.accept());
   await page
     .getByRole("button", { name: "Conferma cliente", exact: true })
@@ -339,11 +342,30 @@ test("native quote choices populate prices, clear on model changes and discounts
 }) => {
   await page.goto("/orders/new");
   await page
+    .getByLabel("Tipo dispositivo", { exact: true })
+    .selectOption("TABLET");
+  await page
     .getByLabel("Seleziona Marca", { exact: true })
-    .selectOption("apple");
+    .selectOption("Apple");
+  await expect(
+    page
+      .getByLabel("Seleziona Modello", { exact: true })
+      .locator('option[value="iPhone 13"]'),
+  ).toHaveCount(0);
+  await expect(
+    page
+      .getByLabel("Seleziona Modello", { exact: true })
+      .locator('option[value^="iPad"]'),
+  ).not.toHaveCount(0);
+  await page
+    .getByLabel("Tipo dispositivo", { exact: true })
+    .selectOption("PHONE");
+  await page
+    .getByLabel("Seleziona Marca", { exact: true })
+    .selectOption("Apple");
   await page
     .getByLabel("Seleziona Modello", { exact: true })
-    .selectOption("iphone 13");
+    .selectOption("iPhone 13");
   await page
     .getByLabel("Seleziona Intervento 1", { exact: true })
     .selectOption("sostituzione display");

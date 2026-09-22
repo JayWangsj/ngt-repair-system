@@ -22,10 +22,14 @@ export async function PageHeader({
   title,
   description,
   action = false,
+  actionHref,
+  actionLabel,
 }: {
   title: string;
   description?: string;
   action?: boolean;
+  actionHref?: string;
+  actionLabel?: string;
 }) {
   const it = await getMessages();
   return (
@@ -35,11 +39,11 @@ export async function PageHeader({
         <h1>{title}</h1>
         {description && <p>{description}</p>}
       </div>
-      {action && (
+      {(action || actionHref) && (
         <Button asChild>
-          <Link href="/orders/new">
+          <Link href={actionHref ?? "/orders/new"}>
             <Plus size={18} />
-            {it.newOrder}
+            {actionLabel ?? it.newOrder}
           </Link>
         </Button>
       )}

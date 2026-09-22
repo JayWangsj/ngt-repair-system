@@ -28,10 +28,16 @@ describe("integer money", () => {
   );
 });
 describe("quote matching", () => {
-  const device = { brand: "Apple", series: "iPhone", model: "iPhone 13" };
+  const device = {
+    category: "PHONE",
+    brand: "Apple",
+    series: "iPhone",
+    model: "iPhone 13",
+  };
   const rules = [
     {
       id: "generic",
+      category: "PHONE",
       brand: "",
       series: "",
       model: "",
@@ -40,6 +46,7 @@ describe("quote matching", () => {
     },
     {
       id: "series",
+      category: "PHONE",
       brand: "Apple",
       series: "iPhone",
       model: "",
@@ -48,6 +55,7 @@ describe("quote matching", () => {
     },
     {
       id: "exact",
+      category: "PHONE",
       brand: "Apple",
       series: "",
       model: "iPhone 13",

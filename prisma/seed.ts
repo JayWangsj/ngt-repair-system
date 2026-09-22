@@ -14,8 +14,9 @@ async function main() {
   if (process.env.SEED_DEMO === "true") {
     for (const data of [
       {
-        brand: "apple",
-        model: "iphone 13",
+        category: "PHONE",
+        brand: "Apple",
+        model: "iPhone 13",
         series: "",
         project: "sostituzione display",
         suggested: "129.00",
@@ -23,15 +24,17 @@ async function main() {
         minutes: 60,
       },
       {
-        brand: "apple",
+        category: "PHONE",
+        brand: "Apple",
         model: "",
-        series: "iphone",
+        series: "iPhone",
         project: "sostituzione batteria",
         suggested: "59.00",
         cost: "22.00",
         minutes: 30,
       },
       {
+        category: "PHONE",
         brand: "",
         model: "",
         series: "",
@@ -43,7 +46,8 @@ async function main() {
     ])
       await db.priceRule.upsert({
         where: {
-          brand_series_model_project: {
+          category_brand_series_model_project: {
+            category: data.category,
             brand: data.brand,
             series: data.series,
             model: data.model,

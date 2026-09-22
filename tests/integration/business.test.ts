@@ -680,6 +680,43 @@ describe("1.2 customer and catalog management", () => {
       (await db.workOrder.findUniqueOrThrow({ where: { id: order.id } })).fault,
     ).toBe("Display rotto");
   });
+  it("normalizes brand and model names and isolates identical quotes by device type", async () => {
+    const phone = await createOrder(
+      owner,
+      input({
+        brand: "apple",
+        model: "iphone 16 pro max",
+        items: [{ project: "Camera", final: "80" }],
+      }),
+    );
+    const storedPhone = await db.workOrder.findUniqueOrThrow({
+      where: { id: phone.id },
+      include: { device: true },
+    });
+    expect(storedPhone.device.brand).toBe("Apple");
+    expect(storedPhone.device.model).toBe("iPhone 16 Pro Max");
+    const tablet = await savePriceRule(owner, null, {
+      category: "TABLET",
+      brand: "APPLE",
+      model: "iphone 16 pro max",
+      project: "Camera",
+      suggested: "90",
+    });
+    expect(tablet).toMatchObject({
+      category: "TABLET",
+      brand: "Apple",
+      model: "iPhone 16 Pro Max",
+    });
+    expect(
+      await db.priceRule.count({
+        where: {
+          brand: "Apple",
+          model: "iPhone 16 Pro Max",
+          project: "camera",
+        },
+      }),
+    ).toBe(2);
+  });
   it("failed order creation does not write a new model or price", async () => {
     await expect(
       createOrder(
@@ -691,7 +728,7 @@ describe("1.2 customer and catalog management", () => {
         }),
       ),
     ).rejects.toThrow("supera");
-    expect(await db.priceRule.count({ where: { model: "never saved" } })).toBe(
+    expect(await db.priceRule.count({ where: { model: "Never Saved" } })).toBe(
       0,
     );
     expect(await db.device.count()).toBe(0);

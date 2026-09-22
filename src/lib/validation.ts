@@ -87,6 +87,9 @@ export const statusInput = z.object({
 });
 export const ruleInput = z
   .object({
+    category: z
+      .enum(["PHONE", "TABLET", "LAPTOP", "DESKTOP", "CONSOLE", "OTHER"])
+      .default("PHONE"),
     brand: z.string().trim().max(120).default(""),
     series: z.string().trim().max(120).default(""),
     model: z.string().trim().max(120).default(""),

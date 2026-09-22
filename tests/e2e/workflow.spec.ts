@@ -641,3 +641,61 @@ test("settings exports data and re-import skips existing records", async ({
   expect(result.imported).toBe(0);
   expect(result.skipped).toBeGreaterThan(0);
 });
+
+for (const width of [1280, 390]) {
+  test(`creation buttons and dialog actions stay consistent at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    for (const [path, name] of [
+      ["/customers", "Nuovo cliente"],
+      ["/prices", "Nuova regola"],
+    ]) {
+      await page.goto(path);
+      const trigger = page
+        .locator(".page-header")
+        .getByRole("button", { name, exact: true });
+      await expect(trigger).toBeVisible();
+      if (width === 1280) {
+        const heading = await page.locator("h1").boundingBox();
+        const button = await trigger.boundingBox();
+        expect(button!.x).toBeGreaterThan(heading!.x + heading!.width);
+      }
+      await trigger.click();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog.locator("input, select").first()).toBeFocused();
+      const cancel = dialog.getByRole("button", {
+        name: "Annulla",
+        exact: true,
+      });
+      const saveButton = dialog.getByRole("button", {
+        name: "Salva",
+        exact: true,
+      });
+      await saveButton.scrollIntoViewIfNeeded();
+      const cancelBox = await cancel.boundingBox();
+      const saveBox = await saveButton.boundingBox();
+      const footer = await dialog.locator(".dialog-actions").boundingBox();
+      const lastInput = await dialog.locator("input").last().boundingBox();
+      expect(cancelBox!.x + cancelBox!.width).toBeLessThan(saveBox!.x);
+      expect(Math.abs(cancelBox!.y - saveBox!.y)).toBeLessThan(2);
+      expect(
+        Math.abs(saveBox!.x + saveBox!.width - footer!.x - footer!.width),
+      ).toBeLessThan(2);
+      expect(saveBox!.y).toBeGreaterThan(lastInput!.y + lastInput!.height);
+      expect(await dialog.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(
+        true,
+      );
+      await page.screenshot({
+        path: `test-results/creation-${path.slice(1)}-${width}.png`,
+      });
+      await cancel.click();
+      await expect(dialog).not.toBeVisible();
+      await expect(trigger).toBeFocused();
+      await trigger.click();
+      await page.keyboard.press("Escape");
+      await expect(dialog).not.toBeVisible();
+      await expect(trigger).toBeFocused();
+    }
+  });
+}

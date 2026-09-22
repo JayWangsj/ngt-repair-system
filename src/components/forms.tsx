@@ -1,5 +1,7 @@
 "use client";
 import {
+  createContext,
+  useContext,
   useState,
   useEffect,
   useRef,
@@ -890,6 +892,8 @@ export function QuoteSummary({
 }
 
 type ActionResult = { ok: boolean; error?: string };
+const DialogCloseContext = createContext<(() => void) | null>(null);
+
 function ActionForm({
   action,
   children,
@@ -902,6 +906,7 @@ function ActionForm({
   onSuccess?: () => void;
 }) {
   const it = useMessages();
+  const closeDialog = useContext(DialogCloseContext);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -929,7 +934,21 @@ function ActionForm({
     <form onSubmit={handle} className="action-form" aria-busy={pending}>
       {children}
       <Message error={error} success={success} />
-      <Button disabled={pending}>{pending ? it.saving : submit}</Button>
+      {closeDialog ? (
+        <div className="dialog-actions">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={closeDialog}
+          >
+            {it.cancel}
+          </Button>
+          <Button disabled={pending}>{pending ? it.saving : submit}</Button>
+        </div>
+      ) : (
+        <Button disabled={pending}>{pending ? it.saving : submit}</Button>
+      )}
     </form>
   );
 }
@@ -1551,6 +1570,22 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
   }
   return (
     <>
+      <header className="page-header">
+        <div>
+          <div className="eyebrow">{it.workspace}</div>
+          <h1>{it.nav.prices}</h1>
+          <p>{it.priceDescription}</p>
+        </div>
+        <Button
+          onClick={() => {
+            setSaved(false);
+            setCreating({});
+          }}
+        >
+          <Plus size={18} />
+          {it.newRule}
+        </Button>
+      </header>
       <div className="catalog-toolbar">
         <Field label={it.search}>
           <input
@@ -1561,15 +1596,6 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
             }}
           />
         </Field>
-        <Button
-          onClick={() => {
-            setSaved(false);
-            setCreating({});
-          }}
-        >
-          <Plus size={18} />
-          {it.newRule}
-        </Button>
       </div>
       {creating && (
         <FormDialog title={it.newRule} onClose={() => setCreating(null)}>
@@ -1731,7 +1757,6 @@ function FormDialog({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
-  const it = useMessages();
   const busy = () =>
     Boolean(dialog.current?.querySelector('[aria-busy="true"]'));
   useEffect(() => {
@@ -1756,19 +1781,12 @@ function FormDialog({
         if (!busy()) onClose();
       }}
     >
-      <div className="catalog-toolbar">
+      <div className="dialog-heading">
         <h2 id={titleId}>{title}</h2>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            if (!busy()) onClose();
-          }}
-        >
-          {it.cancel}
-        </Button>
       </div>
-      {children}
+      <DialogCloseContext.Provider value={onClose}>
+        {children}
+      </DialogCloseContext.Provider>
     </dialog>
   );
 }

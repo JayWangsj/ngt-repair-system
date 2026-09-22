@@ -1661,7 +1661,7 @@ details[open] > summary {
 .form-dialog::backdrop {
   background: rgb(0 0 0 / 45%);
 }
-.form-dialog > .catalog-toolbar {
+.form-dialog > .dialog-heading {
   margin-bottom: 20px;
 }
 .price-tree-level {
@@ -1694,4 +1694,12 @@ details[open] > summary {
     margin-left: 6px;
     padding-left: 8px;
   }
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e5e5;
 }

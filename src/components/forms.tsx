@@ -12,7 +12,12 @@ import {
   type ReactNode,
 } from "react";
 import { EditableSelect } from "./editable-select";
-import { deviceProjects, uniqueOptions } from "@/lib/options";
+import {
+  deviceProjects,
+  uniqueOptions,
+  groupPriceRules,
+  pricePath,
+} from "@/lib/options";
 import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -921,7 +926,7 @@ function ActionForm({
     }
   }
   return (
-    <form onSubmit={handle} className="action-form">
+    <form onSubmit={handle} className="action-form" aria-busy={pending}>
       {children}
       <Message error={error} success={success} />
       <Button disabled={pending}>{pending ? it.saving : submit}</Button>
@@ -1166,21 +1171,36 @@ export function EditQuoteForm({
 export function RuleForm({
   rule,
   rules = [],
+  initial,
+  onSuccess,
 }: {
   rule?: RuleView;
   rules?: RuleView[];
+  initial?: Partial<RuleView>;
+  onSuccess?: (device: {
+    category: string;
+    brand: string;
+    model: string;
+  }) => void;
 }) {
   const it = useMessages();
   const { locale } = useLanguage();
   const [category, setCategory] = useState<Category>(
-    (rule?.category as Category) ?? "PHONE",
+    ((rule?.category ?? initial?.category) as Category) ?? "PHONE",
   );
-  const [brand, setBrand] = useState(rule?.brand ?? "");
-  const [model, setModel] = useState(rule?.model ?? "");
+  const [brand, setBrand] = useState(rule?.brand ?? initial?.brand ?? "");
+  const [model, setModel] = useState(rule?.model ?? initial?.model ?? "");
   const [project, setProject] = useState(rule?.project ?? "");
   return (
     <ActionForm
       submit={it.save}
+      onSuccess={() =>
+        onSuccess?.({
+          category,
+          brand: normalizeBrand(brand),
+          model: normalizeModel(model),
+        })
+      }
       action={(data) =>
         ruleAction(rule?.id ?? null, {
           ...Object.fromEntries(data),
@@ -1282,7 +1302,9 @@ export function RuleForm({
 
 export function CustomerForm({
   customer,
+  onSuccess,
 }: {
+  onSuccess?: () => void;
   customer?: {
     id: string;
     name: string;
@@ -1299,13 +1321,15 @@ export function CustomerForm({
   return (
     <ActionForm
       submit={it.save}
+      onSuccess={onSuccess}
       action={async (data) => {
         const result = await customerAction(customer?.id ?? null, {
           name: str(data, "name"),
           phone: str(data, "phone"),
           additionalPhones: phones,
         });
-        if (result.ok && !customer) router.push("/customers/" + result.id);
+        if (result.ok && !customer && !onSuccess)
+          router.push("/customers/" + result.id);
         return result;
       }}
     >
@@ -1455,28 +1479,58 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
-  const groups = rules.reduce<
-    {
-      key: string;
-      category: string;
-      brand: string;
-      model: string;
-      rules: RuleView[];
-    }[]
-  >((result, rule) => {
-    const key = [rule.category, rule.brand, rule.model].join("|");
-    const previous = result.at(-1);
-    if (previous?.key === key) previous.rules.push(rule);
-    else
-      result.push({
-        key,
-        category: rule.category,
-        brand: rule.brand,
-        model: rule.model,
-        rules: [rule],
-      });
-    return result;
-  }, []);
+  const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState<string[]>([]);
+  const [creating, setCreating] = useState<Partial<RuleView> | null>(null);
+  const [saved, setSaved] = useState(false);
+  const reveal = useRef("");
+  const groups = groupPriceRules(rules, query);
+  const visibleIds = groups.flatMap((b) =>
+    b.categories.flatMap((c) =>
+      c.models.flatMap((m) => m.rules.map((r) => r.id)),
+    ),
+  );
+  const selectedIds = selected.filter((id) => visibleIds.includes(id));
+  useEffect(() => {
+    if (!reveal.current) return;
+    const target = document.getElementById(reveal.current);
+    if (target) {
+      target.scrollIntoView({ block: "nearest" });
+      reveal.current = "";
+    }
+  }, [rules, creating]);
+  function toggle(key: string) {
+    setExpanded((current) =>
+      current.includes(key)
+        ? current.filter((k) => k !== key)
+        : [...current, key],
+    );
+  }
+  const heading = (key: string, label: string, initial: Partial<RuleView>) => (
+    <div className="catalog-toolbar price-tree-heading">
+      <button
+        type="button"
+        className="price-toggle"
+        aria-expanded={Boolean(query.trim()) || expanded.includes(key)}
+        aria-controls={"group-" + key}
+        onClick={() => toggle(key)}
+      >
+        <span aria-hidden="true">
+          {query.trim() || expanded.includes(key) ? "▾" : "▸"}
+        </span>{" "}
+        {label}
+      </button>
+      <Button
+        variant="outline"
+        onClick={() => {
+          setSaved(false);
+          setCreating(initial);
+        }}
+      >
+        {it.newRule}
+      </Button>
+    </div>
+  );
 
   async function remove(ids: string[]) {
     if (!window.confirm(it.deleteConfirm)) return;
@@ -1498,92 +1552,252 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
   return (
     <>
       <div className="catalog-toolbar">
+        <Field label={it.search}>
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setSelected([]);
+            }}
+          />
+        </Field>
+        <Button
+          onClick={() => {
+            setSaved(false);
+            setCreating({});
+          }}
+        >
+          <Plus size={18} />
+          {it.newRule}
+        </Button>
+      </div>
+      {creating && (
+        <FormDialog title={it.newRule} onClose={() => setCreating(null)}>
+          <RuleForm
+            initial={creating}
+            rules={rules}
+            onSuccess={(device) => {
+              setCreating(null);
+              setSaved(true);
+              setQuery("");
+              setSelected([]);
+              const paths = [
+                pricePath(device.brand),
+                pricePath(device.brand, device.category),
+                pricePath(device.brand, device.category, device.model),
+              ];
+              setExpanded((current) => [...new Set([...current, ...paths])]);
+              reveal.current = "group-" + paths[2];
+            }}
+          />
+        </FormDialog>
+      )}
+      <Message success={saved} />
+      <div className="catalog-toolbar">
         <label className="checkbox">
           <input
             type="checkbox"
-            checked={rules.length > 0 && selected.length === rules.length}
+            checked={
+              visibleIds.length > 0 && selectedIds.length === visibleIds.length
+            }
             onChange={(event) =>
-              setSelected(
-                event.target.checked ? rules.map((rule) => rule.id) : [],
-              )
+              setSelected(event.target.checked ? visibleIds : [])
             }
           />
           {it.selectAll}
         </label>
         <Button
-          disabled={pending || !selected.length}
+          disabled={pending || !selectedIds.length}
           variant="outline"
-          onClick={() => remove(selected)}
+          onClick={() => remove(selectedIds)}
         >
-          {it.deleteSelected} ({selected.length})
+          {it.deleteSelected} ({selectedIds.length})
         </Button>
       </div>
       <Message error={error} />
       <div className="price-groups">
-        {groups.map((group) => (
-          <section className="price-group" key={group.key}>
-            <h2 className="price-group-heading">
-              {
-                categories[group.category as Category]?.[
-                  locale === "zh" ? 1 : 0
-                ]
-              }
-              <span>·</span>
-              {group.brand} {group.model}
-            </h2>
-            <div className="rule-list">
-              {group.rules.map((rule) => (
-                <article className="panel padded" key={rule.id}>
-                  <div className="catalog-toolbar">
-                    <label className="checkbox">
-                      <input
-                        type="checkbox"
-                        aria-label={
-                          it.selectOption +
-                          " " +
-                          rule.project +
-                          " " +
-                          rule.brand +
-                          " " +
-                          rule.model
-                        }
-                        checked={selected.includes(rule.id)}
-                        onChange={(event) =>
-                          setSelected(
-                            event.target.checked
-                              ? [...selected, rule.id]
-                              : selected.filter((id) => id !== rule.id),
-                          )
-                        }
-                      />
-                      {rule.project}
-                    </label>
-                    <Button
-                      variant="ghost"
-                      disabled={pending}
-                      onClick={() => remove([rule.id])}
-                    >
-                      {it.deleteRule}
-                    </Button>
+        {groups.length === 0 && <p className="empty">{it.noPriceResults}</p>}
+        {groups.map((brand) => (
+          <section className="price-group" key={brand.key}>
+            {heading(brand.key, brand.brand || it.generic, {
+              brand: brand.brand,
+            })}
+            <div
+              id={"group-" + brand.key}
+              hidden={!query.trim() && !expanded.includes(brand.key)}
+            >
+              {brand.categories.map((category) => (
+                <section className="price-tree-level" key={category.key}>
+                  {heading(
+                    category.key,
+                    categories[category.category as Category]?.[
+                      locale === "zh" ? 1 : 0
+                    ] ?? category.category,
+                    { brand: brand.brand, category: category.category },
+                  )}
+                  <div
+                    id={"group-" + category.key}
+                    hidden={!query.trim() && !expanded.includes(category.key)}
+                  >
+                    {category.models.map((group) => (
+                      <section className="price-tree-level" key={group.key}>
+                        {heading(group.key, group.model || it.generic, {
+                          brand: brand.brand,
+                          category: category.category,
+                          model: group.model,
+                        })}
+                        <div
+                          id={"group-" + group.key}
+                          hidden={
+                            !query.trim() && !expanded.includes(group.key)
+                          }
+                        >
+                          <div className="rule-list">
+                            {group.rules.map((rule) => (
+                              <article className="panel padded" key={rule.id}>
+                                <div className="catalog-toolbar">
+                                  <label className="checkbox">
+                                    <input
+                                      type="checkbox"
+                                      aria-label={
+                                        it.selectOption +
+                                        " " +
+                                        rule.project +
+                                        " " +
+                                        rule.brand +
+                                        " " +
+                                        rule.model
+                                      }
+                                      checked={selected.includes(rule.id)}
+                                      onChange={(event) =>
+                                        setSelected(
+                                          event.target.checked
+                                            ? [...selected, rule.id]
+                                            : selected.filter(
+                                                (id) => id !== rule.id,
+                                              ),
+                                        )
+                                      }
+                                    />
+                                    {rule.project}
+                                  </label>
+                                  <Button
+                                    variant="ghost"
+                                    disabled={pending}
+                                    onClick={() => remove([rule.id])}
+                                  >
+                                    {it.deleteRule}
+                                  </Button>
+                                </div>
+                                <details>
+                                  <summary className="rule-summary">
+                                    <span className="rule-price">
+                                      <strong>{rule.project}</strong>
+                                      <small>
+                                        {money(cents(rule.suggested))}
+                                      </small>
+                                    </span>
+                                    <span className="button button-outline rule-edit-button">
+                                      {it.editProject}
+                                    </span>
+                                  </summary>
+                                  <RuleForm rule={rule} rules={rules} />
+                                </details>
+                              </article>
+                            ))}
+                          </div>
+                        </div>
+                      </section>
+                    ))}
                   </div>
-                  <details>
-                    <summary className="rule-summary">
-                      <span className="rule-price">
-                        <strong>{rule.project}</strong>
-                        <small>{money(cents(rule.suggested))}</small>
-                      </span>
-                      <span className="button button-outline rule-edit-button">
-                        {it.editProject}
-                      </span>
-                    </summary>
-                    <RuleForm rule={rule} rules={rules} />
-                  </details>
-                </article>
+                </section>
               ))}
             </div>
           </section>
         ))}
       </div>
     </>
+  );
+}
+
+function FormDialog({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const it = useMessages();
+  const busy = () =>
+    Boolean(dialog.current?.querySelector('[aria-busy="true"]'));
+  useEffect(() => {
+    const element = dialog.current;
+    const previous = document.activeElement as HTMLElement | null;
+    element?.showModal();
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      element?.close();
+      document.body.style.overflow = overflow;
+      previous?.focus();
+    };
+  }, []);
+  return (
+    <dialog
+      ref={dialog}
+      className="form-dialog"
+      aria-labelledby={titleId}
+      onCancel={(e) => {
+        e.preventDefault();
+        if (!busy()) onClose();
+      }}
+    >
+      <div className="catalog-toolbar">
+        <h2 id={titleId}>{title}</h2>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            if (!busy()) onClose();
+          }}
+        >
+          {it.cancel}
+        </Button>
+      </div>
+      {children}
+    </dialog>
+  );
+}
+export function NewCustomerDialog() {
+  const it = useMessages();
+  const [open, setOpen] = useState(false);
+  const [saved, setSaved] = useState(false);
+  return (
+    <div>
+      <Button
+        onClick={() => {
+          setSaved(false);
+          setOpen(true);
+        }}
+      >
+        <Plus size={18} />
+        {it.addCustomer}
+      </Button>
+      <Message success={saved} />
+      {open && (
+        <FormDialog title={it.addCustomer} onClose={() => setOpen(false)}>
+          <CustomerForm
+            onSuccess={() => {
+              setOpen(false);
+              setSaved(true);
+            }}
+          />
+        </FormDialog>
+      )}
+    </div>
   );
 }

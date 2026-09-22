@@ -77,6 +77,7 @@ export const zh: typeof it = {
   save: "保存",
   saving: "保存中…",
   saved: "操作成功。",
+  noPriceResults: "没有找到报价。",
   cancel: "取消",
   search: "搜索",
   all: "全部",

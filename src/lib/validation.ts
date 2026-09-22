@@ -44,7 +44,16 @@ export const orderInput = z.object({
   additionalPhones: z.array(phoneInput).max(2).default([]),
   privacyConsent: z.boolean().default(false),
   category: z
-    .enum(["PHONE", "TABLET", "LAPTOP", "DESKTOP", "CONSOLE", "OTHER"])
+    .enum([
+      "PHONE",
+      "TABLET",
+      "LAPTOP",
+      "DESKTOP",
+      "CONSOLE",
+      "SMARTWATCH",
+      "SMARTBAND",
+      "OTHER",
+    ])
     .default("PHONE"),
   faults: z.array(short).max(30).default([]),
   orderDiscount: amountInput.default("0"),
@@ -88,7 +97,16 @@ export const statusInput = z.object({
 export const ruleInput = z
   .object({
     category: z
-      .enum(["PHONE", "TABLET", "LAPTOP", "DESKTOP", "CONSOLE", "OTHER"])
+      .enum([
+        "PHONE",
+        "TABLET",
+        "LAPTOP",
+        "DESKTOP",
+        "CONSOLE",
+        "SMARTWATCH",
+        "SMARTBAND",
+        "OTHER",
+      ])
       .default("PHONE"),
     brand: z.string().trim().max(120).default(""),
     series: z.string().trim().max(120).default(""),
@@ -145,6 +163,8 @@ export const deviceInput = z.object({
     "LAPTOP",
     "DESKTOP",
     "CONSOLE",
+    "SMARTWATCH",
+    "SMARTBAND",
     "OTHER",
   ]),
   brand: short,

@@ -176,6 +176,7 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
       });
     let customer = await tx.customer.findFirst({
       where: {
+        deletedAt: null,
         OR: [
           { phone: data.phone },
           { phones: { some: { phone: data.phone } } },
@@ -598,6 +599,7 @@ async function syncPhones(
   const conflict = await tx.customer.findFirst({
     where: {
       id: { not: id },
+      deletedAt: null,
       OR: [
         { phone: { in: phones } },
         { phones: { some: { phone: { in: phones } } } },
@@ -611,7 +613,7 @@ async function syncPhones(
   });
   for (const phone of phones)
     await tx.customerPhone.upsert({
-      where: { phone },
+      where: { phone_customerId: { phone, customerId: id } },
       create: { phone, customerId: id },
       update: {},
     });

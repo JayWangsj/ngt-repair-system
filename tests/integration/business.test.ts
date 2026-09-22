@@ -640,7 +640,11 @@ describe("1.2 customer and catalog management", () => {
     expect(await db.device.count({ where: { deletedAt: null } })).toBe(0);
     expect(await db.workOrder.count()).toBe(1);
     expect(await db.payment.count()).toBe(1);
-    await expect(createOrder(owner, input())).rejects.toThrow("eliminato");
+    const replacement = await createOrder(owner, input());
+    const replacementDevice = await db.device.findUniqueOrThrow({
+      where: { id: replacement.deviceId },
+    });
+    expect(replacementDevice.customerId).not.toBe(full.device.customerId);
   });
   it("deletes single and multiple quotes while preserving historical amounts", async () => {
     const order = await createOrder(owner, input());
@@ -825,4 +829,98 @@ describe("versioned data backup and merge import", () => {
     expect(await db.workOrder.count()).toBe(1);
     expect(await db.customer.count()).toBe(1);
   });
+});
+
+it("reuses deleted primary and extra numbers while retaining history and backup identity", async () => {
+  const data = {
+    name: "Customer A",
+    phone: "3331234567",
+    additionalPhones: ["3331234568", "3331234569"],
+  };
+  const original = await saveCustomer(owner, null, data);
+  const order = await createOrder(owner, input());
+  await deleteCustomer(owner, original.id);
+  const replacement = await saveCustomer(owner, null, data);
+  expect(replacement.id).not.toBe(original.id);
+  expect(
+    await db.customerPhone.count({ where: { customerId: original.id } }),
+  ).toBe(3);
+  expect(
+    await db.customerPhone.count({ where: { customerId: replacement.id } }),
+  ).toBe(3);
+  await expect(saveCustomer(owner, null, data)).rejects.toThrow();
+  await expect(
+    saveCustomer(owner, null, {
+      name: "Conflict",
+      phone: "3339999999",
+      additionalPhones: [data.additionalPhones[0]],
+    }),
+  ).rejects.toThrow("altro cliente");
+  const historical = await db.workOrder.findUniqueOrThrow({
+    where: { id: order.id },
+    include: orderInclude,
+  });
+  expect(historical.device.customerId).toBe(original.id);
+  const backup = await exportBusinessData();
+  await clearBusinessData(owner);
+  await importBusinessData(owner, backup);
+  expect(await db.customer.count()).toBe(2);
+  expect(
+    (await db.customer.findUniqueOrThrow({ where: { id: original.id } }))
+      .deletedAt,
+  ).not.toBeNull();
+  expect(
+    (await db.customer.findUniqueOrThrow({ where: { id: replacement.id } }))
+      .deletedAt,
+  ).toBeNull();
+  expect(
+    (
+      await db.workOrder.findUniqueOrThrow({
+        where: { id: order.id },
+        include: orderInclude,
+      })
+    ).device.customerId,
+  ).toBe(original.id);
+});
+it.each(["SMARTWATCH", "SMARTBAND"])(
+  "saves %s quotes and devices",
+  async (category) => {
+    const quote = await savePriceRule(owner, null, {
+      category,
+      brand: "Apple",
+      model: "Wearable",
+      project: "Battery",
+      suggested: "40",
+    });
+    expect(
+      (await db.priceRule.findUniqueOrThrow({ where: { id: quote.id } }))
+        .category,
+    ).toBe(category);
+    const order = await createOrder(
+      owner,
+      input({ category, model: "Wearable" }),
+    );
+    expect(
+      (await db.device.findUniqueOrThrow({ where: { id: order.deviceId } }))
+        .category,
+    ).toBe(category);
+  },
+);
+
+it("does not import an extra phone already owned by another active customer", async () => {
+  const first = await saveCustomer(owner, null, {
+    name: "First",
+    phone: "3330000001",
+  });
+  const second = await saveCustomer(owner, null, {
+    name: "Second",
+    phone: "3330000002",
+  });
+  const backup = await exportBusinessData();
+  backup.data.phones.push({ customerId: second.id, phone: "+393330000001" });
+  await clearBusinessData(owner);
+  await importBusinessData(owner, backup);
+  expect(
+    await db.customerPhone.findMany({ where: { phone: "+393330000001" } }),
+  ).toEqual([{ phone: "+393330000001", customerId: first.id }]);
 });

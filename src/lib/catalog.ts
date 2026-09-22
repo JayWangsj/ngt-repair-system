@@ -4,6 +4,8 @@ export const categories = {
   LAPTOP: ["Notebook", "笔记本电脑"],
   DESKTOP: ["Computer desktop", "台式电脑"],
   CONSOLE: ["Console", "游戏机"],
+  SMARTWATCH: ["Smartwatch", "智能手表"],
+  SMARTBAND: ["Smartband", "智能手环"],
   OTHER: ["Altro", "其他设备"],
 } as const;
 export type Category = keyof typeof categories;
@@ -55,6 +57,8 @@ export const brands: Record<Category, string[]> = {
   LAPTOP: ["Apple", "Lenovo", "HP", "Dell", "ASUS", "Acer", "MSI", "Samsung"],
   DESKTOP: ["Assemblato", "Lenovo", "HP", "Dell", "ASUS", "Acer", "Apple"],
   CONSOLE: ["Sony", "Microsoft", "Nintendo"],
+  SMARTWATCH: ["Apple", "Samsung", "Huawei", "Xiaomi", "Garmin"],
+  SMARTBAND: ["Xiaomi", "Huawei", "Honor", "Fitbit"],
   OTHER: [],
 };
 export const models: Partial<Record<Category, Record<string, string[]>>> = {

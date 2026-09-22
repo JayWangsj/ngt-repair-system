@@ -179,14 +179,16 @@ export async function importBusinessData(
 
     for (const source of backup.data.customers) {
       let target = await tx.customer.findUnique({ where: { id: source.id } });
-      target ??= await tx.customer.findFirst({
-        where: {
-          OR: [
-            { phone: source.phone },
-            { phones: { some: { phone: source.phone } } },
-          ],
-        },
-      });
+      if (!target && !source.deletedAt)
+        target = await tx.customer.findFirst({
+          where: {
+            deletedAt: null,
+            OR: [
+              { phone: source.phone },
+              { phones: { some: { phone: source.phone } } },
+            ],
+          },
+        });
       if (!target) {
         target = await tx.customer.create({
           data: {
@@ -213,9 +215,24 @@ export async function importBusinessData(
         continue;
       }
       const exists = await tx.customerPhone.findUnique({
-        where: { phone: source.phone },
+        where: { phone_customerId: { phone: source.phone, customerId } },
       });
-      if (exists) skipped++;
+      const activeTarget = await tx.customer.findFirst({
+        where: { id: customerId, deletedAt: null },
+      });
+      const conflict =
+        activeTarget &&
+        (await tx.customer.findFirst({
+          where: {
+            id: { not: customerId },
+            deletedAt: null,
+            OR: [
+              { phone: source.phone },
+              { phones: { some: { phone: source.phone } } },
+            ],
+          },
+        }));
+      if (exists || conflict) skipped++;
       else {
         await tx.customerPhone.create({
           data: { phone: source.phone, customerId },

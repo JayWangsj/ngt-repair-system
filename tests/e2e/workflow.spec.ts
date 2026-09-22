@@ -88,9 +88,14 @@ test("single operator opens every business page without login", async ({
     ["/prices", "Nuova regola"],
   ] as const) {
     await page.goto(path);
-    await expect(page.getByRole("link", { name, exact: true })).toHaveClass(
-      /button-primary/,
-    );
+    await expect(
+      page
+        .getByRole(path === "/orders" ? "link" : "button", {
+          name,
+          exact: true,
+        })
+        .first(),
+    ).toHaveClass(/button-primary/);
   }
   await page.goto("/login");
   await expect(page).toHaveURL(/\/$/);
@@ -209,6 +214,7 @@ test("manual quote saves automatically and rejects overpayment", async ({
     "supera il saldo",
   );
   await page.goto("/prices");
+  await page.getByLabel("Cerca", { exact: true }).fill("fotocamera");
   await expect(page.getByText(/fotocamera/i).first()).toBeVisible();
 });
 test("unpaid delivery requires explicit acknowledgement", async ({ page }) => {
@@ -236,14 +242,18 @@ test("price editor and mobile yellow layout support both languages", async ({
   page,
 }) => {
   await page.goto("/prices");
-  await page.getByRole("link", { name: "Nuova regola", exact: true }).click();
-  const form = page.locator("#new-rule");
+  await page
+    .getByRole("button", { name: "Nuova regola", exact: true })
+    .first()
+    .click();
+  const form = page.getByRole("dialog");
   await form
     .getByLabel("Intervento", { exact: true })
     .fill(`pulizia ${Date.now()}`);
   await form.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("15");
   await form.getByRole("button", { name: "Salva", exact: true }).click();
-  await expect(form.getByRole("status")).toBeVisible();
+  await expect(form).not.toBeVisible();
+  await expect(page.getByRole("main").getByRole("status")).toBeVisible();
   await page.goto("/");
   await expect(
     page.getByRole("heading", { name: "Oggi in laboratorio", exact: true }),
@@ -404,13 +414,17 @@ test("native quote choices populate prices, clear on model changes and discounts
 test("customer page adds, edits and deletes a customer", async ({ page }) => {
   const phone = "339" + Date.now().toString().slice(-7);
   await page.goto("/customers");
-  await page.getByRole("link", { name: "Nuovo cliente", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Nuovo cliente", exact: true })
+    .click();
   await page
     .getByLabel("Nome e cognome", { exact: true })
     .fill("Da modificare");
   await page.getByLabel("Telefono", { exact: true }).fill(phone);
   await page.getByRole("button", { name: "Salva", exact: true }).click();
-  await expect(page).toHaveURL(/customers\/(?!new)[a-z0-9]+$/);
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await expect(page).toHaveURL(/customers$/);
+  await page.getByRole("link", { name: "Da modificare", exact: true }).click();
   await page
     .getByLabel("Nome e cognome", { exact: true })
     .fill("Cliente modificato");
@@ -425,6 +439,146 @@ test("customer page adds, edits and deletes a customer", async ({ page }) => {
     page.getByRole("link", { name: "Cliente modificato", exact: true }),
   ).toHaveCount(0);
 });
+test("customer dialog keeps filters and inputs on errors and allows deleted numbers again", async ({
+  page,
+}) => {
+  const phone = "335" + Date.now().toString().slice(-7);
+  await page.goto("/customers?q=ModalCustomer");
+  const open = () =>
+    page.getByRole("button", { name: "Nuovo cliente", exact: true }).click();
+  await open();
+  let dialog = page.getByRole("dialog");
+  await dialog
+    .getByLabel("Nome e cognome", { exact: true })
+    .fill("ModalCustomer");
+  await dialog.getByLabel("Telefono", { exact: true }).fill("bad");
+  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toBeVisible();
+  await expect(
+    dialog.getByLabel("Nome e cognome", { exact: true }),
+  ).toHaveValue("ModalCustomer");
+  await dialog.getByLabel("Telefono", { exact: true }).fill(phone);
+  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page).toHaveURL(/customers\?q=ModalCustomer$/);
+  await page.getByRole("link", { name: "ModalCustomer", exact: true }).click();
+  page.once("dialog", (d) => d.accept());
+  await page
+    .getByRole("button", { name: "Elimina cliente", exact: true })
+    .click();
+  await expect(page).toHaveURL(/customers$/);
+  await open();
+  dialog = page.getByRole("dialog");
+  await dialog
+    .getByLabel("Nome e cognome", { exact: true })
+    .fill("ModalCustomer");
+  await dialog.getByLabel("Telefono", { exact: true }).fill(phone);
+  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "ModalCustomer", exact: true }),
+  ).toBeVisible();
+  await open();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Annulla", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Nuovo cliente", exact: true }),
+  ).toBeFocused();
+});
+
+test("quote tree supports contextual dialogs, search, editing and empty branch removal", async ({
+  page,
+}) => {
+  await page.goto("/prices");
+  await page
+    .getByRole("button", { name: "Nuova regola", exact: true })
+    .first()
+    .click();
+  let dialog = page.getByRole("dialog");
+  await dialog
+    .getByLabel("Tipo dispositivo", { exact: true })
+    .selectOption("SMARTWATCH");
+  await dialog.getByLabel("Marca", { exact: true }).fill("Apple");
+  await dialog.getByLabel("Modello", { exact: true }).fill("Watch Modal");
+  await dialog.getByLabel("Intervento", { exact: true }).fill("Test battery");
+  await dialog.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("bad");
+  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toBeVisible();
+  await expect(dialog.getByLabel("Modello", { exact: true })).toHaveValue(
+    "Watch Modal",
+  );
+  await dialog.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("40");
+  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page).toHaveURL(/prices$/);
+  const model = page
+    .locator("section.price-tree-level")
+    .filter({ has: page.locator(".price-toggle", { hasText: "Watch Modal" }) })
+    .last();
+  await expect(model.locator("article")).toBeVisible();
+  await model
+    .getByRole("button", { name: "Nuova regola", exact: true })
+    .click();
+  dialog = page.getByRole("dialog");
+  await expect(
+    dialog.getByLabel("Tipo dispositivo", { exact: true }),
+  ).toHaveValue("SMARTWATCH");
+  await expect(dialog.getByLabel("Marca", { exact: true })).toHaveValue(
+    "Apple",
+  );
+  await expect(dialog.getByLabel("Modello", { exact: true })).toHaveValue(
+    "Watch Modal",
+  );
+  await dialog.getByLabel("Intervento", { exact: true }).fill("Test screen");
+  await dialog.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("70");
+  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(model.locator("article")).toHaveCount(2);
+  await page.getByLabel("Cerca", { exact: true }).fill("Test battery");
+  await expect(page.locator(".rule-list > article")).toHaveCount(1);
+  await page.locator(".rule-summary").click();
+  await page.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("45");
+  await page.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(page.locator(".rule-price")).toContainText("45,00");
+  await expect(page.getByLabel("Cerca", { exact: true })).toHaveValue(
+    "Test battery",
+  );
+  await page.getByLabel("Cerca", { exact: true }).fill("Watch Modal");
+  await page.getByLabel("Seleziona tutti", { exact: true }).check();
+  page.once("dialog", (d) => d.accept());
+  await page
+    .getByRole("button", { name: /Elimina preventivi selezionati/ })
+    .click();
+  await expect(page.locator(".rule-list > article")).toHaveCount(0);
+  await page.getByLabel("Cerca", { exact: true }).fill("");
+  await expect(
+    page.locator(".price-toggle", { hasText: "Watch Modal" }),
+  ).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page
+    .getByRole("button", { name: "Nuova regola", exact: true })
+    .first()
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByLabel("Tipo dispositivo", { exact: true })
+    .selectOption("SMARTBAND");
+  expect(
+    await page
+      .getByRole("dialog")
+      .evaluate((e) => e.scrollWidth <= e.clientWidth),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/mobile-quote-dialog.png",
+    fullPage: true,
+  });
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+});
+
 test("removes a saved fault and keeps it removed after reload", async ({
   page,
 }) => {
@@ -448,6 +602,9 @@ test("price editor supports individual and batch deletion", async ({
   page,
 }) => {
   await page.goto("/prices");
+  await page.getByRole("button", { name: "Apple", exact: true }).click();
+  await page.getByRole("button", { name: "Telefono", exact: true }).click();
+  await page.getByRole("button", { name: "iPhone 13", exact: true }).click();
   const before = await page.locator(".rule-list > article").count();
   expect(before).toBeGreaterThan(1);
   page.once("dialog", (d) => d.accept());

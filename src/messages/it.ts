@@ -109,6 +109,7 @@ export const it = {
   save: "Salva",
   saving: "Salvataggio…",
   saved: "Operazione completata.",
+  noPriceResults: "Nessun preventivo trovato.",
   cancel: "Annulla",
   search: "Cerca",
   all: "Tutti",

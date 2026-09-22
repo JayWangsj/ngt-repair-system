@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { NewCustomerDialog } from "@/components/forms";
 import { db } from "@/lib/db";
 import { requireActor } from "@/lib/session";
 import { PageHeader, Empty } from "@/components/common";
@@ -35,8 +36,7 @@ export default async function Customers({
       <PageHeader
         title={it.nav.customers}
         description={it.customersDescription}
-        actionHref="/customers/new"
-        actionLabel={it.addCustomer}
+        actionNode={<NewCustomerDialog />}
       />
       <form className="filters">
         <label className="grow">

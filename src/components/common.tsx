@@ -6,7 +6,7 @@ import type {
   WorkOrderItem,
   Payment,
 } from "@prisma/client";
-import { Plus, Wrench } from "lucide-react";
+import { Plus, Wrench, ChevronRight } from "lucide-react";
 import { getMessages } from "@/lib/i18n-server";
 import {
   balance,
@@ -76,22 +76,30 @@ type Row = WorkOrder & {
   items: WorkOrderItem[];
   payments: Payment[];
 };
-export async function OrderTable({ orders }: { orders: Row[] }) {
+export async function OrderTable({
+  orders,
+  hideCustomer = false,
+  compact = false,
+}: {
+  orders: Row[];
+  hideCustomer?: boolean;
+  compact?: boolean;
+}) {
   const it = await getMessages();
-  if (!orders.length) return <Empty />;
+  if (!orders.length)
+    return compact ? <p className="compact-empty">{it.empty}</p> : <Empty />;
   return (
     <div className="table-scroll">
       <table>
         <thead>
           <tr>
             <th>{it.order}</th>
-            <th>{it.customer}</th>
+            {!hideCustomer && <th>{it.customer}</th>}
             <th>{it.device}</th>
             <th>{it.statusLabel}</th>
             <th>{it.dueDate}</th>
             <th className="numeric">{it.total}</th>
             <th className="numeric">{it.balance}</th>
-            <th />
           </tr>
         </thead>
         <tbody>
@@ -100,14 +108,28 @@ export async function OrderTable({ orders }: { orders: Row[] }) {
               <td>
                 <Link className="order-link" href={`/orders/${order.id}`}>
                   {orderCode(order.number)}
+                  <ChevronRight size={15} aria-hidden="true" />
                 </Link>
               </td>
-              <td>{order.device.customer.name}</td>
+              {!hideCustomer && (
+                <td>
+                  <Link
+                    className="order-link"
+                    href={`/customers/${order.device.customerId}`}
+                  >
+                    {order.device.customer.name}
+                  </Link>
+                </td>
+              )}
               <td>
                 <strong>
                   {order.device.brand} {order.device.model}
                 </strong>
-                <small>{order.items.map((i) => i.project).join(", ")}</small>
+                <small
+                  className={compact ? "order-project-summary" : undefined}
+                >
+                  {order.items.map((i) => i.project).join(", ")}
+                </small>
               </td>
               <td>
                 <Badge status={order.status} />
@@ -121,15 +143,6 @@ export async function OrderTable({ orders }: { orders: Row[] }) {
               </td>
               <td className="numeric">
                 {money(balance(order.items, order.payments, order))}
-              </td>
-              <td>
-                <Link
-                  className="button button-outline table-action"
-                  aria-label={`${it.viewOrder} ${orderCode(order.number)}`}
-                  href={`/orders/${order.id}`}
-                >
-                  {it.viewOrder}
-                </Link>
               </td>
             </tr>
           ))}

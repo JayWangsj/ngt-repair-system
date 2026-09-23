@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireActor } from "@/lib/session";
-import { PageHeader, OrderTable } from "@/components/common";
+import { OrderTable } from "@/components/common";
 import { CustomerSummary, CustomerDevices } from "@/components/customers";
 import { getMessages } from "@/lib/i18n-server";
 export default async function CustomerDetail({
@@ -36,7 +36,6 @@ export default async function CustomerDetail({
       <Link className="button button-outline customer-back" href={returnTo}>
         ← {it.backCustomers}
       </Link>
-      <PageHeader title={customer.name} />
       <CustomerSummary
         customer={{
           id: customer.id,
@@ -62,7 +61,7 @@ export default async function CustomerDetail({
       />
       <h2 className="spaced">{it.customerHistory}</h2>
       <section className="panel table-panel">
-        <OrderTable orders={orders} />
+        <OrderTable orders={orders} hideCustomer compact />
       </section>
     </>
   );

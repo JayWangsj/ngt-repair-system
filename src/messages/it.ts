@@ -1,5 +1,10 @@
 // Italian interface dictionary.
 export const it = {
+  deleteCustomers: "Elimina clienti selezionati",
+  selectedCustomers: "clienti selezionati",
+  customerDeleteConfirm:
+    "Eliminare {count} clienti? Anche i loro dispositivi saranno rimossi dagli elenchi. Lo storico delle riparazioni e dei pagamenti sarà conservato.",
+  batchLimit: "Seleziona al massimo 500 clienti per volta.",
   priceSearch: "Cerca marca, modello o intervento",
   addCustomer: "Nuovo cliente",
   confirmCustomer: "Conferma cliente",

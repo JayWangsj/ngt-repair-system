@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import {
   saveCustomer,
   deleteCustomer,
+  deleteCustomers,
   saveDevice,
   deleteDevice,
   deletePriceRules,
@@ -933,4 +934,35 @@ it("does not import an extra phone already owned by another active customer", as
   expect(
     await db.customerPhone.findMany({ where: { phone: "+393330000001" } }),
   ).toEqual([{ phone: "+393330000001", customerId: first.id }]);
+});
+
+it("batch customer deletion is atomic and retains orders, payments and per-customer audit", async () => {
+  const order = await createOrder(owner, input());
+  const device = await db.device.findUniqueOrThrow({
+    where: { id: order.deviceId },
+  });
+  const extra = await saveCustomer(owner, null, {
+    name: "Batch extra",
+    phone: "3339988776",
+    additionalPhones: [],
+  });
+  await expect(
+    deleteCustomers(owner, [device.customerId, "missing"]),
+  ).rejects.toThrow("Clienti non disponibili");
+  expect(await db.customer.count({ where: { deletedAt: null } })).toBe(2);
+  expect(await db.device.count({ where: { deletedAt: null } })).toBe(1);
+  await expect(deleteCustomers(owner, [])).rejects.toThrow();
+  await expect(
+    deleteCustomers(owner, Array(501).fill(extra.id)),
+  ).rejects.toThrow();
+  await db.user.update({ where: { id: staff.id }, data: { enabled: false } });
+  await expect(deleteCustomers(staff, [extra.id])).rejects.toThrow("Sessione");
+  await deleteCustomers(owner, [device.customerId, extra.id, extra.id]);
+  expect(await db.customer.count({ where: { deletedAt: null } })).toBe(0);
+  expect(await db.device.count({ where: { deletedAt: null } })).toBe(0);
+  expect(await db.workOrder.count()).toBe(1);
+  expect(await db.payment.count()).toBe(1);
+  expect(
+    await db.auditLog.count({ where: { action: "CUSTOMER_DELETED" } }),
+  ).toBe(2);
 });

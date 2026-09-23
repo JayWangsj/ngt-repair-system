@@ -1,5 +1,10 @@
 import type { it } from "./it";
 export const zh: typeof it = {
+  deleteCustomers: "批量删除客户",
+  selectedCustomers: "位客户已选",
+  customerDeleteConfirm:
+    "确认删除 {count} 位客户？其设备也将从列表中移除，维修和收款历史记录会保留。",
+  batchLimit: "每次最多选择 500 位客户。",
   priceSearch: "搜索品牌、型号或维修项目",
   addCustomer: "新增客户",
   confirmCustomer: "确认客户",

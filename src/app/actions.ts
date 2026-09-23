@@ -112,6 +112,10 @@ export async function deleteCustomerAction(id: string) {
   const actor = await requireActor();
   return execute(() => service.deleteCustomer(actor, id));
 }
+export async function deleteCustomersAction(ids: string[]) {
+  const actor = await requireActor();
+  return execute(() => service.deleteCustomers(actor, ids));
+}
 export async function deviceAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.saveDevice(actor, id, input));

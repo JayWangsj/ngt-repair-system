@@ -646,17 +646,32 @@ export async function saveCustomer(
   });
 }
 export async function deleteCustomer(actorInput: Actor, id: string) {
+  return deleteCustomers(actorInput, [id]);
+}
+export async function deleteCustomers(actorInput: Actor, raw: unknown) {
+  const ids = [
+    ...new Set(z.array(z.string().min(1)).min(1).max(500).parse(raw)),
+  ];
   return transact(async (tx) => {
     const actor = await currentActor(tx, actorInput);
-    await tx.customer.update({
-      where: { id },
-      data: { deletedAt: new Date() },
+    const customers = await tx.customer.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+      select: { id: true },
+    });
+    if (customers.length !== ids.length)
+      throw new BusinessError(
+        "Clienti non disponibili. Aggiorna la pagina e riprova.",
+      );
+    const deletedAt = new Date();
+    await tx.customer.updateMany({
+      where: { id: { in: ids } },
+      data: { deletedAt },
     });
     await tx.device.updateMany({
-      where: { customerId: id },
-      data: { deletedAt: new Date() },
+      where: { customerId: { in: ids }, deletedAt: null },
+      data: { deletedAt },
     });
-    await audit(tx, actor, id, "CUSTOMER_DELETED");
+    for (const id of ids) await audit(tx, actor, id, "CUSTOMER_DELETED");
   });
 }
 export async function saveDevice(actorInput: Actor, id: string, raw: unknown) {

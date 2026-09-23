@@ -1,5 +1,6 @@
 import { faultLabel } from "@/lib/catalog";
 import Link from "next/link";
+import { Pencil } from "lucide-react";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { orderInclude } from "@/lib/service";
@@ -81,7 +82,13 @@ export default async function Detail({
             </dl>
             {!closed && (
               <details>
-                <summary>{it.edit}</summary>
+                <summary
+                  className="record-icon record-icon-edit"
+                  aria-label={it.edit}
+                  title={it.edit}
+                >
+                  <Pencil size={18} aria-hidden="true" />
+                </summary>
                 <EditOrderForm
                   id={id}
                   values={{
@@ -147,7 +154,13 @@ export default async function Detail({
             {!closed && (
               <>
                 <details>
-                  <summary>{it.editQuote}</summary>
+                  <summary
+                    className="record-icon record-icon-edit"
+                    aria-label={it.editQuote}
+                    title={it.editQuote}
+                  >
+                    <Pencil size={18} aria-hidden="true" />
+                  </summary>
                   <EditQuoteForm
                     key={order.updatedAt.toISOString()}
                     id={id}

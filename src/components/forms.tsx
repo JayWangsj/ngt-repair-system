@@ -13,6 +13,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { RecordIcon } from "./ui/record-icon";
 import { EditableSelect } from "./editable-select";
 import {
   deviceProjects,
@@ -24,7 +25,7 @@ import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Trash2, Check, MoreHorizontal } from "lucide-react";
+import { Plus, Trash2, Check } from "lucide-react";
 import { Button } from "./ui/button";
 import { useMessages, useLanguage } from "./language";
 import { translateError } from "@/lib/i18n";
@@ -274,14 +275,11 @@ export function ItemsEditor({
                 </Button>
               )}
               {items.length > 1 && (
-                <Button
-                  type="button"
-                  variant="ghost"
+                <RecordIcon
+                  kind="delete"
+                  label={it.remove + " " + it.project + " " + (index + 1)}
                   onClick={() => onChange(items.filter((_, i) => i !== index))}
-                >
-                  <Trash2 size={14} />
-                  {it.remove}
-                </Button>
+                />
               )}
             </div>
           </div>
@@ -579,9 +577,9 @@ export function NewOrderForm({
                 }}
               />
             </Field>
-            <Button
-              type="button"
-              variant="ghost"
+            <RecordIcon
+              kind="delete"
+              label={it.remove + " " + it.phone + " " + (index + 2)}
               onClick={() => {
                 setValue(
                   "additionalPhones",
@@ -589,9 +587,7 @@ export function NewOrderForm({
                 );
                 setCustomerConfirmed(false);
               }}
-            >
-              {it.remove}
-            </Button>
+            />
           </div>
         ))}
         <div className="catalog-toolbar">
@@ -1451,13 +1447,11 @@ export function CustomerForm({
               }
             />
           </Field>
-          <Button
-            type="button"
-            variant="ghost"
+          <RecordIcon
+            kind="delete"
+            label={it.remove + " " + it.phone + " " + (index + 2)}
             onClick={() => setPhones(phones.filter((_, i) => i !== index))}
-          >
-            {it.remove}
-          </Button>
+          />
         </div>
       ))}
       <Button
@@ -1563,72 +1557,6 @@ export function DeviceForm({
     </ActionForm>
   );
 }
-function PriceRuleMore({
-  project,
-  disabled,
-  onDelete,
-}: {
-  project: string;
-  disabled: boolean;
-  onDelete: () => void;
-}) {
-  const it = useMessages();
-  const [open, setOpen] = useState(false);
-  const container = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const id = useId();
-  useEffect(() => {
-    if (!open) return;
-    function dismiss(event: PointerEvent) {
-      if (!container.current?.contains(event.target as Node)) setOpen(false);
-    }
-    document.addEventListener("pointerdown", dismiss);
-    return () => document.removeEventListener("pointerdown", dismiss);
-  }, [open]);
-  return (
-    <div
-      className="price-rule-more"
-      ref={container}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          setOpen(false);
-          trigger.current?.focus();
-        }
-      }}
-    >
-      <Button
-        ref={trigger}
-        variant="ghost"
-        disabled={disabled}
-        aria-label={it.moreActions + " " + project}
-        aria-expanded={open}
-        aria-controls={id}
-        onClick={() => setOpen(!open)}
-      >
-        <MoreHorizontal size={18} />
-      </Button>
-      {open && (
-        <div id={id} className="price-rule-menu">
-          <Button
-            variant="ghost"
-            disabled={disabled}
-            onClick={() => {
-              setOpen(false);
-              onDelete();
-            }}
-          >
-            {it.deleteRule}
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function PriceList({ rules }: { rules: RuleView[] }) {
   const it = useMessages();
   const { locale } = useLanguage();
@@ -1810,6 +1738,7 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
               variant="outline"
               onClick={() => remove(selectedIds)}
             >
+              <Trash2 size={18} aria-hidden="true" />
               {it.deleteSelected} ({selectedIds.length})
             </Button>
           </>
@@ -1883,20 +1812,20 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
                                 <span className="rule-price">
                                   {money(cents(rule.suggested))}
                                 </span>
-                                <Button
-                                  variant="ghost"
+                                <RecordIcon
+                                  kind="edit"
+                                  label={it.editRule}
                                   disabled={pending}
                                   onClick={() => {
                                     setSaved(false);
                                     setEditing(rule);
                                   }}
-                                >
-                                  {it.editRule}
-                                </Button>
-                                <PriceRuleMore
-                                  project={rule.project}
+                                />
+                                <RecordIcon
+                                  kind="delete"
+                                  label={it.deleteRule}
                                   disabled={pending}
-                                  onDelete={() => remove([rule.id])}
+                                  onClick={() => remove([rule.id])}
                                 />
                               </article>
                             ))}

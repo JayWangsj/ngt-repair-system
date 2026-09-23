@@ -339,7 +339,7 @@ test("confirms a new customer with three numbers and selects that customer by na
   });
   await expect(confirmCustomer).toBeDisabled();
   await page
-    .getByRole("button", { name: "Rimuovi", exact: true })
+    .getByRole("button", { name: "Rimuovi Telefono 3", exact: true })
     .last()
     .click();
   await expect(confirmCustomer).toBeEnabled();
@@ -801,7 +801,7 @@ test("manages hidden faults and restores them", async ({ page }) => {
   await expect(page.getByLabel("Display rotto", { exact: true })).toBeVisible();
 });
 
-test("compact price rows support editing, selection and dismissible actions on mobile", async ({
+test("compact price rows support direct icon actions and selection on mobile", async ({
   page,
 }) => {
   await page.goto("/prices");
@@ -811,8 +811,10 @@ test("compact price rows support editing, selection and dismissible actions on m
   await expect(row).toBeVisible();
   await expect(page.getByRole("checkbox")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Elimina preventivo", exact: true }),
-  ).toHaveCount(0);
+    page
+      .getByRole("button", { name: "Elimina preventivo", exact: true })
+      .first(),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Nuova regola", exact: true }),
   ).toHaveCount(1);
@@ -843,17 +845,13 @@ test("compact price rows support editing, selection and dismissible actions on m
   const changed = rows.filter({ hasText: longName });
   await expect(changed.locator(".price-rule-name")).toHaveCount(1);
   await expect(changed.locator(".rule-price")).toContainText("123,45");
-  const more = changed.getByRole("button", { name: /^Altre azioni/ });
-  await more.click();
   await expect(
     changed.getByRole("button", { name: "Elimina preventivo", exact: true }),
   ).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(more).toBeFocused();
-  await expect(more).toHaveAttribute("aria-expanded", "false");
-  await more.click();
-  await page.locator("h1").click();
-  await expect(more).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    changed.getByRole("button", { name: /^Altre azioni/ }),
+  ).toHaveCount(0);
+  await expect(edit.locator("svg")).toHaveCount(1);
   await page
     .getByRole("button", { name: "Gestisci selezione", exact: true })
     .click();
@@ -907,10 +905,6 @@ test("price editor supports individual and batch deletion", async ({
   await page.getByRole("button", { name: "iPhone 13", exact: true }).click();
   const before = await page.locator(".rule-list > article").count();
   expect(before).toBeGreaterThan(1);
-  await page
-    .getByRole("button", { name: /^Altre azioni/ })
-    .first()
-    .click();
   page.once("dialog", (d) => d.accept());
   await page
     .getByRole("button", { name: "Elimina preventivo", exact: true })
@@ -1040,4 +1034,98 @@ test("shared action affordances, price search and delivery date limit", async ({
   await expect(back).toHaveClass(/button-outline/);
   await expect(back).toHaveCSS("border-top-style", "solid");
   await expect(back).toHaveCSS("display", "inline-flex");
+});
+
+test("customer batch deletion keeps selection scoped and confirms the count", async ({
+  page,
+}) => {
+  const prefix = "Batch-" + Date.now();
+  for (let i = 0; i < 2; i++) {
+    await page.goto("/customers");
+    await page
+      .getByRole("button", { name: "Nuovo cliente", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog");
+    await dialog
+      .getByLabel("Nome e cognome", { exact: true })
+      .fill(prefix + "-" + i);
+    await dialog
+      .getByLabel("Telefono", { exact: true })
+      .fill("334" + String(Date.now()).slice(-6) + i);
+    await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+  }
+  const search = page.getByLabel("Cerca", { exact: true });
+  await search.fill(prefix);
+  await expect(page.locator(".customer-table tbody tr")).toHaveCount(2);
+  await expect(
+    page.getByRole("button", { name: "Elimina clienti selezionati" }),
+  ).toHaveCount(0);
+  await page.getByLabel("Seleziona tutti", { exact: true }).check();
+  page.once("dialog", async (dialog) => {
+    expect(dialog.message()).toContain("2 clienti");
+    await dialog.dismiss();
+  });
+  await page
+    .getByRole("button", { name: "Elimina clienti selezionati" })
+    .click();
+  await expect(page.locator(".customer-table tbody tr")).toHaveCount(2);
+  await search.fill(prefix + "-0");
+  await expect(
+    page.getByRole("button", { name: "Elimina clienti selezionati" }),
+  ).toHaveCount(0);
+  await search.fill(prefix);
+  await page.getByLabel("Seleziona tutti", { exact: true }).check();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/customer-batch-mobile.png",
+    fullPage: true,
+  });
+  page.once("dialog", (dialog) => dialog.accept());
+  await page
+    .getByRole("button", { name: "Elimina clienti selezionati" })
+    .click();
+  await expect(page.locator(".customer-table tbody tr")).toHaveCount(0);
+  await expect(search).toHaveValue(prefix);
+});
+
+test("customer detail removes duplicate actions and supports keyboard icon editing", async ({
+  page,
+}) => {
+  await page.goto("/customers");
+  await page.locator(".customer-name .order-link").first().click();
+  await expect(page.locator(".customer-summary h1")).toBeVisible();
+  await expect(
+    page.locator(".eyebrow").filter({ hasText: "Area di lavoro" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("columnheader", { name: "Cliente", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator(".table-action")).toHaveCount(0);
+  const edit = page
+    .locator(".customer-summary")
+    .getByRole("button", { name: "Modifica cliente", exact: true });
+  await expect(edit).toHaveAttribute("title", "Modifica cliente");
+  await edit.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(edit).toBeFocused();
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: "test-results/customer-detail-" + width + ".png",
+      fullPage: true,
+    });
+  }
 });

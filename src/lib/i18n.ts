@@ -6,6 +6,8 @@ export function localeOf(value: unknown): Locale {
 }
 export const messages = { it, zh };
 const errors: Record<string, string> = {
+  "Clienti non disponibili. Aggiorna la pagina e riprova.":
+    "部分客户已不可用，请刷新页面后重试。",
   "Telefoni duplicati.": "电话号码不能重复。",
   "Massimo tre telefoni per cliente.": "每位客户最多三个电话号码。",
   "Telefono già associato a un altro cliente.": "该电话号码已属于另一位客户。",

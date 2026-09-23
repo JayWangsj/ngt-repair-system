@@ -128,6 +128,10 @@ export async function hideFaultAction(category: string, name: string) {
   const actor = await requireActor();
   return execute(() => service.hideFault(actor, category, name));
 }
+export async function restoreFaultAction(category: string, name: string) {
+  const actor = await requireActor();
+  return execute(() => service.restoreFault(actor, category, name));
+}
 export async function clearDataAction() {
   const actor = await requireActor();
   return execute(() => clearBusinessData(actor));

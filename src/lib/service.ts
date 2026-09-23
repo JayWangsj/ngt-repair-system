@@ -725,3 +725,25 @@ export async function hideFault(
     await audit(tx, actor, fault.id, "FAULT_DELETED", data);
   });
 }
+export async function restoreFault(
+  actorInput: Actor,
+  category: string,
+  name: string,
+) {
+  const data = z
+    .object({
+      category: deviceInput.shape.category,
+      name: z.string().trim().min(1).max(120),
+    })
+    .parse({ category, name });
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const key = data.name.toLowerCase();
+    const fault = await tx.faultOption.upsert({
+      where: { category_key: { category: data.category, key } },
+      create: { ...data, key, hidden: false },
+      update: { hidden: false },
+    });
+    await audit(tx, actor, fault.id, "FAULT_RESTORED", data);
+  });
+}

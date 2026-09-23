@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
-import { useEffect, useId, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Copy, Check, MoreHorizontal } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { CustomerForm, DeviceForm, FormDialog } from "./forms";
 import { Button } from "./ui/button";
 import { useLanguage, useMessages } from "./language";
@@ -27,28 +27,6 @@ export function customerListUrl(query: string) {
 }
 
 export function PhoneList({ customer }: { customer: Customer }) {
-  const it = useMessages();
-  const [copied, setCopied] = useState("");
-  const [failed, setFailed] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(
-    () => () => {
-      if (timer.current) clearTimeout(timer.current);
-    },
-    [],
-  );
-  async function copy(phone: string) {
-    setFailed(false);
-    setCopied("");
-    if (timer.current) clearTimeout(timer.current);
-    try {
-      await navigator.clipboard.writeText(phone);
-      setCopied(phone);
-      timer.current = setTimeout(() => setCopied(""), 2000);
-    } catch {
-      setFailed(true);
-    }
-  }
   return (
     <div className="customer-phones">
       {[
@@ -56,23 +34,8 @@ export function PhoneList({ customer }: { customer: Customer }) {
       ].map((phone) => (
         <div className="customer-phone" key={phone}>
           <a href={`tel:${phone.replace(/[^+\d]/g, "")}`}>{phone}</a>
-          <Button
-            variant="ghost"
-            aria-label={`${it.copyPhone} ${phone}`}
-            onClick={() => copy(phone)}
-          >
-            {copied === phone ? <Check size={15} /> : <Copy size={15} />}
-          </Button>
         </div>
       ))}
-      <span className="sr-only" role="status">
-        {copied ? it.copiedPhone : ""}
-      </span>
-      {failed && (
-        <span role="alert" className="danger-text">
-          {it.copyFailed}
-        </span>
-      )}
     </div>
   );
 }
@@ -81,44 +44,20 @@ function RecordActions({
   customer,
   device,
   returnTo,
-  primaryEdit = false,
 }: {
   customer?: Customer;
   device?: Device;
   returnTo?: string;
-  primaryEdit?: boolean;
 }) {
   const it = useMessages();
   const { locale } = useLanguage();
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
-  const container = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const id = useId();
   const title = device ? it.editDevice : it.editCustomer;
-  const name = device ? `${device.brand} ${device.model}` : customer!.name;
-  useEffect(() => {
-    if (!open) return;
-    function dismiss(event: PointerEvent) {
-      if (!container.current?.contains(event.target as Node)) setOpen(false);
-    }
-    document.addEventListener("pointerdown", dismiss);
-    return () => document.removeEventListener("pointerdown", dismiss);
-  }, [open]);
-  function edit() {
-    setSaved(false);
-    setError("");
-    trigger.current?.focus();
-    setOpen(false);
-    setEditing(true);
-  }
   async function remove() {
-    setOpen(false);
-    trigger.current?.focus();
     if (!window.confirm(it.deleteConfirm)) return;
     setPending(true);
     setError("");
@@ -140,56 +79,25 @@ function RecordActions({
   }
   return (
     <div className="record-actions">
-      {primaryEdit && (
-        <Button
-          variant="outline"
-          disabled={pending}
-          onClick={() => {
-            setSaved(false);
-            setEditing(true);
-          }}
-        >
-          {title}
-        </Button>
-      )}
-      <div
-        className="record-more"
-        ref={container}
-        onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget))
-            setOpen(false);
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            setOpen(false);
-            trigger.current?.focus();
-          }
+      <Button
+        variant="outline"
+        disabled={pending}
+        onClick={() => {
+          setSaved(false);
+          setError("");
+          setEditing(true);
         }}
       >
-        <Button
-          variant="ghost"
-          ref={trigger}
-          disabled={pending}
-          aria-label={`${it.moreActions} ${name}`}
-          aria-expanded={open}
-          aria-controls={id}
-          onClick={() => setOpen(!open)}
-        >
-          <MoreHorizontal size={18} />
-        </Button>
-        {open && (
-          <div id={id} className="record-menu">
-            {!primaryEdit && (
-              <Button variant="ghost" onClick={edit}>
-                {title}
-              </Button>
-            )}
-            <Button variant="ghost" className="danger-text" onClick={remove}>
-              {device ? it.deleteDevice : it.deleteCustomer}
-            </Button>
-          </div>
-        )}
-      </div>
+        {title}
+      </Button>
+      <Button
+        variant="ghost"
+        className="danger-text"
+        disabled={pending}
+        onClick={remove}
+      >
+        {device ? it.deleteDevice : it.deleteCustomer}
+      </Button>
       {error && (
         <p role="alert" className="message error">
           {translateError(error, locale)}
@@ -287,6 +195,7 @@ export function CustomerList({
                     <td className="customer-name">
                       <Link className="order-link" href={href}>
                         {customer.name}
+                        <ChevronRight size={15} aria-hidden="true" />
                       </Link>
                     </td>
                     <td className="customer-contact">
@@ -297,9 +206,6 @@ export function CustomerList({
                       {customer._count.devices}
                     </td>
                     <td className="customer-row-actions">
-                      <Link className="button button-ghost" href={href}>
-                        {it.viewDetails}
-                      </Link>
                       <RecordActions customer={customer} />
                     </td>
                   </tr>
@@ -335,11 +241,7 @@ export function CustomerSummary({
     <section className="panel padded customer-summary">
       <PhoneList customer={customer} />
       {!deleted && (
-        <RecordActions
-          customer={customer}
-          returnTo={customerListUrl(query)}
-          primaryEdit
-        />
+        <RecordActions customer={customer} returnTo={customerListUrl(query)} />
       )}
     </section>
   );
@@ -365,7 +267,7 @@ export function CustomerDevices({
                 {it.imei}: {device.imei || "—"}
               </small>
             </div>
-            {!readOnly && <RecordActions device={device} primaryEdit />}
+            {!readOnly && <RecordActions device={device} />}
           </article>
         ))
       ) : (

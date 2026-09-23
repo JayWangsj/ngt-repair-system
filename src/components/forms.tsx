@@ -58,6 +58,7 @@ import {
   ruleAction,
   customerAction,
   hideFaultAction,
+  restoreFaultAction,
   deleteCustomerAction,
   deviceAction,
   deleteDeviceAction,
@@ -330,6 +331,8 @@ export function NewOrderForm({
     useState<Awaited<ReturnType<typeof lookupCustomerAction>>>(null);
   const [customerConfirmed, setCustomerConfirmed] = useState(false);
   const [hiddenFaults, setHiddenFaults] = useState<string[]>([]);
+  const [restoredFaults, setRestoredFaults] = useState<string[]>([]);
+  const [managingFaults, setManagingFaults] = useState(false);
   const [customFault, setCustomFault] = useState("");
   const [localFaults, setLocalFaults] = useState<string[]>([]);
   const [discountEnabled, setDiscountEnabled] = useState(false);
@@ -447,13 +450,27 @@ export function NewOrderForm({
   ];
   const visibleFaults = faults.filter(
     (f) =>
-      !faultOptions.some(
+      (!faultOptions.some(
         (o) =>
           o.category === category &&
           o.hidden &&
           o.name.toLowerCase() === f.name.toLowerCase(),
-      ) && !hiddenFaults.includes(category + ":" + f.name.toLowerCase()),
+      ) ||
+        restoredFaults.includes(category + ":" + f.name.toLowerCase())) &&
+      !hiddenFaults.includes(category + ":" + f.name.toLowerCase()),
   );
+  const hiddenFaultOptions = faults.filter((f) => !visibleFaults.includes(f));
+  const customerUnchanged =
+    !!customer &&
+    values.customerName === customer.name &&
+    values.phone === customer.phone &&
+    JSON.stringify([...(values.additionalPhones ?? [])].sort()) ===
+      JSON.stringify(
+        customer.phones
+          .map((p) => p.phone)
+          .filter((p) => p !== customer.phone)
+          .sort(),
+      );
   async function confirmCustomer() {
     setError("");
     try {
@@ -594,7 +611,7 @@ export function NewOrderForm({
           </Button>
           <Button
             type="button"
-            disabled={pending}
+            disabled={pending || customerUnchanged}
             onClick={async () => {
               setPending(true);
               try {
@@ -646,7 +663,8 @@ export function NewOrderForm({
           <Field label={it.deviceType}>
             <select
               {...register("category", {
-                onChange: () => {
+                onChange: (event) => {
+                  setValue("category", event.target.value as Category);
                   clearDevice();
                   setValue("faults", []);
                   setLocalFaults([]);
@@ -684,8 +702,17 @@ export function NewOrderForm({
             onChange={(model) => setValue("model", model)}
           />
         </div>
-        <fieldset className="fault-options">
-          <legend>{it.fault}</legend>
+        <div className="fault-options-heading">
+          <strong>{it.fault}</strong>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setManagingFaults(!managingFaults)}
+          >
+            {managingFaults ? it.finishFaultManagement : it.manageFaults}
+          </Button>
+        </div>
+        <fieldset className="fault-options" aria-label={it.fault}>
           {visibleFaults.map((f) => (
             <div className="fault-row" key={f.name}>
               <label className="checkbox">
@@ -703,35 +730,67 @@ export function NewOrderForm({
                 />
                 {f.label}
               </label>
-              <button
-                type="button"
-                aria-label={it.deleteFault + " " + f.label}
-                onClick={async () => {
-                  if (!window.confirm(it.deleteConfirm)) return;
-                  try {
-                    const result = await hideFaultAction(category, f.name);
-                    if (!result.ok) {
-                      setError(result.error);
-                      return;
+              {managingFaults && (
+                <button
+                  type="button"
+                  aria-label={it.deleteFault + " " + f.label}
+                  onClick={async () => {
+                    try {
+                      const result = await hideFaultAction(category, f.name);
+                      if (!result.ok) {
+                        setError(result.error);
+                        return;
+                      }
+                      const key = category + ":" + f.name.toLowerCase();
+                      setHiddenFaults([...hiddenFaults, key]);
+                      setRestoredFaults(
+                        restoredFaults.filter((v) => v !== key),
+                      );
+                      setValue(
+                        "faults",
+                        (values.faults ?? []).filter((n) => n !== f.name),
+                      );
+                    } catch {
+                      setError("Connessione non disponibile. Riprova.");
                     }
-                    setHiddenFaults([
-                      ...hiddenFaults,
-                      category + ":" + f.name.toLowerCase(),
-                    ]);
-                    setValue(
-                      "faults",
-                      (values.faults ?? []).filter((n) => n !== f.name),
-                    );
-                  } catch {
-                    setError("Connessione non disponibile. Riprova.");
-                  }
-                }}
-              >
-                <Trash2 size={14} />
-              </button>
+                  }}
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
           ))}
         </fieldset>
+        {managingFaults && hiddenFaultOptions.length > 0 && (
+          <div className="hidden-faults">
+            <strong>{it.hiddenFaults}</strong>
+            <div>
+              {hiddenFaultOptions.map((f) => (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  key={f.name}
+                  onClick={async () => {
+                    try {
+                      const result = await restoreFaultAction(category, f.name);
+                      if (!result.ok) {
+                        setError(result.error);
+                        return;
+                      }
+                      const key = category + ":" + f.name.toLowerCase();
+                      setHiddenFaults(hiddenFaults.filter((v) => v !== key));
+                      setRestoredFaults([...restoredFaults, key]);
+                    } catch {
+                      setError("Connessione non disponibile. Riprova.");
+                    }
+                  }}
+                >
+                  {it.restoreFault}: {f.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="input-action">
           <Field label={it.faultOther}>
             <input
@@ -782,29 +841,31 @@ export function NewOrderForm({
           }}
           discounts
         />
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            setDiscountEnabled(!discountEnabled);
-            setValue("orderDiscount", "0");
-          }}
-        >
-          {discountEnabled ? it.cancelDiscount : it.addOrderDiscount}
-        </Button>
-        {discountEnabled && (
-          <Field label={it.orderDiscount}>
-            <input
-              {...register("orderDiscount")}
-              required
-              inputMode="decimal"
-            />
-          </Field>
-        )}
-        <label className="checkbox">
-          <input type="checkbox" {...register("includeVat")} />
-          {it.includeVat}
-        </label>
+        <div className="quote-adjustments">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setDiscountEnabled(!discountEnabled);
+              setValue("orderDiscount", "0");
+            }}
+          >
+            {discountEnabled ? it.cancelDiscount : it.addOrderDiscount}
+          </Button>
+          {discountEnabled && (
+            <Field label={it.orderDiscount}>
+              <input
+                {...register("orderDiscount")}
+                required
+                inputMode="decimal"
+              />
+            </Field>
+          )}
+          <label className="checkbox">
+            <input type="checkbox" {...register("includeVat")} />
+            {it.includeVat}
+          </label>
+        </div>
         <QuoteSummary
           items={values.items}
           orderDiscount={values.orderDiscount ?? "0"}
@@ -1157,34 +1218,36 @@ export function EditQuoteForm({
         device={device}
         discounts
       />
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => {
-          setDiscounts(!discounts);
-          setOrderDiscount("0");
-        }}
-      >
-        {discounts ? it.cancelDiscount : it.addOrderDiscount}
-      </Button>
-      {discounts && (
-        <Field label={it.orderDiscount}>
+      <div className="quote-adjustments">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            setDiscounts(!discounts);
+            setOrderDiscount("0");
+          }}
+        >
+          {discounts ? it.cancelDiscount : it.addOrderDiscount}
+        </Button>
+        {discounts && (
+          <Field label={it.orderDiscount}>
+            <input
+              inputMode="decimal"
+              required
+              value={orderDiscount}
+              onChange={(e) => setOrderDiscount(e.target.value)}
+            />
+          </Field>
+        )}
+        <label className="checkbox">
           <input
-            inputMode="decimal"
-            required
-            value={orderDiscount}
-            onChange={(e) => setOrderDiscount(e.target.value)}
+            type="checkbox"
+            checked={includeVat}
+            onChange={(e) => setIncludeVat(e.target.checked)}
           />
-        </Field>
-      )}
-      <label className="checkbox">
-        <input
-          type="checkbox"
-          checked={includeVat}
-          onChange={(e) => setIncludeVat(e.target.checked)}
-        />
-        {it.includeVat}
-      </label>
+          {it.includeVat}
+        </label>
+      </div>
       <QuoteSummary
         items={items}
         orderDiscount={orderDiscount}

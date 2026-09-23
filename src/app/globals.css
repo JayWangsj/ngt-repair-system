@@ -683,6 +683,7 @@ textarea {
 .input-action {
   display: flex;
   gap: 8px;
+  align-items: flex-start;
 }
 .input-action input {
   min-width: 0;
@@ -694,6 +695,22 @@ textarea {
   gap: 8px;
   font-size: 12px;
   font-weight: 400;
+}
+.quote-adjustments {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  margin-block: 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fffef8;
+}
+.quote-adjustments > label,
+.quote-adjustments > .checkbox {
+  margin: 0;
+  max-width: 360px;
 }
 .checkbox input {
   width: 15px;
@@ -1407,6 +1424,20 @@ details[open] > summary {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
+.fault-options-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.fault-options-heading > strong {
+  font-size: 12px;
+}
+.fault-options-heading .button {
+  min-height: 34px;
+  padding: 6px 10px;
+}
 .fault-options legend {
   padding: 0 6px;
   font-size: 12px;
@@ -1425,7 +1456,30 @@ details[open] > summary {
   min-width: 0;
 }
 .input-action > button {
-  align-self: center;
+  margin-top: 20px;
+  min-height: 41px;
+}
+.hidden-faults {
+  margin: -8px 0 18px;
+  padding: 12px;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  background: #f8faf8;
+}
+.hidden-faults > strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.hidden-faults > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.hidden-faults .button {
+  min-height: 34px;
+  padding: 6px 10px;
 }
 .quote-summary {
   padding: 16px 20px;
@@ -1761,6 +1815,21 @@ details[open] > summary {
 .customer-name {
   overflow-wrap: anywhere;
 }
+.customer-name .order-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 650;
+  text-decoration-thickness: 1px;
+}
+.customer-name .order-link:hover svg,
+.customer-name .order-link:focus-visible svg {
+  transform: translateX(2px);
+}
+.customer-name .order-link svg {
+  flex-shrink: 0;
+  transition: transform 120ms ease;
+}
 .customer-phones {
   display: grid;
   gap: 2px;
@@ -1775,11 +1844,6 @@ details[open] > summary {
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
-.customer-phone .button {
-  padding: 6px;
-  min-height: 32px;
-  flex-shrink: 0;
-}
 .customer-result-count {
   color: var(--muted);
   font-size: 12px;
@@ -1791,38 +1855,18 @@ details[open] > summary {
   gap: 8px;
   flex-wrap: wrap;
 }
-.record-more {
-  position: relative;
-}
-.record-more > .button {
-  min-height: 36px;
-  padding: 8px;
-}
-.record-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 20;
-  display: grid;
-  min-width: max-content;
-  padding: 4px;
-  background: white;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
-}
-.record-menu .button {
-  justify-content: flex-start;
-}
-.record-menu .danger-text {
-  color: #8f3f36;
-}
 .record-saved {
   font-size: 12px;
   color: var(--teal);
 }
-.customer-row-actions > .button {
-  margin-right: 8px;
+.customer-row-actions .record-actions {
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.customer-row-actions .button {
+  min-height: 34px;
+  padding: 7px 9px;
 }
 .customer-summary {
   display: flex;
@@ -1883,7 +1927,7 @@ details[open] > summary {
     white-space: normal;
   }
   .customer-table .customer-name {
-    grid-column: 1;
+    grid-column: 1 / -1;
     grid-row: 1;
   }
   .customer-table .customer-contact {
@@ -1896,8 +1940,8 @@ details[open] > summary {
     align-self: center;
   }
   .customer-table .customer-row-actions {
-    grid-column: 2;
-    grid-row: 3;
+    grid-column: 1 / -1;
+    grid-row: 4;
   }
   .customer-table .mobile-label {
     display: inline;
@@ -1916,10 +1960,9 @@ details[open] > summary {
   .customer-search .grow {
     min-width: 0;
   }
-  .customer-phone .button,
-  .record-more > .button {
-    min-height: 40px;
-    min-width: 40px;
+  .customer-row-actions .record-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 }
 

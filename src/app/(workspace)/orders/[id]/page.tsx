@@ -75,10 +75,6 @@ export default async function Detail({
                 <dd>{faultLabel(order.fault, await getLocale())}</dd>
               </div>
               <div>
-                <dt>{it.accessories}</dt>
-                <dd>{order.accessories || "—"}</dd>
-              </div>
-              <div>
                 <dt>{it.notes}</dt>
                 <dd>{order.notes || "—"}</dd>
               </div>

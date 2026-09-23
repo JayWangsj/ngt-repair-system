@@ -9,6 +9,7 @@ import {
   deleteDevice,
   deletePriceRules,
   hideFault,
+  restoreFault,
   addPayment,
   changeStatus,
   confirmQuote,
@@ -682,6 +683,15 @@ describe("1.2 customer and catalog management", () => {
     await hideFault(owner, "PHONE", "Display rotto");
     await hideFault(owner, "PHONE", "Non si accende");
     expect(await db.faultOption.count({ where: { hidden: true } })).toBe(2);
+    await restoreFault(owner, "PHONE", "Display rotto");
+    expect(await db.faultOption.count({ where: { hidden: true } })).toBe(1);
+    expect(
+      await db.faultOption.findUniqueOrThrow({
+        where: {
+          category_key: { category: "PHONE", key: "display rotto" },
+        },
+      }),
+    ).toMatchObject({ hidden: false });
     expect(
       (await db.workOrder.findUniqueOrThrow({ where: { id: order.id } })).fault,
     ).toBe("Display rotto");

@@ -21,6 +21,8 @@ import {
   quoteInput,
   orderInput,
   paymentInput,
+  productInput,
+  inventoryAdjustmentInput,
   ruleInput,
   statusInput,
   userInput,
@@ -546,6 +548,134 @@ export async function savePriceRule(
       },
     );
     return rule;
+  });
+}
+
+export async function applyInventoryMovement(
+  tx: Tx,
+  actor: Actor,
+  input: {
+    requestId: string;
+    productId: string;
+    quantity: number;
+    type:
+      | "INITIAL_STOCK"
+      | "STOCK_IN"
+      | "RETAIL_SALE"
+      | "REPAIR_USE"
+      | "SALE_RETURN"
+      | "MANUAL_ADJUSTMENT";
+    referenceType?: string;
+    referenceId?: string;
+    note?: string;
+  },
+) {
+  const existing = await tx.inventoryMovement.findUnique({
+    where: { requestId: input.requestId },
+  });
+  if (existing) {
+    if (
+      existing.productId !== input.productId ||
+      existing.quantity !== input.quantity ||
+      existing.type !== input.type
+    )
+      throw new BusinessError("Richiesta di magazzino già utilizzata.");
+    return existing;
+  }
+  if (!Number.isSafeInteger(input.quantity) || input.quantity === 0)
+    throw new BusinessError("Variazione di magazzino non valida.");
+  const updated = await tx.product.updateMany({
+    where: {
+      id: input.productId,
+      ...(input.quantity < 0
+        ? { stockQuantity: { gte: -input.quantity } }
+        : {}),
+    },
+    data: { stockQuantity: { increment: input.quantity } },
+  });
+  if (updated.count !== 1)
+    throw new BusinessError("Scorte insufficienti o prodotto non disponibile.");
+  const product = await tx.product.findUniqueOrThrow({
+    where: { id: input.productId },
+  });
+  return tx.inventoryMovement.create({
+    data: {
+      requestId: input.requestId,
+      productId: input.productId,
+      quantity: input.quantity,
+      stockBefore: product.stockQuantity - input.quantity,
+      stockAfter: product.stockQuantity,
+      type: input.type,
+      referenceType: input.referenceType,
+      referenceId: input.referenceId,
+      note: input.note ?? "",
+      actorId: actor.id,
+      actorName: actor.name,
+    },
+  });
+}
+
+export async function createProduct(actorInput: Actor, raw: unknown) {
+  const data = productInput.parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const previous = await tx.auditLog.findFirst({
+      where: {
+        action: "PRODUCT_CREATED",
+        context: { path: ["requestId"], equals: data.requestId },
+      },
+    });
+    if (previous)
+      return tx.product.findUniqueOrThrow({ where: { id: previous.entityId } });
+    const product = await tx.product.create({
+      data: {
+        name: data.name,
+        category: data.category,
+        usage: data.usage,
+        costPrice: decimal(cents(data.costPrice)),
+        salePrice: decimal(cents(data.salePrice)),
+        minStock: data.minStock,
+        favorite: data.favorite,
+        enabled: data.enabled,
+      },
+    });
+    if (data.initialStock > 0)
+      await applyInventoryMovement(tx, actor, {
+        requestId: data.requestId,
+        productId: product.id,
+        quantity: data.initialStock,
+        type: "INITIAL_STOCK",
+        referenceType: "PRODUCT",
+        referenceId: product.id,
+      });
+    await audit(tx, actor, product.id, "PRODUCT_CREATED", {
+      requestId: data.requestId,
+      initialStock: data.initialStock,
+    });
+    return product;
+  });
+}
+
+export async function adjustInventory(
+  actorInput: Actor,
+  productId: string,
+  raw: unknown,
+) {
+  const data = inventoryAdjustmentInput.parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const movement = await applyInventoryMovement(tx, actor, {
+      ...data,
+      productId,
+      referenceType: "PRODUCT",
+      referenceId: productId,
+    });
+    await audit(tx, actor, productId, "INVENTORY_ADJUSTED", {
+      movementId: movement.id,
+      quantity: movement.quantity,
+      type: movement.type,
+    });
+    return movement;
   });
 }
 export async function createUser(actorInput: Actor, raw: unknown) {

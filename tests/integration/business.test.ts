@@ -13,6 +13,8 @@ import {
   restoreFault,
   addPayment,
   changeStatus,
+  createProduct,
+  adjustInventory,
   confirmQuote,
   createOrder,
   createUser,
@@ -52,6 +54,8 @@ beforeAll(async () => {
   if (!new URL(process.env.DATABASE_URL || "").pathname.endsWith("_test"))
     throw new Error("Integration tests require an isolated *_test database.");
   await db.auditLog.deleteMany();
+  await db.inventoryMovement.deleteMany();
+  await db.product.deleteMany();
   await db.payment.deleteMany();
   await db.statusHistory.deleteMany();
   await db.workOrderItem.deleteMany();
@@ -80,6 +84,8 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await db.auditLog.deleteMany();
+  await db.inventoryMovement.deleteMany();
+  await db.product.deleteMany();
   await db.payment.deleteMany();
   await db.statusHistory.deleteMany();
   await db.workOrderItem.deleteMany();
@@ -768,9 +774,98 @@ describe("1.2 customer and catalog management", () => {
   });
 });
 
+describe("unified product inventory", () => {
+  it("creates initial stock and records idempotent stock changes", async () => {
+    const product = await createProduct(staff, {
+      requestId: randomUUID(),
+      name: "Batteria iPhone 15",
+      category: "Batterie",
+      usage: "REPAIR",
+      costPrice: "32.50",
+      salePrice: "65",
+      initialStock: 8,
+      minStock: 3,
+      favorite: true,
+      enabled: true,
+    });
+    const requestId = randomUUID();
+    const adjustment = {
+      requestId,
+      quantity: 5,
+      type: "STOCK_IN",
+      note: "Consegna fornitore",
+    };
+    await adjustInventory(staff, product.id, adjustment);
+    await adjustInventory(staff, product.id, adjustment);
+
+    expect(
+      await db.product.findUniqueOrThrow({ where: { id: product.id } }),
+    ).toMatchObject({
+      stockQuantity: 13,
+      minStock: 3,
+    });
+    expect(
+      await db.inventoryMovement.findMany({
+        where: { productId: product.id },
+        orderBy: { createdAt: "asc" },
+      }),
+    ).toMatchObject([
+      { quantity: 8, stockBefore: 0, stockAfter: 8, type: "INITIAL_STOCK" },
+      { quantity: 5, stockBefore: 8, stockAfter: 13, type: "STOCK_IN" },
+    ]);
+  });
+
+  it("prevents negative stock under concurrent adjustments", async () => {
+    const product = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Display OLED",
+      category: "Schermi",
+      usage: "BOTH",
+      costPrice: "80",
+      salePrice: "150",
+      initialStock: 10,
+      minStock: 2,
+    });
+    const results = await Promise.allSettled([
+      adjustInventory(staff, product.id, {
+        requestId: randomUUID(),
+        quantity: -8,
+        type: "MANUAL_ADJUSTMENT",
+        note: "Verifica concorrenza A",
+      }),
+      adjustInventory(staff, product.id, {
+        requestId: randomUUID(),
+        quantity: -8,
+        type: "MANUAL_ADJUSTMENT",
+        note: "Verifica concorrenza B",
+      }),
+    ]);
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      (await db.product.findUniqueOrThrow({ where: { id: product.id } }))
+        .stockQuantity,
+    ).toBe(2);
+    expect(
+      await db.inventoryMovement.count({ where: { productId: product.id } }),
+    ).toBe(2);
+  });
+});
+
 describe("versioned data backup and merge import", () => {
   it("exports, clears, restores and skips an identical second import", async () => {
     const usersBefore = await db.user.count();
+    const product = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Vetro backup",
+      category: "Pellicole",
+      usage: "RETAIL",
+      costPrice: "2",
+      salePrice: "10",
+      initialStock: 6,
+      minStock: 2,
+    });
     await createOrder(
       owner,
       input({
@@ -782,10 +877,12 @@ describe("versioned data backup and merge import", () => {
     const backup = await exportBusinessData();
     expect(backup).toMatchObject({
       format: "ngt-repair-data",
-      version: 1,
+      version: 2,
     });
     expect(backup.data.orders).toHaveLength(1);
     expect(backup.data.payments[0].kind).toBe("BALANCE");
+    expect(backup.data.products).toHaveLength(1);
+    expect(backup.data.inventoryMovements).toHaveLength(1);
 
     const conflict = structuredClone(backup);
     const originalOrderId = conflict.data.orders[0].id;
@@ -824,12 +921,17 @@ describe("versioned data backup and merge import", () => {
     await clearBusinessData(owner);
     expect(await db.workOrder.count()).toBe(0);
     expect(await db.customer.count()).toBe(0);
+    expect(await db.product.count()).toBe(0);
     expect(await db.user.count()).toBe(usersBefore);
 
     const first = await importBusinessData(owner, backup);
     expect(first.imported).toBeGreaterThan(0);
     expect(await db.workOrder.count()).toBe(1);
     expect(await db.customer.count()).toBe(1);
+    expect(
+      await db.product.findUniqueOrThrow({ where: { id: product.id } }),
+    ).toMatchObject({ stockQuantity: 6 });
+    expect(await db.inventoryMovement.count()).toBe(1);
     expect((await db.device.findFirstOrThrow()).model).toBe(
       "iPhone 18 Pro Max",
     );
@@ -839,6 +941,21 @@ describe("versioned data backup and merge import", () => {
     expect(second.skipped).toBeGreaterThan(0);
     expect(await db.workOrder.count()).toBe(1);
     expect(await db.customer.count()).toBe(1);
+  });
+
+  it("continues to accept version 1 backups without inventory arrays", async () => {
+    const backup = await exportBusinessData();
+    const legacy = structuredClone(backup) as unknown as {
+      version: number;
+      data: Record<string, unknown>;
+    };
+    legacy.version = 1;
+    delete legacy.data.products;
+    delete legacy.data.inventoryMovements;
+    await expect(importBusinessData(owner, legacy)).resolves.toEqual({
+      imported: 0,
+      skipped: expect.any(Number),
+    });
   });
 });
 

@@ -7,6 +7,7 @@ import {
   cents,
   decimal,
   isOverdue,
+  inventoryStatus,
   matchRule,
   normalizePhone,
   romeDay,
@@ -26,6 +27,14 @@ describe("integer money", () => {
     "rejects invalid money %s",
     (value) => expect(() => cents(value)).toThrow(),
   );
+});
+
+describe("inventory status", () => {
+  it("distinguishes available, low and out-of-stock products", () => {
+    expect(inventoryStatus(8, 3)).toBe("IN_STOCK");
+    expect(inventoryStatus(3, 3)).toBe("LOW_STOCK");
+    expect(inventoryStatus(0, 3)).toBe("OUT_OF_STOCK");
+  });
 });
 describe("quote matching", () => {
   const device = {

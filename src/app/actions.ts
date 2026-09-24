@@ -60,6 +60,14 @@ export async function paymentAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.addPayment(actor, id, input));
 }
+export async function createProductAction(input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.createProduct(actor, input));
+}
+export async function adjustInventoryAction(id: string, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.adjustInventory(actor, id, input));
+}
 export async function statusAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.changeStatus(actor, id, input));

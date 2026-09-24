@@ -92,6 +92,29 @@ export const paymentInput = z.object({
   method: z.enum(["CASH", "CARD", "TRANSFER", "OTHER"]),
   kind: z.enum(["DEPOSIT", "BALANCE", "OTHER"]),
 });
+export const productInput = z.object({
+  requestId: z.string().uuid(),
+  name: short,
+  category: short,
+  usage: z.enum(["RETAIL", "REPAIR", "BOTH"]),
+  costPrice: amountInput,
+  salePrice: amountInput,
+  initialStock: z.coerce.number().int().min(0).max(1_000_000).default(0),
+  minStock: z.coerce.number().int().min(0).max(1_000_000).default(0),
+  favorite: z.boolean().default(false),
+  enabled: z.boolean().default(true),
+});
+export const inventoryAdjustmentInput = z.object({
+  requestId: z.string().uuid(),
+  quantity: z.coerce
+    .number()
+    .int()
+    .min(-1_000_000)
+    .max(1_000_000)
+    .refine((value) => value !== 0, "La variazione non può essere zero."),
+  type: z.enum(["STOCK_IN", "MANUAL_ADJUSTMENT"]),
+  note: text,
+});
 export const statusInput = z.object({
   status: z.enum(statuses),
   note: text,

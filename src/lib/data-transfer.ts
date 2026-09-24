@@ -5,6 +5,8 @@ import type {
   Device,
   FaultOption,
   Payment,
+  Product,
+  InventoryMovement,
   PriceRule,
   StatusHistory,
   WorkOrder,
@@ -16,7 +18,7 @@ import { BusinessError, type Actor } from "./domain";
 import { normalizeBrand, normalizeModel } from "./catalog";
 
 export const BACKUP_FORMAT = "ngt-repair-data";
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = 2;
 
 type JsonRow<T> = {
   [K in keyof T]: T[K] extends Date
@@ -40,6 +42,8 @@ type BackupData = {
   prices: JsonRow<PriceRule>[];
   faults: JsonRow<FaultOption>[];
   audits: JsonRow<AuditLog>[];
+  products: JsonRow<Product>[];
+  inventoryMovements: JsonRow<InventoryMovement>[];
 };
 export type BackupFile = {
   format: typeof BACKUP_FORMAT;
@@ -78,7 +82,19 @@ function ensureBackup(value: unknown): BackupFile {
   ] as const)
     if (!Array.isArray(candidate.data[key]))
       throw new BusinessError("File di backup incompleto.");
-  return candidate as BackupFile;
+  const products = (candidate.data as Partial<BackupData>).products ?? [];
+  const inventoryMovements =
+    (candidate.data as Partial<BackupData>).inventoryMovements ?? [];
+  if (!Array.isArray(products) || !Array.isArray(inventoryMovements))
+    throw new BusinessError("File di backup incompleto.");
+  return {
+    ...(candidate as BackupFile),
+    data: {
+      ...(candidate.data as BackupData),
+      products,
+      inventoryMovements,
+    },
+  };
 }
 async function ensureActor(actor: Actor) {
   const found = await db.user.findFirst({
@@ -100,6 +116,8 @@ export async function exportBusinessData(): Promise<BackupFile> {
     prices,
     faults,
     audits,
+    products,
+    inventoryMovements,
   ] = await Promise.all([
     db.customer.findMany({ orderBy: { createdAt: "asc" } }),
     db.customerPhone.findMany({ orderBy: { phone: "asc" } }),
@@ -118,6 +136,8 @@ export async function exportBusinessData(): Promise<BackupFile> {
     }),
     db.faultOption.findMany({ orderBy: [{ category: "asc" }, { key: "asc" }] }),
     db.auditLog.findMany({ orderBy: { createdAt: "asc" } }),
+    db.product.findMany({ orderBy: { createdAt: "asc" } }),
+    db.inventoryMovement.findMany({ orderBy: { createdAt: "asc" } }),
   ]);
   const data = JSON.parse(
     JSON.stringify({
@@ -131,6 +151,8 @@ export async function exportBusinessData(): Promise<BackupFile> {
       prices,
       faults,
       audits,
+      products,
+      inventoryMovements,
     }),
   ) as BackupData;
   return {
@@ -145,6 +167,8 @@ export async function clearBusinessData(actor: Actor) {
   await ensureActor(actor);
   return db.$transaction(async (tx) => {
     await tx.auditLog.deleteMany();
+    await tx.inventoryMovement.deleteMany();
+    await tx.product.deleteMany();
     await tx.payment.deleteMany();
     await tx.statusHistory.deleteMany();
     await tx.workOrderItem.deleteMany();
@@ -176,6 +200,34 @@ export async function importBusinessData(
     const orderIds = new Map<string, string>();
     const entityIds = new Map<string, string>();
     const orderSourceIds = new Set(backup.data.orders.map((order) => order.id));
+
+    for (const source of backup.data.products) {
+      const existing = await tx.product.findUnique({
+        where: { id: source.id },
+      });
+      if (existing) {
+        skipped++;
+      } else {
+        await tx.product.create({
+          data: {
+            id: source.id,
+            name: source.name,
+            category: source.category,
+            usage: source.usage,
+            costPrice: source.costPrice,
+            salePrice: source.salePrice,
+            stockQuantity: source.stockQuantity,
+            minStock: source.minStock,
+            favorite: source.favorite,
+            enabled: source.enabled,
+            createdAt: date(source.createdAt) ?? new Date(),
+            updatedAt: date(source.updatedAt) ?? new Date(),
+          },
+        });
+        imported++;
+      }
+      entityIds.set(source.id, source.id);
+    }
 
     for (const source of backup.data.customers) {
       let target = await tx.customer.findUnique({ where: { id: source.id } });
@@ -478,6 +530,41 @@ export async function importBusinessData(
             actorId: actor.id,
             actorName: source.actorName,
             context: source.context as Prisma.InputJsonValue,
+            createdAt: date(source.createdAt) ?? new Date(),
+          },
+        });
+        imported++;
+      }
+    }
+    for (const source of backup.data.inventoryMovements) {
+      const product = await tx.product.findUnique({
+        where: { id: source.productId },
+      });
+      if (!product) {
+        skipped++;
+        continue;
+      }
+      const exists =
+        (await tx.inventoryMovement.findUnique({ where: { id: source.id } })) ??
+        (await tx.inventoryMovement.findUnique({
+          where: { requestId: source.requestId },
+        }));
+      if (exists) skipped++;
+      else {
+        await tx.inventoryMovement.create({
+          data: {
+            id: source.id,
+            requestId: source.requestId,
+            productId: source.productId,
+            quantity: source.quantity,
+            stockBefore: source.stockBefore,
+            stockAfter: source.stockAfter,
+            type: source.type,
+            referenceType: source.referenceType,
+            referenceId: source.referenceId,
+            note: source.note,
+            actorId: actor.id,
+            actorName: source.actorName,
             createdAt: date(source.createdAt) ?? new Date(),
           },
         });

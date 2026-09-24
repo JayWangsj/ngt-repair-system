@@ -35,19 +35,35 @@ enum PaymentKind {
   OTHER
 }
 
+enum ProductUsage {
+  RETAIL
+  REPAIR
+  BOTH
+}
+
+enum InventoryMovementType {
+  INITIAL_STOCK
+  STOCK_IN
+  RETAIL_SALE
+  REPAIR_USE
+  SALE_RETURN
+  MANUAL_ADJUSTMENT
+}
+
 model User {
-  id             String          @id @default(cuid())
-  email          String          @unique
-  name           String
-  passwordHash   String
-  role           Role            @default(STAFF)
-  enabled        Boolean         @default(true)
-  failedAttempts Int             @default(0)
-  lockedUntil    DateTime?       @db.Timestamptz(3)
-  createdAt      DateTime        @default(now()) @db.Timestamptz(3)
-  payments       Payment[]
-  statuses       StatusHistory[]
-  audits         AuditLog[]
+  id                 String              @id @default(cuid())
+  email              String              @unique
+  name               String
+  passwordHash       String
+  role               Role                @default(STAFF)
+  enabled            Boolean             @default(true)
+  failedAttempts     Int                 @default(0)
+  lockedUntil        DateTime?           @db.Timestamptz(3)
+  createdAt          DateTime            @default(now()) @db.Timestamptz(3)
+  payments           Payment[]
+  statuses           StatusHistory[]
+  audits             AuditLog[]
+  inventoryMovements InventoryMovement[]
 }
 
 model Customer {
@@ -207,4 +223,46 @@ model FaultOption {
   hidden   Boolean @default(false)
 
   @@unique([category, key])
+}
+
+model Product {
+  id            String              @id @default(cuid())
+  name          String
+  category      String
+  usage         ProductUsage
+  costPrice     Decimal             @db.Decimal(12, 2)
+  salePrice     Decimal             @db.Decimal(12, 2)
+  stockQuantity Int                 @default(0)
+  minStock      Int                 @default(0)
+  favorite      Boolean             @default(false)
+  enabled       Boolean             @default(true)
+  createdAt     DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime            @updatedAt @db.Timestamptz(3)
+  movements     InventoryMovement[]
+
+  @@index([name])
+  @@index([category, usage, enabled])
+  @@index([enabled, favorite])
+}
+
+model InventoryMovement {
+  id            String                @id @default(cuid())
+  requestId     String                @unique
+  productId     String
+  product       Product               @relation(fields: [productId], references: [id])
+  quantity      Int
+  stockBefore   Int
+  stockAfter    Int
+  type          InventoryMovementType
+  referenceType String?
+  referenceId   String?
+  note          String                @default("")
+  actorId       String
+  actor         User                  @relation(fields: [actorId], references: [id])
+  actorName     String
+  createdAt     DateTime              @default(now()) @db.Timestamptz(3)
+
+  @@index([productId, createdAt])
+  @@index([referenceType, referenceId])
+  @@index([createdAt])
 }

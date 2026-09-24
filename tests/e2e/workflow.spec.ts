@@ -932,7 +932,7 @@ test("settings exports data and re-import skips existing records", async ({
   const backup = await exported.json();
   expect(backup).toMatchObject({
     format: "ngt-repair-data",
-    version: 1,
+    version: 2,
   });
   const imported = await page.request.post("/api/data/import", {
     data: backup,

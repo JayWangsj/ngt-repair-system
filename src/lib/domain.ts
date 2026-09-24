@@ -166,3 +166,12 @@ export const dateOnly = (date: string | null) =>
   date ? date.split("-").reverse().join("/") : "—";
 export const orderCode = (number: number) =>
   `NGT-${String(number).padStart(5, "0")}`;
+
+export type InventoryStatus = "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
+export function inventoryStatus(
+  stock: number,
+  minimum: number,
+): InventoryStatus {
+  if (stock <= 0) return "OUT_OF_STOCK";
+  return stock <= minimum ? "LOW_STOCK" : "IN_STOCK";
+}

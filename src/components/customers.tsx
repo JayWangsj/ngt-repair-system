@@ -154,6 +154,7 @@ export function CustomerList({
   const router = useRouter();
   const { locale } = useLanguage();
   const [selected, setSelected] = useState<string[]>([]);
+  const [batchMode, setBatchMode] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const query = params.get("q") ?? "";
@@ -240,44 +241,58 @@ export function CustomerList({
       <p className="customer-result-count" role="status">
         {shown.length} {it.customerResults}
       </p>
-      {shown.length > 0 && (
-        <label className="checkbox customer-select-all">
-          {" "}
-          <input
-            type="checkbox"
-            aria-label={it.selectAll}
-            disabled={pending}
-            checked={shown.length > 0 && selectedIds.length === shown.length}
-            ref={(element) => {
-              if (element)
-                element.indeterminate =
-                  selectedIds.length > 0 && selectedIds.length < shown.length;
-            }}
-            onChange={(event) =>
-              setSelected(event.target.checked ? shown.map((c) => c.id) : [])
-            }
-          />
-          {it.selectAll}
-        </label>
-      )}
-      {selectedIds.length > 0 && (
-        <div className="catalog-toolbar customer-batch-toolbar">
-          <span role="status">
-            {selectedIds.length} {it.selectedCustomers}
-          </span>
-          <Button
-            variant="outline"
-            disabled={pending || selectedIds.length > 500}
-            onClick={removeSelected}
-          >
-            <Trash2 size={18} aria-hidden="true" />
-            {it.deleteCustomers}
-          </Button>
-          {selectedIds.length > 500 && (
-            <span role="alert">{it.batchLimit}</span>
-          )}
-        </div>
-      )}
+      <div className="catalog-toolbar price-batch-toolbar customer-batch-toolbar">
+        <Button
+          variant="outline"
+          disabled={pending}
+          aria-pressed={batchMode}
+          onClick={() => {
+            setBatchMode(!batchMode);
+            setSelected([]);
+          }}
+        >
+          {batchMode ? it.finishBatch : it.batchManage}
+        </Button>
+        {batchMode && (
+          <>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                aria-label={it.selectAll}
+                disabled={pending || !shown.length}
+                checked={
+                  shown.length > 0 && selectedIds.length === shown.length
+                }
+                ref={(element) => {
+                  if (element)
+                    element.indeterminate =
+                      selectedIds.length > 0 &&
+                      selectedIds.length < shown.length;
+                }}
+                onChange={(event) =>
+                  setSelected(
+                    event.target.checked ? shown.map((c) => c.id) : [],
+                  )
+                }
+              />
+              {it.selectAll}
+            </label>
+            <Button
+              variant="outline"
+              disabled={
+                pending || !selectedIds.length || selectedIds.length > 500
+              }
+              onClick={removeSelected}
+            >
+              <Trash2 size={18} aria-hidden="true" />
+              {it.deleteCustomers} ({selectedIds.length})
+            </Button>
+            {selectedIds.length > 500 && (
+              <span role="alert">{it.batchLimit}</span>
+            )}
+          </>
+        )}
+      </div>
       {error && (
         <p className="message error" role="alert">
           {translateError(error, locale)}
@@ -288,13 +303,15 @@ export function CustomerList({
           <table className="customer-table">
             <thead>
               <tr>
-                <th className="customer-selection">
-                  <span className="sr-only">{it.selectOption}</span>
-                </th>
-                <th>{it.customer}</th>
-                <th>{it.phone}</th>
-                <th>{it.devices}</th>
-                <th>{it.actionsLabel}</th>
+                {batchMode && (
+                  <th className="customer-selection">
+                    <span className="sr-only">{it.selectOption}</span>
+                  </th>
+                )}
+                <th className="customer-name-heading">{it.customer}</th>
+                <th className="customer-phone-heading">{it.phone}</th>
+                <th className="customer-device-heading">{it.devices}</th>
+                <th className="customer-actions-heading">{it.actionsLabel}</th>
               </tr>
             </thead>
             <tbody>
@@ -302,21 +319,23 @@ export function CustomerList({
                 const href = `/customers/${customer.id}${query ? `?q=${encodeURIComponent(query)}` : ""}`;
                 return (
                   <tr key={customer.id}>
-                    <td className="customer-selection">
-                      <input
-                        type="checkbox"
-                        aria-label={it.selectOption + " " + customer.name}
-                        disabled={pending}
-                        checked={selectedIds.includes(customer.id)}
-                        onChange={(event) =>
-                          setSelected((current) =>
-                            event.target.checked
-                              ? [...current, customer.id]
-                              : current.filter((id) => id !== customer.id),
-                          )
-                        }
-                      />
-                    </td>
+                    {batchMode && (
+                      <td className="customer-selection">
+                        <input
+                          type="checkbox"
+                          aria-label={it.selectOption + " " + customer.name}
+                          disabled={pending}
+                          checked={selectedIds.includes(customer.id)}
+                          onChange={(event) =>
+                            setSelected((current) =>
+                              event.target.checked
+                                ? [...current, customer.id]
+                                : current.filter((id) => id !== customer.id),
+                            )
+                          }
+                        />
+                      </td>
+                    )}
                     <td className="customer-name">
                       <Link
                         className="order-link"

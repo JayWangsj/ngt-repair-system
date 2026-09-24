@@ -1061,6 +1061,10 @@ test("customer batch deletion keeps selection scoped and confirms the count", as
   await expect(
     page.getByRole("button", { name: "Elimina clienti selezionati" }),
   ).toHaveCount(0);
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Gestisci selezione", exact: true })
+    .click();
   await page.getByLabel("Seleziona tutti", { exact: true }).check();
   page.once("dialog", async (dialog) => {
     expect(dialog.message()).toContain("2 clienti");
@@ -1073,7 +1077,7 @@ test("customer batch deletion keeps selection scoped and confirms the count", as
   await search.fill(prefix + "-0");
   await expect(
     page.getByRole("button", { name: "Elimina clienti selezionati" }),
-  ).toHaveCount(0);
+  ).toBeDisabled();
   await search.fill(prefix);
   await page.getByLabel("Seleziona tutti", { exact: true }).check();
   await page.setViewportSize({ width: 390, height: 844 });
@@ -1128,4 +1132,59 @@ test("customer detail removes duplicate actions and supports keyboard icon editi
       fullPage: true,
     });
   }
+});
+
+for (const width of [1280, 390]) {
+  test(`customer batch mode is opt-in and resets at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/customers");
+    await expect(page.getByRole("checkbox")).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Gestisci selezione", exact: true })
+      .click();
+    await page.getByLabel("Seleziona tutti", { exact: true }).check();
+    await expect(
+      page.getByRole("button", { name: /Elimina clienti selezionati/ }),
+    ).toBeEnabled();
+    await page
+      .getByRole("button", { name: "Fine selezione", exact: true })
+      .click();
+    await expect(page.getByRole("checkbox")).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Gestisci selezione", exact: true })
+      .click();
+    await expect(
+      page.getByLabel("Seleziona tutti", { exact: true }),
+    ).not.toBeChecked();
+    await expect(
+      page.getByRole("button", { name: /Elimina clienti selezionati/ }),
+    ).toBeDisabled();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+  });
+}
+
+test("customer name hover moves only the link and respects reduced motion", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/customers");
+  const link = page.locator(".customer-name .order-link").first();
+  const row = page.locator(".customer-table tbody tr").first();
+  const before = await row.boundingBox();
+  const color = await link.evaluate((el) => getComputedStyle(el).color);
+  await link.hover();
+  await expect(link).toHaveCSS("transform", "matrix(1, 0, 0, 1, 2, 0)");
+  await expect(link).not.toHaveCSS("color", color);
+  expect(await row.boundingBox()).toEqual(before);
+  await page.mouse.move(0, 0);
+  await link.focus();
+  await expect(link).toHaveCSS("transform", "matrix(1, 0, 0, 1, 2, 0)");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(link).toHaveCSS("transform", "none");
 });

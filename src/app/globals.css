@@ -1776,19 +1776,19 @@ details[open] > summary {
   table-layout: fixed;
   width: 100%;
 }
-.customer-table th:nth-child(1) {
+.customer-table th.customer-selection {
   width: 48px;
 }
-.customer-table th:nth-child(2) {
+.customer-table th.customer-name-heading {
   width: 28%;
 }
-.customer-table th:nth-child(3) {
+.customer-table th.customer-phone-heading {
   width: 34%;
 }
-.customer-table th:nth-child(4) {
+.customer-table th.customer-device-heading {
   width: 12%;
 }
-.customer-table th:nth-child(5) {
+.customer-table th.customer-actions-heading {
   width: 112px;
 }
 .customer-table td {
@@ -1805,14 +1805,6 @@ details[open] > summary {
   gap: 3px;
   font-weight: 650;
   text-decoration-thickness: 1px;
-}
-.customer-name .order-link:hover svg,
-.customer-name .order-link:focus-visible svg {
-  transform: translateX(2px);
-}
-.customer-name .order-link svg {
-  flex-shrink: 0;
-  transition: transform 120ms ease;
 }
 .customer-phones {
   display: grid;
@@ -2057,13 +2049,18 @@ summary.record-icon::-webkit-details-marker {
   align-items: center;
   gap: 3px;
 }
+.order-link {
+  transition:
+    color 140ms ease,
+    transform 140ms ease;
+}
+.order-link:hover,
+.order-link:focus-visible {
+  color: #a66b00;
+  transform: translateX(2px);
+}
 .order-link svg {
   flex-shrink: 0;
-  transition: transform 120ms ease;
-}
-.order-link:hover svg,
-.order-link:focus-visible svg {
-  transform: translateX(2px);
 }
 .customer-selection input {
   width: 18px;
@@ -2119,14 +2116,9 @@ summary.record-icon::-webkit-details-marker {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .order-link svg,
-  .customer-name .order-link svg {
+  .order-link,
+  .customer-name .order-link {
     transition: none;
     transform: none !important;
   }
-}
-
-.customer-select-all {
-  margin-bottom: 12px;
-  width: fit-content;
 }

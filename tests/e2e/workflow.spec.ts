@@ -1176,6 +1176,7 @@ test("customer name hover moves only the link and respects reduced motion", asyn
   await page.goto("/customers");
   const link = page.locator(".customer-name .order-link").first();
   const row = page.locator(".customer-table tbody tr").first();
+  await expect(row).toBeVisible();
   const before = await row.boundingBox();
   const color = await link.evaluate((el) => getComputedStyle(el).color);
   await link.hover();

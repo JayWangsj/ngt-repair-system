@@ -466,25 +466,24 @@ test("native quote choices populate prices, clear on model changes and discounts
   page,
 }) => {
   await page.goto("/orders/new");
-  await page
-    .getByLabel("Tipo dispositivo", { exact: true })
-    .selectOption("TABLET");
+  const deviceType = page.getByLabel("Tipo dispositivo", { exact: true });
+  await deviceType.selectOption("TABLET");
+  await expect(deviceType).toHaveValue("TABLET");
   await page
     .getByLabel("Seleziona Marca", { exact: true })
     .selectOption("Apple");
   await expect(
     page
       .getByLabel("Seleziona Modello", { exact: true })
-      .locator('option[value="iPhone 13"]'),
-  ).toHaveCount(0);
+      .locator('option[value^="iPad"]'),
+  ).not.toHaveCount(0);
   await expect(
     page
       .getByLabel("Seleziona Modello", { exact: true })
-      .locator('option[value^="iPad"]'),
-  ).not.toHaveCount(0);
-  await page
-    .getByLabel("Tipo dispositivo", { exact: true })
-    .selectOption("PHONE");
+      .locator('option[value="iPhone 13"]'),
+  ).toHaveCount(0);
+  await deviceType.selectOption("PHONE");
+  await expect(deviceType).toHaveValue("PHONE");
   await page
     .getByLabel("Seleziona Marca", { exact: true })
     .selectOption("Apple");

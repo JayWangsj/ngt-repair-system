@@ -1093,7 +1093,7 @@ describe("versioned data backup and merge import", () => {
       discount: "0",
       method: "CASH",
     });
-    await createOrder(
+    const order = await createOrder(
       owner,
       input({
         model: "iphone18promax",
@@ -1101,6 +1101,11 @@ describe("versioned data backup and merge import", () => {
         deposit: "100",
       }),
     );
+    await addWorkOrderProduct(owner, order.id, {
+      productId: product.id,
+      kind: "RETAIL_ADDON",
+      quantity: 1,
+    });
     const backup = await exportBusinessData();
     expect(backup).toMatchObject({
       format: "ngt-repair-data",
@@ -1116,7 +1121,7 @@ describe("versioned data backup and merge import", () => {
     expect(backup.data.retailSales).toHaveLength(1);
     expect(backup.data.retailSaleItems).toHaveLength(1);
     expect(backup.data.paymentAllocations).toHaveLength(2);
-    expect(backup.data.workOrderProducts).toHaveLength(0);
+    expect(backup.data.workOrderProducts).toHaveLength(1);
 
     const conflict = structuredClone(backup);
     const originalOrderId = conflict.data.orders[0].id;
@@ -1169,6 +1174,7 @@ describe("versioned data backup and merge import", () => {
     expect(await db.inventoryMovement.count()).toBe(2);
     expect(await db.retailSale.count()).toBe(1);
     expect(await db.paymentAllocation.count()).toBe(2);
+    expect(await db.workOrderProduct.count()).toBe(1);
     expect((await db.device.findFirstOrThrow()).model).toBe(
       "iPhone 18 Pro Max",
     );

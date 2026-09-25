@@ -123,6 +123,22 @@ export default async function Dashboard({
             icon: Wallet,
             color: "green",
           },
+          {
+            label: it.dashboard.repairRevenue,
+            value: money(todayRevenue.repair),
+            count: todayRevenue.repair,
+            type: "money",
+            icon: Wrench,
+            color: "blue",
+          },
+          {
+            label: it.dashboard.retailRevenue,
+            value: money(todayRevenue.retail),
+            count: todayRevenue.retail,
+            type: "money",
+            icon: ShoppingBag,
+            color: "orange",
+          },
         ]
       : [
           {
@@ -184,6 +200,9 @@ export default async function Dashboard({
                 {it.dashboard.repairRevenue} {money(todayRevenue.repair)} ·{" "}
                 {it.dashboard.retailRevenue} {money(todayRevenue.retail)}
               </small>
+            ) : label === it.dashboard.repairRevenue ||
+              label === it.dashboard.retailRevenue ? (
+              <small>{it.today}</small>
             ) : (
               <small>{it.workspace}</small>
             )}

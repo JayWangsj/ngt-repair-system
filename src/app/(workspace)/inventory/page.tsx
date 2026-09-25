@@ -13,21 +13,16 @@ import { PageHeader } from "@/components/common";
 import {
   InventoryWorkspace,
   NewProductDialogButton,
-  type InventoryMovementView,
   type ProductView,
 } from "@/components/inventory";
 
 export default async function InventoryPage() {
   await requireActor();
   const it = await getMessages();
-  const [products, movements] = await Promise.all([
-    db.product.findMany({ orderBy: [{ enabled: "desc" }, { name: "asc" }] }),
-    db.inventoryMovement.findMany({
-      include: { product: { select: { name: true } } },
-      orderBy: { createdAt: "desc" },
-      take: 12,
-    }),
-  ]);
+  const products = await db.product.findMany({
+    where: { enabled: true },
+    orderBy: [{ favorite: "desc" }, { name: "asc" }],
+  });
   const productViews: ProductView[] = products.map((product) => ({
     id: product.id,
     name: product.name,
@@ -39,15 +34,6 @@ export default async function InventoryPage() {
     minStock: product.minStock,
     favorite: product.favorite,
     enabled: product.enabled,
-  }));
-  const movementViews: InventoryMovementView[] = movements.map((movement) => ({
-    id: movement.id,
-    productName: movement.product.name,
-    quantity: movement.quantity,
-    stockAfter: movement.stockAfter,
-    type: movement.type,
-    note: movement.note,
-    createdAt: movement.createdAt.toISOString(),
   }));
   const enabled = productViews.filter((product) => product.enabled);
   const metrics = [
@@ -91,7 +77,13 @@ export default async function InventoryPage() {
       <PageHeader
         title={it.inventory.title}
         description={it.inventory.description}
-        actionNode={<NewProductDialogButton />}
+        actionNode={
+          <NewProductDialogButton
+            categories={[
+              ...new Set(productViews.map((product) => product.category)),
+            ]}
+          />
+        }
       />
       <div className="inventory-metrics">
         {metrics.map(({ label, value, icon: Icon }) => (
@@ -106,7 +98,7 @@ export default async function InventoryPage() {
           </div>
         ))}
       </div>
-      <InventoryWorkspace products={productViews} movements={movementViews} />
+      <InventoryWorkspace products={productViews} />
     </>
   );
 }

@@ -9,7 +9,7 @@ export const amountInput = z
 export const phoneInput = z
   .string()
   .trim()
-  .min(6)
+  .min(6, "Il numero di telefono è troppo corto.")
   .max(30)
   .transform((value, ctx) => {
     try {
@@ -19,7 +19,7 @@ export const phoneInput = z
       return z.NEVER;
     }
   });
-const day = z
+export const dueDateInput = z
   .string()
   .refine(
     (value) =>
@@ -72,7 +72,7 @@ export const orderInput = z.object({
   accessories: text,
   fault: z.string().trim().max(2000).default(""),
   notes: text,
-  dueDate: day,
+  dueDate: dueDateInput,
   confirmed: z.boolean().default(false),
   confirmationNote: text,
   items: z.array(itemInput).min(1).max(30),
@@ -84,7 +84,7 @@ export const editInput = z.object({
   notes: text,
   appearance: text,
   accessories: text,
-  dueDate: day,
+  dueDate: dueDateInput,
 });
 export const paymentInput = z.object({
   requestId: z.string().uuid(),
@@ -103,6 +103,16 @@ export const productInput = z.object({
   minStock: z.coerce.number().int().min(0).max(1_000_000).default(0),
   favorite: z.boolean().default(false),
   enabled: z.boolean().default(true),
+});
+export const productUpdateInput = z.object({
+  name: short,
+  category: short,
+  usage: z.enum(["RETAIL", "REPAIR", "BOTH"]),
+  costPrice: amountInput,
+  salePrice: amountInput,
+  stockQuantity: z.coerce.number().int().min(0).max(1_000_000),
+  minStock: z.coerce.number().int().min(0).max(1_000_000),
+  favorite: z.boolean(),
 });
 export const inventoryAdjustmentInput = z.object({
   requestId: z.string().uuid(),
@@ -207,7 +217,7 @@ export const customerInput = z
     (v) =>
       new Set([v.phone, ...v.additionalPhones]).size ===
       1 + v.additionalPhones.length,
-    "Telefoni duplicati.",
+    "I numeri di telefono non possono essere duplicati.",
   );
 export const deviceInput = z.object({
   category: z.enum([

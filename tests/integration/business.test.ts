@@ -18,6 +18,8 @@ import {
   createProduct,
   createRetailSale,
   adjustInventory,
+  updateProduct,
+  deleteProducts,
   confirmQuote,
   createOrder,
   createUser,
@@ -26,6 +28,7 @@ import {
   savePriceRule,
   setUserEnabled,
   updateOrder,
+  updateDueDate,
 } from "@/lib/service";
 import { balance, type Actor } from "@/lib/domain";
 import {
@@ -119,7 +122,9 @@ afterAll(() => db.$disconnect());
 describe("PostgreSQL workflow", () => {
   it("registers, quotes, receives balance, delivers and audits every change", async () => {
     const created = await createOrder(staff, input());
+    await updateDueDate(staff, created.id, "2099-12-31");
     await changeStatus(staff, created.id, { status: "DIAGNOSING" });
+    await changeStatus(staff, created.id, { status: "PARTS_MISSING" });
     await changeStatus(staff, created.id, { status: "REPAIRING" });
     await changeStatus(staff, created.id, { status: "READY" });
     await addPayment(staff, created.id, {
@@ -138,7 +143,8 @@ describe("PostgreSQL workflow", () => {
     });
     expect(order.status).toBe("COMPLETED");
     expect(order.pickedUpAt).not.toBeNull();
-    expect(order.history).toHaveLength(5);
+    expect(order.history).toHaveLength(6);
+    expect(order.dueDate).toBe("2099-12-31");
     expect(order.payments).toHaveLength(2);
     expect(balance(order.items, order.payments)).toBe(0);
     expect(order.device.customer.phone).toBe("+393331234567");
@@ -786,6 +792,49 @@ describe("1.2 customer and catalog management", () => {
 });
 
 describe("unified product inventory", () => {
+  it("updates product fields and stock atomically, then archives batch deletions", async () => {
+    const product = await createProduct(staff, {
+      requestId: randomUUID(),
+      name: "Cavo USB",
+      category: "Cavi",
+      usage: "RETAIL",
+      costPrice: "2.50",
+      salePrice: "8",
+      initialStock: 4,
+      minStock: 1,
+    });
+    await updateProduct(staff, product.id, {
+      name: "Cavo USB-C",
+      category: "Accessori",
+      usage: "BOTH",
+      costPrice: "3",
+      salePrice: "10",
+      stockQuantity: 7,
+      minStock: 2,
+      favorite: true,
+    });
+    expect(
+      await db.product.findUniqueOrThrow({ where: { id: product.id } }),
+    ).toMatchObject({
+      name: "Cavo USB-C",
+      category: "Accessori",
+      usage: "BOTH",
+      stockQuantity: 7,
+      minStock: 2,
+      favorite: true,
+    });
+    expect(
+      await db.inventoryMovement.findFirstOrThrow({
+        where: { productId: product.id, type: "MANUAL_ADJUSTMENT" },
+      }),
+    ).toMatchObject({ quantity: 3, stockBefore: 4, stockAfter: 7 });
+    await deleteProducts(staff, [product.id]);
+    expect(
+      (await db.product.findUniqueOrThrow({ where: { id: product.id } }))
+        .enabled,
+    ).toBe(false);
+  });
+
   it("creates initial stock and records idempotent stock changes", async () => {
     const product = await createProduct(staff, {
       requestId: randomUUID(),

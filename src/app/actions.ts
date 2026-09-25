@@ -19,6 +19,25 @@ async function execute(
   } catch (error) {
     if (error instanceof BusinessError)
       return { ok: false, error: error.message };
+    if (
+      error instanceof ZodError &&
+      error.issues.some(
+        (issue) =>
+          issue.path[0] === "phone" ||
+          issue.path[0] === "additionalPhones" ||
+          issue.message.includes("telefono"),
+      )
+    )
+      return {
+        ok: false,
+        error:
+          error.issues.find(
+            (issue) =>
+              issue.path[0] === "phone" ||
+              issue.path[0] === "additionalPhones" ||
+              issue.message.includes("telefono"),
+          )?.message ?? "Telefono non valido.",
+      };
     if (error instanceof ZodError)
       return {
         ok: false,
@@ -48,6 +67,10 @@ export async function updateOrderAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.updateOrder(actor, id, input));
 }
+export async function updateDueDateAction(id: string, dueDate: string) {
+  const actor = await requireActor();
+  return execute(() => service.updateDueDate(actor, id, dueDate));
+}
 export async function quoteAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.replaceQuote(actor, id, input));
@@ -67,6 +90,14 @@ export async function createProductAction(input: unknown) {
 export async function adjustInventoryAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.adjustInventory(actor, id, input));
+}
+export async function updateProductAction(id: string, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.updateProduct(actor, id, input));
+}
+export async function deleteProductsAction(ids: string[]) {
+  const actor = await requireActor();
+  return execute(() => service.deleteProducts(actor, ids));
 }
 export async function createRetailSaleAction(input: unknown) {
   const actor = await requireActor();
@@ -91,6 +122,14 @@ export async function statusAction(id: string, input: unknown) {
 export async function ruleAction(id: string | null, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.savePriceRule(actor, id, input));
+}
+export async function updatePriceRuleFieldAction(
+  id: string,
+  field: "project" | "suggested",
+  value: string,
+) {
+  const actor = await requireActor();
+  return execute(() => service.updatePriceRuleField(actor, id, field, value));
 }
 
 export async function lookupCustomerAction(phone: string) {

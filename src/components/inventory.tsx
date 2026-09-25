@@ -1,9 +1,14 @@
 "use client";
+
 import { useMemo, useState, useTransition, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDownUp, Plus, Star } from "lucide-react";
-import { adjustInventoryAction, createProductAction } from "@/app/actions";
-import { dateTime, inventoryStatus, money } from "@/lib/domain";
+import { Plus, Star, Trash2 } from "lucide-react";
+import {
+  createProductAction,
+  deleteProductsAction,
+  updateProductAction,
+} from "@/app/actions";
+import { decimal, inventoryStatus, money } from "@/lib/domain";
 import { useMessages } from "./language";
 import { Field, FormDialog } from "./forms";
 import { Button } from "./ui/button";
@@ -21,17 +26,21 @@ export type ProductView = {
   enabled: boolean;
 };
 
-export type InventoryMovementView = {
-  id: string;
-  productName: string;
-  quantity: number;
-  stockAfter: number;
-  type: string;
-  note: string;
-  createdAt: string;
-};
+const presetCategories = [
+  "Accessori",
+  "Ricambi",
+  "Cavi",
+  "Caricabatterie",
+  "Usato",
+];
 
-function ProductForm({ onClose }: { onClose: () => void }) {
+function ProductForm({
+  categories,
+  onClose,
+}: {
+  categories: string[];
+  onClose: () => void;
+}) {
   const it = useMessages();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -39,7 +48,6 @@ function ProductForm({ onClose }: { onClose: () => void }) {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    setError("");
     startTransition(async () => {
       const result = await createProductAction({
         requestId: crypto.randomUUID(),
@@ -51,13 +59,14 @@ function ProductForm({ onClose }: { onClose: () => void }) {
         initialStock: String(form.get("initialStock") ?? "0"),
         minStock: String(form.get("minStock") ?? "0"),
         favorite: form.get("favorite") === "on",
-        enabled: form.get("enabled") === "on",
+        enabled: true,
       });
       if (!result.ok) return setError(result.error);
       onClose();
       router.refresh();
     });
   }
+  const options = [...new Set([...presetCategories, ...categories])].sort();
   return (
     <form className="dialog-form" onSubmit={submit} aria-busy={pending}>
       <div className="form-grid">
@@ -65,7 +74,17 @@ function ProductForm({ onClose }: { onClose: () => void }) {
           <input name="name" required maxLength={120} autoFocus />
         </Field>
         <Field label={it.inventory.category}>
-          <input name="category" required maxLength={120} />
+          <input
+            name="category"
+            list="inventory-categories"
+            required
+            maxLength={120}
+          />
+          <datalist id="inventory-categories">
+            {options.map((item) => (
+              <option key={item} value={item} />
+            ))}
+          </datalist>
         </Field>
         <Field label={it.inventory.usage}>
           <select name="usage" defaultValue="RETAIL">
@@ -109,16 +128,10 @@ function ProductForm({ onClose }: { onClose: () => void }) {
           />
         </Field>
       </div>
-      <div className="dialog-checks">
-        <label className="checkbox">
-          <input name="favorite" type="checkbox" />
-          {it.inventory.favorite}
-        </label>
-        <label className="checkbox">
-          <input name="enabled" type="checkbox" defaultChecked />
-          {it.inventory.active}
-        </label>
-      </div>
+      <label className="checkbox">
+        <input name="favorite" type="checkbox" />
+        {it.inventory.favorite}
+      </label>
       {error && <p className="message error">{error}</p>}
       <div className="dialog-actions">
         <Button
@@ -135,7 +148,11 @@ function ProductForm({ onClose }: { onClose: () => void }) {
   );
 }
 
-export function NewProductDialogButton() {
+export function NewProductDialogButton({
+  categories,
+}: {
+  categories: string[];
+}) {
   const it = useMessages();
   const [open, setOpen] = useState(false);
   return (
@@ -149,113 +166,86 @@ export function NewProductDialogButton() {
           title={it.inventory.newProduct}
           onClose={() => setOpen(false)}
         >
-          <ProductForm onClose={() => setOpen(false)} />
+          <ProductForm categories={categories} onClose={() => setOpen(false)} />
         </FormDialog>
       )}
     </>
   );
 }
 
-function AdjustmentDialog({
-  product,
-  onClose,
+function StockEditor({
+  value,
+  label,
+  onSave,
 }: {
-  product: ProductView;
-  onClose: () => void;
+  value: number;
+  label: string;
+  onSave: (value: number) => void;
 }) {
-  const it = useMessages();
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState("");
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    startTransition(async () => {
-      const result = await adjustInventoryAction(product.id, {
-        requestId: crypto.randomUUID(),
-        quantity: String(form.get("quantity") ?? ""),
-        type: String(form.get("type") ?? ""),
-        note: String(form.get("note") ?? ""),
-      });
-      if (!result.ok) return setError(result.error);
-      onClose();
-      router.refresh();
-    });
-  }
   return (
-    <form className="dialog-form" onSubmit={submit} aria-busy={pending}>
-      <p className="inventory-dialog-product">
-        <strong>{product.name}</strong>
-        <span>
-          {it.inventory.currentStock}: {product.stockQuantity}
-        </span>
-      </p>
-      <div className="form-grid">
-        <Field label={it.inventory.adjust}>
-          <select name="type" defaultValue="STOCK_IN">
-            <option value="STOCK_IN">{it.inventory.stockIn}</option>
-            <option value="MANUAL_ADJUSTMENT">
-              {it.inventory.manualAdjustment}
-            </option>
-          </select>
-        </Field>
-        <Field label={it.inventory.quantityChange}>
-          <input name="quantity" type="number" required />
-        </Field>
-      </div>
-      <Field label={it.inventory.note}>
-        <textarea name="note" maxLength={2000} />
-      </Field>
-      {error && <p className="message error">{error}</p>}
-      <div className="dialog-actions">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onClose}
-          disabled={pending}
-        >
-          {it.cancel}
-        </Button>
-        <Button disabled={pending}>{it.inventory.saveMovement}</Button>
-      </div>
-    </form>
+    <div className="stock-stepper" onClick={(event) => event.stopPropagation()}>
+      <button
+        type="button"
+        aria-label={`- ${label}`}
+        disabled={value <= 0}
+        onClick={() => onSave(value - 1)}
+      >
+        −
+      </button>
+      <input
+        aria-label={label}
+        type="number"
+        min="0"
+        value={value}
+        onChange={(event) => onSave(Math.max(0, Number(event.target.value)))}
+      />
+      <button
+        type="button"
+        aria-label={`+ ${label}`}
+        onClick={() => onSave(value + 1)}
+      >
+        +
+      </button>
+    </div>
   );
 }
 
-export function InventoryWorkspace({
-  products,
-  movements,
-}: {
-  products: ProductView[];
-  movements: InventoryMovementView[];
-}) {
+export function InventoryWorkspace({ products }: { products: ProductView[] }) {
   const it = useMessages();
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [usage, setUsage] = useState("");
   const [status, setStatus] = useState("");
-  const [adjusting, setAdjusting] = useState<ProductView | null>(null);
+  const [selectedId, setSelectedId] = useState("");
+  const [batchMode, setBatchMode] = useState(false);
+  const [checked, setChecked] = useState<string[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, ProductView>>({});
+  const [error, setError] = useState("");
+  const [pending, startTransition] = useTransition();
   const categories = useMemo(
     () => [...new Set(products.map((product) => product.category))].sort(),
     [products],
   );
-  const filtered = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
-    return products.filter((product) => {
-      const productStatus = inventoryStatus(
-        product.stockQuantity,
-        product.minStock,
-      );
-      return (
-        (!normalized ||
-          product.name.toLocaleLowerCase().includes(normalized) ||
-          product.category.toLocaleLowerCase().includes(normalized)) &&
-        (!category || product.category === category) &&
-        (!usage || product.usage === usage) &&
-        (!status || productStatus === status)
-      );
-    });
-  }, [products, query, category, usage, status]);
+  const filtered = useMemo(
+    () =>
+      products.filter((product) => {
+        const normalized = query.trim().toLocaleLowerCase();
+        const productStatus = inventoryStatus(
+          product.stockQuantity,
+          product.minStock,
+        );
+        return (
+          (!normalized ||
+            product.name.toLocaleLowerCase().includes(normalized) ||
+            product.category.toLocaleLowerCase().includes(normalized)) &&
+          (!category || product.category === category) &&
+          (!usage || product.usage === usage) &&
+          (!status || productStatus === status)
+        );
+      }),
+    [products, query, category, usage, status],
+  );
   const usageLabel = (value: ProductView["usage"]) =>
     value === "RETAIL"
       ? it.inventory.retail
@@ -268,158 +258,314 @@ export function InventoryWorkspace({
       : value === "LOW_STOCK"
         ? it.inventory.low
         : it.inventory.out;
+  function save(product: ProductView, changes: Partial<ProductView>) {
+    const next = { ...product, ...changes };
+    setDrafts((current) => ({ ...current, [product.id]: next }));
+    setError("");
+    startTransition(async () => {
+      const result = await updateProductAction(product.id, {
+        ...next,
+        costPrice: decimal(next.costPrice),
+        salePrice: decimal(next.salePrice),
+      });
+      if (!result.ok) return setError(result.error);
+      router.refresh();
+    });
+  }
+  function removeSelected() {
+    if (!checked.length || !window.confirm(it.deleteConfirm)) return;
+    startTransition(async () => {
+      const result = await deleteProductsAction(checked);
+      if (!result.ok) return setError(result.error);
+      setChecked([]);
+      setBatchMode(false);
+      router.refresh();
+    });
+  }
   return (
-    <div className="inventory-layout">
-      <section className="panel inventory-main">
-        <div className="inventory-filters">
-          <input
-            aria-label={it.inventory.search}
-            placeholder={it.inventory.search}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          <select
-            aria-label={it.inventory.category}
-            value={category}
-            onChange={(event) => setCategory(event.target.value)}
-          >
-            <option value="">{it.inventory.allCategories}</option>
-            {categories.map((item) => (
-              <option key={item}>{item}</option>
-            ))}
-          </select>
-          <select
-            aria-label={it.inventory.usage}
-            value={usage}
-            onChange={(event) => setUsage(event.target.value)}
-          >
-            <option value="">{it.inventory.allUsages}</option>
-            <option value="RETAIL">{it.inventory.retail}</option>
-            <option value="REPAIR">{it.inventory.repair}</option>
-            <option value="BOTH">{it.inventory.both}</option>
-          </select>
-          <select
-            aria-label={it.inventory.status}
-            value={status}
-            onChange={(event) => setStatus(event.target.value)}
-          >
-            <option value="">{it.inventory.allStatuses}</option>
-            <option value="IN_STOCK">{it.inventory.inStock}</option>
-            <option value="LOW_STOCK">{it.inventory.low}</option>
-            <option value="OUT_OF_STOCK">{it.inventory.out}</option>
-          </select>
-        </div>
-        {filtered.length ? (
-          <div className="table-scroll">
-            <table className="inventory-table">
-              <thead>
-                <tr>
-                  <th>{it.inventory.product}</th>
-                  <th>{it.inventory.category}</th>
-                  <th>{it.inventory.usage}</th>
-                  <th className="numeric">{it.inventory.costPrice}</th>
-                  <th className="numeric">{it.inventory.salePrice}</th>
-                  <th className="numeric">{it.inventory.currentStock}</th>
-                  <th className="numeric">{it.inventory.minimumStock}</th>
-                  <th>{it.inventory.status}</th>
-                  <th>
-                    <span className="sr-only">{it.actionsLabel}</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((product) => {
-                  const productStatus = inventoryStatus(
-                    product.stockQuantity,
-                    product.minStock,
-                  );
-                  return (
-                    <tr
-                      key={product.id}
-                      className={product.enabled ? "" : "inventory-disabled"}
-                    >
+    <section className="panel inventory-main">
+      <div className="inventory-filters">
+        <input
+          aria-label={it.inventory.search}
+          placeholder={it.inventory.search}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <select
+          aria-label={it.inventory.category}
+          value={category}
+          onChange={(event) => setCategory(event.target.value)}
+        >
+          <option value="">{it.inventory.allCategories}</option>
+          {categories.map((item) => (
+            <option key={item}>{item}</option>
+          ))}
+        </select>
+        <select
+          aria-label={it.inventory.usage}
+          value={usage}
+          onChange={(event) => setUsage(event.target.value)}
+        >
+          <option value="">{it.inventory.allUsages}</option>
+          <option value="RETAIL">{it.inventory.retail}</option>
+          <option value="REPAIR">{it.inventory.repair}</option>
+          <option value="BOTH">{it.inventory.both}</option>
+        </select>
+        <select
+          aria-label={it.inventory.status}
+          value={status}
+          onChange={(event) => setStatus(event.target.value)}
+        >
+          <option value="">{it.inventory.allStatuses}</option>
+          <option value="IN_STOCK">{it.inventory.inStock}</option>
+          <option value="LOW_STOCK">{it.inventory.low}</option>
+          <option value="OUT_OF_STOCK">{it.inventory.out}</option>
+        </select>
+      </div>
+      <div className="catalog-toolbar inventory-batch-toolbar">
+        <Button
+          variant="outline"
+          aria-pressed={batchMode}
+          disabled={pending}
+          onClick={() => {
+            setBatchMode(!batchMode);
+            setChecked([]);
+          }}
+        >
+          {batchMode ? it.finishBatch : it.batchManage}
+        </Button>
+        {batchMode && (
+          <>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={
+                  filtered.length > 0 && checked.length === filtered.length
+                }
+                onChange={(event) =>
+                  setChecked(
+                    event.target.checked
+                      ? filtered.map((product) => product.id)
+                      : [],
+                  )
+                }
+              />
+              {it.selectAll}
+            </label>
+            <Button
+              variant="outline"
+              disabled={!checked.length || pending}
+              onClick={removeSelected}
+            >
+              <Trash2 size={17} />
+              {it.inventory.deleteSelected} ({checked.length})
+            </Button>
+          </>
+        )}
+      </div>
+      {error && <p className="message error">{error}</p>}
+      {filtered.length ? (
+        <div className="table-scroll">
+          <table className="inventory-table">
+            <thead>
+              <tr>
+                {batchMode && <th />}
+                <th>{it.inventory.product}</th>
+                <th>{it.inventory.category}</th>
+                <th>{it.inventory.usage}</th>
+                <th className="numeric">{it.inventory.costPrice}</th>
+                <th className="numeric">{it.inventory.salePrice}</th>
+                <th>{it.inventory.currentStock}</th>
+                <th>{it.inventory.minimumStock}</th>
+                <th>{it.inventory.status}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((source) => {
+                const product = drafts[source.id] ?? source;
+                const selected = selectedId === product.id;
+                const productStatus = inventoryStatus(
+                  product.stockQuantity,
+                  product.minStock,
+                );
+                return (
+                  <tr
+                    key={product.id}
+                    className={selected ? "inventory-selected" : ""}
+                    onClick={() => !batchMode && setSelectedId(product.id)}
+                  >
+                    {batchMode && (
                       <td>
+                        <input
+                          type="checkbox"
+                          aria-label={`${it.selectOption} ${product.name}`}
+                          checked={checked.includes(product.id)}
+                          onChange={(event) =>
+                            setChecked(
+                              event.target.checked
+                                ? [...checked, product.id]
+                                : checked.filter((id) => id !== product.id),
+                            )
+                          }
+                        />
+                      </td>
+                    )}
+                    <td>
+                      {selected ? (
+                        <div className="inventory-name-edit">
+                          <button
+                            type="button"
+                            aria-label={it.inventory.favorite}
+                            className="favorite-toggle"
+                            onClick={() =>
+                              save(product, { favorite: !product.favorite })
+                            }
+                          >
+                            <Star
+                              size={16}
+                              fill={product.favorite ? "currentColor" : "none"}
+                            />
+                          </button>
+                          <input
+                            value={product.name}
+                            onChange={(event) =>
+                              setDrafts((current) => ({
+                                ...current,
+                                [product.id]: {
+                                  ...product,
+                                  name: event.target.value,
+                                },
+                              }))
+                            }
+                            onBlur={() => save(product, {})}
+                          />
+                        </div>
+                      ) : (
                         <span className="product-name">
                           <strong>{product.name}</strong>
                           {product.favorite && (
                             <Star size={14} fill="currentColor" />
                           )}
                         </span>
-                      </td>
-                      <td>{product.category}</td>
-                      <td>{usageLabel(product.usage)}</td>
-                      <td className="numeric">{money(product.costPrice)}</td>
-                      <td className="numeric">{money(product.salePrice)}</td>
-                      <td className="numeric">
-                        <strong>{product.stockQuantity}</strong>
-                      </td>
-                      <td className="numeric">{product.minStock}</td>
-                      <td>
-                        <span
-                          className={`stock-badge stock-${productStatus.toLowerCase()}`}
+                      )}
+                    </td>
+                    <td>
+                      {selected ? (
+                        <>
+                          <input
+                            list={`categories-${product.id}`}
+                            value={product.category}
+                            onChange={(event) =>
+                              setDrafts((current) => ({
+                                ...current,
+                                [product.id]: {
+                                  ...product,
+                                  category: event.target.value,
+                                },
+                              }))
+                            }
+                            onBlur={() => save(product, {})}
+                          />
+                          <datalist id={`categories-${product.id}`}>
+                            {[
+                              ...new Set([...presetCategories, ...categories]),
+                            ].map((item) => (
+                              <option key={item} value={item} />
+                            ))}
+                          </datalist>
+                        </>
+                      ) : (
+                        product.category
+                      )}
+                    </td>
+                    <td>
+                      {selected ? (
+                        <select
+                          value={product.usage}
+                          onChange={(event) =>
+                            save(product, {
+                              usage: event.target.value as ProductView["usage"],
+                            })
+                          }
                         >
-                          {statusLabel(productStatus)}
-                        </span>
-                      </td>
-                      <td>
-                        <Button
-                          variant="ghost"
-                          onClick={() => setAdjusting(product)}
-                        >
-                          <ArrowDownUp size={16} />
-                          {it.inventory.adjust}
-                        </Button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="inventory-empty">{it.inventory.noProducts}</p>
-        )}
-      </section>
-      <aside className="panel inventory-movements">
-        <h2>{it.inventory.recentMovements}</h2>
-        {movements.length ? (
-          movements.map((movement) => (
-            <div className="movement-row" key={movement.id}>
-              <span
-                className={
-                  movement.quantity > 0
-                    ? "movement-positive"
-                    : "movement-negative"
-                }
-              >
-                {movement.quantity > 0 ? "+" : ""}
-                {movement.quantity}
-              </span>
-              <div>
-                <strong>{movement.productName}</strong>
-                <small>
-                  {movement.note || movement.type.replaceAll("_", " ")} ·{" "}
-                  {dateTime(movement.createdAt)}
-                </small>
-              </div>
-              <b>{movement.stockAfter}</b>
-            </div>
-          ))
-        ) : (
-          <p className="muted">{it.inventory.noMovements}</p>
-        )}
-      </aside>
-      {adjusting && (
-        <FormDialog
-          title={it.inventory.adjust}
-          onClose={() => setAdjusting(null)}
-        >
-          <AdjustmentDialog
-            product={adjusting}
-            onClose={() => setAdjusting(null)}
-          />
-        </FormDialog>
+                          <option value="RETAIL">{it.inventory.retail}</option>
+                          <option value="REPAIR">{it.inventory.repair}</option>
+                          <option value="BOTH">{it.inventory.both}</option>
+                        </select>
+                      ) : (
+                        usageLabel(product.usage)
+                      )}
+                    </td>
+                    <td className="numeric">
+                      {selected ? (
+                        <input
+                          className="price-input"
+                          inputMode="decimal"
+                          defaultValue={decimal(product.costPrice)}
+                          onBlur={(event) =>
+                            save(product, {
+                              costPrice: Math.round(
+                                Number(event.target.value.replace(",", ".")) *
+                                  100,
+                              ),
+                            })
+                          }
+                        />
+                      ) : (
+                        money(product.costPrice)
+                      )}
+                    </td>
+                    <td className="numeric">
+                      {selected ? (
+                        <input
+                          className="price-input"
+                          inputMode="decimal"
+                          defaultValue={decimal(product.salePrice)}
+                          onBlur={(event) =>
+                            save(product, {
+                              salePrice: Math.round(
+                                Number(event.target.value.replace(",", ".")) *
+                                  100,
+                              ),
+                            })
+                          }
+                        />
+                      ) : (
+                        money(product.salePrice)
+                      )}
+                    </td>
+                    <td>
+                      <StockEditor
+                        value={product.stockQuantity}
+                        label={it.inventory.currentStock}
+                        onSave={(value) =>
+                          save(product, { stockQuantity: value })
+                        }
+                      />
+                    </td>
+                    <td>
+                      <StockEditor
+                        value={product.minStock}
+                        label={it.inventory.minimumStock}
+                        onSave={(value) => save(product, { minStock: value })}
+                      />
+                    </td>
+                    <td>
+                      <span
+                        className={`stock-badge stock-${productStatus.toLowerCase()}`}
+                      >
+                        {statusLabel(productStatus)}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="inventory-empty">{it.inventory.noProducts}</p>
       )}
-    </div>
+    </section>
   );
 }

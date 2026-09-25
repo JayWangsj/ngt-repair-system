@@ -58,9 +58,9 @@ import {
   updateOrderAction,
   quoteAction,
   ruleAction,
+  updatePriceRuleFieldAction,
   customerAction,
   hideFaultAction,
-  restoreFaultAction,
   deleteCustomerAction,
   deviceAction,
   deleteDeviceAction,
@@ -80,6 +80,79 @@ export type RuleView = {
   notes: string;
   enabled: boolean;
 };
+
+function InlineRuleField({
+  rule,
+  field,
+  disabled,
+  onError,
+  onSaved,
+}: {
+  rule: RuleView;
+  field: "project" | "suggested";
+  disabled: boolean;
+  onError: (message: string) => void;
+  onSaved: () => void;
+}) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(rule[field]);
+  const [pending, setPending] = useState(false);
+  const input = useRef<HTMLInputElement>(null);
+  const saving = useRef(false);
+  useEffect(() => setValue(rule[field]), [rule, field]);
+  useEffect(() => {
+    if (editing) input.current?.select();
+  }, [editing]);
+  async function save() {
+    if (saving.current) return;
+    const next = value.trim();
+    if (next === rule[field]) return setEditing(false);
+    saving.current = true;
+    setPending(true);
+    onError("");
+    const result = await updatePriceRuleFieldAction(rule.id, field, next);
+    setPending(false);
+    saving.current = false;
+    if (!result.ok) return onError(result.error);
+    setEditing(false);
+    onSaved();
+    router.refresh();
+  }
+  if (editing)
+    return (
+      <input
+        ref={input}
+        className={`inline-rule-input inline-rule-${field}`}
+        value={value}
+        inputMode={field === "suggested" ? "decimal" : undefined}
+        maxLength={field === "project" ? 120 : undefined}
+        disabled={pending}
+        onChange={(event) => setValue(event.target.value)}
+        onBlur={() => void save()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            void save();
+          }
+          if (event.key === "Escape") {
+            setValue(rule[field]);
+            setEditing(false);
+          }
+        }}
+      />
+    );
+  return (
+    <button
+      type="button"
+      className={`inline-rule-value inline-rule-${field}`}
+      disabled={disabled}
+      onClick={() => setEditing(true)}
+    >
+      {field === "suggested" ? money(cents(rule.suggested)) : rule.project}
+    </button>
+  );
+}
 type ItemView = {
   project: string;
   final: string;
@@ -330,7 +403,6 @@ export function NewOrderForm({
     useState<Awaited<ReturnType<typeof lookupCustomerAction>>>(null);
   const [customerConfirmed, setCustomerConfirmed] = useState(false);
   const [hiddenFaults, setHiddenFaults] = useState<string[]>([]);
-  const [restoredFaults, setRestoredFaults] = useState<string[]>([]);
   const [managingFaults, setManagingFaults] = useState(false);
   const [customFault, setCustomFault] = useState("");
   const [localFaults, setLocalFaults] = useState<string[]>([]);
@@ -378,6 +450,10 @@ export function NewOrderForm({
   const values = useWatch({ control }) as z.input<typeof orderInput>;
   const category = values.category ?? "PHONE";
   useEffect(() => {
+    if ((values.phone ?? "").trim().length < 6) {
+      setCustomer(null);
+      return;
+    }
     let active = true;
     const timer = setTimeout(async () => {
       try {
@@ -449,16 +525,13 @@ export function NewOrderForm({
   ];
   const visibleFaults = faults.filter(
     (f) =>
-      (!faultOptions.some(
+      !faultOptions.some(
         (o) =>
           o.category === category &&
           o.hidden &&
           o.name.toLowerCase() === f.name.toLowerCase(),
-      ) ||
-        restoredFaults.includes(category + ":" + f.name.toLowerCase())) &&
-      !hiddenFaults.includes(category + ":" + f.name.toLowerCase()),
+      ) && !hiddenFaults.includes(category + ":" + f.name.toLowerCase()),
   );
-  const hiddenFaultOptions = faults.filter((f) => !visibleFaults.includes(f));
   const customerUnchanged =
     !!customer &&
     values.customerName === customer.name &&
@@ -550,11 +623,22 @@ export function NewOrderForm({
             }))}
             onChange={(value) => {
               const found = customers.find((c) => c.id === value);
-              setValue("customerName", found?.name ?? value);
               setCustomerConfirmed(false);
               if (found) {
-                setValue("phone", found.phone);
                 clearDevice();
+                setValue("customerName", found.name, { shouldDirty: true });
+                setValue("phone", found.phone);
+                setValue(
+                  "additionalPhones",
+                  found.phones
+                    .map((phone) => phone.phone)
+                    .filter((phone) => phone !== found.phone),
+                );
+                void lookupCustomerAction(found.phone).then((customer) =>
+                  setCustomer(customer),
+                );
+              } else {
+                setValue("customerName", value, { shouldDirty: true });
               }
             }}
           />
@@ -634,7 +718,8 @@ export function NewOrderForm({
               onChange={(e) => {
                 const d = customer.devices.find((d) => d.id === e.target.value);
                 setValue("deviceId", e.target.value);
-                setValue("category", (d?.category ?? "PHONE") as Category);
+                const nextCategory = (d?.category ?? "PHONE") as Category;
+                setValue("category", nextCategory);
                 for (const key of [
                   "brand",
                   "series",
@@ -740,9 +825,6 @@ export function NewOrderForm({
                       }
                       const key = category + ":" + f.name.toLowerCase();
                       setHiddenFaults([...hiddenFaults, key]);
-                      setRestoredFaults(
-                        restoredFaults.filter((v) => v !== key),
-                      );
                       setValue(
                         "faults",
                         (values.faults ?? []).filter((n) => n !== f.name),
@@ -758,36 +840,6 @@ export function NewOrderForm({
             </div>
           ))}
         </fieldset>
-        {managingFaults && hiddenFaultOptions.length > 0 && (
-          <div className="hidden-faults">
-            <strong>{it.hiddenFaults}</strong>
-            <div>
-              {hiddenFaultOptions.map((f) => (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  key={f.name}
-                  onClick={async () => {
-                    try {
-                      const result = await restoreFaultAction(category, f.name);
-                      if (!result.ok) {
-                        setError(result.error);
-                        return;
-                      }
-                      const key = category + ":" + f.name.toLowerCase();
-                      setHiddenFaults(hiddenFaults.filter((v) => v !== key));
-                      setRestoredFaults([...restoredFaults, key]);
-                    } catch {
-                      setError("Connessione non disponibile. Riprova.");
-                    }
-                  }}
-                >
-                  {it.restoreFault}: {f.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-        )}
         <div className="input-action">
           <Field label={it.faultOther}>
             <input
@@ -1572,7 +1624,6 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<string[]>([]);
   const [batchMode, setBatchMode] = useState(false);
-  const [editing, setEditing] = useState<RuleView | null>(null);
   const [creating, setCreating] = useState<Partial<RuleView> | null>(null);
   const [saved, setSaved] = useState(false);
   const reveal = useRef("");
@@ -1677,18 +1728,6 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
           />
         </label>
       </div>
-      {editing && (
-        <FormDialog title={it.editProject} onClose={() => setEditing(null)}>
-          <RuleForm
-            rule={editing}
-            rules={rules}
-            onSuccess={() => {
-              setEditing(null);
-              setSaved(true);
-            }}
-          />
-        </FormDialog>
-      )}
       {creating && (
         <FormDialog title={it.newRule} onClose={() => setCreating(null)}>
           <RuleForm
@@ -1811,27 +1850,28 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
                                     }
                                   />
                                 )}
-                                <strong className="price-rule-name">
-                                  {rule.project}
-                                </strong>
-                                <span className="rule-price">
-                                  {money(cents(rule.suggested))}
+                                <InlineRuleField
+                                  rule={rule}
+                                  field="project"
+                                  disabled={pending}
+                                  onError={setError}
+                                  onSaved={() => setSaved(true)}
+                                />
+                                <InlineRuleField
+                                  rule={rule}
+                                  field="suggested"
+                                  disabled={pending}
+                                  onError={setError}
+                                  onSaved={() => setSaved(true)}
+                                />
+                                <span className="price-row-delete">
+                                  <RecordIcon
+                                    kind="delete"
+                                    label={it.deleteRule}
+                                    disabled={pending}
+                                    onClick={() => remove([rule.id])}
+                                  />
                                 </span>
-                                <RecordIcon
-                                  kind="edit"
-                                  label={it.editRule}
-                                  disabled={pending}
-                                  onClick={() => {
-                                    setSaved(false);
-                                    setEditing(rule);
-                                  }}
-                                />
-                                <RecordIcon
-                                  kind="delete"
-                                  label={it.deleteRule}
-                                  disabled={pending}
-                                  onClick={() => remove([rule.id])}
-                                />
                               </article>
                             ))}
                           </div>

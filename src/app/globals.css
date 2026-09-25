@@ -407,7 +407,10 @@ small {
   background: #5b8fc3;
 }
 .status-dot.status-ready {
-  background: #3b9b84;
+  background: #d7a11e;
+}
+.status-dot.status-parts_missing {
+  background: #cf3d3d;
 }
 .status-dot.status-waiting_approval {
   background: #d4a04e;
@@ -508,12 +511,16 @@ td small {
   background: #edf4fc;
 }
 .badge.status-ready {
-  color: #258777;
-  background: #e8f5ef;
+  color: #9b7000;
+  background: #fff3c4;
 }
 .badge.status-completed {
-  color: #6e885a;
-  background: #f0f5ea;
+  color: #247744;
+  background: #e3f6e9;
+}
+.badge.status-parts_missing {
+  color: #b42323;
+  background: #fde8e8;
 }
 .badge.status-cancelled {
   color: #a26868;
@@ -524,6 +531,110 @@ td small {
 }
 .danger-text small {
   color: inherit;
+}
+.inline-order-control {
+  display: grid;
+  gap: 3px;
+}
+.status-select,
+.order-due-input {
+  min-height: 32px;
+  padding: 5px 8px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+.status-select.status-received {
+  background: #f0f3f5;
+  color: #5e6c75;
+}
+.status-select.status-diagnosing {
+  background: #f4f0f9;
+  color: #76558f;
+}
+.status-select.status-waiting_approval {
+  background: #fbeed8;
+  color: #986b17;
+}
+.status-select.status-repairing {
+  background: #e7f1fb;
+  color: #2f6eaa;
+}
+.status-select.status-parts_missing {
+  background: #fde2e2;
+  color: #aa2020;
+}
+.status-select.status-ready {
+  background: #fff0b5;
+  color: #896200;
+}
+.status-select.status-completed {
+  background: #dff4e5;
+  color: #216b3d;
+}
+.status-select.status-cancelled {
+  background: #f5e9e9;
+  color: #8e4d4d;
+}
+.inline-control-error {
+  color: var(--danger);
+  white-space: normal;
+  max-width: 180px;
+}
+.order-payment-trigger {
+  border: 0;
+  background: transparent;
+  padding: 3px;
+  text-align: right;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    color 160ms ease;
+}
+.order-payment-trigger:hover,
+.order-payment-trigger:focus-visible {
+  color: var(--teal);
+  transform: translateX(-2px);
+}
+.order-payment-trigger small {
+  max-width: none;
+}
+.inline-payment-form {
+  display: grid;
+  grid-template-columns: 76px 82px auto auto;
+  gap: 4px;
+  align-items: center;
+}
+.inline-payment-form input,
+.inline-payment-form select,
+.inline-payment-form button {
+  min-height: 30px;
+  padding: 4px 6px;
+  font-size: 10px;
+}
+.inline-payment-form .inline-control-error {
+  grid-column: 1 / -1;
+}
+
+.order-link,
+.section-heading a,
+.dashboard-detail-link,
+.customer-back,
+.back-link {
+  transition:
+    transform 160ms ease,
+    color 160ms ease;
+}
+.order-link:hover,
+.order-link:focus-visible,
+.section-heading a:hover,
+.section-heading a:focus-visible,
+.dashboard-detail-link:hover,
+.dashboard-detail-link:focus-visible,
+.customer-back:hover,
+.customer-back:focus-visible,
+.back-link:hover,
+.back-link:focus-visible {
+  transform: translateX(2px);
 }
 .bottom-grid {
   display: grid;
@@ -1393,7 +1504,7 @@ details[open] > summary {
 }
 
 .dashboard-kpis {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
 }
 .dashboard-date-filter {
   display: flex;
@@ -2322,21 +2433,55 @@ details[open] > summary {
 .price-rule-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 6px;
   padding: 8px 0;
   border-bottom: 1px solid var(--line);
 }
-.price-rule-name {
+.inline-rule-project {
   flex: 1;
   min-width: 0;
   font-size: 13px;
   overflow-wrap: anywhere;
 }
-.price-rule-row .rule-price {
+.price-rule-row .inline-rule-suggested {
   white-space: nowrap;
   text-align: right;
   font-variant-numeric: tabular-nums;
   font-size: 13px;
+}
+.inline-rule-value {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 5px 6px;
+  border-radius: 7px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background 160ms ease;
+}
+.inline-rule-value:hover,
+.inline-rule-value:focus-visible {
+  transform: translateX(2px);
+  background: var(--surface-hover, #f5f7f7);
+}
+.inline-rule-input {
+  min-height: 34px;
+  padding: 5px 6px;
+}
+.inline-rule-suggested {
+  flex: 0 0 104px;
+}
+.price-row-delete {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+.price-rule-row:hover .price-row-delete,
+.price-rule-row:focus-within .price-row-delete {
+  opacity: 1;
+  pointer-events: auto;
 }
 .price-rule-row > input[type="checkbox"] {
   flex: 0 0 16px;
@@ -2435,6 +2580,26 @@ details[open] > summary {
   flex-wrap: nowrap;
   gap: 6px;
 }
+.customer-row-actions .record-actions > .record-icon,
+.customer-summary .record-actions > .record-icon,
+.customer-device-row .record-actions > .record-icon {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+.customer-table tr:hover .customer-row-actions .record-actions > .record-icon,
+.customer-table
+  tr:focus-within
+  .customer-row-actions
+  .record-actions
+  > .record-icon,
+.customer-summary:hover .record-actions > .record-icon,
+.customer-summary:focus-within .record-actions > .record-icon,
+.customer-device-row:hover .record-actions > .record-icon,
+.customer-device-row:focus-within .record-actions > .record-icon {
+  opacity: 1;
+  pointer-events: auto;
+}
 .customer-row-actions .button {
   min-height: 34px;
   padding: 7px 9px;
@@ -2469,6 +2634,43 @@ details[open] > summary {
   display: block;
   color: var(--muted);
   margin-top: 4px;
+}
+@media (hover: none) {
+  .price-row-delete,
+  .customer-row-actions .record-actions > .record-icon,
+  .customer-summary .record-actions > .record-icon,
+  .customer-device-row .record-actions > .record-icon {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (hover: hover) {
+  .quote-item .record-icon-delete,
+  .phone-row .record-icon-delete,
+  .order-product-line .icon-button,
+  .retail-cart-row .retail-remove,
+  .panel.padded > details > summary.record-icon,
+  .settings-action .button-danger {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+  .quote-item:hover .record-icon-delete,
+  .quote-item:focus-within .record-icon-delete,
+  .phone-row:hover .record-icon-delete,
+  .phone-row:focus-within .record-icon-delete,
+  .order-product-line:hover .icon-button,
+  .order-product-line:focus-within .icon-button,
+  .retail-cart-row:hover .retail-remove,
+  .retail-cart-row:focus-within .retail-remove,
+  .panel.padded:hover > details > summary.record-icon,
+  .panel.padded:focus-within > details > summary.record-icon,
+  .settings-action:hover .button-danger,
+  .settings-action:focus-within .button-danger {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 .customer-table .mobile-label {
   display: none;
@@ -2736,6 +2938,62 @@ summary.record-icon::-webkit-details-marker {
 .inventory-main {
   min-width: 0;
   overflow: hidden;
+}
+.inventory-batch-toolbar {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  justify-content: flex-start;
+}
+.inventory-table tbody tr {
+  cursor: pointer;
+}
+.inventory-table tbody tr:hover,
+.inventory-table tbody tr.inventory-selected {
+  background: #f7faf9;
+}
+.inventory-table input,
+.inventory-table select {
+  min-height: 32px;
+  max-width: 150px;
+  padding: 4px 7px;
+  font-size: 11px;
+}
+.inventory-name-edit {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.favorite-toggle {
+  border: 0;
+  background: transparent;
+  color: #d69a00;
+  padding: 4px;
+}
+.stock-stepper {
+  display: inline-grid;
+  grid-template-columns: 27px 48px 27px;
+  align-items: center;
+}
+.stock-stepper button,
+.stock-stepper input {
+  min-height: 30px;
+  border-radius: 0;
+  text-align: center;
+  padding: 3px;
+}
+.stock-stepper button:first-child {
+  border-radius: 7px 0 0 7px;
+}
+.stock-stepper button:last-child {
+  border-radius: 0 7px 7px 0;
+}
+.stock-stepper input {
+  border-left: 0;
+  border-right: 0;
+}
+.inventory-table .price-input {
+  width: 76px;
+  text-align: right;
 }
 .inventory-filters {
   display: grid;

@@ -11,7 +11,6 @@ import { Plus, Wrench, ChevronRight } from "lucide-react";
 import { getMessages } from "@/lib/i18n-server";
 import {
   balance,
-  dateOnly,
   isOverdue,
   money,
   orderCode,
@@ -19,6 +18,11 @@ import {
   type OrderStatus,
 } from "@/lib/domain";
 import { Button } from "./ui/button";
+import {
+  OrderDueDateControl,
+  OrderPaymentControl,
+  OrderStatusControl,
+} from "./order-list-controls";
 export async function PageHeader({
   title,
   description,
@@ -100,8 +104,9 @@ export async function OrderTable({
             <th>{it.device}</th>
             <th>{it.statusLabel}</th>
             <th>{it.dueDate}</th>
-            <th className="numeric">{it.total}</th>
-            <th className="numeric">{it.balance}</th>
+            <th className="numeric">
+              {it.paid} / {it.total}
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -134,17 +139,23 @@ export async function OrderTable({
                 </small>
               </td>
               <td>
-                <Badge status={order.status} />
+                <OrderStatusControl id={order.id} status={order.status} />
               </td>
               <td className={isOverdue(order) ? "danger-text" : ""}>
-                {dateOnly(order.dueDate)}
+                <OrderDueDateControl
+                  id={order.id}
+                  value={order.dueDate ?? ""}
+                  closed={["COMPLETED", "CANCELLED"].includes(order.status)}
+                />
                 {isOverdue(order) && <small>{it.overdue}</small>}
               </td>
               <td className="numeric">
-                {money(settlement(order.items, order).due)}
-              </td>
-              <td className="numeric">
-                {money(balance(order.items, order.payments, order))}
+                <OrderPaymentControl
+                  id={order.id}
+                  due={settlement(order.items, order).due}
+                  balance={balance(order.items, order.payments, order)}
+                  disabled={order.status === "CANCELLED"}
+                />
               </td>
             </tr>
           ))}

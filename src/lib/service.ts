@@ -16,13 +16,16 @@ import {
 } from "./domain";
 import {
   customerInput,
+  amountInput,
   deviceInput,
+  dueDateInput,
   editInput,
   itemInput,
   quoteInput,
   orderInput,
   paymentInput,
   productInput,
+  productUpdateInput,
   inventoryAdjustmentInput,
   retailSaleInput,
   workOrderProductInput,
@@ -329,6 +332,24 @@ export async function updateOrder(actorInput: Actor, id: string, raw: unknown) {
     await audit(tx, actor, id, "ORDER_UPDATED", { fields: Object.keys(data) });
   });
 }
+export async function updateDueDate(
+  actorInput: Actor,
+  id: string,
+  raw: unknown,
+) {
+  const dueDate = dueDateInput.parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const order = await tx.workOrder.findUniqueOrThrow({ where: { id } });
+    if (["COMPLETED", "CANCELLED"].includes(order.status))
+      throw new BusinessError("La scheda è chiusa.");
+    await tx.workOrder.update({
+      where: { id },
+      data: { dueDate: dueDate || null },
+    });
+    await audit(tx, actor, id, "ORDER_DUE_DATE_UPDATED", { dueDate });
+  });
+}
 export async function replaceQuote(
   actorInput: Actor,
   id: string,
@@ -614,6 +635,32 @@ export async function savePriceRule(
   });
 }
 
+export async function updatePriceRuleField(
+  actorInput: Actor,
+  id: string,
+  field: "project" | "suggested",
+  raw: unknown,
+) {
+  const value =
+    field === "project"
+      ? z.string().trim().min(1).max(120).parse(raw)
+      : amountInput.parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    assertOwner(actor);
+    await tx.priceRule.update({
+      where: { id },
+      data:
+        field === "project"
+          ? { project: value }
+          : { suggested: decimal(cents(value)) },
+    });
+    await audit(tx, actor, id, "PRICE_RULE_UPDATED", {
+      fields: [field],
+    });
+  });
+}
+
 export async function applyInventoryMovement(
   tx: Tx,
   actor: Actor,
@@ -765,6 +812,66 @@ export async function adjustInventory(
       type: movement.type,
     });
     return movement;
+  });
+}
+
+export async function updateProduct(
+  actorInput: Actor,
+  productId: string,
+  raw: unknown,
+) {
+  const data = productUpdateInput.parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const current = await tx.product.findUniqueOrThrow({
+      where: { id: productId },
+    });
+    const stockChange = data.stockQuantity - current.stockQuantity;
+    await tx.product.update({
+      where: { id: productId },
+      data: {
+        name: data.name,
+        category: data.category,
+        usage: data.usage,
+        costPrice: decimal(cents(data.costPrice)),
+        salePrice: decimal(cents(data.salePrice)),
+        minStock: data.minStock,
+        favorite: data.favorite,
+      },
+    });
+    if (stockChange)
+      await applyInventoryMovement(tx, actor, {
+        requestId: crypto.randomUUID(),
+        productId,
+        quantity: stockChange,
+        type: "MANUAL_ADJUSTMENT",
+        referenceType: "PRODUCT",
+        referenceId: productId,
+      });
+    await audit(tx, actor, productId, "PRODUCT_UPDATED", {
+      stockChange,
+      fields: [
+        "name",
+        "category",
+        "usage",
+        "costPrice",
+        "salePrice",
+        "minStock",
+        "favorite",
+      ],
+    });
+  });
+}
+
+export async function deleteProducts(actorInput: Actor, raw: unknown) {
+  const ids = z.array(z.string().min(1)).min(1).max(500).parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    await tx.product.updateMany({
+      where: { id: { in: ids } },
+      data: { enabled: false },
+    });
+    for (const id of ids) await audit(tx, actor, id, "PRODUCT_DELETED");
   });
 }
 

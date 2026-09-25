@@ -18,6 +18,14 @@ describe("customer phone validation", () => {
       customerInput.safeParse({ ...input, additionalPhones: ["bad"] }).success,
     ).toBe(false);
     expect(
+      customerInput.safeParse({ ...input, phone: "123" }).error?.issues[0]
+        .message,
+    ).toBe("Il numero di telefono è troppo corto.");
+    expect(
+      customerInput.safeParse({ ...input, additionalPhones: ["3331234567"] })
+        .error?.issues[0].message,
+    ).toBe("I numeri di telefono non possono essere duplicati.");
+    expect(
       customerInput.safeParse({
         ...input,
         additionalPhones: [...input.additionalPhones, "3331234570"],

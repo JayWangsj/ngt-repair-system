@@ -19,8 +19,8 @@ export function DashboardMotion({
       return;
     const storageKey = "ngt-dashboard-animation";
     if (sessionStorage.getItem(storageKey) === fingerprint) return;
-    sessionStorage.setItem(storageKey, fingerprint);
     element.classList.add("dashboard-animating");
+    let completed = false;
     const counts = Array.from(
       element.querySelectorAll<HTMLElement>("[data-count]"),
     );
@@ -45,12 +45,17 @@ export function DashboardMotion({
     });
     bars.forEach((node) => (node.style.height = "0%"));
     progress.forEach((node) => (node.style.width = "0%"));
+    if (donut)
+      donut.style.background =
+        "conic-gradient(var(--accent) 0 0%, #ffe49a 0 100%)";
+
+    void element.offsetHeight;
 
     let frame = 0;
-    const start = performance.now();
+    const start = performance.now() + 150;
     const duration = 720;
     const animate = (now: number) => {
-      const raw = Math.min(1, (now - start) / duration);
+      const raw = Math.max(0, Math.min(1, (now - start) / duration));
       const eased = 1 - Math.pow(1 - raw, 3);
       counts.forEach((node) => {
         const target = Number(node.dataset.count ?? 0);
@@ -65,7 +70,11 @@ export function DashboardMotion({
         donut.style.background = `conic-gradient(var(--accent) 0 ${share}%, #ffe49a 0 100%)`;
       }
       if (raw < 1) frame = requestAnimationFrame(animate);
-      else element.classList.remove("dashboard-animating");
+      else {
+        completed = true;
+        sessionStorage.setItem(storageKey, fingerprint);
+        element.classList.remove("dashboard-animating");
+      }
     };
     const reveal = requestAnimationFrame(() => {
       element.classList.add("dashboard-running");
@@ -81,6 +90,9 @@ export function DashboardMotion({
     return () => {
       cancelAnimationFrame(reveal);
       cancelAnimationFrame(frame);
+      element.classList.remove("dashboard-animating", "dashboard-running");
+      if (!completed && sessionStorage.getItem(storageKey) === fingerprint)
+        sessionStorage.removeItem(storageKey);
     };
   }, [fingerprint, locale]);
 

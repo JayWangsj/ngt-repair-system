@@ -127,6 +127,8 @@ describe("status and permissions", () => {
     expect(() => assertTransition("COMPLETED", "REPAIRING")).toThrow();
     expect(() => assertTransition("CANCELLED", "RECEIVED")).toThrow();
     expect(() => assertTransition("REPAIRING", "READY")).not.toThrow();
+    expect(() => assertTransition("REPAIRING", "PARTS_MISSING")).not.toThrow();
+    expect(() => assertTransition("PARTS_MISSING", "REPAIRING")).not.toThrow();
   });
   it("requires explicit owner confirmation for unpaid delivery", () => {
     expect(() => assertDelivery(staff, 100, true)).toThrow();

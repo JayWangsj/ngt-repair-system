@@ -152,7 +152,7 @@ test("dashboard animates once per data snapshot and respects reduced motion", as
   );
 });
 
-test("creates a real product and records an inventory movement", async ({
+test("creates and edits a product directly in the inventory row", async ({
   page,
 }) => {
   await page.goto("/inventory");
@@ -171,13 +171,62 @@ test("creates a real product and records an inventory movement", async ({
   const row = page.getByRole("row", { name: /Cavo USB-C E2E/ });
   await expect(row).toContainText("Vendita e riparazione");
   await expect(row).toContainText("4");
-  await row.getByRole("button", { name: "Movimento" }).click();
-  const movement = page.getByRole("dialog");
-  await movement.getByLabel("Variazione quantità").fill("5");
-  await movement.getByLabel("Nota").fill("Consegna E2E");
-  await movement.getByRole("button", { name: "Registra movimento" }).click();
-  await expect(row).toContainText("9");
-  await expect(page.getByText("Consegna E2E")).toBeVisible();
+  await row.click();
+  await row.getByLabel("+ Disponibilità").click();
+  await expect(row.getByLabel("Disponibilità", { exact: true })).toHaveValue(
+    "5",
+  );
+  await row.getByLabel("Prodotto frequente", { exact: true }).click();
+  await page
+    .getByRole("button", { name: "Gestisci selezione", exact: true })
+    .click();
+  await row.getByRole("checkbox").check();
+  await expect(
+    page.getByRole("button", { name: /Elimina prodotti selezionati/ }),
+  ).toContainText("(1)");
+});
+
+test("repair list exposes month, status, due-date and payment controls", async ({
+  page,
+}) => {
+  await fillOrder(page);
+  await save(page);
+  await page.goto("/orders");
+  await expect(page.locator('input[name="month"]')).toHaveValue(
+    /^\d{4}-\d{2}$/,
+  );
+  const status = page
+    .locator('select.status-select:has(option[value="PARTS_MISSING"])')
+    .first();
+  await expect(status).toBeVisible();
+  await status.selectOption("PARTS_MISSING");
+  await expect(status).toHaveClass(/status-parts_missing/);
+  const row = status.locator("xpath=ancestor::tr");
+  await expect(
+    row.getByLabel("Consegna prevista", { exact: true }),
+  ).toBeEnabled();
+  await expect(row.locator(".order-payment-trigger")).toHaveCount(1);
+});
+
+test("sales history defaults to one day and can switch to a whole month", async ({
+  page,
+}) => {
+  await page.goto("/retail/sales");
+  await expect(
+    page.getByRole("link", { name: /Vendita rapida/ }),
+  ).toBeVisible();
+  await expect(page.locator('select[name="mode"]')).toHaveValue("day");
+  await expect(page.locator('input[name="period"]')).toHaveAttribute(
+    "type",
+    "date",
+  );
+  await page.locator('select[name="mode"]').selectOption("month");
+  await page.getByRole("button", { name: "Filtra", exact: true }).click();
+  await expect(page.locator('select[name="mode"]')).toHaveValue("month");
+  await expect(page.locator('input[name="period"]')).toHaveAttribute(
+    "type",
+    "month",
+  );
 });
 
 test("completes a retail sale and opens its immutable receipt", async ({
@@ -419,12 +468,14 @@ test("confirms a new customer with three numbers and selects that customer by na
     page.getByText("Dati cliente confermati", { exact: true }),
   ).toBeVisible();
   await page.reload();
-  await page
-    .getByLabel("Seleziona Nome e cognome", { exact: true })
-    .selectOption({ label: "Tre telefoni · +39" + phone });
-  await expect(page.getByLabel("Telefono", { exact: true })).toHaveValue(
-    "+39" + phone,
-  );
+  await expect(async () => {
+    await page
+      .getByLabel("Seleziona Nome e cognome", { exact: true })
+      .selectOption({ label: "Tre telefoni · +39" + phone });
+    await expect(page.getByLabel("Telefono", { exact: true })).toHaveValue(
+      "+39" + phone,
+    );
+  }).toPass();
   await expect(page.getByLabel("Telefono 3", { exact: true })).toHaveValue(
     "+39338" + phone.slice(3),
   );
@@ -433,6 +484,7 @@ test("confirms a new customer with three numbers and selects that customer by na
     exact: true,
   });
   await expect(confirmCustomer).toBeDisabled();
+  await page.locator(".phone-row").last().hover();
   await page
     .getByRole("button", { name: "Rimuovi Telefono 3", exact: true })
     .last()
@@ -467,8 +519,10 @@ test("native quote choices populate prices, clear on model changes and discounts
 }) => {
   await page.goto("/orders/new");
   const deviceType = page.getByLabel("Tipo dispositivo", { exact: true });
-  await deviceType.selectOption("TABLET");
-  await expect(deviceType).toHaveValue("TABLET");
+  await expect(async () => {
+    await deviceType.selectOption("TABLET");
+    await expect(deviceType).toHaveValue("TABLET");
+  }).toPass();
   await page
     .getByLabel("Seleziona Marca", { exact: true })
     .selectOption("Apple");
@@ -555,11 +609,12 @@ test("customer list searches instantly, preserves navigation and supports compac
   await expect(
     page.getByRole("link", { name: "Torna ai clienti" }),
   ).toHaveAttribute("href", "/customers?q=" + phone);
-  await expect(page.locator("main input")).toHaveCount(0);
+  await expect(page.locator('main input:not([type="date"])')).toHaveCount(0);
   await expect(page.locator(".customer-device-row")).toHaveCount(1);
   await expect(
     page.getByRole("heading", { name: "Storico riparazioni" }),
   ).toBeVisible();
+  await page.locator(".customer-summary").hover();
   await page
     .getByRole("button", { name: "Modifica cliente", exact: true })
     .click();
@@ -584,6 +639,7 @@ test("customer list searches instantly, preserves navigation and supports compac
     "tel:" + storedPhone,
   );
   await expect(firstPhone.getByRole("button")).toHaveCount(0);
+  await page.locator(".customer-device-row").hover();
   await page
     .getByRole("button", { name: "Modifica dispositivo", exact: true })
     .click();
@@ -596,6 +652,7 @@ test("customer list searches instantly, preserves navigation and supports compac
   await expect(
     page.getByRole("button", { name: "Modifica dispositivo", exact: true }),
   ).toBeFocused();
+  await page.locator(".customer-device-row").hover();
   await page
     .getByRole("button", { name: "Modifica dispositivo", exact: true })
     .click();
@@ -632,6 +689,7 @@ test("customer list searches instantly, preserves navigation and supports compac
     path: "test-results/customer-list-mobile.png",
     fullPage: true,
   });
+  await row.hover();
   await row
     .getByRole("button", { name: "Modifica cliente", exact: true })
     .click();
@@ -665,6 +723,7 @@ test("customer list searches instantly, preserves navigation and supports compac
   await row.getByRole("link", { name, exact: true }).click();
   const device = page.locator(".customer-device-row");
   page.once("dialog", (d) => d.accept());
+  await device.hover();
   await device
     .getByRole("button", { name: "Elimina dispositivo", exact: true })
     .click();
@@ -676,11 +735,13 @@ test("customer list searches instantly, preserves navigation and supports compac
   await page.getByRole("link", { name: "Torna ai clienti" }).click();
   await expect(row.locator(".customer-device-count")).toContainText("0");
   page.once("dialog", (d) => d.dismiss());
+  await row.hover();
   await row
     .getByRole("button", { name: "Elimina cliente", exact: true })
     .click();
   await expect(row).toHaveCount(1);
   page.once("dialog", (d) => d.accept());
+  await row.hover();
   await row
     .getByRole("button", { name: "Elimina cliente", exact: true })
     .click();
@@ -704,6 +765,7 @@ test("customer page adds, edits and deletes a customer", async ({ page }) => {
   await page.getByRole("link", { name: "Da modificare", exact: true }).click();
   await expect(page).toHaveURL(/\/customers\/[^/]+$/);
   const summary = page.locator(".customer-summary");
+  await summary.hover();
   await summary
     .getByRole("button", { name: "Modifica cliente", exact: true })
     .click();
@@ -713,6 +775,7 @@ test("customer page adds, edits and deletes a customer", async ({ page }) => {
   await page.getByRole("button", { name: "Salva", exact: true }).click();
   await expect(page.locator("h1")).toHaveText("Cliente modificato");
   page.once("dialog", (d) => d.accept());
+  await summary.hover();
   await summary
     .getByRole("button", { name: "Elimina cliente", exact: true })
     .click();
@@ -745,6 +808,7 @@ test("customer dialog keeps filters and inputs on errors and allows deleted numb
   await expect(page).toHaveURL(/customers\?q=ModalCustomer$/);
   await page.getByRole("link", { name: "ModalCustomer", exact: true }).click();
   page.once("dialog", (d) => d.accept());
+  await page.locator(".customer-summary").hover();
   await page
     .getByRole("button", { name: "Elimina cliente", exact: true })
     .click();
@@ -819,10 +883,13 @@ test("quote tree supports contextual dialogs, search, editing and empty branch r
   await expect(model.locator("article")).toHaveCount(2);
   await page.getByLabel("Cerca", { exact: true }).fill("Test battery");
   await expect(page.locator(".rule-list > article")).toHaveCount(1);
-  await page.getByRole("button", { name: "Modifica", exact: true }).click();
-  await page.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("45");
-  await page.getByRole("button", { name: "Salva", exact: true }).click();
-  await expect(page.locator(".rule-price")).toContainText("45,00");
+  const directPrice = page.locator(".price-rule-row").first();
+  await directPrice.locator("button.inline-rule-suggested").click();
+  await directPrice.locator("input.inline-rule-suggested").fill("45");
+  await directPrice.locator("input.inline-rule-suggested").press("Enter");
+  await expect(
+    directPrice.locator("button.inline-rule-suggested"),
+  ).toContainText("45,00");
   await expect(page.getByLabel("Cerca", { exact: true })).toHaveValue(
     "Test battery",
   );
@@ -862,17 +929,17 @@ test("quote tree supports contextual dialogs, search, editing and empty branch r
   await expect(page.getByRole("dialog")).not.toBeVisible();
 });
 
-test("manages hidden faults and restores them", async ({ page }) => {
+test("deletes managed faults without offering restore", async ({ page }) => {
   await page.goto("/orders/new");
   await expect(
-    page.getByRole("button", { name: "Nascondi problema Display rotto" }),
+    page.getByRole("button", { name: "Elimina problema Display rotto" }),
   ).toHaveCount(0);
   await page
     .getByRole("button", { name: "Gestisci problemi", exact: true })
     .click();
   await page
     .getByRole("button", {
-      name: "Nascondi problema Display rotto",
+      name: "Elimina problema Display rotto",
       exact: true,
     })
     .click();
@@ -883,16 +950,9 @@ test("manages hidden faults and restores them", async ({ page }) => {
   await expect(page.getByLabel("Display rotto", { exact: true })).toHaveCount(
     0,
   );
-  await page
-    .getByRole("button", { name: "Gestisci problemi", exact: true })
-    .click();
-  await page
-    .getByRole("button", {
-      name: "Ripristina problema: Display rotto",
-      exact: true,
-    })
-    .click();
-  await expect(page.getByLabel("Display rotto", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Ripristina problema/ }),
+  ).toHaveCount(0);
 });
 
 test("compact price rows support direct icon actions and selection on mobile", async ({
@@ -904,48 +964,38 @@ test("compact price rows support direct icon actions and selection on mobile", a
   const row = rows.first();
   await expect(row).toBeVisible();
   await expect(page.getByRole("checkbox")).toHaveCount(0);
-  await expect(
-    page
-      .getByRole("button", { name: "Elimina preventivo", exact: true })
-      .first(),
-  ).toBeVisible();
+  const deleteButton = row.getByRole("button", {
+    name: "Elimina preventivo",
+    exact: true,
+  });
+  await expect(row.locator(".price-row-delete")).toHaveCSS("opacity", "0");
+  await row.hover();
+  await expect(row.locator(".price-row-delete")).toHaveCSS("opacity", "1");
   await expect(
     page.getByRole("button", { name: "Nuova regola", exact: true }),
   ).toHaveCount(1);
-  const originalPrice = await row.locator(".rule-price").innerText();
-  const edit = row.getByRole("button", { name: "Modifica", exact: true });
-  await edit.click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("999");
-  await dialog.getByRole("button", { name: "Annulla", exact: true }).click();
-  await expect(dialog).not.toBeVisible();
-  await expect(edit).toBeFocused();
-  await expect(row.locator(".rule-price")).toHaveText(originalPrice);
-  await edit.click();
-  await dialog.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("bad");
-  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
-  await expect(dialog.getByRole("alert")).toBeVisible();
   const longName =
     "Sostituzione componente con descrizione molto lunga per verifica mobile";
-  await dialog.getByLabel("Intervento", { exact: true }).fill(longName);
-  await dialog
-    .getByLabel("Prezzo suggerito (€)", { exact: true })
-    .fill("123.45");
-  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
-  await expect(dialog).not.toBeVisible();
+  await row.locator("button.inline-rule-project").click();
+  await row.locator("input.inline-rule-project").fill(longName);
+  await row.locator("input.inline-rule-project").press("Enter");
+  const changed = rows.filter({ hasText: longName });
+  await expect(changed.locator("button.inline-rule-project")).toHaveCount(1);
+  await changed.locator("button.inline-rule-suggested").click();
+  await changed.locator("input.inline-rule-suggested").fill("123.45");
+  await changed.locator("input.inline-rule-suggested").press("Enter");
   await expect(page.getByLabel("Cerca", { exact: true })).toHaveValue(
     "iPhone 13",
   );
-  const changed = rows.filter({ hasText: longName });
-  await expect(changed.locator(".price-rule-name")).toHaveCount(1);
-  await expect(changed.locator(".rule-price")).toContainText("123,45");
+  await expect(changed.locator("button.inline-rule-suggested")).toContainText(
+    "123,45",
+  );
   await expect(
     changed.getByRole("button", { name: "Elimina preventivo", exact: true }),
   ).toBeVisible();
   await expect(
     changed.getByRole("button", { name: /^Altre azioni/ }),
   ).toHaveCount(0);
-  await expect(edit.locator("svg")).toHaveCount(1);
   await page
     .getByRole("button", { name: "Gestisci selezione", exact: true })
     .click();
@@ -964,9 +1014,7 @@ test("compact price rows support direct icon actions and selection on mobile", a
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
-  await expect(
-    changed.getByRole("button", { name: "Modifica", exact: true }),
-  ).toBeInViewport();
+  await expect(changed.locator("button.inline-rule-project")).toBeInViewport();
   await page.screenshot({
     path: "test-results/compact-prices-mobile.png",
     fullPage: true,
@@ -997,14 +1045,21 @@ test("price editor supports individual and batch deletion", async ({
   await page.getByRole("button", { name: "Apple", exact: true }).click();
   await page.getByRole("button", { name: "Telefono", exact: true }).click();
   await page.getByRole("button", { name: "iPhone 13", exact: true }).click();
-  const before = await page.locator(".rule-list > article").count();
-  expect(before).toBeGreaterThan(1);
+  await page.getByRole("button", { name: "Intervento", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Intervento", { exact: true }).fill("Da eliminare");
+  await dialog.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("25");
+  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+  const removable = page
+    .locator(".price-rule-row")
+    .filter({ hasText: "Da eliminare" });
+  await expect(removable).toBeVisible();
   page.once("dialog", (d) => d.accept());
-  await page
+  await removable.hover();
+  await removable
     .getByRole("button", { name: "Elimina preventivo", exact: true })
-    .first()
     .click();
-  await expect(page.locator(".rule-list > article")).toHaveCount(before - 1);
+  await expect(removable).toHaveCount(0);
   await page
     .getByRole("button", { name: "Gestisci selezione", exact: true })
     .click();
@@ -1020,6 +1075,15 @@ test("settings exports data and re-import skips existing records", async ({
   page,
 }) => {
   await page.goto("/settings");
+  await page.evaluate(() =>
+    Object.defineProperty(window, "showSaveFilePicker", {
+      configurable: true,
+      value: undefined,
+    }),
+  );
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Esporta dati", exact: true }).click();
+  expect((await download).suggestedFilename()).toMatch(/^ngt-backup-.*\.json$/);
   const exported = await page.request.get("/api/data/export");
   expect(exported.ok()).toBe(true);
   expect(exported.headers()["content-disposition"]).toContain("ngt-backup-");

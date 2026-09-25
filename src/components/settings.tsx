@@ -14,6 +14,60 @@ export function SettingsTools() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  async function exportFile() {
+    setPending(true);
+    setMessage("");
+    setError("");
+    try {
+      const response = await fetch("/api/data/export");
+      if (!response.ok) throw new Error(it.connectionError);
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      const filename =
+        disposition.match(/filename="([^"]+)"/)?.[1] ?? "ngt-backup.json";
+      const picker = (
+        window as typeof window & {
+          showSaveFilePicker?: (options: {
+            suggestedName: string;
+            types: { description: string; accept: Record<string, string[]> }[];
+          }) => Promise<{
+            createWritable: () => Promise<{
+              write: (value: Blob) => Promise<void>;
+              close: () => Promise<void>;
+            }>;
+          }>;
+        }
+      ).showSaveFilePicker;
+      if (picker) {
+        const handle = await picker({
+          suggestedName: filename,
+          types: [
+            {
+              description: "Backup JSON",
+              accept: { "application/json": [".json"] },
+            },
+          ],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+      } else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+      setMessage(it.exportData);
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === "AbortError") return;
+      setError(cause instanceof Error ? cause.message : it.connectionError);
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function importFile(file: File) {
     setPending(true);
     setMessage("");
@@ -76,11 +130,14 @@ export function SettingsTools() {
             <strong>{it.exportData}</strong>
             <p>{it.exportHelp}</p>
           </div>
-          <Button asChild variant="outline">
-            <a href="/api/data/export">
-              <Download size={17} />
-              {it.exportData}
-            </a>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={() => void exportFile()}
+          >
+            <Download size={17} />
+            {it.exportData}
           </Button>
         </div>
         <div className="settings-action">

@@ -197,7 +197,11 @@ export function RetailWorkbench({ products }: { products: RetailProduct[] }) {
             );
           })}
           <div className="retail-new-product">
-            <NewProductDialogButton />
+            <NewProductDialogButton
+              categories={[
+                ...new Set(products.map((product) => product.category)),
+              ]}
+            />
           </div>
         </div>
       </section>
@@ -225,6 +229,7 @@ export function RetailWorkbench({ products }: { products: RetailProduct[] }) {
                   <small>{money(item.salePrice)}</small>
                 </div>
                 <button
+                  className="retail-remove"
                   aria-label={`${it.retail.remove} ${item.name}`}
                   onClick={() => setQuantity(item, 0)}
                 >

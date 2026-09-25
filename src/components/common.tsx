@@ -4,6 +4,7 @@ import type {
   Device,
   Customer,
   WorkOrderItem,
+  WorkOrderProduct,
   Payment,
 } from "@prisma/client";
 import { Plus, Wrench, ChevronRight } from "lucide-react";
@@ -74,6 +75,7 @@ export async function Empty({ text }: { text?: string }) {
 type Row = WorkOrder & {
   device: Device & { customer: Customer };
   items: WorkOrderItem[];
+  products: WorkOrderProduct[];
   payments: Payment[];
 };
 export async function OrderTable({

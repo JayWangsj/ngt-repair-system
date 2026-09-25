@@ -5,6 +5,7 @@ import {
   assertOwner,
   assertTransition,
   balance,
+  allocatePayment,
   BusinessError,
   cents,
   decimal,
@@ -24,6 +25,8 @@ import {
   productInput,
   inventoryAdjustmentInput,
   retailSaleInput,
+  workOrderProductInput,
+  checkoutInput,
   ruleInput,
   statusInput,
   userInput,
@@ -36,7 +39,11 @@ type Tx = Prisma.TransactionClient;
 export const orderInclude = {
   device: { include: { customer: true } },
   items: true,
-  payments: { orderBy: { receivedAt: "asc" as const } },
+  products: true,
+  payments: {
+    orderBy: { receivedAt: "asc" as const },
+    include: { allocations: true },
+  },
   history: { orderBy: { createdAt: "asc" as const } },
 };
 export async function transact<T>(
@@ -346,7 +353,10 @@ export async function replaceQuote(
       order.items,
     );
     const options = parsed ?? order;
-    if (balance(items, order.payments, options) < 0)
+    if (
+      balance(items, order.payments, { ...options, products: order.products }) <
+      0
+    )
       throw new BusinessError(
         "Il nuovo totale è inferiore agli incassi già registrati.",
       );
@@ -433,12 +443,34 @@ export async function addPayment(actorInput: Actor, id: string, raw: unknown) {
     }
     const order = await tx.workOrder.findUniqueOrThrow({
       where: { id },
-      include: { items: true, payments: true },
+      include: {
+        items: true,
+        products: true,
+        payments: { include: { allocations: true } },
+      },
     });
     if (order.status === "CANCELLED")
       throw new BusinessError("La scheda è annullata.");
     if (amount > balance(order.items, order.payments, order))
       throw new BusinessError("L'importo supera il saldo da pagare.");
+    const repairDue = settlement(order.items, {
+      orderDiscount: order.orderDiscount,
+      includeVat: order.includeVat,
+    }).due;
+    const retailDue = settlement([], { products: order.products }).productTotal;
+    const repairPaid = order.payments
+      .flatMap((payment) => payment.allocations)
+      .filter((allocation) => allocation.source === "REPAIR")
+      .reduce((sum, allocation) => sum + cents(allocation.amount), 0);
+    const retailPaid = order.payments
+      .flatMap((payment) => payment.allocations)
+      .filter((allocation) => allocation.source === "RETAIL")
+      .reduce((sum, allocation) => sum + cents(allocation.amount), 0);
+    const allocation = allocatePayment(
+      amount,
+      Math.max(0, repairDue - repairPaid),
+      Math.max(0, retailDue - retailPaid),
+    );
     const payment = await tx.payment.create({
       data: {
         ...data,
@@ -447,7 +479,24 @@ export async function addPayment(actorInput: Actor, id: string, raw: unknown) {
         actorId: actor.id,
         actorName: actor.name,
         allocations: {
-          create: { source: "REPAIR", amount: decimal(amount) },
+          create: [
+            ...(allocation.repair
+              ? [
+                  {
+                    source: "REPAIR" as const,
+                    amount: decimal(allocation.repair),
+                  },
+                ]
+              : []),
+            ...(allocation.retail
+              ? [
+                  {
+                    source: "RETAIL" as const,
+                    amount: decimal(allocation.retail),
+                  },
+                ]
+              : []),
+          ],
         },
       },
     });
@@ -470,7 +519,7 @@ export async function changeStatus(
     const actor = await currentActor(tx, actorInput);
     const order = await tx.workOrder.findUniqueOrThrow({
       where: { id },
-      include: { items: true, payments: true },
+      include: { items: true, products: true, payments: true },
     });
     assertTransition(order.status, data.status);
 
@@ -487,6 +536,10 @@ export async function changeStatus(
         data.override,
       );
     }
+    if (data.status === "READY")
+      await consumeWorkOrderProducts(tx, actor, id, "REPAIR_PART");
+    if (data.status === "COMPLETED")
+      await consumeWorkOrderProducts(tx, actor, id, "RETAIL_ADDON");
     await tx.workOrder.update({
       where: { id },
       data: {
@@ -625,6 +678,32 @@ export async function applyInventoryMovement(
   });
 }
 
+async function consumeWorkOrderProducts(
+  tx: Tx,
+  actor: Actor,
+  orderId: string,
+  kind: "REPAIR_PART" | "RETAIL_ADDON",
+) {
+  const lines = await tx.workOrderProduct.findMany({
+    where: { orderId, kind, consumedAt: null },
+  });
+  const consumedAt = new Date();
+  for (const line of lines) {
+    await applyInventoryMovement(tx, actor, {
+      requestId: `work-order-product:${line.id}`,
+      productId: line.productId,
+      quantity: -line.quantity,
+      type: kind === "REPAIR_PART" ? "REPAIR_USE" : "RETAIL_SALE",
+      referenceType: "WORK_ORDER",
+      referenceId: orderId,
+    });
+    await tx.workOrderProduct.update({
+      where: { id: line.id },
+      data: { consumedAt },
+    });
+  }
+}
+
 export async function createProduct(actorInput: Actor, raw: unknown) {
   const data = productInput.parse(raw);
   return transact(async (tx) => {
@@ -686,6 +765,228 @@ export async function adjustInventory(
       type: movement.type,
     });
     return movement;
+  });
+}
+
+export async function addWorkOrderProduct(
+  actorInput: Actor,
+  orderId: string,
+  raw: unknown,
+) {
+  const data = workOrderProductInput.parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const order = await tx.workOrder.findUniqueOrThrow({
+      where: { id: orderId },
+    });
+    if (["COMPLETED", "CANCELLED"].includes(order.status))
+      throw new BusinessError("La scheda è chiusa.");
+    if (data.kind === "REPAIR_PART" && order.status === "READY")
+      throw new BusinessError("I ricambi sono già stati contabilizzati.");
+    const product = await tx.product.findFirst({
+      where: {
+        id: data.productId,
+        enabled: true,
+        usage: {
+          in:
+            data.kind === "REPAIR_PART"
+              ? ["REPAIR", "BOTH"]
+              : ["RETAIL", "BOTH"],
+        },
+      },
+    });
+    if (!product) throw new BusinessError("Prodotto non disponibile.");
+    const existing = await tx.workOrderProduct.findUnique({
+      where: {
+        orderId_productId_kind: {
+          orderId,
+          productId: product.id,
+          kind: data.kind,
+        },
+      },
+    });
+    if (existing?.consumedAt)
+      throw new BusinessError("Il movimento di magazzino è già registrato.");
+    const line = await tx.workOrderProduct.upsert({
+      where: {
+        orderId_productId_kind: {
+          orderId,
+          productId: product.id,
+          kind: data.kind,
+        },
+      },
+      create: {
+        orderId,
+        productId: product.id,
+        productName: product.name,
+        category: product.category,
+        kind: data.kind,
+        unitPrice:
+          data.kind === "RETAIL_ADDON" ? product.salePrice : decimal(0),
+        quantity: data.quantity,
+      },
+      update: {
+        quantity: data.quantity,
+        productName: product.name,
+        category: product.category,
+        unitPrice:
+          data.kind === "RETAIL_ADDON" ? product.salePrice : decimal(0),
+      },
+    });
+    await audit(tx, actor, orderId, "WORK_ORDER_PRODUCT_SAVED", {
+      lineId: line.id,
+      productId: product.id,
+      kind: data.kind,
+      quantity: data.quantity,
+    });
+    return line;
+  });
+}
+
+export async function removeWorkOrderProduct(
+  actorInput: Actor,
+  orderId: string,
+  lineId: string,
+) {
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const line = await tx.workOrderProduct.findFirstOrThrow({
+      where: { id: lineId, orderId },
+      include: { order: true },
+    });
+    if (line.consumedAt)
+      throw new BusinessError("Il movimento di magazzino è già registrato.");
+    if (["COMPLETED", "CANCELLED"].includes(line.order.status))
+      throw new BusinessError("La scheda è chiusa.");
+    await tx.workOrderProduct.delete({ where: { id: line.id } });
+    await audit(tx, actor, orderId, "WORK_ORDER_PRODUCT_REMOVED", {
+      lineId,
+      productId: line.productId,
+    });
+  });
+}
+
+export async function checkoutWorkOrder(
+  actorInput: Actor,
+  orderId: string,
+  raw: unknown,
+) {
+  const data = checkoutInput.parse(raw);
+  const amount = cents(data.amount);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const previousCheckout = await tx.auditLog.findFirst({
+      where: {
+        action: "ORDER_CHECKED_OUT",
+        context: { path: ["requestId"], equals: data.requestId },
+      },
+    });
+    if (previousCheckout) {
+      if (previousCheckout.entityId !== orderId)
+        throw new BusinessError("Richiesta di pagamento già utilizzata.");
+      return tx.workOrder.findUniqueOrThrow({ where: { id: orderId } });
+    }
+    const existing = await tx.payment.findUnique({
+      where: { requestId: data.requestId },
+    });
+    if (existing) {
+      if (existing.orderId !== orderId || cents(existing.amount) !== amount)
+        throw new BusinessError("Richiesta di pagamento già utilizzata.");
+      return tx.workOrder.findUniqueOrThrow({ where: { id: orderId } });
+    }
+    const order = await tx.workOrder.findUniqueOrThrow({
+      where: { id: orderId },
+      include: {
+        items: true,
+        products: true,
+        payments: { include: { allocations: true } },
+      },
+    });
+    if (order.status !== "READY")
+      throw new BusinessError("La riparazione non è pronta per la consegna.");
+    const remaining = balance(order.items, order.payments, order);
+    if (amount > remaining)
+      throw new BusinessError("L'importo supera il saldo da pagare.");
+    assertDelivery(actor, remaining - amount, data.override);
+    if (amount > 0) {
+      const repairDue = settlement(order.items, {
+        orderDiscount: order.orderDiscount,
+        includeVat: order.includeVat,
+      }).due;
+      const retailDue = settlement([], {
+        products: order.products,
+      }).productTotal;
+      const repairPaid = order.payments
+        .flatMap((payment) => payment.allocations)
+        .filter((allocation) => allocation.source === "REPAIR")
+        .reduce((sum, allocation) => sum + cents(allocation.amount), 0);
+      const retailPaid = order.payments
+        .flatMap((payment) => payment.allocations)
+        .filter((allocation) => allocation.source === "RETAIL")
+        .reduce((sum, allocation) => sum + cents(allocation.amount), 0);
+      const allocation = allocatePayment(
+        amount,
+        Math.max(0, repairDue - repairPaid),
+        Math.max(0, retailDue - retailPaid),
+      );
+      await tx.payment.create({
+        data: {
+          requestId: data.requestId,
+          orderId,
+          amount: decimal(amount),
+          method: data.method,
+          kind: "BALANCE",
+          actorId: actor.id,
+          actorName: actor.name,
+          allocations: {
+            create: [
+              ...(allocation.repair
+                ? [
+                    {
+                      source: "REPAIR" as const,
+                      amount: decimal(allocation.repair),
+                    },
+                  ]
+                : []),
+              ...(allocation.retail
+                ? [
+                    {
+                      source: "RETAIL" as const,
+                      amount: decimal(allocation.retail),
+                    },
+                  ]
+                : []),
+            ],
+          },
+        },
+      });
+    }
+    await consumeWorkOrderProducts(tx, actor, orderId, "RETAIL_ADDON");
+    await tx.workOrder.update({
+      where: { id: orderId },
+      data: {
+        status: "COMPLETED",
+        pickedUpAt: new Date(),
+        pickedUpBy: data.pickedUpBy,
+      },
+    });
+    await tx.statusHistory.create({
+      data: {
+        orderId,
+        from: "READY",
+        to: "COMPLETED",
+        actorId: actor.id,
+        actorName: actor.name,
+        note: "",
+      },
+    });
+    await audit(tx, actor, orderId, "ORDER_CHECKED_OUT", {
+      amount: decimal(amount),
+      requestId: data.requestId,
+      method: amount > 0 ? data.method : null,
+      unpaidOverride: remaining - amount > 0,
+    });
+    return tx.workOrder.findUniqueOrThrow({ where: { id: orderId } });
   });
 }
 

@@ -16,6 +16,7 @@ export default async function Orders({
     include: {
       device: { include: { customer: true } },
       items: true,
+      products: true,
       payments: true,
     },
     orderBy: { createdAt: "desc" },

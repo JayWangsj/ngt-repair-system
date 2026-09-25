@@ -26,6 +26,7 @@ export default async function Dashboard() {
     include: {
       device: { include: { customer: true } },
       items: true,
+      products: true,
       payments: true,
     },
     orderBy: { createdAt: "desc" },

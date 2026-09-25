@@ -156,6 +156,21 @@ export const it = {
     noSales: "Nessuna vendita registrata.",
     itemsSold: "articoli",
   },
+  orderProducts: {
+    title: "Prodotti e ricambi",
+    description:
+      "I ricambi vengono scaricati quando la riparazione è pronta; gli articoli aggiuntivi alla consegna.",
+    repairParts: "Ricambi usati",
+    retailAddons: "Articoli aggiuntivi",
+    add: "Aggiungi prodotto",
+    product: "Prodotto",
+    quantity: "Quantità",
+    included: "Incluso nell'intervento",
+    consumed: "Scaricato dal magazzino",
+    empty: "Nessun prodotto collegato.",
+    checkout: "Incassa e consegna",
+    checkoutDescription: "Registra l'incasso residuo e completa la consegna.",
+  },
   kinds: {
     DEPOSIT: "Acconto",
     BALANCE: "Saldo",

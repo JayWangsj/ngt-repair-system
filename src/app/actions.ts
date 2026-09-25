@@ -72,6 +72,18 @@ export async function createRetailSaleAction(input: unknown) {
   const actor = await requireActor();
   return execute(() => service.createRetailSale(actor, input));
 }
+export async function addWorkOrderProductAction(id: string, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.addWorkOrderProduct(actor, id, input));
+}
+export async function removeWorkOrderProductAction(id: string, lineId: string) {
+  const actor = await requireActor();
+  return execute(() => service.removeWorkOrderProduct(actor, id, lineId));
+}
+export async function checkoutWorkOrderAction(id: string, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.checkoutWorkOrder(actor, id, input));
+}
 export async function statusAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.changeStatus(actor, id, input));

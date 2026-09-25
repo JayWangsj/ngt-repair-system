@@ -129,6 +129,18 @@ export const retailSaleInput = z.object({
   discount: amountInput.default("0"),
   method: z.enum(["CASH", "CARD", "OTHER"]),
 });
+export const workOrderProductInput = z.object({
+  productId: z.string().min(1),
+  kind: z.enum(["REPAIR_PART", "RETAIL_ADDON"]),
+  quantity: z.coerce.number().int().min(1).max(999),
+});
+export const checkoutInput = z.object({
+  requestId: z.string().uuid(),
+  amount: amountInput.default("0"),
+  method: z.enum(["CASH", "CARD", "OTHER"]),
+  pickedUpBy: short,
+  override: z.boolean().default(false),
+});
 export const statusInput = z.object({
   status: z.enum(statuses),
   note: text,

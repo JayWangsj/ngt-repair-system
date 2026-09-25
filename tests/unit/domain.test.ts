@@ -3,6 +3,7 @@ import {
   assertDelivery,
   assertOwner,
   assertTransition,
+  allocatePayment,
   balance,
   cents,
   decimal,
@@ -11,6 +12,7 @@ import {
   matchRule,
   normalizePhone,
   romeDay,
+  settlement,
   total,
 } from "@/lib/domain";
 import { orderInput, paymentInput, ruleInput } from "@/lib/validation";
@@ -27,6 +29,17 @@ describe("integer money", () => {
     "rejects invalid money %s",
     (value) => expect(() => cents(value)).toThrow(),
   );
+  it("keeps product prices tax-inclusive and allocates mixed payments", () => {
+    const result = settlement([{ final: "100" }], {
+      includeVat: true,
+      products: [{ unitPrice: "15", quantity: 2 }],
+    });
+    expect(result).toMatchObject({ vat: 2200, productTotal: 3000, due: 15200 });
+    expect(allocatePayment(9500, 8000, 1500)).toEqual({
+      repair: 8000,
+      retail: 1500,
+    });
+  });
 });
 
 describe("inventory status", () => {

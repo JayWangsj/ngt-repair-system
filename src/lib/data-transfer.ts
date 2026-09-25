@@ -10,6 +10,7 @@ import type {
   RetailSale,
   RetailSaleItem,
   PaymentAllocation,
+  WorkOrderProduct,
   PriceRule,
   StatusHistory,
   WorkOrder,
@@ -21,7 +22,7 @@ import { BusinessError, type Actor } from "./domain";
 import { normalizeBrand, normalizeModel } from "./catalog";
 
 export const BACKUP_FORMAT = "ngt-repair-data";
-export const BACKUP_VERSION = 3;
+export const BACKUP_VERSION = 4;
 
 type JsonRow<T> = {
   [K in keyof T]: T[K] extends Date
@@ -50,6 +51,7 @@ type BackupData = {
   retailSales: JsonRow<RetailSale>[];
   retailSaleItems: JsonRow<RetailSaleItem>[];
   paymentAllocations: JsonRow<PaymentAllocation>[];
+  workOrderProducts: JsonRow<WorkOrderProduct>[];
 };
 export type BackupFile = {
   format: typeof BACKUP_FORMAT;
@@ -96,12 +98,15 @@ function ensureBackup(value: unknown): BackupFile {
     (candidate.data as Partial<BackupData>).retailSaleItems ?? [];
   const paymentAllocations =
     (candidate.data as Partial<BackupData>).paymentAllocations ?? [];
+  const workOrderProducts =
+    (candidate.data as Partial<BackupData>).workOrderProducts ?? [];
   if (
     !Array.isArray(products) ||
     !Array.isArray(inventoryMovements) ||
     !Array.isArray(retailSales) ||
     !Array.isArray(retailSaleItems) ||
-    !Array.isArray(paymentAllocations)
+    !Array.isArray(paymentAllocations) ||
+    !Array.isArray(workOrderProducts)
   )
     throw new BusinessError("File di backup incompleto.");
   return {
@@ -113,6 +118,7 @@ function ensureBackup(value: unknown): BackupFile {
       retailSales,
       retailSaleItems,
       paymentAllocations,
+      workOrderProducts,
     },
   };
 }
@@ -141,6 +147,7 @@ export async function exportBusinessData(): Promise<BackupFile> {
     retailSales,
     retailSaleItems,
     paymentAllocations,
+    workOrderProducts,
   ] = await Promise.all([
     db.customer.findMany({ orderBy: { createdAt: "asc" } }),
     db.customerPhone.findMany({ orderBy: { phone: "asc" } }),
@@ -164,6 +171,7 @@ export async function exportBusinessData(): Promise<BackupFile> {
     db.retailSale.findMany({ orderBy: { number: "asc" } }),
     db.retailSaleItem.findMany({ orderBy: { id: "asc" } }),
     db.paymentAllocation.findMany({ orderBy: { id: "asc" } }),
+    db.workOrderProduct.findMany({ orderBy: { id: "asc" } }),
   ]);
   const data = JSON.parse(
     JSON.stringify({
@@ -182,6 +190,7 @@ export async function exportBusinessData(): Promise<BackupFile> {
       retailSales,
       retailSaleItems,
       paymentAllocations,
+      workOrderProducts,
     }),
   ) as BackupData;
   return {
@@ -200,6 +209,7 @@ export async function clearBusinessData(actor: Actor) {
     await tx.payment.deleteMany();
     await tx.retailSaleItem.deleteMany();
     await tx.retailSale.deleteMany();
+    await tx.workOrderProduct.deleteMany();
     await tx.inventoryMovement.deleteMany();
     await tx.product.deleteMany();
     await tx.statusHistory.deleteMany();
@@ -535,6 +545,38 @@ export async function importBusinessData(
             matchLevel: source.matchLevel,
             adjustmentReason: source.adjustmentReason,
             minutes: source.minutes,
+          },
+        });
+        imported++;
+      }
+    }
+    for (const source of backup.data.workOrderProducts) {
+      const orderId = orderIds.get(source.orderId);
+      const product = await tx.product.findUnique({
+        where: { id: source.productId },
+      });
+      if (!orderId || !product) {
+        skipped++;
+        continue;
+      }
+      const exists = await tx.workOrderProduct.findUnique({
+        where: { id: source.id },
+      });
+      if (exists) skipped++;
+      else {
+        await tx.workOrderProduct.create({
+          data: {
+            id: source.id,
+            orderId,
+            productId: source.productId,
+            productName: source.productName,
+            category: source.category,
+            kind: source.kind,
+            unitPrice: source.unitPrice,
+            discount: source.discount,
+            quantity: source.quantity,
+            consumedAt: date(source.consumedAt),
+            createdAt: date(source.createdAt) ?? new Date(),
           },
         });
         imported++;

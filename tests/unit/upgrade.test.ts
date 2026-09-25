@@ -14,6 +14,7 @@ describe("discounts and fixed IVA", () => {
       net: 13500,
       vat: 2970,
       withVat: 16470,
+      productTotal: 0,
       due: 13500,
     });
     expect(

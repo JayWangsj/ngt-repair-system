@@ -27,6 +27,7 @@ export default async function CustomerDetail({
     include: {
       device: { include: { customer: true } },
       items: true,
+      products: true,
       payments: true,
     },
     orderBy: { createdAt: "desc" },

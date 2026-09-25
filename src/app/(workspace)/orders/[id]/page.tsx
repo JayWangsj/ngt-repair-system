@@ -23,6 +23,10 @@ import {
   QuoteSummary,
 } from "@/components/forms";
 import { getLocale, getMessages } from "@/lib/i18n-server";
+import {
+  WorkOrderCheckout,
+  WorkOrderProducts,
+} from "@/components/work-order-products";
 export default async function Detail({
   params,
 }: {
@@ -36,7 +40,13 @@ export default async function Detail({
     include: orderInclude,
   });
   if (!order) notFound();
-  const rules = await db.priceRule.findMany({ where: { enabled: true } });
+  const [rules, products] = await Promise.all([
+    db.priceRule.findMany({ where: { enabled: true } }),
+    db.product.findMany({
+      where: { enabled: true },
+      orderBy: [{ favorite: "desc" }, { name: "asc" }],
+    }),
+  ]);
   const remaining = balance(order.items, order.payments, order);
   const closed = ["COMPLETED", "CANCELLED"].includes(order.status);
   return (
@@ -107,6 +117,26 @@ export default async function Detail({
               </p>
             )}
           </section>
+          <WorkOrderProducts
+            orderId={id}
+            closed={closed}
+            products={products.map((product) => ({
+              id: product.id,
+              name: product.name,
+              category: product.category,
+              usage: product.usage,
+              salePrice: product.salePrice.toString(),
+              stock: product.stockQuantity,
+            }))}
+            lines={order.products.map((line) => ({
+              id: line.id,
+              productName: line.productName,
+              kind: line.kind,
+              unitPrice: line.unitPrice.toString(),
+              quantity: line.quantity,
+              consumedAt: line.consumedAt?.toISOString() ?? null,
+            }))}
+          />
           <section className="panel padded">
             <h2>{it.quote}</h2>
             <div className="table-scroll">
@@ -212,6 +242,17 @@ export default async function Detail({
             <strong>{money(remaining)}</strong>
             <div>
               <span>
+                {it.orderProducts.repairParts}:{" "}
+                {money(
+                  settlement(order.items, order).due -
+                    settlement(order.items, order).productTotal,
+                )}
+              </span>
+              <span>
+                {it.orderProducts.retailAddons}:{" "}
+                {money(settlement(order.items, order).productTotal)}
+              </span>
+              <span>
                 {it.total}: {money(settlement(order.items, order).due)}
               </span>
               <span>
@@ -222,15 +263,48 @@ export default async function Detail({
           </section>
           {!closed && (
             <section className="panel padded">
-              <h2>{it.updateStatus}</h2>
-              <StatusForm
-                customerName={order.customerName || order.device.customer.name}
-                key={order.status}
-                id={id}
-                status={order.status}
-                remaining={remaining}
-                owner={actor.role === "OWNER"}
-              />
+              <h2>
+                {order.status === "READY"
+                  ? it.orderProducts.checkout
+                  : it.updateStatus}
+              </h2>
+              {order.status === "READY" ? (
+                <>
+                  <WorkOrderCheckout
+                    orderId={id}
+                    remaining={remaining}
+                    customerName={
+                      order.customerName || order.device.customer.name
+                    }
+                    owner={actor.role === "OWNER"}
+                  />
+                  <details className="secondary-status-action">
+                    <summary>{it.updateStatus}</summary>
+                    <StatusForm
+                      customerName={
+                        order.customerName || order.device.customer.name
+                      }
+                      key={order.status}
+                      id={id}
+                      status={order.status}
+                      remaining={remaining}
+                      owner={actor.role === "OWNER"}
+                      allowCompletion={false}
+                    />
+                  </details>
+                </>
+              ) : (
+                <StatusForm
+                  customerName={
+                    order.customerName || order.device.customer.name
+                  }
+                  key={order.status}
+                  id={id}
+                  status={order.status}
+                  remaining={remaining}
+                  owner={actor.role === "OWNER"}
+                />
+              )}
             </section>
           )}
           <section className="panel padded">
@@ -250,9 +324,10 @@ export default async function Detail({
             ) : (
               <p className="muted">{it.noPayments}</p>
             )}
-            {remaining > 0 && order.status !== "CANCELLED" && (
-              <PaymentForm key={remaining} id={id} remaining={remaining} />
-            )}
+            {remaining > 0 &&
+              !["READY", "CANCELLED"].includes(order.status) && (
+                <PaymentForm key={remaining} id={id} remaining={remaining} />
+              )}
           </section>
         </div>
       </div>

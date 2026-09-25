@@ -12,6 +12,8 @@ import {
   hideFault,
   restoreFault,
   addPayment,
+  addWorkOrderProduct,
+  checkoutWorkOrder,
   changeStatus,
   createProduct,
   createRetailSale,
@@ -60,6 +62,7 @@ beforeAll(async () => {
   await db.retailSaleItem.deleteMany();
   await db.retailSale.deleteMany();
   await db.inventoryMovement.deleteMany();
+  await db.workOrderProduct.deleteMany();
   await db.product.deleteMany();
   await db.statusHistory.deleteMany();
   await db.workOrderItem.deleteMany();
@@ -93,6 +96,7 @@ beforeEach(async () => {
   await db.retailSaleItem.deleteMany();
   await db.retailSale.deleteMany();
   await db.inventoryMovement.deleteMany();
+  await db.workOrderProduct.deleteMany();
   await db.product.deleteMany();
   await db.statusHistory.deleteMany();
   await db.workOrderItem.deleteMany();
@@ -860,6 +864,128 @@ describe("unified product inventory", () => {
   });
 });
 
+describe("work order products and combined checkout", () => {
+  it("deducts repair parts at READY once and allocates combined payment", async () => {
+    const part = await createProduct(staff, {
+      requestId: randomUUID(),
+      name: "Display OLED test",
+      category: "Schermi",
+      usage: "REPAIR",
+      costPrice: "40",
+      salePrice: "80",
+      initialStock: 3,
+      minStock: 1,
+    });
+    const addon = await createProduct(staff, {
+      requestId: randomUUID(),
+      name: "Vetro aggiuntivo test",
+      category: "Pellicole",
+      usage: "BOTH",
+      costPrice: "2",
+      salePrice: "15",
+      initialStock: 5,
+      minStock: 1,
+    });
+    const order = await createOrder(staff, input());
+    await addWorkOrderProduct(staff, order.id, {
+      productId: part.id,
+      kind: "REPAIR_PART",
+      quantity: 1,
+    });
+    await addWorkOrderProduct(staff, order.id, {
+      productId: addon.id,
+      kind: "RETAIL_ADDON",
+      quantity: 1,
+    });
+    await changeStatus(staff, order.id, { status: "REPAIRING" });
+    await changeStatus(staff, order.id, { status: "READY" });
+    expect(
+      (await db.product.findUniqueOrThrow({ where: { id: part.id } }))
+        .stockQuantity,
+    ).toBe(2);
+    expect(
+      (await db.product.findUniqueOrThrow({ where: { id: addon.id } }))
+        .stockQuantity,
+    ).toBe(5);
+
+    await changeStatus(staff, order.id, { status: "REPAIRING" });
+    await changeStatus(staff, order.id, { status: "READY" });
+    expect(
+      (await db.product.findUniqueOrThrow({ where: { id: part.id } }))
+        .stockQuantity,
+    ).toBe(2);
+
+    await checkoutWorkOrder(staff, order.id, {
+      requestId: randomUUID(),
+      amount: "95",
+      method: "CARD",
+      pickedUpBy: "Test Cliente",
+    });
+    const completed = await db.workOrder.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { payments: { include: { allocations: true } } },
+    });
+    expect(completed.status).toBe("COMPLETED");
+    expect(
+      (await db.product.findUniqueOrThrow({ where: { id: addon.id } }))
+        .stockQuantity,
+    ).toBe(4);
+    const allocations = completed.payments
+      .flatMap((payment) => payment.allocations)
+      .map((allocation) => [allocation.source, allocation.amount.toString()]);
+    expect(allocations).toEqual(
+      expect.arrayContaining([
+        ["REPAIR", "20"],
+        ["REPAIR", "80"],
+        ["RETAIL", "15"],
+      ]),
+    );
+    expect(
+      await db.inventoryMovement.count({
+        where: { referenceType: "WORK_ORDER", referenceId: order.id },
+      }),
+    ).toBe(2);
+  });
+
+  it("rolls back checkout when an add-on lacks stock", async () => {
+    const addon = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Cover insufficiente test",
+      category: "Cover",
+      usage: "RETAIL",
+      costPrice: "3",
+      salePrice: "15",
+      initialStock: 1,
+      minStock: 0,
+    });
+    const order = await createOrder(staff, input());
+    await addWorkOrderProduct(staff, order.id, {
+      productId: addon.id,
+      kind: "RETAIL_ADDON",
+      quantity: 2,
+    });
+    await changeStatus(staff, order.id, { status: "REPAIRING" });
+    await changeStatus(staff, order.id, { status: "READY" });
+    await expect(
+      checkoutWorkOrder(staff, order.id, {
+        requestId: randomUUID(),
+        amount: "110",
+        method: "CASH",
+        pickedUpBy: "Test Cliente",
+      }),
+    ).rejects.toThrow("insufficienti");
+    expect(
+      (await db.workOrder.findUniqueOrThrow({ where: { id: order.id } }))
+        .status,
+    ).toBe("READY");
+    expect(await db.payment.count({ where: { orderId: order.id } })).toBe(1);
+    expect(
+      (await db.product.findUniqueOrThrow({ where: { id: addon.id } }))
+        .stockQuantity,
+    ).toBe(1);
+  });
+});
+
 describe("retail checkout", () => {
   it("creates sale, payment, allocation and stock movements atomically", async () => {
     const cable = await createProduct(staff, {
@@ -978,7 +1104,7 @@ describe("versioned data backup and merge import", () => {
     const backup = await exportBusinessData();
     expect(backup).toMatchObject({
       format: "ngt-repair-data",
-      version: 3,
+      version: 4,
     });
     expect(backup.data.orders).toHaveLength(1);
     expect(backup.data.payments.map((payment) => payment.kind).sort()).toEqual([
@@ -990,6 +1116,7 @@ describe("versioned data backup and merge import", () => {
     expect(backup.data.retailSales).toHaveLength(1);
     expect(backup.data.retailSaleItems).toHaveLength(1);
     expect(backup.data.paymentAllocations).toHaveLength(2);
+    expect(backup.data.workOrderProducts).toHaveLength(0);
 
     const conflict = structuredClone(backup);
     const originalOrderId = conflict.data.orders[0].id;
@@ -1061,6 +1188,7 @@ describe("versioned data backup and merge import", () => {
     };
     legacy.version = 1;
     delete legacy.data.products;
+    delete legacy.data.workOrderProducts;
     delete legacy.data.inventoryMovements;
     delete legacy.data.retailSales;
     delete legacy.data.retailSaleItems;

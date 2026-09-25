@@ -1061,15 +1061,19 @@ export function StatusForm({
   id,
   status,
   remaining,
+  allowCompletion,
 }: {
   id: string;
   customerName: string;
   status: OrderStatus;
   remaining: number;
   owner?: boolean;
+  allowCompletion?: boolean;
 }) {
   const it = useMessages();
-  const choices = transitions[status];
+  const choices = transitions[status].filter(
+    (choice) => allowCompletion !== false || choice !== "COMPLETED",
+  );
   const [selected, setSelected] = useState(choices[0] ?? "");
   if (!choices.length) return null;
   return (

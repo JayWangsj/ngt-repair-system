@@ -30,7 +30,13 @@ export function total(
 type Amount = string | { toString(): string };
 export type QuoteItem = { final: Amount; discount?: Amount };
 export type QuoteOptions = { orderDiscount?: Amount; includeVat?: boolean };
-export function settlement(items: QuoteItem[], options: QuoteOptions = {}) {
+export type ProductCharge = {
+  unitPrice: Amount;
+  discount?: Amount;
+  quantity: number;
+};
+export type WorkOrderOptions = QuoteOptions & { products?: ProductCharge[] };
+export function settlement(items: QuoteItem[], options: WorkOrderOptions = {}) {
   const gross = total(items);
   const itemDiscount = items.reduce((sum, item) => {
     const discount = cents(item.discount ?? "0");
@@ -42,19 +48,50 @@ export function settlement(items: QuoteItem[], options: QuoteOptions = {}) {
   if (discount > gross) throw new BusinessError("Lo sconto supera il prezzo.");
   const net = gross - discount;
   const vat = Math.round((net * 22) / 100);
+  const products = options.products ?? [];
+  const productTotal = products.reduce((sum, product) => {
+    if (!Number.isSafeInteger(product.quantity) || product.quantity <= 0)
+      throw new BusinessError("Quantità prodotto non valida.");
+    const line = cents(product.unitPrice) * product.quantity;
+    const lineDiscount = cents(product.discount ?? "0");
+    if (lineDiscount > line)
+      throw new BusinessError("Lo sconto prodotto supera il prezzo.");
+    return sum + line - lineDiscount;
+  }, 0);
   return {
     gross,
     discount,
     net,
     vat,
     withVat: net + vat,
-    due: net + (options.includeVat ? vat : 0),
+    productTotal,
+    due: net + (options.includeVat ? vat : 0) + productTotal,
+  };
+}
+
+export function allocatePayment(
+  amount: number,
+  repairOutstanding: number,
+  retailOutstanding: number,
+) {
+  const outstanding = repairOutstanding + retailOutstanding;
+  if (amount < 0 || amount > outstanding || outstanding <= 0)
+    throw new BusinessError("Ripartizione pagamento non valida.");
+  if (amount === outstanding)
+    return { repair: repairOutstanding, retail: retailOutstanding };
+  const repair = Math.min(
+    repairOutstanding,
+    Math.round((amount * repairOutstanding) / outstanding),
+  );
+  return {
+    repair,
+    retail: Math.min(retailOutstanding, amount - repair),
   };
 }
 export function balance(
   items: QuoteItem[],
   payments: { amount: string | { toString(): string } }[],
-  options: QuoteOptions = {},
+  options: WorkOrderOptions = {},
 ) {
   return (
     settlement(items, options).due -

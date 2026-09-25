@@ -56,6 +56,11 @@ enum InventoryMovementType {
   MANUAL_ADJUSTMENT
 }
 
+enum WorkOrderProductKind {
+  REPAIR_PART
+  RETAIL_ADDON
+}
+
 model User {
   id                 String              @id @default(cuid())
   email              String              @unique
@@ -114,26 +119,27 @@ model Device {
 }
 
 model WorkOrder {
-  id               String          @id @default(cuid())
-  number           Int             @unique @default(autoincrement())
-  customerName     String          @default("")
+  id               String             @id @default(cuid())
+  number           Int                @unique @default(autoincrement())
+  customerName     String             @default("")
   deviceId         String
-  device           Device          @relation(fields: [deviceId], references: [id])
-  status           Status          @default(RECEIVED)
-  orderDiscount    Decimal         @default(0) @db.Decimal(12, 2)
-  includeVat       Boolean         @default(false)
+  device           Device             @relation(fields: [deviceId], references: [id])
+  status           Status             @default(RECEIVED)
+  orderDiscount    Decimal            @default(0) @db.Decimal(12, 2)
+  includeVat       Boolean            @default(false)
   fault            String
-  appearance       String          @default("")
-  accessories      String          @default("")
-  notes            String          @default("")
+  appearance       String             @default("")
+  accessories      String             @default("")
+  notes            String             @default("")
   dueDate          String?
-  confirmedAt      DateTime?       @db.Timestamptz(3)
-  confirmationNote String          @default("")
-  pickedUpAt       DateTime?       @db.Timestamptz(3)
+  confirmedAt      DateTime?          @db.Timestamptz(3)
+  confirmationNote String             @default("")
+  pickedUpAt       DateTime?          @db.Timestamptz(3)
   pickedUpBy       String?
-  createdAt        DateTime        @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime        @updatedAt @db.Timestamptz(3)
+  createdAt        DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime           @updatedAt @db.Timestamptz(3)
   items            WorkOrderItem[]
+  products         WorkOrderProduct[]
   payments         Payment[]
   history          StatusHistory[]
 
@@ -237,20 +243,21 @@ model FaultOption {
 }
 
 model Product {
-  id            String              @id @default(cuid())
-  name          String
-  category      String
-  usage         ProductUsage
-  costPrice     Decimal             @db.Decimal(12, 2)
-  salePrice     Decimal             @db.Decimal(12, 2)
-  stockQuantity Int                 @default(0)
-  minStock      Int                 @default(0)
-  favorite      Boolean             @default(false)
-  enabled       Boolean             @default(true)
-  createdAt     DateTime            @default(now()) @db.Timestamptz(3)
-  updatedAt     DateTime            @updatedAt @db.Timestamptz(3)
-  movements     InventoryMovement[]
-  saleItems     RetailSaleItem[]
+  id                String              @id @default(cuid())
+  name              String
+  category          String
+  usage             ProductUsage
+  costPrice         Decimal             @db.Decimal(12, 2)
+  salePrice         Decimal             @db.Decimal(12, 2)
+  stockQuantity     Int                 @default(0)
+  minStock          Int                 @default(0)
+  favorite          Boolean             @default(false)
+  enabled           Boolean             @default(true)
+  createdAt         DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime            @updatedAt @db.Timestamptz(3)
+  movements         InventoryMovement[]
+  saleItems         RetailSaleItem[]
+  workOrderProducts WorkOrderProduct[]
 
   @@index([name])
   @@index([category, usage, enabled])
@@ -300,6 +307,26 @@ model PaymentAllocation {
 
   @@unique([paymentId, source])
   @@index([source])
+}
+
+model WorkOrderProduct {
+  id          String               @id @default(cuid())
+  orderId     String
+  order       WorkOrder            @relation(fields: [orderId], references: [id])
+  productId   String
+  product     Product              @relation(fields: [productId], references: [id])
+  productName String
+  category    String
+  kind        WorkOrderProductKind
+  unitPrice   Decimal              @db.Decimal(12, 2)
+  discount    Decimal              @default(0) @db.Decimal(12, 2)
+  quantity    Int
+  consumedAt  DateTime?            @db.Timestamptz(3)
+  createdAt   DateTime             @default(now()) @db.Timestamptz(3)
+
+  @@unique([orderId, productId, kind])
+  @@index([orderId])
+  @@index([productId])
 }
 
 model InventoryMovement {

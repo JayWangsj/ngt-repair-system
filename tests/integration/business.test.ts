@@ -14,6 +14,7 @@ import {
   addPayment,
   changeStatus,
   createProduct,
+  createRetailSale,
   adjustInventory,
   confirmQuote,
   createOrder,
@@ -54,9 +55,12 @@ beforeAll(async () => {
   if (!new URL(process.env.DATABASE_URL || "").pathname.endsWith("_test"))
     throw new Error("Integration tests require an isolated *_test database.");
   await db.auditLog.deleteMany();
+  await db.paymentAllocation.deleteMany();
+  await db.payment.deleteMany();
+  await db.retailSaleItem.deleteMany();
+  await db.retailSale.deleteMany();
   await db.inventoryMovement.deleteMany();
   await db.product.deleteMany();
-  await db.payment.deleteMany();
   await db.statusHistory.deleteMany();
   await db.workOrderItem.deleteMany();
   await db.workOrder.deleteMany();
@@ -84,9 +88,12 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await db.auditLog.deleteMany();
+  await db.paymentAllocation.deleteMany();
+  await db.payment.deleteMany();
+  await db.retailSaleItem.deleteMany();
+  await db.retailSale.deleteMany();
   await db.inventoryMovement.deleteMany();
   await db.product.deleteMany();
-  await db.payment.deleteMany();
   await db.statusHistory.deleteMany();
   await db.workOrderItem.deleteMany();
   await db.workOrder.deleteMany();
@@ -203,7 +210,7 @@ describe("PostgreSQL workflow", () => {
     await addPayment(staff, created.id, {
       requestId: randomUUID(),
       amount: "80",
-      method: "TRANSFER",
+      method: "OTHER",
       kind: "BALANCE",
     });
   });
@@ -853,6 +860,94 @@ describe("unified product inventory", () => {
   });
 });
 
+describe("retail checkout", () => {
+  it("creates sale, payment, allocation and stock movements atomically", async () => {
+    const cable = await createProduct(staff, {
+      requestId: randomUUID(),
+      name: "Cavo USB-C",
+      category: "Ricarica",
+      usage: "BOTH",
+      costPrice: "4",
+      salePrice: "12",
+      initialStock: 10,
+      minStock: 2,
+    });
+    const glass = await createProduct(staff, {
+      requestId: randomUUID(),
+      name: "Vetro iPhone",
+      category: "Pellicole",
+      usage: "RETAIL",
+      costPrice: "2",
+      salePrice: "10",
+      initialStock: 6,
+      minStock: 2,
+    });
+    const requestId = randomUUID();
+    const input = {
+      requestId,
+      items: [
+        { productId: cable.id, quantity: 2 },
+        { productId: glass.id, quantity: 1 },
+      ],
+      discount: "4",
+      method: "CARD",
+    };
+    const first = await createRetailSale(staff, input);
+    const second = await createRetailSale(staff, input);
+    expect(second.id).toBe(first.id);
+    expect(first).toMatchObject({ itemCount: 3 });
+    expect(first.total.toString()).toBe("30");
+    expect(await db.retailSaleItem.count({ where: { saleId: first.id } })).toBe(
+      2,
+    );
+    const payment = await db.payment.findFirstOrThrow({
+      where: { saleId: first.id },
+      include: { allocations: true },
+    });
+    expect(payment).toMatchObject({ method: "CARD", kind: "SALE" });
+    expect(payment.allocations).toMatchObject([
+      { source: "RETAIL", amount: expect.objectContaining({}) },
+    ]);
+    expect(payment.allocations[0].amount.toString()).toBe("30");
+    expect(
+      (await db.product.findUniqueOrThrow({ where: { id: cable.id } }))
+        .stockQuantity,
+    ).toBe(8);
+    expect(
+      await db.inventoryMovement.count({
+        where: { referenceType: "RETAIL_SALE", referenceId: first.id },
+      }),
+    ).toBe(2);
+  });
+
+  it("rolls back the whole sale when any product lacks stock", async () => {
+    const product = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Cover limitata",
+      category: "Cover",
+      usage: "RETAIL",
+      costPrice: "3",
+      salePrice: "15",
+      initialStock: 1,
+      minStock: 0,
+    });
+    await expect(
+      createRetailSale(staff, {
+        requestId: randomUUID(),
+        items: [{ productId: product.id, quantity: 2 }],
+        discount: "0",
+        method: "CASH",
+      }),
+    ).rejects.toThrow("insufficienti");
+    expect(await db.retailSale.count()).toBe(0);
+    expect(await db.payment.count()).toBe(0);
+    expect(
+      (await db.product.findUniqueOrThrow({ where: { id: product.id } }))
+        .stockQuantity,
+    ).toBe(1);
+  });
+});
+
 describe("versioned data backup and merge import", () => {
   it("exports, clears, restores and skips an identical second import", async () => {
     const usersBefore = await db.user.count();
@@ -866,6 +961,12 @@ describe("versioned data backup and merge import", () => {
       initialStock: 6,
       minStock: 2,
     });
+    await createRetailSale(owner, {
+      requestId: randomUUID(),
+      items: [{ productId: product.id, quantity: 2 }],
+      discount: "0",
+      method: "CASH",
+    });
     await createOrder(
       owner,
       input({
@@ -877,12 +978,18 @@ describe("versioned data backup and merge import", () => {
     const backup = await exportBusinessData();
     expect(backup).toMatchObject({
       format: "ngt-repair-data",
-      version: 2,
+      version: 3,
     });
     expect(backup.data.orders).toHaveLength(1);
-    expect(backup.data.payments[0].kind).toBe("BALANCE");
+    expect(backup.data.payments.map((payment) => payment.kind).sort()).toEqual([
+      "BALANCE",
+      "SALE",
+    ]);
     expect(backup.data.products).toHaveLength(1);
-    expect(backup.data.inventoryMovements).toHaveLength(1);
+    expect(backup.data.inventoryMovements).toHaveLength(2);
+    expect(backup.data.retailSales).toHaveLength(1);
+    expect(backup.data.retailSaleItems).toHaveLength(1);
+    expect(backup.data.paymentAllocations).toHaveLength(2);
 
     const conflict = structuredClone(backup);
     const originalOrderId = conflict.data.orders[0].id;
@@ -922,6 +1029,7 @@ describe("versioned data backup and merge import", () => {
     expect(await db.workOrder.count()).toBe(0);
     expect(await db.customer.count()).toBe(0);
     expect(await db.product.count()).toBe(0);
+    expect(await db.retailSale.count()).toBe(0);
     expect(await db.user.count()).toBe(usersBefore);
 
     const first = await importBusinessData(owner, backup);
@@ -930,8 +1038,10 @@ describe("versioned data backup and merge import", () => {
     expect(await db.customer.count()).toBe(1);
     expect(
       await db.product.findUniqueOrThrow({ where: { id: product.id } }),
-    ).toMatchObject({ stockQuantity: 6 });
-    expect(await db.inventoryMovement.count()).toBe(1);
+    ).toMatchObject({ stockQuantity: 4 });
+    expect(await db.inventoryMovement.count()).toBe(2);
+    expect(await db.retailSale.count()).toBe(1);
+    expect(await db.paymentAllocation.count()).toBe(2);
     expect((await db.device.findFirstOrThrow()).model).toBe(
       "iPhone 18 Pro Max",
     );
@@ -952,6 +1062,9 @@ describe("versioned data backup and merge import", () => {
     legacy.version = 1;
     delete legacy.data.products;
     delete legacy.data.inventoryMovements;
+    delete legacy.data.retailSales;
+    delete legacy.data.retailSaleItems;
+    delete legacy.data.paymentAllocations;
     await expect(importBusinessData(owner, legacy)).resolves.toEqual({
       imported: 0,
       skipped: expect.any(Number),

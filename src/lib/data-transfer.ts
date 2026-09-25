@@ -7,6 +7,9 @@ import type {
   Payment,
   Product,
   InventoryMovement,
+  RetailSale,
+  RetailSaleItem,
+  PaymentAllocation,
   PriceRule,
   StatusHistory,
   WorkOrder,
@@ -18,7 +21,7 @@ import { BusinessError, type Actor } from "./domain";
 import { normalizeBrand, normalizeModel } from "./catalog";
 
 export const BACKUP_FORMAT = "ngt-repair-data";
-export const BACKUP_VERSION = 2;
+export const BACKUP_VERSION = 3;
 
 type JsonRow<T> = {
   [K in keyof T]: T[K] extends Date
@@ -44,6 +47,9 @@ type BackupData = {
   audits: JsonRow<AuditLog>[];
   products: JsonRow<Product>[];
   inventoryMovements: JsonRow<InventoryMovement>[];
+  retailSales: JsonRow<RetailSale>[];
+  retailSaleItems: JsonRow<RetailSaleItem>[];
+  paymentAllocations: JsonRow<PaymentAllocation>[];
 };
 export type BackupFile = {
   format: typeof BACKUP_FORMAT;
@@ -85,7 +91,18 @@ function ensureBackup(value: unknown): BackupFile {
   const products = (candidate.data as Partial<BackupData>).products ?? [];
   const inventoryMovements =
     (candidate.data as Partial<BackupData>).inventoryMovements ?? [];
-  if (!Array.isArray(products) || !Array.isArray(inventoryMovements))
+  const retailSales = (candidate.data as Partial<BackupData>).retailSales ?? [];
+  const retailSaleItems =
+    (candidate.data as Partial<BackupData>).retailSaleItems ?? [];
+  const paymentAllocations =
+    (candidate.data as Partial<BackupData>).paymentAllocations ?? [];
+  if (
+    !Array.isArray(products) ||
+    !Array.isArray(inventoryMovements) ||
+    !Array.isArray(retailSales) ||
+    !Array.isArray(retailSaleItems) ||
+    !Array.isArray(paymentAllocations)
+  )
     throw new BusinessError("File di backup incompleto.");
   return {
     ...(candidate as BackupFile),
@@ -93,6 +110,9 @@ function ensureBackup(value: unknown): BackupFile {
       ...(candidate.data as BackupData),
       products,
       inventoryMovements,
+      retailSales,
+      retailSaleItems,
+      paymentAllocations,
     },
   };
 }
@@ -118,6 +138,9 @@ export async function exportBusinessData(): Promise<BackupFile> {
     audits,
     products,
     inventoryMovements,
+    retailSales,
+    retailSaleItems,
+    paymentAllocations,
   ] = await Promise.all([
     db.customer.findMany({ orderBy: { createdAt: "asc" } }),
     db.customerPhone.findMany({ orderBy: { phone: "asc" } }),
@@ -138,6 +161,9 @@ export async function exportBusinessData(): Promise<BackupFile> {
     db.auditLog.findMany({ orderBy: { createdAt: "asc" } }),
     db.product.findMany({ orderBy: { createdAt: "asc" } }),
     db.inventoryMovement.findMany({ orderBy: { createdAt: "asc" } }),
+    db.retailSale.findMany({ orderBy: { number: "asc" } }),
+    db.retailSaleItem.findMany({ orderBy: { id: "asc" } }),
+    db.paymentAllocation.findMany({ orderBy: { id: "asc" } }),
   ]);
   const data = JSON.parse(
     JSON.stringify({
@@ -153,6 +179,9 @@ export async function exportBusinessData(): Promise<BackupFile> {
       audits,
       products,
       inventoryMovements,
+      retailSales,
+      retailSaleItems,
+      paymentAllocations,
     }),
   ) as BackupData;
   return {
@@ -167,9 +196,12 @@ export async function clearBusinessData(actor: Actor) {
   await ensureActor(actor);
   return db.$transaction(async (tx) => {
     await tx.auditLog.deleteMany();
+    await tx.paymentAllocation.deleteMany();
+    await tx.payment.deleteMany();
+    await tx.retailSaleItem.deleteMany();
+    await tx.retailSale.deleteMany();
     await tx.inventoryMovement.deleteMany();
     await tx.product.deleteMany();
-    await tx.payment.deleteMany();
     await tx.statusHistory.deleteMany();
     await tx.workOrderItem.deleteMany();
     await tx.workOrder.deleteMany();
@@ -180,6 +212,9 @@ export async function clearBusinessData(actor: Actor) {
     await tx.faultOption.deleteMany();
     await tx.$executeRawUnsafe(
       'ALTER SEQUENCE "WorkOrder_number_seq" RESTART WITH 1',
+    );
+    await tx.$executeRawUnsafe(
+      'ALTER SEQUENCE "RetailSale_number_seq" RESTART WITH 1',
     );
     return { id: "cleared" };
   });
@@ -198,6 +233,8 @@ export async function importBusinessData(
     const deviceIds = new Map<string, string>();
     const priceIds = new Map<string, string>();
     const orderIds = new Map<string, string>();
+    const saleIds = new Map<string, string>();
+    const paymentIds = new Map<string, string>();
     const entityIds = new Map<string, string>();
     const orderSourceIds = new Set(backup.data.orders.map((order) => order.id));
 
@@ -259,6 +296,67 @@ export async function importBusinessData(
       } else skipped++;
       customerIds.set(source.id, target.id);
       entityIds.set(source.id, target.id);
+    }
+    for (const source of backup.data.retailSales) {
+      let target = await tx.retailSale.findUnique({ where: { id: source.id } });
+      target ??= await tx.retailSale.findUnique({
+        where: { requestId: source.requestId },
+      });
+      if (!target) {
+        const numberConflict = await tx.retailSale.findUnique({
+          where: { number: source.number },
+        });
+        if (numberConflict) {
+          skipped++;
+          continue;
+        }
+        target = await tx.retailSale.create({
+          data: {
+            id: source.id,
+            number: source.number,
+            requestId: source.requestId,
+            subtotal: source.subtotal,
+            discount: source.discount,
+            total: source.total,
+            itemCount: source.itemCount,
+            actorId: actor.id,
+            actorName: source.actorName,
+            createdAt: date(source.createdAt) ?? new Date(),
+          },
+        });
+        imported++;
+      } else skipped++;
+      saleIds.set(source.id, target.id);
+      entityIds.set(source.id, target.id);
+    }
+    for (const source of backup.data.retailSaleItems) {
+      const saleId = saleIds.get(source.saleId);
+      const product = await tx.product.findUnique({
+        where: { id: source.productId },
+      });
+      if (!saleId || !product) {
+        skipped++;
+        continue;
+      }
+      const exists = await tx.retailSaleItem.findUnique({
+        where: { id: source.id },
+      });
+      if (exists) skipped++;
+      else {
+        await tx.retailSaleItem.create({
+          data: {
+            id: source.id,
+            saleId,
+            productId: source.productId,
+            productName: source.productName,
+            category: source.category,
+            unitPrice: source.unitPrice,
+            quantity: source.quantity,
+            subtotal: source.subtotal,
+          },
+        });
+        imported++;
+      }
     }
     for (const source of backup.data.phones) {
       const customerId = customerIds.get(source.customerId);
@@ -443,8 +541,9 @@ export async function importBusinessData(
       }
     }
     for (const source of backup.data.payments) {
-      const orderId = orderIds.get(source.orderId);
-      if (!orderId) {
+      const orderId = source.orderId ? orderIds.get(source.orderId) : null;
+      const saleId = source.saleId ? saleIds.get(source.saleId) : null;
+      if ((!orderId && !saleId) || (orderId && saleId)) {
         skipped++;
         continue;
       }
@@ -453,13 +552,16 @@ export async function importBusinessData(
         (await tx.payment.findUnique({
           where: { requestId: source.requestId },
         }));
-      if (exists) skipped++;
-      else {
-        await tx.payment.create({
+      if (exists) {
+        skipped++;
+        paymentIds.set(source.id, exists.id);
+      } else {
+        const created = await tx.payment.create({
           data: {
             id: source.id,
             requestId: source.requestId,
             orderId,
+            saleId,
             amount: source.amount,
             method: source.method,
             kind: source.kind,
@@ -468,7 +570,50 @@ export async function importBusinessData(
             actorName: source.actorName,
           },
         });
+        paymentIds.set(source.id, created.id);
         imported++;
+      }
+    }
+    for (const source of backup.data.paymentAllocations) {
+      const paymentId = paymentIds.get(source.paymentId);
+      if (!paymentId) {
+        skipped++;
+        continue;
+      }
+      const exists = await tx.paymentAllocation.findUnique({
+        where: {
+          paymentId_source: { paymentId, source: source.source },
+        },
+      });
+      if (exists) skipped++;
+      else {
+        await tx.paymentAllocation.create({
+          data: {
+            id: source.id,
+            paymentId,
+            source: source.source,
+            amount: source.amount,
+          },
+        });
+        imported++;
+      }
+    }
+    if (backup.version < 3) {
+      for (const source of backup.data.payments) {
+        if (!source.orderId) continue;
+        const paymentId = paymentIds.get(source.id);
+        if (!paymentId) continue;
+        await tx.paymentAllocation.upsert({
+          where: {
+            paymentId_source: { paymentId, source: "REPAIR" },
+          },
+          create: {
+            paymentId,
+            source: "REPAIR",
+            amount: source.amount,
+          },
+          update: {},
+        });
       }
     }
     for (const source of backup.data.histories) {
@@ -576,6 +721,12 @@ export async function importBusinessData(
         "pg_get_serial_sequence('\"WorkOrder\"', 'number'), " +
         'GREATEST((SELECT COALESCE(MAX("number"), 0) FROM "WorkOrder"), 1), ' +
         '(SELECT COUNT(*) > 0 FROM "WorkOrder"))',
+    );
+    await tx.$executeRawUnsafe(
+      "SELECT setval(" +
+        "pg_get_serial_sequence('\"RetailSale\"', 'number'), " +
+        'GREATEST((SELECT COALESCE(MAX("number"), 0) FROM "RetailSale"), 1), ' +
+        '(SELECT COUNT(*) > 0 FROM "RetailSale"))',
     );
   });
   return { imported, skipped };

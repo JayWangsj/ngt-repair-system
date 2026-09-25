@@ -77,7 +77,7 @@ export const orderInput = z.object({
   confirmationNote: text,
   items: z.array(itemInput).min(1).max(30),
   deposit: amountInput.default("0"),
-  method: z.enum(["CASH", "CARD", "TRANSFER", "OTHER"]).default("CASH"),
+  method: z.enum(["CASH", "CARD", "OTHER"]).default("CASH"),
 });
 export const editInput = z.object({
   fault: z.string().trim().min(1).max(2000),
@@ -89,7 +89,7 @@ export const editInput = z.object({
 export const paymentInput = z.object({
   requestId: z.string().uuid(),
   amount: amountInput,
-  method: z.enum(["CASH", "CARD", "TRANSFER", "OTHER"]),
+  method: z.enum(["CASH", "CARD", "OTHER"]),
   kind: z.enum(["DEPOSIT", "BALANCE", "OTHER"]),
 });
 export const productInput = z.object({
@@ -114,6 +114,20 @@ export const inventoryAdjustmentInput = z.object({
     .refine((value) => value !== 0, "La variazione non può essere zero."),
   type: z.enum(["STOCK_IN", "MANUAL_ADJUSTMENT"]),
   note: text,
+});
+export const retailSaleInput = z.object({
+  requestId: z.string().uuid(),
+  items: z
+    .array(
+      z.object({
+        productId: z.string().min(1),
+        quantity: z.coerce.number().int().min(1).max(999),
+      }),
+    )
+    .min(1)
+    .max(100),
+  discount: amountInput.default("0"),
+  method: z.enum(["CASH", "CARD", "OTHER"]),
 });
 export const statusInput = z.object({
   status: z.enum(statuses),

@@ -63,6 +63,8 @@ test("single operator opens every business page without login", async ({
   for (const path of [
     "/",
     "/orders",
+    "/retail",
+    "/retail/sales",
     "/inventory",
     "/customers",
     "/prices",
@@ -130,6 +132,31 @@ test("creates a real product and records an inventory movement", async ({
   await movement.getByRole("button", { name: "Registra movimento" }).click();
   await expect(row).toContainText("9");
   await expect(page.getByText("Consegna E2E")).toBeVisible();
+});
+
+test("completes a retail sale and opens its immutable receipt", async ({
+  page,
+}) => {
+  await page.goto("/retail");
+  const products = page.locator(".retail-product-grid");
+  const cable = products.getByRole("button", { name: /Cavo USB-C Test/ });
+  await cable.click();
+  await cable.click();
+  await expect(page.locator(".retail-cart-row")).toContainText("2");
+  await expect(
+    products.getByRole("button", { name: /Cover esaurita Test/ }),
+  ).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Bonifico" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Carta", exact: true }).click();
+  await page.getByRole("button", { name: /Conferma incasso.*24,00/ }).click();
+  await expect(page.getByRole("status")).toContainText("Vendita completata");
+  await expect(page.getByRole("status")).toContainText("24,00 €");
+  await page.getByRole("link", { name: "Vedi vendita" }).click();
+  await expect(page).toHaveURL(/\/retail\/sales\/[a-z0-9]+$/);
+  await expect(
+    page.getByRole("heading", { name: /Dettaglio vendita/ }),
+  ).toBeVisible();
+  await expect(page.getByText("Cavo USB-C Test")).toBeVisible();
 });
 test("creates automatic quote, receives payment and delivers", async ({
   page,
@@ -961,7 +988,7 @@ test("settings exports data and re-import skips existing records", async ({
   const backup = await exported.json();
   expect(backup).toMatchObject({
     format: "ngt-repair-data",
-    version: 2,
+    version: 3,
   });
   const imported = await page.request.post("/api/data/import", {
     data: backup,

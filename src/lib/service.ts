@@ -23,6 +23,7 @@ import {
   paymentInput,
   productInput,
   inventoryAdjustmentInput,
+  retailSaleInput,
   ruleInput,
   statusInput,
   userInput,
@@ -282,6 +283,12 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
                       : data.paymentKind,
                   actorId: actor.id,
                   actorName: actor.name,
+                  allocations: {
+                    create: {
+                      source: "REPAIR",
+                      amount: decimal(cents(data.deposit)),
+                    },
+                  },
                 },
               }
             : undefined,
@@ -439,6 +446,9 @@ export async function addPayment(actorInput: Actor, id: string, raw: unknown) {
         orderId: id,
         actorId: actor.id,
         actorName: actor.name,
+        allocations: {
+          create: { source: "REPAIR", amount: decimal(amount) },
+        },
       },
     });
     await audit(tx, actor, id, "PAYMENT_ADDED", {
@@ -676,6 +686,103 @@ export async function adjustInventory(
       type: movement.type,
     });
     return movement;
+  });
+}
+
+export async function createRetailSale(actorInput: Actor, raw: unknown) {
+  const data = retailSaleInput.parse(raw);
+  const uniqueItems = new Map<string, number>();
+  for (const item of data.items)
+    uniqueItems.set(
+      item.productId,
+      (uniqueItems.get(item.productId) ?? 0) + item.quantity,
+    );
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const existing = await tx.retailSale.findUnique({
+      where: { requestId: data.requestId },
+      include: { payments: true },
+    });
+    if (existing) return existing;
+    const products = await tx.product.findMany({
+      where: {
+        id: { in: [...uniqueItems.keys()] },
+        enabled: true,
+        usage: { in: ["RETAIL", "BOTH"] },
+      },
+    });
+    if (products.length !== uniqueItems.size)
+      throw new BusinessError("Uno o più prodotti non sono disponibili.");
+    const lines = products.map((product) => {
+      const quantity = uniqueItems.get(product.id) ?? 0;
+      const unitPrice = cents(product.salePrice);
+      return {
+        product,
+        quantity,
+        unitPrice,
+        subtotal: unitPrice * quantity,
+      };
+    });
+    const subtotal = lines.reduce((sum, line) => sum + line.subtotal, 0);
+    const discount = cents(data.discount);
+    if (discount >= subtotal)
+      throw new BusinessError("Lo sconto deve essere inferiore al subtotale.");
+    const totalAmount = subtotal - discount;
+    const itemCount = lines.reduce((sum, line) => sum + line.quantity, 0);
+    const sale = await tx.retailSale.create({
+      data: {
+        requestId: data.requestId,
+        subtotal: decimal(subtotal),
+        discount: decimal(discount),
+        total: decimal(totalAmount),
+        itemCount,
+        actorId: actor.id,
+        actorName: actor.name,
+        items: {
+          create: lines.map((line) => ({
+            productId: line.product.id,
+            productName: line.product.name,
+            category: line.product.category,
+            unitPrice: decimal(line.unitPrice),
+            quantity: line.quantity,
+            subtotal: decimal(line.subtotal),
+          })),
+        },
+      },
+    });
+    const payment = await tx.payment.create({
+      data: {
+        requestId: data.requestId,
+        saleId: sale.id,
+        amount: decimal(totalAmount),
+        method: data.method,
+        kind: "SALE",
+        actorId: actor.id,
+        actorName: actor.name,
+        allocations: {
+          create: { source: "RETAIL", amount: decimal(totalAmount) },
+        },
+      },
+    });
+    for (const line of lines)
+      await applyInventoryMovement(tx, actor, {
+        requestId: `${data.requestId}:${line.product.id}`,
+        productId: line.product.id,
+        quantity: -line.quantity,
+        type: "RETAIL_SALE",
+        referenceType: "RETAIL_SALE",
+        referenceId: sale.id,
+      });
+    await audit(tx, actor, sale.id, "RETAIL_SALE_COMPLETED", {
+      paymentId: payment.id,
+      total: decimal(totalAmount),
+      itemCount,
+      method: data.method,
+    });
+    return tx.retailSale.findUniqueOrThrow({
+      where: { id: sale.id },
+      include: { payments: true },
+    });
   });
 }
 export async function createUser(actorInput: Actor, raw: unknown) {

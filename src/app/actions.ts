@@ -68,6 +68,10 @@ export async function adjustInventoryAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.adjustInventory(actor, id, input));
 }
+export async function createRetailSaleAction(input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.createRetailSale(actor, input));
+}
 export async function statusAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.changeStatus(actor, id, input));

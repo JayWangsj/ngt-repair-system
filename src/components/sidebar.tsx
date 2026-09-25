@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Wrench,
   Package,
+  ShoppingBag,
   Users,
   Tags,
   ChartNoAxesCombined,
@@ -18,6 +19,7 @@ export function Sidebar() {
   const links = [
     { href: "/", label: it.nav.dashboard, icon: LayoutDashboard },
     { href: "/orders", label: it.nav.orders, icon: Wrench },
+    { href: "/retail", label: it.nav.retail, icon: ShoppingBag },
     { href: "/inventory", label: it.nav.inventory, icon: Package },
     { href: "/customers", label: it.nav.customers, icon: Users },
     { href: "/prices", label: it.nav.prices, icon: Tags },

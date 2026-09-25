@@ -44,6 +44,7 @@ import {
   decimal,
   matchRule,
   money,
+  creatablePaymentMethods,
   transitions,
   type OrderStatus,
 } from "@/lib/domain";
@@ -888,9 +889,9 @@ export function NewOrderForm({
 
             <Field label={it.paymentMethod}>
               <select {...register("method")}>
-                {Object.entries(it.methods).map(([v, l]) => (
-                  <option key={v} value={v}>
-                    {l}
+                {creatablePaymentMethods.map((method) => (
+                  <option key={method} value={method}>
+                    {it.methods[method]}
                   </option>
                 ))}
               </select>
@@ -1044,9 +1045,9 @@ export function PaymentForm({
         </Field>
         <Field label={it.paymentMethod}>
           <select name="method">
-            {Object.entries(it.methods).map(([v, l]) => (
-              <option value={v} key={v}>
-                {l}
+            {creatablePaymentMethods.map((method) => (
+              <option value={method} key={method}>
+                {it.methods[method]}
               </option>
             ))}
           </select>

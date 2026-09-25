@@ -166,6 +166,9 @@ export const dateOnly = (date: string | null) =>
   date ? date.split("-").reverse().join("/") : "—";
 export const orderCode = (number: number) =>
   `NGT-${String(number).padStart(5, "0")}`;
+export const saleCode = (number: number) =>
+  `R-${String(number).padStart(5, "0")}`;
+export const creatablePaymentMethods = ["CASH", "CARD", "OTHER"] as const;
 
 export type InventoryStatus = "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
 export function inventoryStatus(

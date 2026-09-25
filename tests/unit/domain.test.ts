@@ -13,7 +13,7 @@ import {
   romeDay,
   total,
 } from "@/lib/domain";
-import { orderInput, ruleInput } from "@/lib/validation";
+import { orderInput, paymentInput, ruleInput } from "@/lib/validation";
 const staff = { id: "s", name: "Staff", role: "STAFF" as const };
 const owner = { ...staff, role: "OWNER" as const };
 describe("integer money", () => {
@@ -34,6 +34,19 @@ describe("inventory status", () => {
     expect(inventoryStatus(8, 3)).toBe("IN_STOCK");
     expect(inventoryStatus(3, 3)).toBe("LOW_STOCK");
     expect(inventoryStatus(0, 3)).toBe("OUT_OF_STOCK");
+  });
+});
+
+describe("payment methods", () => {
+  it("keeps legacy transfer values out of new payment input", () => {
+    expect(
+      paymentInput.safeParse({
+        requestId: "85d6d2cc-bc27-4b55-9ec7-7a90092388d3",
+        amount: "10",
+        method: "TRANSFER",
+        kind: "BALANCE",
+      }).success,
+    ).toBe(false);
   });
 });
 describe("quote matching", () => {

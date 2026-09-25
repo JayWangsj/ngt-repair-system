@@ -156,6 +156,18 @@ export const it = {
     noSales: "Nessuna vendita registrata.",
     itemsSold: "articoli",
   },
+  dashboard: {
+    revenue7: "Incassi degli ultimi 7 giorni",
+    repairRevenue: "Riparazioni",
+    retailRevenue: "Vendita prodotti",
+    paymentMethods: "Metodi di pagamento",
+    recentSales: "Ultime vendite",
+    hotProducts: "Prodotti più venduti oggi",
+    viewStats: "Statistiche dettagliate",
+    lowStock: "Prodotti con scorta bassa",
+    outOfStock: "Prodotti esauriti",
+    noAttention: "Nessuna attività richiede attenzione.",
+  },
   orderProducts: {
     title: "Prodotti e ricambi",
     description:

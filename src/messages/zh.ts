@@ -125,6 +125,18 @@ export const zh: typeof it = {
     noSales: "暂无销售记录。",
     itemsSold: "件商品",
   },
+  dashboard: {
+    revenue7: "最近 7 天收款趋势",
+    repairRevenue: "维修收入",
+    retailRevenue: "商品收入",
+    paymentMethods: "按付款方式统计",
+    recentSales: "最近零售单",
+    hotProducts: "今日热销商品",
+    viewStats: "查看详细统计",
+    lowStock: "库存不足商品",
+    outOfStock: "缺货商品",
+    noAttention: "暂无需要处理的事项。",
+  },
   orderProducts: {
     title: "商品与配件",
     description: "维修配件在进入待取机时扣库；附加商品在统一结账交付时扣库。",

@@ -8,7 +8,6 @@ import {
   ShoppingBag,
   Users,
   Tags,
-  ChartNoAxesCombined,
   Smartphone,
   Settings,
 } from "lucide-react";
@@ -23,7 +22,6 @@ export function Sidebar() {
     { href: "/inventory", label: it.nav.inventory, icon: Package },
     { href: "/customers", label: it.nav.customers, icon: Users },
     { href: "/prices", label: it.nav.prices, icon: Tags },
-    { href: "/reports", label: it.nav.reports, icon: ChartNoAxesCombined },
     { href: "/settings", label: it.nav.settings, icon: Settings },
   ];
   return (

@@ -1,7 +1,8 @@
 import { db } from "@/lib/db";
 import { requireActor } from "@/lib/session";
 import { PageHeader, OrderTable } from "@/components/common";
-import { balance, cents, money, romeDay, statuses } from "@/lib/domain";
+import { balance, money, romeDay, statuses } from "@/lib/domain";
+import { summarizePayments } from "@/lib/business-metrics";
 import { getMessages } from "@/lib/i18n-server";
 export default async function Reports({
   searchParams,
@@ -13,18 +14,19 @@ export default async function Reports({
   if (actor.role !== "OWNER")
     return <p className="message error">{it.restricted}</p>;
   const { day = romeDay() } = await searchParams;
-  const orders = await db.workOrder.findMany({
-    include: {
-      device: { include: { customer: true } },
-      items: true,
-      products: true,
-      payments: true,
-    },
-    orderBy: { createdAt: "desc" },
-  });
-  const payments = orders
-    .flatMap((o) => o.payments)
-    .filter((p) => romeDay(p.receivedAt) === day);
+  const [orders, payments] = await Promise.all([
+    db.workOrder.findMany({
+      include: {
+        device: { include: { customer: true } },
+        items: true,
+        products: true,
+        payments: true,
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    db.payment.findMany({ include: { allocations: true } }),
+  ]);
+  const revenue = summarizePayments(payments, day);
   const unpaid = orders.filter(
     (o) => o.status !== "CANCELLED" && balance(o.items, o.payments, o) > 0,
   );
@@ -41,9 +43,7 @@ export default async function Reports({
       <div className="metrics">
         <div className="metric">
           <span>{it.receivedOnDay}</span>
-          <strong>
-            {money(payments.reduce((s, p) => s + cents(p.amount), 0))}
-          </strong>
+          <strong>{money(revenue.total)}</strong>
         </div>
         <div className="metric">
           <span>{it.createdOnDay}</span>
@@ -63,18 +63,20 @@ export default async function Reports({
       <div className="bottom-grid">
         <section className="panel padded">
           <h2>{it.byMethod}</h2>
-          {Object.entries(it.methods).map(([method, label]) => (
+          {(["CASH", "CARD", "OTHER"] as const).map((method) => (
             <div className="stat-row" key={method}>
-              <span>{label}</span>
-              <strong>
-                {money(
-                  payments
-                    .filter((p) => p.method === method)
-                    .reduce((s, p) => s + cents(p.amount), 0),
-                )}
-              </strong>
+              <span>{it.methods[method]}</span>
+              <strong>{money(revenue.methods[method])}</strong>
             </div>
           ))}
+          <div className="stat-row">
+            <span>{it.dashboard.repairRevenue}</span>
+            <strong>{money(revenue.repair)}</strong>
+          </div>
+          <div className="stat-row">
+            <span>{it.dashboard.retailRevenue}</span>
+            <strong>{money(revenue.retail)}</strong>
+          </div>
         </section>
         <section className="panel padded">
           <h2>{it.workflow}</h2>

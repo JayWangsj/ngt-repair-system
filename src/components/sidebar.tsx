@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Wrench,
+  Package,
   Users,
   Tags,
   ChartNoAxesCombined,
@@ -17,6 +18,7 @@ export function Sidebar() {
   const links = [
     { href: "/", label: it.nav.dashboard, icon: LayoutDashboard },
     { href: "/orders", label: it.nav.orders, icon: Wrench },
+    { href: "/inventory", label: it.nav.inventory, icon: Package },
     { href: "/customers", label: it.nav.customers, icon: Users },
     { href: "/prices", label: it.nav.prices, icon: Tags },
     { href: "/reports", label: it.nav.reports, icon: ChartNoAxesCombined },

@@ -5,6 +5,8 @@ async function main() {
   if (!new URL(process.env.DATABASE_URL || "").pathname.endsWith("_test"))
     throw new Error("This script only accepts *_test databases.");
   await db.auditLog.deleteMany();
+  await db.inventoryMovement.deleteMany();
+  await db.product.deleteMany();
   await db.payment.deleteMany();
   await db.statusHistory.deleteMany();
   await db.workOrderItem.deleteMany();

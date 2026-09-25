@@ -63,6 +63,7 @@ test("single operator opens every business page without login", async ({
   for (const path of [
     "/",
     "/orders",
+    "/inventory",
     "/customers",
     "/prices",
     "/reports",
@@ -101,6 +102,34 @@ test("single operator opens every business page without login", async ({
   await expect(page).toHaveURL(/\/$/);
   await page.goto("/team");
   await expect(page).toHaveURL(/\/$/);
+});
+
+test("creates a real product and records an inventory movement", async ({
+  page,
+}) => {
+  await page.goto("/inventory");
+  await page.getByRole("button", { name: "Nuovo prodotto" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Prodotto", { exact: true }).fill("Cavo USB-C E2E");
+  await dialog.getByLabel("Categoria", { exact: true }).fill("Ricarica");
+  await dialog.getByLabel("Utilizzo", { exact: true }).selectOption("BOTH");
+  await dialog.getByLabel("Costo", { exact: true }).fill("4.50");
+  await dialog.getByLabel("Prezzo", { exact: true }).fill("12");
+  await dialog.getByLabel("Scorta iniziale", { exact: true }).fill("4");
+  await dialog.getByLabel("Scorta minima", { exact: true }).fill("2");
+  await dialog.getByLabel("Prodotto frequente", { exact: true }).check();
+  await dialog.getByRole("button", { name: "Salva prodotto" }).click();
+
+  const row = page.getByRole("row", { name: /Cavo USB-C E2E/ });
+  await expect(row).toContainText("Vendita e riparazione");
+  await expect(row).toContainText("4");
+  await row.getByRole("button", { name: "Movimento" }).click();
+  const movement = page.getByRole("dialog");
+  await movement.getByLabel("Variazione quantità").fill("5");
+  await movement.getByLabel("Nota").fill("Consegna E2E");
+  await movement.getByRole("button", { name: "Registra movimento" }).click();
+  await expect(row).toContainText("9");
+  await expect(page.getByText("Consegna E2E")).toBeVisible();
 });
 test("creates automatic quote, receives payment and delivers", async ({
   page,

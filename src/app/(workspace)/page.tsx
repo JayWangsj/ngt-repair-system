@@ -23,8 +23,13 @@ import { revenueSeries, summarizePayments } from "@/lib/business-metrics";
 import { getLocale, getMessages } from "@/lib/i18n-server";
 import { Badge, PageHeader } from "@/components/common";
 import { requireActor } from "@/lib/session";
+import { DashboardMotion } from "@/components/dashboard-motion";
 
-export default async function Dashboard() {
+export default async function Dashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ day?: string }>;
+}) {
   const it = await getMessages();
   const locale = await getLocale();
   const actor = await requireActor();
@@ -46,7 +51,11 @@ export default async function Dashboard() {
     db.retailSale.findMany({ orderBy: { createdAt: "desc" }, take: 5 }),
     db.retailSaleItem.findMany({ include: { sale: true } }),
   ]);
-  const today = romeDay();
+  const requestedDay = (await searchParams).day;
+  const today =
+    requestedDay && /^\d{4}-\d{2}-\d{2}$/.test(requestedDay)
+      ? requestedDay
+      : romeDay();
   const active = orders.filter(
     (order) => !["COMPLETED", "CANCELLED"].includes(order.status),
   );
@@ -80,16 +89,27 @@ export default async function Dashboard() {
     .sort((a, b) => b.quantity - a.quantity)
     .slice(0, 5);
   const metrics = [
-    { label: it.active, value: active.length, icon: Wrench, color: "teal" },
+    {
+      label: it.active,
+      value: active.length,
+      count: active.length,
+      type: "integer",
+      icon: Wrench,
+      color: "teal",
+    },
     {
       label: it.ready,
       value: active.filter((order) => order.status === "READY").length,
+      count: active.filter((order) => order.status === "READY").length,
+      type: "integer",
       icon: PackageCheck,
       color: "blue",
     },
     {
       label: it.overdue,
       value: overdue.length,
+      count: overdue.length,
+      type: "integer",
       icon: Clock3,
       color: "orange",
     },
@@ -98,6 +118,8 @@ export default async function Dashboard() {
           {
             label: it.receipts,
             value: money(todayRevenue.total),
+            count: todayRevenue.total,
+            type: "money",
             icon: Wallet,
             color: "green",
           },
@@ -107,31 +129,46 @@ export default async function Dashboard() {
             label: it.waiting,
             value: active.filter((order) => order.status === "WAITING_APPROVAL")
               .length,
+            count: active.filter((order) => order.status === "WAITING_APPROVAL")
+              .length,
+            type: "integer",
             icon: Clock3,
             color: "green",
           },
         ]),
   ];
+  const fingerprint = JSON.stringify({
+    today,
+    metrics: metrics.map(({ count }) => count),
+    series: series.map(({ repair, retail }) => [repair, retail]),
+    methods: todayRevenue.methods,
+    attention: [overdue.length, lowStock.length, outOfStock.length],
+    recent: [orders[0]?.updatedAt, sales[0]?.createdAt],
+  });
 
   return (
-    <>
+    <DashboardMotion fingerprint={fingerprint} locale={locale}>
       <PageHeader
         title={it.today}
         description={it.dashboardDescription}
         action
       />
-      <div className="date-strip">
+      <form className="date-strip dashboard-date-filter">
         <span className="live-dot" />
-        {new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "it-IT", {
-          weekday: "long",
-          day: "numeric",
-          month: "long",
-          year: "numeric",
-          timeZone: "Europe/Rome",
-        }).format(new Date())}
-      </div>
+        <span>
+          {new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "it-IT", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+            timeZone: "Europe/Rome",
+          }).format(new Date(`${today}T12:00:00Z`))}
+        </span>
+        <input name="day" type="date" defaultValue={today} />
+        <button className="button button-outline">{it.filter}</button>
+      </form>
       <div className="metrics dashboard-kpis">
-        {metrics.map(({ label, value, icon: Icon, color }) => (
+        {metrics.map(({ label, value, count, type, icon: Icon, color }) => (
           <div className="metric" key={label}>
             <div className="metric-top">
               <span>{label}</span>
@@ -139,7 +176,9 @@ export default async function Dashboard() {
                 <Icon size={21} />
               </span>
             </div>
-            <strong>{value}</strong>
+            <strong data-count={count} data-count-type={type}>
+              {value}
+            </strong>
             {label === it.receipts ? (
               <small>
                 {it.dashboard.repairRevenue} {money(todayRevenue.repair)} ·{" "}
@@ -174,10 +213,12 @@ export default async function Dashboard() {
                   <div className="revenue-bar-track" title={money(day.total)}>
                     <div
                       className="revenue-bar repair"
+                      data-bar={`${(day.repair / chartMax) * 100}%`}
                       style={{ height: `${(day.repair / chartMax) * 100}%` }}
                     />
                     <div
                       className="revenue-bar retail"
+                      data-bar={`${(day.retail / chartMax) * 100}%`}
                       style={{ height: `${(day.retail / chartMax) * 100}%` }}
                     />
                   </div>
@@ -191,12 +232,18 @@ export default async function Dashboard() {
             <div className="revenue-source-content">
               <div
                 className="revenue-donut"
+                data-donut={(todayRevenue.repair / sourceTotal) * 100}
                 style={{
                   background: `conic-gradient(var(--accent) 0 ${(todayRevenue.repair / sourceTotal) * 100}%, #ffe49a 0 100%)`,
                 }}
               >
                 <span>
-                  <strong>{money(todayRevenue.total)}</strong>
+                  <strong
+                    data-count={todayRevenue.total}
+                    data-count-type="money"
+                  >
+                    {money(todayRevenue.total)}
+                  </strong>
                   <small>{it.receipts}</small>
                 </span>
               </div>
@@ -221,6 +268,7 @@ export default async function Dashboard() {
                 <span>{it.methods[method]}</span>
                 <div>
                   <i
+                    data-progress={`${(todayRevenue.methods[method] / sourceTotal) * 100}%`}
                     style={{
                       width: `${(todayRevenue.methods[method] / sourceTotal) * 100}%`,
                     }}
@@ -359,6 +407,6 @@ export default async function Dashboard() {
           {!hotProducts.length && <p className="muted">{it.empty}</p>}
         </section>
       </div>
-    </>
+    </DashboardMotion>
   );
 }

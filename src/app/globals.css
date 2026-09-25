@@ -1395,6 +1395,51 @@ details[open] > summary {
 .dashboard-kpis {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
+.dashboard-date-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dashboard-date-filter > span:nth-child(2) {
+  margin-right: auto;
+}
+.dashboard-date-filter input {
+  width: auto;
+}
+.dashboard-date-filter .button {
+  min-height: 40px;
+  padding: 8px 14px;
+}
+.dashboard-animating .dashboard-kpis .metric {
+  opacity: 0;
+  transform: translateY(7px);
+}
+.dashboard-animating.dashboard-running .dashboard-kpis .metric {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 320ms ease-out 100ms,
+    transform 320ms ease-out 100ms;
+}
+.dashboard-animating .revenue-bar {
+  transition: height 680ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.dashboard-animating .payment-method-row i {
+  transition: width 650ms cubic-bezier(0.22, 1, 0.36, 1) 300ms;
+}
+.dashboard-animating .dashboard-workflow,
+.dashboard-animating .dashboard-lists > section {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.dashboard-animating.dashboard-running .dashboard-workflow,
+.dashboard-animating.dashboard-running .dashboard-lists > section {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 350ms ease-out 400ms,
+    transform 350ms ease-out 400ms;
+}
 .dashboard-charts {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(260px, 0.9fr) minmax(
@@ -1583,6 +1628,18 @@ details[open] > summary {
   }
   .payment-method-card {
     grid-column: auto;
+  }
+  .dashboard-date-filter {
+    flex-wrap: wrap;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-kpis .metric,
+  .revenue-bar,
+  .payment-method-row i,
+  .dashboard-workflow,
+  .dashboard-lists > section {
+    transition: none !important;
   }
 }
 

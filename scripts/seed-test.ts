@@ -11,6 +11,7 @@ async function main() {
   await db.retailSaleItem.deleteMany();
   await db.retailSale.deleteMany();
   await db.inventoryMovement.deleteMany();
+  await db.workOrderProduct.deleteMany();
   await db.product.deleteMany();
   await db.statusHistory.deleteMany();
   await db.workOrderItem.deleteMany();
@@ -50,6 +51,16 @@ async function main() {
       salePrice: "12.00",
       stockQuantity: 10,
       minStock: 2,
+      favorite: true,
+    },
+    {
+      name: "Batteria Test",
+      category: "Batterie",
+      usage: "REPAIR" as const,
+      costPrice: "35.00",
+      salePrice: "80.00",
+      stockQuantity: 3,
+      minStock: 1,
       favorite: true,
     },
     {

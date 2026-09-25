@@ -78,6 +78,13 @@ test("single operator opens every business page without login", async ({
   await expect(
     page.getByRole("link", { name: "Collaboratori", exact: true }),
   ).toHaveCount(0);
+  await page.goto("/");
+  await expect(
+    page.getByRole("link", { name: "Andamento", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("link", { name: "Statistiche dettagliate", exact: true }),
+  ).toBeVisible();
   await page.goto("/settings");
   await expect(
     page.getByRole("group", { name: "Lingua / 语言", exact: true }),
@@ -104,6 +111,45 @@ test("single operator opens every business page without login", async ({
   await expect(page).toHaveURL(/\/$/);
   await page.goto("/team");
   await expect(page).toHaveURL(/\/$/);
+});
+
+test("dashboard animates once per data snapshot and respects reduced motion", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const dashboard = page.getByTestId("dashboard-motion");
+  await expect(dashboard).toBeVisible();
+  await expect
+    .poll(() =>
+      page.evaluate(() => sessionStorage.getItem("ngt-dashboard-animation")),
+    )
+    .not.toBeNull();
+  const fingerprint = await page.evaluate(() =>
+    sessionStorage.getItem("ngt-dashboard-animation"),
+  );
+  await expect(dashboard).not.toHaveClass(/dashboard-animating/, {
+    timeout: 2000,
+  });
+
+  await page.goto("/orders");
+  await page.goto("/");
+  await expect(page.getByTestId("dashboard-motion")).not.toHaveClass(
+    /dashboard-animating/,
+  );
+  expect(
+    await page.evaluate(() =>
+      sessionStorage.getItem("ngt-dashboard-animation"),
+    ),
+  ).toBe(fingerprint);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.evaluate(() =>
+    sessionStorage.removeItem("ngt-dashboard-animation"),
+  );
+  await page.reload();
+  await expect(page.getByTestId("dashboard-motion")).not.toHaveClass(
+    /dashboard-animating/,
+  );
 });
 
 test("creates a real product and records an inventory movement", async ({
@@ -169,29 +215,28 @@ test("creates automatic quote, receives payment and delivers", async ({
     .getByLabel("Incasso alla creazione (€)", { exact: true })
     .fill("20");
   await save(page);
+  const productForm = page.locator(".order-product-form");
+  const productSelect = productForm.locator('select[name="productId"]');
+  const repairProductId = await productSelect
+    .locator("option", { hasText: "Batteria Test" })
+    .getAttribute("value");
+  await productSelect.selectOption(repairProductId ?? "");
+  await productForm
+    .getByRole("button", { name: "Aggiungi prodotto", exact: true })
+    .click();
+  await expect(page.getByText("Batteria Test", { exact: true })).toBeVisible();
   await expect(
     page.getByText("Accessori ricevuti", { exact: true }),
   ).toHaveCount(0);
   await expect(page.locator(".balance-card>strong")).toContainText("80,00");
   await state(page, "REPAIRING");
   await state(page, "READY");
+  await expect(page.getByText("Scaricato dal magazzino")).toBeVisible();
   await expect(
     page.locator('select[name="kind"] option[value="DEPOSIT"]'),
   ).toHaveCount(0);
   await page.getByLabel("Importo (€)", { exact: true }).fill("80");
-  await page
-    .getByRole("button", { name: "Registra incasso", exact: true })
-    .click();
-  await expect(page.locator(".balance-card>strong")).toContainText("0,00");
-  await page
-    .getByLabel("Nuovo stato", { exact: true })
-    .selectOption("COMPLETED");
-  await expect(
-    page.getByLabel("Nome di chi ritira", { exact: true }),
-  ).toHaveValue("Cliente Playwright");
-  await page
-    .getByRole("button", { name: "Consegna dispositivo", exact: true })
-    .click();
+  await page.getByRole("button", { name: /Incassa e consegna/ }).click();
   await expect(page.locator(".detail-status .badge")).toHaveText("Consegnato");
   await page.getByRole("link", { name: "Cliente ↗", exact: true }).click();
   await expect(
@@ -281,20 +326,14 @@ test("unpaid delivery requires explicit acknowledgement", async ({ page }) => {
   await save(page);
   await state(page, "REPAIRING");
   await state(page, "READY");
-  await page
-    .getByLabel("Nuovo stato", { exact: true })
-    .selectOption("COMPLETED");
+  await page.getByLabel("Importo (€)", { exact: true }).fill("0");
   await page.getByLabel("Nome di chi ritira", { exact: true }).fill("Cliente");
-  await page
-    .getByRole("button", { name: "Consegna dispositivo", exact: true })
-    .click();
+  await page.getByRole("button", { name: /Incassa e consegna/ }).click();
   await expect(page.locator(".detail-status .badge")).toHaveText("Da ritirare");
   await page
     .getByLabel("Autorizzo la consegna con saldo aperto", { exact: true })
     .check();
-  await page
-    .getByRole("button", { name: "Consegna dispositivo", exact: true })
-    .click();
+  await page.getByRole("button", { name: /Incassa e consegna/ }).click();
   await expect(page.locator(".detail-status .badge")).toHaveText("Consegnato");
 });
 test("price editor and mobile yellow layout support both languages", async ({

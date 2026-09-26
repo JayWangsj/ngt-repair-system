@@ -1135,27 +1135,45 @@ describe("unified product inventory", () => {
 });
 
 describe("work order products and combined checkout", () => {
-  it("rejects partial checkout without recording a payment or changing status", async () => {
+  it("records a partial checkout payment and delivers only after the balance is cleared", async () => {
     const order = await createOrder(staff, input({ deposit: "20" }));
     await changeStatus(staff, order.id, { status: "REPAIRING" });
     await changeStatus(staff, order.id, { status: "READY" });
 
-    await expect(
-      checkoutWorkOrder(staff, order.id, {
-        requestId: randomUUID(),
-        amount: "79",
-        method: "CASH",
-        pickedUpBy: "Test Cliente",
-      }),
-    ).rejects.toThrow("saldo deve essere zero");
+    await checkoutWorkOrder(staff, order.id, {
+      requestId: randomUUID(),
+      amount: "79",
+      method: "CASH",
+      pickedUpBy: "Test Cliente",
+    });
 
-    const unchanged = await db.workOrder.findUniqueOrThrow({
+    const partial = await db.workOrder.findUniqueOrThrow({
       where: { id: order.id },
       include: { payments: true },
     });
-    expect(unchanged.status).toBe("READY");
-    expect(unchanged.payments).toHaveLength(1);
-    expect(unchanged.payments[0].amount.toString()).toBe("20");
+    expect(partial.status).toBe("READY");
+    expect(
+      partial.payments.map((payment) => payment.amount.toString()),
+    ).toEqual(expect.arrayContaining(["20", "79"]));
+    expect(
+      await db.auditLog.count({
+        where: { entityId: order.id, action: "PAYMENT_ADDED" },
+      }),
+    ).toBe(2);
+
+    const deliveredAt = "2026-09-27T12:30:00.000Z";
+    await checkoutWorkOrder(staff, order.id, {
+      requestId: randomUUID(),
+      amount: "1",
+      method: "CARD",
+      pickedUpBy: "Test Cliente",
+      pickedUpAt: deliveredAt,
+    });
+    const completed = await db.workOrder.findUniqueOrThrow({
+      where: { id: order.id },
+    });
+    expect(completed.status).toBe("COMPLETED");
+    expect(completed.pickedUpAt?.toISOString()).toBe(deliveredAt);
   });
 
   it("deducts repair parts at READY once and allocates combined payment", async () => {

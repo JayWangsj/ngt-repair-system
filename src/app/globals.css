@@ -1002,13 +1002,187 @@ textarea {
   color: var(--muted);
   font-size: 11px;
 }
-.detail-status-trigger {
-  border: 0;
-  padding: 0;
-  background: transparent;
-}
 .detail-status-control .inline-order-control {
-  min-width: 185px;
+  min-width: 0;
+}
+.status-dropdown {
+  display: inline-flex;
+  vertical-align: middle;
+}
+.status-dropdown-trigger {
+  --status-color: #66737b;
+  --status-bg: #f4f6f7;
+  --status-bg-hover: #edf1f2;
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--status-color) 22%, white);
+  border-radius: 7px;
+  background: var(--status-bg);
+  color: var(--status-color);
+  font: inherit;
+  font-size: 10px;
+  white-space: nowrap;
+  cursor: pointer;
+  transform: translateY(0) scale(1);
+  transition:
+    transform 180ms var(--ease-ui),
+    border-color 180ms var(--ease-ui),
+    background 180ms var(--ease-ui),
+    box-shadow 180ms var(--ease-ui);
+}
+.status-dropdown-trigger:hover:not(:disabled),
+.status-dropdown-trigger:focus-visible {
+  border-color: color-mix(in srgb, var(--status-color) 42%, white);
+  background: var(--status-bg-hover);
+  box-shadow: 0 3px 9px color-mix(in srgb, var(--status-color) 10%, transparent);
+  transform: translateY(-1px) scale(1.015);
+}
+.status-dropdown.is-open .status-dropdown-trigger {
+  border-color: color-mix(in srgb, var(--status-color) 48%, white);
+  background: var(--status-bg-hover);
+  transform: translateY(0) scale(1.01);
+}
+.status-dropdown-trigger:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+.status-dropdown-trigger:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+.status-dropdown-trigger svg {
+  transition: transform 180ms var(--ease-ui);
+}
+.status-dropdown.is-open .status-dropdown-trigger svg {
+  transform: rotate(180deg);
+}
+.status-dropdown-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--status-color);
+}
+.status-dropdown-menu {
+  position: fixed;
+  z-index: 1200;
+  display: grid;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid #e1e5e4;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 10px 28px rgb(30 45 40 / 12%);
+  animation: status-menu-in 170ms var(--ease-ui);
+}
+@keyframes status-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.status-dropdown-option {
+  --status-color: #66737b;
+  --status-bg: #f4f6f7;
+  display: flex;
+  width: 100%;
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #39433f;
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.status-dropdown-option:hover,
+.status-dropdown-option:focus-visible {
+  background: var(--status-bg);
+  outline: none;
+}
+.status-dropdown-trigger.status-received,
+.status-dropdown-option.status-received {
+  --status-color: #6d7880;
+  --status-bg: #f3f5f6;
+  --status-bg-hover: #ebeff1;
+}
+.status-dropdown-trigger.status-diagnosing,
+.status-dropdown-option.status-diagnosing {
+  --status-color: #81649a;
+  --status-bg: #f6f2f8;
+  --status-bg-hover: #eee7f3;
+}
+.status-dropdown-trigger.status-waiting_approval,
+.status-dropdown-option.status-waiting_approval,
+.status-dropdown-trigger.status-ready,
+.status-dropdown-option.status-ready {
+  --status-color: #9b741e;
+  --status-bg: #fdf8e9;
+  --status-bg-hover: #f9f0d2;
+}
+.status-dropdown-trigger.status-repairing,
+.status-dropdown-option.status-repairing {
+  --status-color: #4779a8;
+  --status-bg: #f0f6fb;
+  --status-bg-hover: #e6f0f8;
+}
+.status-dropdown-trigger.status-parts_missing,
+.status-dropdown-option.status-parts_missing {
+  --status-color: #a9632f;
+  --status-bg: #fbf3ec;
+  --status-bg-hover: #f6e8db;
+}
+.status-dropdown-trigger.status-completed,
+.status-dropdown-option.status-completed {
+  --status-color: #377b50;
+  --status-bg: #eff8f2;
+  --status-bg-hover: #e4f2e8;
+}
+.status-dropdown-trigger.status-reworking,
+.status-dropdown-option.status-reworking {
+  --status-color: #876099;
+  --status-bg: #f7f1f8;
+  --status-bg-hover: #eee4f1;
+}
+.status-dropdown-trigger.status-refunded,
+.status-dropdown-option.status-refunded,
+.status-dropdown-trigger.status-cancelled,
+.status-dropdown-option.status-cancelled {
+  --status-color: #6f7a80;
+  --status-bg: #f4f6f7;
+  --status-bg-hover: #eceff1;
+}
+.checkout-summary {
+  display: grid;
+  gap: 7px;
+  margin: 14px 0;
+  padding: 12px 0;
+  border-block: 1px solid var(--line);
+}
+.checkout-summary > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+}
+.checkout-summary dt,
+.checkout-summary dd {
+  margin: 0;
+}
+.checkout-summary > div:last-child {
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+  font-weight: 700;
 }
 .detail-grid {
   display: grid;

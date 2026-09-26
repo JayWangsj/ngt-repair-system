@@ -49,11 +49,12 @@ async function save(page: Page) {
   await expect(page).toHaveURL(/\/orders\/(?!new)[a-z0-9]+$/);
 }
 async function state(page: Page, next: string) {
-  await page.locator(".detail-status-trigger").click();
-  await page.locator(".detail-status .status-select").selectOption(next);
-  await expect(page.locator(".detail-status .badge")).toContainText(
-    next === "REPAIRING" ? "In riparazione" : "Da ritirare",
-  );
+  const label = next === "REPAIRING" ? "In riparazione" : "Da ritirare";
+  await page.locator(".detail-status .status-dropdown-trigger").click();
+  await page.getByRole("option", { name: label, exact: true }).click();
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toContainText(label);
 }
 test("single operator opens every business page without login", async ({
   page,
@@ -257,11 +258,30 @@ test("repair list exposes month, status, due-date and payment controls", async (
     "transform",
     /matrix\(1\.015, 0, 0, 1\.015, 0, 0\)/,
   );
-  const status = row.locator(
-    'select.status-select:has(option[value="PARTS_MISSING"])',
-  );
+  const status = row.locator(".status-dropdown-trigger");
   await expect(status).toBeVisible();
-  await status.selectOption("PARTS_MISSING");
+  await expect(row.locator("select.status-select")).toHaveCount(0);
+  const currentStatus = (await status.textContent())?.trim() ?? "";
+  const rowHeight = await row.evaluate(
+    (element) => element.getBoundingClientRect().height,
+  );
+  await status.click();
+  await expect(page.locator(".status-dropdown-menu")).toHaveCSS(
+    "position",
+    "fixed",
+  );
+  await expect(
+    page
+      .locator(".status-dropdown-menu")
+      .getByRole("option", { name: currentStatus, exact: true }),
+  ).toHaveCount(0);
+  expect(
+    await row.evaluate((element) => element.getBoundingClientRect().height),
+  ).toBe(rowHeight);
+  await page
+    .locator(".status-dropdown-menu")
+    .getByRole("option", { name: "Ricambio mancante", exact: true })
+    .click();
   await expect(status).toHaveClass(/status-parts_missing/);
   await expect(
     row.getByLabel("Consegna prevista", { exact: true }),
@@ -273,6 +293,31 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await expect(row.getByLabel("Incassato", { exact: true })).toHaveCount(0);
   await expect(row).toContainText("30,00 €");
   await expect(row).toContainText("30/11/2099");
+});
+test("repair list delivery choice opens the shared checkout dialog", async ({
+  page,
+}) => {
+  await fillOrder(page);
+  await save(page);
+  await state(page, "READY");
+  const orderPath = new URL(page.url()).pathname;
+  await page.goto("/orders");
+  const row = page.locator(`tbody tr:has(a[href="${orderPath}"])`);
+  await row.click();
+  await row.locator(".status-dropdown-trigger").click();
+  await page
+    .locator(".status-dropdown-menu")
+    .getByRole("option", { name: "Consegnato", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Incassa e consegna" });
+  await expect(dialog.getByLabel("Importo (€)", { exact: true })).toHaveValue(
+    "100.00",
+  );
+  await dialog.getByRole("button", { name: "Annulla", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(row.locator(".status-dropdown-trigger")).toHaveText(
+    /Da ritirare/,
+  );
 });
 
 test("diagnostic intake hides repair projects and defaults the fee", async ({
@@ -361,7 +406,9 @@ test("creates automatic quote, receives payment and delivers", async ({
   ).toHaveCount(0);
   await page.getByLabel("Importo (€)", { exact: true }).fill("80");
   await page.getByRole("button", { name: /Incassa e consegna/ }).click();
-  await expect(page.locator(".detail-status .badge")).toHaveText("Consegnato");
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toHaveText(/Consegnato/);
   await page
     .getByRole("link", { name: "Cliente Playwright", exact: true })
     .click();
@@ -447,26 +494,80 @@ test("manual quote saves automatically and rejects overpayment", async ({
   await page.getByLabel("Cerca", { exact: true }).fill("fotocamera");
   await expect(page.getByText(/fotocamera/i).first()).toBeVisible();
 });
-test("delivery requires a zero balance", async ({ page }) => {
+test("partial checkout records payment and delivers only after the balance is cleared", async ({
+  page,
+}) => {
   await fillOrder(page);
   await save(page);
   await state(page, "READY");
+  const trigger = page.locator(".detail-status .status-dropdown-trigger");
+  await trigger.hover();
+  await expect(trigger).toHaveCSS(
+    "transform",
+    /matrix\(1\.015, 0, 0, 1\.015, 0, -1\)/,
+  );
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await expect(trigger.locator("svg")).toHaveCSS(
+    "transform",
+    "matrix(-1, 0, 0, -1, 0, 0)",
+  );
+  await expect(
+    page
+      .locator(".status-dropdown-menu")
+      .getByRole("option", { name: "Da ritirare", exact: true }),
+  ).toHaveCount(0);
+  await trigger.click();
   await page.getByLabel("Importo (€)", { exact: true }).fill("99");
   await page.getByLabel("Nome di chi ritira", { exact: true }).fill("Cliente");
-  await page.getByRole("button", { name: /Incassa e consegna/ }).click();
-  await expect(page.locator(".detail-status .badge")).toHaveText("Da ritirare");
-  await expect(page.getByText(/uguale al saldo da pagare/i)).toBeVisible();
+  await page.getByRole("button", { name: /Registra incasso/ }).click();
   await expect(
-    page.getByRole("button", { name: /Incassa e consegna/ }),
-  ).toBeEnabled();
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toHaveText(/Da ritirare/);
+  await expect(page.locator(".balance-card>strong")).toContainText("1,00");
   await page.reload();
-  await expect(page.locator(".detail-status .badge")).toHaveText("Da ritirare");
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toHaveText(/Da ritirare/);
   await expect(page.getByLabel("Importo (€)", { exact: true })).toHaveValue(
-    "100.00",
+    "1.00",
   );
-  await page.getByLabel("Importo (€)", { exact: true }).fill("100");
-  await page.getByRole("button", { name: /Incassa e consegna/ }).click();
-  await expect(page.locator(".detail-status .badge")).toHaveText("Consegnato");
+  await page.locator(".detail-status .status-dropdown-trigger").click();
+  await page.getByRole("option", { name: "Consegnato", exact: true }).click();
+  const checkout = page.getByRole("dialog", { name: "Incassa e consegna" });
+  await expect(checkout.getByLabel("Importo (€)", { exact: true })).toHaveValue(
+    "1.00",
+  );
+  await checkout.getByRole("button", { name: /Incassa e consegna/ }).click();
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toHaveText(/Consegnato/);
+});
+test("zero balance delivery uses the lightweight confirmation dialog", async ({
+  page,
+}) => {
+  await fillOrder(page);
+  await page
+    .getByLabel("Registra un pagamento adesso", { exact: true })
+    .check();
+  await page
+    .getByLabel("Incasso alla creazione (€)", { exact: true })
+    .fill("100");
+  await save(page);
+  await state(page, "READY");
+  await page.locator(".detail-status .status-dropdown-trigger").click();
+  await page.getByRole("option", { name: "Consegnato", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Conferma consegna" });
+  await expect(dialog.getByLabel("Importo (€)", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(
+    dialog.getByLabel("Nome di chi ritira", { exact: true }),
+  ).toHaveValue("Cliente Playwright");
+  await dialog.getByRole("button", { name: "Conferma consegna" }).click();
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toHaveText(/Consegnato/);
 });
 test("repair detail cards lock history and keep post-sale finance auditable", async ({
   page,
@@ -567,8 +668,10 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
 
   await state(page, "READY");
   await page.getByLabel("Nome di chi ritira", { exact: true }).fill("Cliente");
-  await page.getByRole("button", { name: /Incassa e consegna/ }).click();
-  await expect(page.locator(".detail-status .badge")).toHaveText("Consegnato");
+  await page.getByRole("button", { name: /Conferma consegna/ }).click();
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toHaveText(/Consegnato/);
   const firstDelivery = await details.getByText(/Ritirato da/).textContent();
   await expect(
     details.getByRole("button", { name: "Modifica dati" }),
@@ -591,9 +694,9 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await dialog
     .getByRole("button", { name: "Apri riparazione post-vendita", exact: true })
     .click();
-  await expect(page.locator(".detail-status .badge")).toHaveText(
-    "In riparazione post-vendita",
-  );
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toHaveText(/In riparazione post-vendita/);
   await expect(page.locator(".balance-card>strong")).toContainText("50,00");
   await expect(page.getByTestId("history-card")).toContainText(
     "Riparazione post-vendita aperta",
@@ -608,7 +711,7 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await page
     .getByLabel("Nome di chi ritira", { exact: true })
     .fill("Altro nome");
-  await page.getByRole("button", { name: /Incassa e consegna/ }).click();
+  await page.getByRole("button", { name: /Conferma consegna/ }).click();
   await expect(details.getByText(/Ritirato da/)).toHaveText(
     firstDelivery ?? "",
   );
@@ -619,7 +722,9 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await dialog
     .getByRole("button", { name: "Conferma rimborso totale", exact: true })
     .click();
-  await expect(page.locator(".detail-status .badge")).toHaveText("Rimborsato");
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toHaveText(/Rimborsato/);
   await expect(page.locator(".balance-card>strong")).toContainText("0,00");
   await expect(page.locator(".balance-card")).toContainText("Totale: 0,00 €");
   await expect(page.locator(".balance-card")).toContainText(

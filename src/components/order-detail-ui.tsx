@@ -52,6 +52,7 @@ export function OrderDetailCard({
       if (!(target instanceof Node) || card.current?.contains(target)) return;
       const clickTarget =
         target instanceof HTMLElement ? target : target.parentElement;
+      if (clickTarget?.closest("[data-prevent-card-autosave]")) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       if (saving.current) return;

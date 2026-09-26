@@ -221,6 +221,9 @@ export default async function Detail({
           id={id}
           status={order.status}
           customerName={order.customerName || order.device.customer.name}
+          due={currentDue}
+          paid={received}
+          balance={remaining}
         />
         <span>
           {it.created}: {dateTime(order.createdAt)}
@@ -490,9 +493,10 @@ export default async function Detail({
               <h2>{it.orderProducts.checkout}</h2>
               <WorkOrderCheckout
                 orderId={id}
+                due={currentDue}
+                paid={received}
                 remaining={remaining}
                 customerName={order.customerName || order.device.customer.name}
-                owner={actor.role === "OWNER"}
               />
             </section>
           )}

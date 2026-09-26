@@ -2184,6 +2184,7 @@ export function FormDialog({
     <dialog
       ref={dialog}
       className="form-dialog"
+      data-prevent-card-autosave
       aria-labelledby={titleId}
       onCancel={(e) => {
         e.preventDefault();

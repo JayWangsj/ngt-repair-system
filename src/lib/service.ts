@@ -1355,9 +1355,10 @@ export async function checkoutWorkOrder(
     if (order.status !== "READY")
       throw new BusinessError("La riparazione non è pronta per la consegna.");
     const remaining = balance(order.items, order.payments, order);
+    if (amount < 0 || (remaining > 0 && amount === 0))
+      throw new BusinessError("L'importo deve essere maggiore di zero.");
     if (amount > remaining)
       throw new BusinessError("L'importo supera il saldo da pagare.");
-    assertDelivery(remaining - amount);
     if (amount > 0) {
       const repairDue = settlement(order.items, {
         orderDiscount: order.orderDiscount,
@@ -1380,7 +1381,7 @@ export async function checkoutWorkOrder(
         Math.max(0, repairDue - repairPaid),
         Math.max(0, retailDue - retailPaid),
       );
-      await tx.payment.create({
+      const payment = await tx.payment.create({
         data: {
           requestId: data.requestId,
           orderId,
@@ -1411,13 +1412,24 @@ export async function checkoutWorkOrder(
           },
         },
       });
+      await audit(tx, actor, orderId, "PAYMENT_ADDED", {
+        paymentId: payment.id,
+        amount: decimal(amount),
+        kind: order.afterSalesOpen ? "AFTER_SALES" : "BALANCE",
+        method: data.method,
+      });
     }
+    if (remaining - amount > 0)
+      return tx.workOrder.findUniqueOrThrow({ where: { id: orderId } });
+    assertDelivery(remaining - amount);
     await consumeWorkOrderProducts(tx, actor, orderId, "RETAIL_ADDON");
     await tx.workOrder.update({
       where: { id: orderId },
       data: {
         status: "COMPLETED",
-        pickedUpAt: order.pickedUpAt ?? new Date(),
+        pickedUpAt:
+          order.pickedUpAt ??
+          (data.pickedUpAt ? new Date(data.pickedUpAt) : new Date()),
         pickedUpBy: order.pickedUpBy ?? data.pickedUpBy,
         afterSalesOpen: false,
         afterSalesDueDate: null,

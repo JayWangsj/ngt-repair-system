@@ -12,6 +12,7 @@ import { cents, creatablePaymentMethods, decimal, money } from "@/lib/domain";
 import { useMessages } from "./language";
 import { Button } from "./ui/button";
 import { OrderDetailCard } from "./order-detail-ui";
+import { FormDialog } from "./forms";
 
 type ProductOption = {
   id: string;
@@ -153,27 +154,47 @@ export function WorkOrderProducts({
 
 export function WorkOrderCheckout({
   orderId,
+  due,
+  paid,
   remaining,
   customerName,
+  onClose,
 }: {
   orderId: string;
+  due: number;
+  paid: number;
   remaining: number;
   customerName: string;
-  owner: boolean;
+  onClose?: () => void;
 }) {
   const it = useMessages();
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const [requestId] = useState(() => crypto.randomUUID());
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const [amount, setAmount] = useState(decimal(remaining));
+  let enteredAmount = 0;
+  try {
+    enteredAmount = cents(amount || "0");
+  } catch {}
+  const now = () => {
+    const date = new Date();
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+      .toISOString()
+      .slice(0, 16);
+  };
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
     const data = new FormData(event.currentTarget);
-    const amount = String(data.get("amount") ?? "0");
+    const submittedAmount = String(data.get("amount") ?? "0");
+    let submittedCents: number;
     try {
-      if (cents(amount) !== remaining)
-        return setError(it.orderProducts.checkoutExactAmount);
+      submittedCents = cents(submittedAmount);
+      if (submittedCents < 0 || submittedCents > remaining)
+        return setError(it.orderProducts.checkoutAmountRange);
+      if (remaining > 0 && submittedCents === 0)
+        return setError(it.orderProducts.checkoutAmountRange);
     } catch {
       return setError(it.validationError);
     }
@@ -181,12 +202,19 @@ export function WorkOrderCheckout({
     try {
       const result = await checkoutWorkOrderAction(orderId, {
         requestId,
-        amount,
+        amount: submittedAmount,
         method: String(data.get("method") ?? "CASH"),
         pickedUpBy: String(data.get("pickedUpBy") ?? ""),
+        pickedUpAt: new Date(String(data.get("pickedUpAt"))).toISOString(),
         override: data.get("override") === "on",
       });
       if (!result.ok) return setError(result.error);
+      const delivered = submittedCents === remaining;
+      if (!delivered) {
+        setRequestId(crypto.randomUUID());
+        setAmount(decimal(remaining - submittedCents));
+      }
+      onClose?.();
       router.refresh();
     } catch {
       setError(it.connectionError);
@@ -195,37 +223,110 @@ export function WorkOrderCheckout({
     }
   }
   return (
-    <form className="action-form" onSubmit={submit}>
+    <form
+      className="action-form checkout-form"
+      data-prevent-card-autosave
+      onSubmit={submit}
+    >
       <p className="muted">{it.orderProducts.checkoutDescription}</p>
-      <label>
-        <span>{it.amount}</span>
-        <input
-          name="amount"
-          inputMode="decimal"
-          defaultValue={decimal(remaining)}
-          required
-        />
-      </label>
-      <label>
-        <span>{it.paymentMethod}</span>
-        <select name="method">
-          {creatablePaymentMethods.map((method) => (
-            <option key={method} value={method}>
-              {it.methods[method]}
-            </option>
-          ))}
-        </select>
-      </label>
+      <dl className="checkout-summary">
+        <div>
+          <dt>{it.total}</dt>
+          <dd>{money(due)}</dd>
+        </div>
+        <div>
+          <dt>{it.paid}</dt>
+          <dd>{money(paid)}</dd>
+        </div>
+        <div>
+          <dt>{it.balance}</dt>
+          <dd>{money(remaining)}</dd>
+        </div>
+      </dl>
+      {remaining > 0 && (
+        <>
+          <label>
+            <span>{it.amount}</span>
+            <input
+              name="amount"
+              inputMode="decimal"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              required
+            />
+          </label>
+          <label>
+            <span>{it.paymentMethod}</span>
+            <select name="method">
+              {creatablePaymentMethods.map((method) => (
+                <option key={method} value={method}>
+                  {it.methods[method]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </>
+      )}
+      {remaining === 0 && <input type="hidden" name="amount" value="0" />}
       <label>
         <span>{it.pickedUpBy}</span>
         <input name="pickedUpBy" defaultValue={customerName} required />
       </label>
+      <label>
+        <span>{it.orderProducts.deliveryTime}</span>
+        <input
+          name="pickedUpAt"
+          type="datetime-local"
+          defaultValue={now()}
+          required
+        />
+      </label>
       {error && <p className="message error">{error}</p>}
-      <Button disabled={pending}>
-        {pending
-          ? it.saving
-          : `${it.orderProducts.checkout} · ${money(remaining)}`}
-      </Button>
+      <div className="dialog-actions">
+        {onClose && (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={pending}
+            onClick={onClose}
+          >
+            {it.cancel}
+          </Button>
+        )}
+        <Button disabled={pending} aria-busy={pending}>
+          {pending
+            ? it.saving
+            : remaining === 0
+              ? it.orderProducts.confirmDelivery
+              : enteredAmount < remaining
+                ? `${it.orderProducts.collectPayment} · ${money(enteredAmount)}`
+                : `${it.orderProducts.checkout} · ${money(remaining)}`}
+        </Button>
+      </div>
     </form>
+  );
+}
+
+export function WorkOrderCheckoutDialog({
+  open,
+  onClose,
+  ...props
+}: Omit<Parameters<typeof WorkOrderCheckout>[0], "onClose"> & {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const it = useMessages();
+  if (!open) return null;
+  return (
+    <FormDialog
+      title={
+        props.remaining > 0
+          ? it.orderProducts.checkout
+          : it.orderProducts.confirmDelivery
+      }
+      onClose={onClose}
+    >
+      <WorkOrderCheckout {...props} onClose={onClose} />
+    </FormDialog>
   );
 }

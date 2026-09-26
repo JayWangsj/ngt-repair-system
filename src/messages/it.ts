@@ -188,9 +188,13 @@ export const it = {
     consumed: "Scaricato dal magazzino",
     empty: "Nessun prodotto collegato.",
     checkout: "Incassa e consegna",
-    checkoutDescription: "Registra l'incasso residuo e completa la consegna.",
-    checkoutExactAmount:
-      "L'importo deve essere uguale al saldo da pagare prima della consegna.",
+    collectPayment: "Registra incasso",
+    confirmDelivery: "Conferma consegna",
+    deliveryTime: "Data e ora di consegna",
+    checkoutDescription:
+      "Un incasso parziale mantiene la scheda da ritirare; il saldo completo conclude la consegna.",
+    checkoutAmountRange:
+      "Inserisci un importo valido entro il saldo da pagare.",
   },
   kinds: {
     DEPOSIT: "Acconto",

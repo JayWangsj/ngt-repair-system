@@ -18,6 +18,8 @@ import {
   type OrderStatus,
 } from "@/lib/domain";
 import { useMessages } from "./language";
+import { StatusDropdown } from "./status-dropdown";
+import { WorkOrderCheckoutDialog } from "./work-order-products";
 
 export type OrderListRow = {
   id: string;
@@ -48,65 +50,60 @@ function StaticStatus({ status }: { status: OrderStatus }) {
 function StatusControl({
   row,
   active,
-  allowCompletion = true,
-  onActivate,
-  onSaved,
 }: {
-  row: Pick<OrderListRow, "id" | "status" | "customerName">;
+  row: Pick<
+    OrderListRow,
+    "id" | "status" | "customerName" | "due" | "paid" | "balance"
+  >;
   active: boolean;
-  allowCompletion?: boolean;
-  onActivate?: () => void;
-  onSaved?: () => void;
 }) {
   const it = useMessages();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
   const choices = transitions[row.status].filter(
-    (status) => allowCompletion || status !== "COMPLETED",
+    (status) => !["REWORKING", "REFUNDED"].includes(status),
   );
-  if (!active || row.status === "COMPLETED" || choices.length === 0)
-    return onActivate && choices.length ? (
-      <button
-        type="button"
-        className="detail-status-trigger"
-        onClick={onActivate}
-      >
-        <StaticStatus status={row.status} />
-      </button>
-    ) : (
-      <StaticStatus status={row.status} />
-    );
+  if (!active) return <StaticStatus status={row.status} />;
   return (
     <div className="inline-order-control">
-      <select
-        className={`status-select status-${row.status.toLowerCase()}`}
-        aria-label={`${it.statusLabel}: ${it.status[row.status]}`}
+      <StatusDropdown
         value={row.status}
+        label={it.status[row.status]}
+        options={choices.map((status) => ({
+          value: status,
+          label: it.status[status],
+        }))}
         disabled={pending}
-        onChange={(event) => {
-          const next = event.target.value as OrderStatus;
+        readonly={choices.length === 0}
+        onChange={(next) => {
+          if (next === "COMPLETED") {
+            setCheckoutOpen(true);
+            return;
+          }
           startTransition(async () => {
             const result = await statusAction(row.id, {
               status: next,
               note: "",
-              pickedUpBy: next === "COMPLETED" ? row.customerName : "",
+              pickedUpBy: "",
             });
             if (!result.ok) return setError(result.error);
             setError("");
-            onSaved?.();
             router.refresh();
           });
         }}
-      >
-        <option value={row.status}>{it.status[row.status]}</option>
-        {choices.map((next) => (
-          <option value={next} key={next}>
-            {it.status[next]}
-          </option>
-        ))}
-      </select>
+      />
       {error && <small className="inline-control-error">{error}</small>}
+      <WorkOrderCheckoutDialog
+        open={checkoutOpen}
+        onClose={() => setCheckoutOpen(false)}
+        orderId={row.id}
+        due={row.due}
+        paid={row.paid}
+        remaining={row.balance}
+        customerName={row.customerName}
+      />
     </div>
   );
 }
@@ -115,25 +112,18 @@ export function DetailStatusControl({
   id,
   status,
   customerName,
-}: Pick<OrderListRow, "id" | "status" | "customerName">) {
-  const [active, setActive] = useState(false);
-  const control = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!active) return;
-    function outside(event: PointerEvent) {
-      if (!control.current?.contains(event.target as Node)) setActive(false);
-    }
-    document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
-  }, [active]);
+  due,
+  paid,
+  balance,
+}: Pick<
+  OrderListRow,
+  "id" | "status" | "customerName" | "due" | "paid" | "balance"
+>) {
   return (
-    <div className="detail-status-control" ref={control}>
+    <div className="detail-status-control">
       <StatusControl
-        row={{ id, status, customerName }}
-        active={active}
-        allowCompletion={false}
-        onActivate={() => setActive(true)}
-        onSaved={() => setActive(false)}
+        row={{ id, status, customerName, due, paid, balance }}
+        active
       />
     </div>
   );

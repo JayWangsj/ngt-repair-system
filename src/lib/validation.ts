@@ -165,6 +165,7 @@ export const checkoutInput = z.object({
   amount: amountInput.default("0"),
   method: z.enum(["CASH", "CARD", "OTHER"]),
   pickedUpBy: short,
+  pickedUpAt: z.string().datetime().optional(),
   override: z.boolean().default(false),
 });
 export const statusInput = z.object({

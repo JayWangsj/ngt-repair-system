@@ -154,8 +154,11 @@ export const zh: typeof it = {
     consumed: "库存已扣减",
     empty: "尚未关联商品。",
     checkout: "收款并交付",
-    checkoutDescription: "登记剩余收款并完成交付。",
-    checkoutExactAmount: "收款并交付的金额必须等于当前待收余额。",
+    collectPayment: "登记收款",
+    confirmDelivery: "确认交付",
+    deliveryTime: "实际交付时间",
+    checkoutDescription: "部分收款后保持待取机；结清全部余额后完成交付。",
+    checkoutAmountRange: "请输入大于零且不超过待收余额的金额。",
   },
   kinds: {
     DEPOSIT: "预付款",

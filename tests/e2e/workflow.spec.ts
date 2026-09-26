@@ -198,14 +198,61 @@ test("creates and edits a product directly in the inventory row", async ({
 test("repair list exposes month, status, due-date and payment controls", async ({
   page,
 }) => {
-  await fillOrder(page);
+  await fillOrder(page, { manual: true });
   await save(page);
   await page.goto("/orders");
   await expect(page.locator('input[name="month"]')).toHaveValue(
     /^\d{4}-\d{2}$/,
   );
   const row = page.locator("tbody tr").first();
+  await row.hover();
+  await expect(row).toHaveCSS("background-color", "rgb(255, 249, 232)");
+  await expect(row).toHaveCSS("transform", /matrix\(1, 0, 0, 1, 0, -1\)/);
+
+  const orderLink = row.locator(".order-code-link");
+  await orderLink.hover();
+  await expect(orderLink).toHaveCSS("color", "rgb(84, 62, 0)");
+  await expect(orderLink.locator("svg")).toHaveCSS(
+    "transform",
+    "matrix(1, 0, 0, 1, 4, 0)",
+  );
+  expect(
+    await orderLink
+      .locator("span")
+      .evaluate((text) => getComputedStyle(text, "::after").transform),
+  ).toBe("matrix(1, 0, 0, 1, 0, 0)");
+  await orderLink.evaluate((link) =>
+    link.addEventListener("click", (event) => event.preventDefault()),
+  );
+  await orderLink.click();
+  await expect(row).not.toHaveClass(/order-row-active/);
+
+  const customerLink = row.locator(".order-customer-link");
+  await customerLink.hover();
+  await expect(customerLink).toHaveCSS(
+    "transform",
+    "matrix(1.01, 0, 0, 1.01, 0, 0)",
+  );
+  expect(
+    await customerLink
+      .locator("span")
+      .evaluate((text) => getComputedStyle(text, "::after").transform),
+  ).toBe("matrix(1, 0, 0, 1, 0, 0)");
+  await customerLink.evaluate((link) =>
+    link.addEventListener("click", (event) => event.preventDefault()),
+  );
+  await customerLink.click();
+  await expect(row).not.toHaveClass(/order-row-active/);
+
   await row.click();
+  await expect(row).toHaveClass(/order-row-active/);
+  await expect(row).toHaveCSS("background-color", "rgb(255, 249, 232)");
+  await expect(row).toHaveCSS("box-shadow", "none");
+  await expect(row).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+  await expect(row.locator(".order-inline-edit-cell > *").first()).toHaveCSS(
+    "transform",
+    /matrix\(1\.015, 0, 0, 1\.015, 0, 0\)/,
+  );
   const status = row.locator(
     'select.status-select:has(option[value="PARTS_MISSING"])',
   );

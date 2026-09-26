@@ -215,7 +215,7 @@ export function OrderListBody({
     return () => document.removeEventListener("pointerdown", outside);
   }, []);
   return (
-    <tbody ref={body}>
+    <tbody className="order-list-body" ref={body}>
       {rows.map((row) => {
         const active = row.id === activeId;
         return (
@@ -225,18 +225,23 @@ export function OrderListBody({
             onClick={() => setActiveId(row.id)}
           >
             <td>
-              <Link className="order-link" href={`/orders/${row.id}`}>
-                {row.code}
+              <Link
+                className="order-link order-code-link"
+                href={`/orders/${row.id}`}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <span>{row.code}</span>
                 <ChevronRight size={15} aria-hidden="true" />
               </Link>
             </td>
             {!hideCustomer && (
               <td>
                 <Link
-                  className="order-link"
+                  className="order-link order-customer-link"
                   href={`/customers/${row.customerId}`}
+                  onClick={(event) => event.stopPropagation()}
                 >
-                  {row.customerName}
+                  <span>{row.customerName}</span>
                 </Link>
               </td>
             )}
@@ -248,13 +253,15 @@ export function OrderListBody({
                 {row.projects}
               </small>
             </td>
-            <td>
+            <td className="order-inline-edit-cell">
               <StatusControl row={row} active={active} />
             </td>
-            <td className={row.overdue ? "danger-text" : ""}>
+            <td
+              className={`order-inline-edit-cell${row.overdue ? " danger-text" : ""}`}
+            >
               <DueDateControl key={row.dueDate} row={row} active={active} />
             </td>
-            <td className="numeric">
+            <td className="numeric order-inline-edit-cell">
               <PaymentControl key={row.paid} row={row} active={active} />
             </td>
           </tr>

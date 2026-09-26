@@ -131,6 +131,18 @@ export async function statusAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.changeStatus(actor, id, input));
 }
+export async function warrantyAction(id: string, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.updateWarranty(actor, id, input));
+}
+export async function afterSalesAction(id: string, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.openAfterSales(actor, id, input));
+}
+export async function refundAction(id: string, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.refundOrder(actor, id, input));
+}
 export async function ruleAction(id: string | null, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.savePriceRule(actor, id, input));

@@ -35,6 +35,9 @@ import {
   checkoutInput,
   ruleInput,
   statusInput,
+  warrantyInput,
+  afterSalesInput,
+  refundInput,
   userInput,
 } from "./validation";
 import { z } from "zod";
@@ -42,6 +45,13 @@ import { hash } from "bcryptjs";
 import { normalizeBrand, normalizeModel } from "./catalog";
 
 type Tx = Prisma.TransactionClient;
+const lockedOrderStatuses = ["COMPLETED", "REWORKING", "REFUNDED", "CANCELLED"];
+function originalOrderLocked(order: {
+  status: string;
+  afterSalesOpen?: boolean;
+}) {
+  return lockedOrderStatuses.includes(order.status) || order.afterSalesOpen;
+}
 export const orderInclude = {
   device: { include: { customer: true } },
   items: true,
@@ -461,7 +471,7 @@ export async function updateOrder(actorInput: Actor, id: string, raw: unknown) {
   return transact(async (tx) => {
     const actor = await currentActor(tx, actorInput);
     const order = await tx.workOrder.findUniqueOrThrow({ where: { id } });
-    if (["COMPLETED", "CANCELLED"].includes(order.status))
+    if (originalOrderLocked(order))
       throw new BusinessError("La scheda è chiusa.");
     await tx.workOrder.update({
       where: { id },
@@ -479,7 +489,7 @@ export async function updateDueDate(
   return transact(async (tx) => {
     const actor = await currentActor(tx, actorInput);
     const order = await tx.workOrder.findUniqueOrThrow({ where: { id } });
-    if (["COMPLETED", "CANCELLED"].includes(order.status))
+    if (originalOrderLocked(order))
       throw new BusinessError("La scheda è chiusa.");
     await tx.workOrder.update({
       where: { id },
@@ -502,7 +512,7 @@ export async function replaceQuote(
       where: { id },
       include: orderInclude,
     });
-    if (["COMPLETED", "CANCELLED"].includes(order.status))
+    if (originalOrderLocked(order))
       throw new BusinessError("La scheda è chiusa.");
     const items = await snapshots(
       tx,
@@ -600,7 +610,7 @@ export async function confirmQuote(
   return transact(async (tx) => {
     const actor = await currentActor(tx, actorInput);
     const order = await tx.workOrder.findUniqueOrThrow({ where: { id } });
-    if (["COMPLETED", "CANCELLED"].includes(order.status))
+    if (originalOrderLocked(order))
       throw new BusinessError("La scheda è chiusa.");
     await tx.workOrder.update({
       where: { id },
@@ -627,7 +637,7 @@ export async function addPayment(actorInput: Actor, id: string, raw: unknown) {
       if (
         existing.orderId !== id ||
         cents(existing.amount) !== amount ||
-        existing.kind !== data.kind ||
+        (existing.kind !== data.kind && existing.kind !== "AFTER_SALES") ||
         existing.method !== data.method
       )
         throw new BusinessError("Richiesta di pagamento già utilizzata.");
@@ -641,13 +651,14 @@ export async function addPayment(actorInput: Actor, id: string, raw: unknown) {
         payments: { include: { allocations: true } },
       },
     });
-    if (order.status === "CANCELLED")
-      throw new BusinessError("La scheda è annullata.");
+    if (["COMPLETED", "REFUNDED", "CANCELLED"].includes(order.status))
+      throw new BusinessError("La scheda è chiusa.");
     if (amount > balance(order.items, order.payments, order))
       throw new BusinessError("L'importo supera il saldo da pagare.");
     const repairDue = settlement(order.items, {
       orderDiscount: order.orderDiscount,
       includeVat: order.includeVat,
+      afterSalesFee: order.afterSalesFee,
     }).due;
     const retailDue = settlement([], { products: order.products }).productTotal;
     const repairPaid = order.payments
@@ -663,9 +674,11 @@ export async function addPayment(actorInput: Actor, id: string, raw: unknown) {
       Math.max(0, repairDue - repairPaid),
       Math.max(0, retailDue - retailPaid),
     );
+    const kind = order.afterSalesOpen ? "AFTER_SALES" : data.kind;
     const payment = await tx.payment.create({
       data: {
         ...data,
+        kind,
         amount: decimal(amount),
         orderId: id,
         actorId: actor.id,
@@ -695,7 +708,7 @@ export async function addPayment(actorInput: Actor, id: string, raw: unknown) {
     await audit(tx, actor, id, "PAYMENT_ADDED", {
       paymentId: payment.id,
       amount: decimal(amount),
-      kind: data.kind,
+      kind,
       method: data.method,
     });
     return payment;
@@ -726,8 +739,8 @@ export async function setPaidTotal(
         payments: { include: { allocations: true } },
       },
     });
-    if (order.status === "CANCELLED")
-      throw new BusinessError("La scheda è annullata.");
+    if (originalOrderLocked(order))
+      throw new BusinessError("La scheda è chiusa.");
     const due = settlement(order.items, order).due;
     if (target > due) throw new BusinessError("L'incassato supera il totale.");
     const current = order.payments.reduce(
@@ -806,6 +819,8 @@ export async function changeStatus(
       },
     });
     if (order.status === data.status) return;
+    if (["REWORKING", "REFUNDED"].includes(data.status))
+      throw new BusinessError("Usa l'operazione post-vendita dedicata.");
     assertTransition(order.status, data.status);
 
     if (
@@ -838,7 +853,12 @@ export async function changeStatus(
       data: {
         status: data.status,
         ...(data.status === "COMPLETED"
-          ? { pickedUpAt: new Date(), pickedUpBy: data.pickedUpBy }
+          ? {
+              pickedUpAt: order.pickedUpAt ?? new Date(),
+              pickedUpBy: order.pickedUpBy ?? data.pickedUpBy,
+              afterSalesOpen: false,
+              afterSalesDueDate: null,
+            }
           : {}),
       },
     });
@@ -1209,7 +1229,7 @@ export async function addWorkOrderProduct(
     const order = await tx.workOrder.findUniqueOrThrow({
       where: { id: orderId },
     });
-    if (["COMPLETED", "CANCELLED"].includes(order.status))
+    if (originalOrderLocked(order))
       throw new BusinessError("La scheda è chiusa.");
     if (data.kind === "REPAIR_PART" && order.status === "READY")
       throw new BusinessError("I ricambi sono già stati contabilizzati.");
@@ -1286,7 +1306,7 @@ export async function removeWorkOrderProduct(
     });
     if (line.consumedAt)
       throw new BusinessError("Il movimento di magazzino è già registrato.");
-    if (["COMPLETED", "CANCELLED"].includes(line.order.status))
+    if (originalOrderLocked(line.order))
       throw new BusinessError("La scheda è chiusa.");
     await tx.workOrderProduct.delete({ where: { id: line.id } });
     await audit(tx, actor, orderId, "WORK_ORDER_PRODUCT_REMOVED", {
@@ -1342,6 +1362,7 @@ export async function checkoutWorkOrder(
       const repairDue = settlement(order.items, {
         orderDiscount: order.orderDiscount,
         includeVat: order.includeVat,
+        afterSalesFee: order.afterSalesFee,
       }).due;
       const retailDue = settlement([], {
         products: order.products,
@@ -1365,7 +1386,7 @@ export async function checkoutWorkOrder(
           orderId,
           amount: decimal(amount),
           method: data.method,
-          kind: "BALANCE",
+          kind: order.afterSalesOpen ? "AFTER_SALES" : "BALANCE",
           actorId: actor.id,
           actorName: actor.name,
           allocations: {
@@ -1396,8 +1417,10 @@ export async function checkoutWorkOrder(
       where: { id: orderId },
       data: {
         status: "COMPLETED",
-        pickedUpAt: new Date(),
-        pickedUpBy: data.pickedUpBy,
+        pickedUpAt: order.pickedUpAt ?? new Date(),
+        pickedUpBy: order.pickedUpBy ?? data.pickedUpBy,
+        afterSalesOpen: false,
+        afterSalesDueDate: null,
       },
     });
     await tx.statusHistory.create({
@@ -1417,6 +1440,151 @@ export async function checkoutWorkOrder(
       unpaidOverride: remaining - amount > 0,
     });
     return tx.workOrder.findUniqueOrThrow({ where: { id: orderId } });
+  });
+}
+
+export async function updateWarranty(
+  actorInput: Actor,
+  id: string,
+  raw: unknown,
+) {
+  const data = warrantyInput.parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const order = await tx.workOrder.findUniqueOrThrow({ where: { id } });
+    if (originalOrderLocked(order))
+      throw new BusinessError("La scheda è chiusa.");
+    await tx.workOrder.update({
+      where: { id },
+      data: {
+        warrantyMonths: data.months,
+        warrantyScope: data.scope,
+        warrantyNotes: data.notes,
+      },
+    });
+    await audit(tx, actor, id, "WARRANTY_UPDATED", data);
+  });
+}
+
+export async function openAfterSales(
+  actorInput: Actor,
+  id: string,
+  raw: unknown,
+) {
+  const data = afterSalesInput.parse(raw);
+  const fee = cents(data.fee);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const order = await tx.workOrder.findUniqueOrThrow({ where: { id } });
+    if (order.status !== "COMPLETED")
+      throw new BusinessError(
+        "Il post-vendita richiede una scheda consegnata.",
+      );
+    await tx.workOrder.update({
+      where: { id },
+      data: {
+        status: "REWORKING",
+        afterSalesFee: { increment: decimal(fee) },
+        afterSalesDueDate: data.dueDate || null,
+        afterSalesOpen: true,
+      },
+    });
+    await tx.statusHistory.create({
+      data: {
+        orderId: id,
+        from: "COMPLETED",
+        to: "REWORKING",
+        actorId: actor.id,
+        actorName: actor.name,
+        note: data.reason,
+      },
+    });
+    await audit(tx, actor, id, "AFTER_SALES_OPENED", {
+      reason: data.reason,
+      notes: data.notes,
+      fee: decimal(fee),
+      dueDate: data.dueDate || null,
+    });
+  });
+}
+
+export async function refundOrder(actorInput: Actor, id: string, raw: unknown) {
+  const data = refundInput.parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const existing = await tx.payment.findUnique({
+      where: { requestId: data.requestId },
+    });
+    if (existing) {
+      if (existing.orderId !== id || existing.kind !== "REFUND")
+        throw new BusinessError("Richiesta di rimborso già utilizzata.");
+      return existing;
+    }
+    const order = await tx.workOrder.findUniqueOrThrow({
+      where: { id },
+      include: { payments: { include: { allocations: true } } },
+    });
+    if (order.status !== "COMPLETED")
+      throw new BusinessError("Il rimborso richiede una scheda consegnata.");
+    const received = order.payments.reduce(
+      (sum, payment) => sum + cents(payment.amount),
+      0,
+    );
+    if (received <= 0)
+      throw new BusinessError("Non ci sono incassi da rimborsare.");
+    const allocations = new Map<string, number>();
+    for (const allocation of order.payments.flatMap(
+      (payment) => payment.allocations,
+    ))
+      allocations.set(
+        allocation.source,
+        (allocations.get(allocation.source) ?? 0) + cents(allocation.amount),
+      );
+    const payment = await tx.payment.create({
+      data: {
+        requestId: data.requestId,
+        orderId: id,
+        amount: decimal(-received),
+        method: data.method,
+        kind: "REFUND",
+        actorId: actor.id,
+        actorName: actor.name,
+        allocations: {
+          create: [...allocations.entries()]
+            .filter(([, amount]) => amount > 0)
+            .map(([source, amount]) => ({
+              source: source as "REPAIR" | "RETAIL",
+              amount: decimal(-amount),
+            })),
+        },
+      },
+    });
+    await tx.workOrder.update({
+      where: { id },
+      data: { status: "REFUNDED", afterSalesOpen: false },
+    });
+    await tx.statusHistory.create({
+      data: {
+        orderId: id,
+        from: "COMPLETED",
+        to: "REFUNDED",
+        actorId: actor.id,
+        actorName: actor.name,
+        note: data.reason,
+      },
+    });
+    await audit(tx, actor, id, "REFUND_ISSUED", {
+      paymentId: payment.id,
+      amount: decimal(received),
+      method: data.method,
+      originalMethods: [...new Set(order.payments.map((item) => item.method))],
+      reason: data.reason,
+    });
+    await audit(tx, actor, id, "STATUS_CHANGED", {
+      from: "COMPLETED",
+      to: "REFUNDED",
+    });
+    return payment;
   });
 }
 

@@ -22,7 +22,7 @@ import { BusinessError, type Actor } from "./domain";
 import { normalizeBrand, normalizeModel } from "./catalog";
 
 export const BACKUP_FORMAT = "ngt-repair-data";
-export const BACKUP_VERSION = 4;
+export const BACKUP_VERSION = 5;
 
 type JsonRow<T> = {
   [K in keyof T]: T[K] extends Date
@@ -533,6 +533,12 @@ export async function importBusinessData(
           confirmationNote: source.confirmationNote,
           pickedUpAt: date(source.pickedUpAt),
           pickedUpBy: source.pickedUpBy,
+          warrantyMonths: source.warrantyMonths ?? 0,
+          warrantyScope: source.warrantyScope ?? "",
+          warrantyNotes: source.warrantyNotes ?? "",
+          afterSalesFee: source.afterSalesFee ?? "0",
+          afterSalesDueDate: source.afterSalesDueDate ?? null,
+          afterSalesOpen: source.afterSalesOpen ?? false,
           createdAt: date(source.createdAt) ?? new Date(),
           updatedAt: date(source.updatedAt) ?? new Date(),
         },

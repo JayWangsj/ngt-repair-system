@@ -6,6 +6,8 @@ export const statuses = [
   "PARTS_MISSING",
   "READY",
   "COMPLETED",
+  "REWORKING",
+  "REFUNDED",
   "CANCELLED",
 ] as const;
 export type OrderStatus = (typeof statuses)[number];
@@ -39,7 +41,11 @@ export type ProductCharge = {
   discount?: Amount;
   quantity: number;
 };
-export type WorkOrderOptions = QuoteOptions & { products?: ProductCharge[] };
+export type WorkOrderOptions = QuoteOptions & {
+  products?: ProductCharge[];
+  afterSalesFee?: Amount;
+  status?: OrderStatus;
+};
 export function settlement(items: QuoteItem[], options: WorkOrderOptions = {}) {
   const gross = total(items);
   const itemDiscount = items.reduce((sum, item) => {
@@ -63,6 +69,9 @@ export function settlement(items: QuoteItem[], options: WorkOrderOptions = {}) {
       throw new BusinessError("Lo sconto prodotto supera il prezzo.");
     return sum + line - lineDiscount;
   }, 0);
+  const afterSalesTotal = cents(options.afterSalesFee ?? "0");
+  if (afterSalesTotal < 0)
+    throw new BusinessError("Costo post-vendita non valido.");
   return {
     gross,
     discount,
@@ -70,7 +79,8 @@ export function settlement(items: QuoteItem[], options: WorkOrderOptions = {}) {
     vat,
     withVat: net + vat,
     productTotal,
-    due: net + (options.includeVat ? vat : 0) + productTotal,
+    afterSalesTotal,
+    due: net + (options.includeVat ? vat : 0) + productTotal + afterSalesTotal,
   };
 }
 
@@ -98,6 +108,7 @@ export function balance(
   payments: { amount: string | { toString(): string } }[],
   options: WorkOrderOptions = {},
 ) {
+  if (options.status === "REFUNDED") return 0;
   return (
     settlement(items, options).due -
     payments.reduce((sum, payment) => sum + cents(payment.amount), 0)
@@ -129,6 +140,8 @@ export const transitions: Record<OrderStatus, OrderStatus[]> = {
   ],
   READY: ["REPAIRING", "COMPLETED"],
   COMPLETED: [],
+  REWORKING: ["READY"],
+  REFUNDED: [],
   CANCELLED: [],
 };
 export function assertTransition(from: OrderStatus, to: OrderStatus) {
@@ -142,6 +155,23 @@ export function assertOwner(actor: Actor) {
 export function assertDelivery(remaining: number) {
   if (remaining !== 0)
     throw new BusinessError("Il saldo deve essere zero prima della consegna.");
+}
+export function warrantyPeriod(
+  deliveredAt: Date | null,
+  months: number,
+  today = romeDay(),
+) {
+  if (!deliveredAt || months <= 0) return null;
+  const start = romeDay(deliveredAt);
+  const [year, month, day] = start.split("-").map(Number);
+  const targetMonth = month - 1 + months;
+  const targetYear = year + Math.floor(targetMonth / 12);
+  const normalizedMonth = ((targetMonth % 12) + 12) % 12;
+  const lastDay = new Date(
+    Date.UTC(targetYear, normalizedMonth + 1, 0),
+  ).getUTCDate();
+  const end = `${targetYear}-${String(normalizedMonth + 1).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
+  return { start, end, active: today <= end };
 }
 export function normalizePhone(phone: string) {
   const clean = phone.replace(/[\s().-]/g, "").replace(/^00/, "+");
@@ -207,7 +237,7 @@ export function isOverdue(
   today = romeDay(),
 ) {
   return (
-    !["COMPLETED", "CANCELLED"].includes(order.status) &&
+    !["COMPLETED", "REFUNDED", "CANCELLED"].includes(order.status) &&
     !!order.dueDate &&
     order.dueDate < today
   );

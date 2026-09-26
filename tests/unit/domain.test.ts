@@ -15,6 +15,7 @@ import {
   romeDay,
   settlement,
   total,
+  warrantyPeriod,
 } from "@/lib/domain";
 import { orderInput, paymentInput, ruleInput } from "@/lib/validation";
 const staff = { id: "s", name: "Staff", role: "STAFF" as const };
@@ -41,6 +42,23 @@ describe("integer money", () => {
       repair: 8000,
       retail: 1500,
     });
+  });
+  it("adds post-sale fees without changing quote or IVA totals", () => {
+    const result = settlement([{ final: "100" }], {
+      includeVat: true,
+      afterSalesFee: "50",
+    });
+    expect(result).toMatchObject({
+      gross: 10000,
+      vat: 2200,
+      afterSalesTotal: 5000,
+      due: 17200,
+    });
+    expect(
+      balance([{ final: "100" }], [{ amount: "0" }], {
+        status: "REFUNDED",
+      }),
+    ).toBe(0);
   });
 });
 
@@ -156,12 +174,21 @@ describe("Italian localization and validation", () => {
     expect(romeDay(new Date("2026-07-01T22:30:00Z"))).toBe("2026-07-02");
     expect(romeDay(new Date("2026-01-01T23:30:00Z"))).toBe("2026-01-02");
   });
+  it("starts warranty at actual delivery and clamps calendar month ends", () => {
+    expect(
+      warrantyPeriod(new Date("2026-01-31T12:00:00Z"), 1, "2026-02-28"),
+    ).toEqual({ start: "2026-01-31", end: "2026-02-28", active: true });
+    expect(warrantyPeriod(null, 3)).toBeNull();
+  });
   it("excludes closed orders from overdue", () => {
     expect(
       isOverdue({ status: "READY", dueDate: "2026-01-01" }, "2026-01-02"),
     ).toBe(true);
     expect(
       isOverdue({ status: "COMPLETED", dueDate: "2026-01-01" }, "2026-01-02"),
+    ).toBe(false);
+    expect(
+      isOverdue({ status: "REFUNDED", dueDate: "2026-01-01" }, "2026-01-02"),
     ).toBe(false);
     expect(
       isOverdue({ status: "READY", dueDate: "2026-01-02" }, "2026-01-02"),

@@ -1,6 +1,5 @@
 import { faultLabel } from "@/lib/catalog";
 import Link from "next/link";
-import { Pencil } from "lucide-react";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { orderInclude } from "@/lib/service";
@@ -13,6 +12,7 @@ import {
   money,
   orderCode,
   settlement,
+  warrantyPeriod,
 } from "@/lib/domain";
 import { Badge, PageHeader } from "@/components/common";
 import {
@@ -21,24 +21,54 @@ import {
   PaymentForm,
   StatusForm,
   QuoteSummary,
+  WarrantyForm,
 } from "@/components/forms";
 import { getLocale, getMessages } from "@/lib/i18n-server";
 import {
   WorkOrderCheckout,
   WorkOrderProducts,
 } from "@/components/work-order-products";
+import {
+  AfterSalesActions,
+  CustomerDetailLink,
+  OrderDetailCard,
+} from "@/components/order-detail-ui";
+
+type TimelineEvent = {
+  id: string;
+  at: Date;
+  title: string;
+  actor: string;
+  detail?: string;
+};
+
+function auditContext(value: unknown) {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 export default async function Detail({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const it = await getMessages();
+  const locale = await getLocale();
   const actor = await requireActor();
   const { id } = await params;
-  const order = await db.workOrder.findUnique({
-    where: { id },
-    include: orderInclude,
-  });
+  const [order, audits] = await Promise.all([
+    db.workOrder.findUnique({ where: { id }, include: orderInclude }),
+    db.auditLog.findMany({
+      where: {
+        entityId: id,
+        action: {
+          in: ["ORDER_CREATED", "AFTER_SALES_OPENED", "REFUND_ISSUED"],
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
   if (!order) notFound();
   const [rules, products] = await Promise.all([
     db.priceRule.findMany({ where: { enabled: true } }),
@@ -47,8 +77,128 @@ export default async function Detail({
       orderBy: [{ favorite: "desc" }, { name: "asc" }],
     }),
   ]);
+  const totals = settlement(order.items, order);
   const remaining = balance(order.items, order.payments, order);
-  const closed = ["COMPLETED", "CANCELLED"].includes(order.status);
+  const received = order.payments.reduce(
+    (sum, payment) => sum + cents(payment.amount),
+    0,
+  );
+  const originalLocked =
+    order.afterSalesOpen ||
+    ["COMPLETED", "REWORKING", "REFUNDED", "CANCELLED"].includes(order.status);
+  const warranty = warrantyPeriod(order.pickedUpAt, order.warrantyMonths);
+  const duration =
+    order.warrantyMonths === 0
+      ? it.warranty.none
+      : order.warrantyMonths === 1
+        ? it.warranty.oneMonth
+        : order.warrantyMonths === 3
+          ? it.warranty.threeMonths
+          : order.warrantyMonths === 6
+            ? it.warranty.sixMonths
+            : order.warrantyMonths === 12
+              ? it.warranty.twelveMonths
+              : `${order.warrantyMonths} ${it.warranty.months}`;
+
+  const events: TimelineEvent[] = [];
+  for (const audit of audits) {
+    const context = auditContext(audit.context);
+    if (audit.action === "ORDER_CREATED")
+      events.push({
+        id: audit.id,
+        at: order.createdAt,
+        title: it.actions.ORDER_CREATED,
+        actor: audit.actorName,
+      });
+    if (audit.action === "AFTER_SALES_OPENED") {
+      const detail = [context.reason, context.notes]
+        .filter(Boolean)
+        .join(" · ");
+      events.push({
+        id: audit.id,
+        at: audit.createdAt,
+        title: it.actions.AFTER_SALES_OPENED,
+        actor: audit.actorName,
+        detail,
+      });
+      if (context.fee && cents(String(context.fee)) > 0)
+        events.push({
+          id: `${audit.id}:fee`,
+          at: audit.createdAt,
+          title: `${it.afterSales.feeEvent} +${money(cents(String(context.fee)))}`,
+          actor: audit.actorName,
+        });
+    }
+    if (audit.action === "REFUND_ISSUED") {
+      const originalMethods = Array.isArray(context.originalMethods)
+        ? context.originalMethods
+            .map((method) =>
+              typeof method === "string" && method in it.methods
+                ? it.methods[method as keyof typeof it.methods]
+                : null,
+            )
+            .filter(Boolean)
+            .join(", ")
+        : "";
+      events.push({
+        id: audit.id,
+        at: audit.createdAt,
+        title: `${it.afterSales.refundEvent} ${money(cents(String(context.amount)))}`,
+        actor: audit.actorName,
+        detail: [
+          context.method
+            ? `${it.afterSales.refundMethod}: ${it.methods[context.method as keyof typeof it.methods]}`
+            : null,
+          originalMethods
+            ? `${it.afterSales.originalMethod}: ${originalMethods}`
+            : null,
+          context.reason,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      });
+      events.push({
+        id: `${audit.id}:status`,
+        at: new Date(audit.createdAt.getTime() + 1),
+        title: `${it.actions.STATUS_CHANGED}: ${it.status.REFUNDED}`,
+        actor: audit.actorName,
+      });
+    }
+  }
+  for (const history of order.history) {
+    if (
+      !history.from ||
+      history.to === "REWORKING" ||
+      history.to === "REFUNDED"
+    )
+      continue;
+    events.push({
+      id: history.id,
+      at: history.createdAt,
+      title:
+        history.to === "COMPLETED"
+          ? it.actions.ORDER_DELIVERED
+          : `${it.actions.STATUS_CHANGED}: ${it.status[history.to]}`,
+      actor: history.actorName,
+      detail: history.note,
+    });
+  }
+  for (const payment of order.payments) {
+    if (payment.kind === "REFUND") continue;
+    events.push({
+      id: payment.id,
+      at: payment.receivedAt,
+      title: `${
+        payment.kind === "AFTER_SALES"
+          ? it.afterSales.paymentEvent
+          : it.actions.PAYMENT_ADDED
+      } ${money(cents(payment.amount))}`,
+      actor: payment.actorName,
+      detail: it.methods[payment.method],
+    });
+  }
+  events.sort((a, b) => a.at.getTime() - b.at.getTime());
+
   return (
     <>
       <Link className="button button-outline back-link" href="/orders">
@@ -64,62 +214,80 @@ export default async function Detail({
           {it.created}: {dateTime(order.createdAt)}
         </span>
         <span>
-          {it.dueDate}: {dateOnly(order.dueDate)}
+          {it.dueDate}: {dateOnly(order.afterSalesDueDate ?? order.dueDate)}
         </span>
       </div>
+      {order.status === "COMPLETED" && (
+        <p className="order-lock-notice">{it.lockedDelivered}</p>
+      )}
+      {order.status === "REFUNDED" && (
+        <p className="order-lock-notice refunded">{it.lockedRefunded}</p>
+      )}
       <div className="detail-grid">
         <div className="stack">
-          <section className="panel padded">
-            <div className="section-heading">
-              <h2>{it.details}</h2>
-              <Link href={`/customers/${order.device.customerId}`}>
-                {it.customer} ↗
-              </Link>
-            </div>
+          <OrderDetailCard
+            title={it.details}
+            locked={originalLocked}
+            testId="details-card"
+            headerExtra={
+              <CustomerDetailLink
+                href={`/customers/${order.device.customerId}`}
+                name={order.device.customer.name}
+              />
+            }
+            edit={
+              <EditOrderForm
+                id={id}
+                values={{
+                  fault: order.fault,
+                  notes: order.notes,
+                  accessories: order.accessories,
+                  dueDate: order.dueDate,
+                }}
+              />
+            }
+          >
             <dl className="detail-list">
               <div>
+                <dt>{it.customer}</dt>
+                <dd>{order.device.customer.name}</dd>
+              </div>
+              <div>
                 <dt>{it.phone}</dt>
-                <dd>{order.device.customer.phone}</dd>
+                <dd>
+                  <a href={`tel:${order.device.customer.phone}`}>
+                    {order.device.customer.phone}
+                  </a>
+                </dd>
               </div>
               <div>
                 <dt>{it.fault}</dt>
-                <dd>{faultLabel(order.fault, await getLocale())}</dd>
+                <dd>{faultLabel(order.fault, locale)}</dd>
+              </div>
+              <div>
+                <dt>{it.dueDate}</dt>
+                <dd>{dateOnly(order.dueDate)}</dd>
               </div>
               <div>
                 <dt>{it.notes}</dt>
                 <dd>{order.notes || "—"}</dd>
               </div>
+              <div>
+                <dt>{it.accessories}</dt>
+                <dd>{order.accessories || "—"}</dd>
+              </div>
             </dl>
-            {!closed && (
-              <details>
-                <summary
-                  className="record-icon record-icon-edit"
-                  aria-label={it.edit}
-                  title={it.edit}
-                >
-                  <Pencil size={18} aria-hidden="true" />
-                </summary>
-                <EditOrderForm
-                  id={id}
-                  values={{
-                    fault: order.fault,
-                    notes: order.notes,
-                    accessories: order.accessories,
-                    dueDate: order.dueDate,
-                  }}
-                />
-              </details>
-            )}
             {order.pickedUpAt && (
               <p className="message success">
                 {it.delivered}: {order.pickedUpBy} ·{" "}
                 {dateTime(order.pickedUpAt)}
               </p>
             )}
-          </section>
+          </OrderDetailCard>
+
           <WorkOrderProducts
             orderId={id}
-            closed={closed}
+            closed={originalLocked}
             products={products.map((product) => ({
               id: product.id,
               name: product.name,
@@ -137,8 +305,39 @@ export default async function Detail({
               consumedAt: line.consumedAt?.toISOString() ?? null,
             }))}
           />
-          <section className="panel padded">
-            <h2>{it.quote}</h2>
+
+          <OrderDetailCard
+            title={it.quote}
+            locked={originalLocked}
+            testId="quote-card"
+            edit={
+              <EditQuoteForm
+                key={order.updatedAt.toISOString()}
+                id={id}
+                initialDiscount={order.orderDiscount.toString()}
+                initialVat={order.includeVat}
+                initial={order.items.map((item) => ({
+                  project: item.project,
+                  final: item.final.toString(),
+                  discount: item.discount.toString(),
+                  adjustmentReason: item.adjustmentReason,
+                }))}
+                device={{
+                  category: order.device.category,
+                  brand: order.device.brand,
+                  series: order.device.series,
+                  model: order.device.model,
+                }}
+                owner={actor.role === "OWNER"}
+                rules={rules.map((rule) => ({
+                  ...rule,
+                  suggested: rule.suggested.toString(),
+                  cost: undefined,
+                  updatedAt: undefined,
+                }))}
+              />
+            }
+          >
             <div className="table-scroll">
               <table>
                 <thead>
@@ -173,69 +372,87 @@ export default async function Detail({
               </table>
             </div>
             <QuoteSummary
-              items={order.items.map((i) => ({
-                final: i.final.toString(),
-                discount: i.discount.toString(),
+              items={order.items.map((item) => ({
+                final: item.final.toString(),
+                discount: item.discount.toString(),
               }))}
               orderDiscount={order.orderDiscount.toString()}
               includeVat={order.includeVat}
             />
+          </OrderDetailCard>
 
-            {!closed && (
-              <>
-                <details>
-                  <summary
-                    className="record-icon record-icon-edit"
-                    aria-label={it.editQuote}
-                    title={it.editQuote}
-                  >
-                    <Pencil size={18} aria-hidden="true" />
-                  </summary>
-                  <EditQuoteForm
-                    key={order.updatedAt.toISOString()}
-                    id={id}
-                    initialDiscount={order.orderDiscount.toString()}
-                    initialVat={order.includeVat}
-                    initial={order.items.map((i) => ({
-                      project: i.project,
-                      final: i.final.toString(),
-                      discount: i.discount.toString(),
-                      adjustmentReason: i.adjustmentReason,
-                    }))}
-                    device={{
-                      category: order.device.category,
-                      brand: order.device.brand,
-                      series: order.device.series,
-                      model: order.device.model,
-                    }}
-                    owner={actor.role === "OWNER"}
-                    rules={rules.map((r) => ({
-                      ...r,
-                      suggested: r.suggested.toString(),
-                      cost: undefined,
-                      updatedAt: undefined,
-                    }))}
-                  />
-                </details>
-              </>
-            )}
-          </section>
-          <section className="panel padded">
-            <h2>{it.history}</h2>
+          <OrderDetailCard
+            title={it.warranty.title}
+            locked={originalLocked}
+            testId="warranty-card"
+            edit={
+              <WarrantyForm
+                id={id}
+                values={{
+                  months: order.warrantyMonths,
+                  scope: order.warrantyScope,
+                  notes: order.warrantyNotes,
+                }}
+              />
+            }
+          >
+            <dl className="detail-list warranty-details">
+              {order.pickedUpAt && order.warrantyMonths > 0 && (
+                <div>
+                  <dt>{it.warranty.status}</dt>
+                  <dd>
+                    {warranty?.active
+                      ? it.warranty.active
+                      : it.warranty.expired}
+                  </dd>
+                </div>
+              )}
+              <div>
+                <dt>{it.warranty.duration}</dt>
+                <dd>{duration}</dd>
+              </div>
+              <div>
+                <dt>{it.warranty.period}</dt>
+                <dd>
+                  {warranty
+                    ? `${warranty.start.replaceAll("-", "/")} → ${warranty.end.replaceAll("-", "/")}`
+                    : it.warranty.startsAfterDelivery}
+                </dd>
+              </div>
+              <div>
+                <dt>{it.warranty.scope}</dt>
+                <dd>{order.warrantyScope || "—"}</dd>
+              </div>
+              {order.warrantyNotes && (
+                <div>
+                  <dt>{it.warranty.notes}</dt>
+                  <dd>{order.warrantyNotes}</dd>
+                </div>
+              )}
+            </dl>
+          </OrderDetailCard>
+
+          <OrderDetailCard
+            title={it.history}
+            locked
+            className="history-card"
+            testId="history-card"
+          >
             <ol className="timeline">
-              {order.history.map((h) => (
-                <li key={h.id}>
+              {events.map((event) => (
+                <li key={event.id}>
                   <span className="timeline-dot" />
-                  <strong>{it.status[h.to]}</strong>
+                  <strong>{event.title}</strong>
                   <small>
-                    {dateTime(h.createdAt)} · {h.actorName}
+                    {dateTime(event.at)} · {event.actor}
                   </small>
-                  {h.note && <p>{h.note}</p>}
+                  {event.detail && <p>{event.detail}</p>}
                 </li>
               ))}
             </ol>
-          </section>
+          </OrderDetailCard>
         </div>
+
         <div className="stack">
           <section className="panel padded balance-card">
             <span>{it.balance}</span>
@@ -244,25 +461,30 @@ export default async function Detail({
               <span>
                 {it.orderProducts.repairParts}:{" "}
                 {money(
-                  settlement(order.items, order).due -
-                    settlement(order.items, order).productTotal,
+                  totals.due - totals.productTotal - totals.afterSalesTotal,
                 )}
               </span>
               <span>
-                {it.orderProducts.retailAddons}:{" "}
-                {money(settlement(order.items, order).productTotal)}
+                {it.orderProducts.retailAddons}: {money(totals.productTotal)}
+              </span>
+              {totals.afterSalesTotal > 0 && (
+                <span>
+                  {it.afterSales.feeEvent}: {money(totals.afterSalesTotal)}
+                </span>
+              )}
+              <span>
+                {it.total}: {money(totals.due)}
               </span>
               <span>
-                {it.total}: {money(settlement(order.items, order).due)}
-              </span>
-              <span>
-                {it.paid}:{" "}
-                {money(settlement(order.items, order).due - remaining)}
+                {it.paid}: {money(received)}
               </span>
             </div>
           </section>
-          {!closed && (
-            <section className="panel padded">
+
+          {!(["COMPLETED", "REFUNDED", "CANCELLED"] as string[]).includes(
+            order.status,
+          ) && (
+            <section className="panel padded status-operation-card">
               <h2>
                 {order.status === "READY"
                   ? it.orderProducts.checkout
@@ -307,17 +529,29 @@ export default async function Detail({
               )}
             </section>
           )}
-          <section className="panel padded">
+
+          {["COMPLETED", "REFUNDED"].includes(order.status) && (
+            <section className="panel padded current-status-card">
+              <h2>{it.currentStatus}</h2>
+              <Badge status={order.status} />
+              {order.pickedUpAt && <p>{dateTime(order.pickedUpAt)}</p>}
+            </section>
+          )}
+
+          <section className="panel padded payments-card">
             <h2>{it.payments}</h2>
             {order.payments.length ? (
-              order.payments.map((p) => (
-                <div className="payment-row" key={p.id}>
-                  <strong>{money(cents(p.amount))}</strong>
+              order.payments.map((payment) => (
+                <div
+                  className={`payment-row ${payment.kind === "REFUND" ? "is-refund" : ""}`}
+                  key={payment.id}
+                >
+                  <strong>{money(cents(payment.amount))}</strong>
                   <span>
-                    {it.kinds[p.kind]} · {it.methods[p.method]}
+                    {it.kinds[payment.kind]} · {it.methods[payment.method]}
                   </span>
                   <small>
-                    {dateTime(p.receivedAt)} · {p.actorName}
+                    {dateTime(payment.receivedAt)} · {payment.actorName}
                   </small>
                 </div>
               ))
@@ -325,10 +559,16 @@ export default async function Detail({
               <p className="muted">{it.noPayments}</p>
             )}
             {remaining > 0 &&
-              !["READY", "CANCELLED"].includes(order.status) && (
+              !["READY", "COMPLETED", "REFUNDED", "CANCELLED"].includes(
+                order.status,
+              ) && (
                 <PaymentForm key={remaining} id={id} remaining={remaining} />
               )}
           </section>
+
+          {order.status === "COMPLETED" && (
+            <AfterSalesActions orderId={id} received={received} />
+          )}
         </div>
       </div>
     </>

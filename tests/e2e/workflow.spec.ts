@@ -346,7 +346,7 @@ test("creates automatic quote, receives payment and delivers", async ({
   ).toHaveCount(0);
   await expect(
     page.getByText("Accessori ricevuti", { exact: true }),
-  ).toHaveCount(0);
+  ).toBeVisible();
   await expect(page.locator(".balance-card>strong")).toContainText("80,00");
   await state(page, "READY");
   await expect(
@@ -355,7 +355,9 @@ test("creates automatic quote, receives payment and delivers", async ({
   await page.getByLabel("Importo (€)", { exact: true }).fill("80");
   await page.getByRole("button", { name: /Incassa e consegna/ }).click();
   await expect(page.locator(".detail-status .badge")).toHaveText("Consegnato");
-  await page.getByRole("link", { name: "Cliente ↗", exact: true }).click();
+  await page
+    .getByRole("link", { name: "Cliente Playwright", exact: true })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Storico riparazioni" }),
   ).toBeVisible();
@@ -450,6 +452,128 @@ test("delivery requires a zero balance", async ({ page }) => {
   await page.getByLabel("Importo (€)", { exact: true }).fill("100");
   await page.getByRole("button", { name: /Incassa e consegna/ }).click();
   await expect(page.locator(".detail-status .badge")).toHaveText("Consegnato");
+});
+test("repair detail cards lock history and keep post-sale finance auditable", async ({
+  page,
+}) => {
+  await fillOrder(page, { manual: true });
+  await page
+    .getByLabel("Registra un pagamento adesso", { exact: true })
+    .check();
+  await page
+    .getByLabel("Incasso alla creazione (€)", { exact: true })
+    .fill("75");
+  await save(page);
+
+  const details = page.getByTestId("details-card");
+  const products = page.getByTestId("products-card");
+  const quote = page.getByTestId("quote-card");
+  const warranty = page.getByTestId("warranty-card");
+  const productsTop = await products.evaluate(
+    (element) => element.getBoundingClientRect().top,
+  );
+  const customerLink = details.locator(".order-customer-link");
+  await customerLink.hover();
+  await expect(customerLink).toHaveCSS("transform", "none");
+  await expect(customerLink.locator("span").last()).toHaveCSS(
+    "transform",
+    "matrix(1, 0, 0, 1, 4, 0)",
+  );
+  await details.hover();
+  await expect(details).toHaveCSS(
+    "transform",
+    /matrix\(1\.003, 0, 0, 1\.003, 0, -1\)/,
+  );
+  expect(
+    await products.evaluate((element) => element.getBoundingClientRect().top),
+  ).toBe(productsTop);
+
+  await details.getByRole("button", { name: "Modifica dati" }).click();
+  await expect(details).toHaveClass(/is-editing/);
+  await expect(
+    details.getByRole("button", { name: "Dettagli" }),
+  ).toBeDisabled();
+  await details
+    .getByLabel("Problema segnalato")
+    .fill("Fotocamera non funziona");
+  await details.getByRole("button", { name: "Annulla" }).click();
+  await expect(details).not.toHaveClass(/is-editing/);
+
+  await quote.getByRole("button", { name: "Preventivo" }).click();
+  await expect(quote.locator(".quote-summary")).toBeHidden();
+  await quote.getByRole("button", { name: "Preventivo" }).click();
+  await expect(quote.locator(".quote-summary")).toBeVisible();
+  await quote.getByRole("button", { name: "Modifica dati" }).click();
+  await expect(
+    quote.getByRole("button", { name: "Aggiungi intervento" }),
+  ).toBeVisible();
+  await quote.getByRole("button", { name: "Annulla" }).click();
+  await warranty.getByRole("button", { name: "Modifica dati" }).click();
+  await warranty.getByLabel("Durata garanzia").selectOption("3");
+  await warranty.getByLabel("Copertura").fill("Solo il componente sostituito");
+  await warranty.getByRole("button", { name: "Salva" }).click();
+  await expect(warranty).toContainText("3 mesi");
+
+  await state(page, "READY");
+  await page.getByLabel("Nome di chi ritira", { exact: true }).fill("Cliente");
+  await page.getByRole("button", { name: /Incassa e consegna/ }).click();
+  await expect(page.locator(".detail-status .badge")).toHaveText("Consegnato");
+  const firstDelivery = await details.getByText(/Ritirato da/).textContent();
+  await expect(
+    details.getByRole("button", { name: "Modifica dati" }),
+  ).toHaveCount(0);
+  await expect(
+    quote.getByRole("button", { name: "Modifica dati" }),
+  ).toHaveCount(0);
+  await expect(page.locator(".order-product-form")).toHaveCount(0);
+  await details.hover();
+  await expect(details).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+
+  await page
+    .getByRole("button", { name: "Riparazione in garanzia", exact: true })
+    .click();
+  let dialog = page.getByRole("dialog");
+  await dialog
+    .getByLabel("Motivo della riparazione")
+    .fill("Difetto ricomparso");
+  await dialog.getByLabel("Costo aggiuntivo (€)").fill("50");
+  await dialog
+    .getByRole("button", { name: "Apri riparazione post-vendita", exact: true })
+    .click();
+  await expect(page.locator(".detail-status .badge")).toHaveText(
+    "In riparazione post-vendita",
+  );
+  await expect(page.locator(".balance-card>strong")).toContainText("50,00");
+  await expect(page.getByTestId("history-card")).toContainText(
+    "Riparazione post-vendita aperta",
+  );
+  await expect(
+    details.getByRole("button", { name: "Modifica dati" }),
+  ).toHaveCount(0);
+  await page.getByLabel("Importo (€)", { exact: true }).fill("50");
+  await page.getByRole("button", { name: "Registra incasso" }).click();
+  await state(page, "READY");
+  await page
+    .getByLabel("Nome di chi ritira", { exact: true })
+    .fill("Altro nome");
+  await page.getByRole("button", { name: /Incassa e consegna/ }).click();
+  await expect(details.getByText(/Ritirato da/)).toHaveText(
+    firstDelivery ?? "",
+  );
+
+  await page.getByRole("button", { name: "Rimborso", exact: true }).click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Motivo / note").fill("Cliente non soddisfatto");
+  await dialog
+    .getByRole("button", { name: "Conferma rimborso totale", exact: true })
+    .click();
+  await expect(page.locator(".detail-status .badge")).toHaveText("Rimborsato");
+  await expect(page.locator(".balance-card>strong")).toContainText("0,00");
+  await expect(page.locator(".payments-card")).toContainText("-125,00");
+  await expect(page.getByTestId("history-card")).toContainText(
+    "Rimborso 125,00",
+  );
+  await expect(page.getByText("Rimborsato · contenuti bloccati")).toBeVisible();
 });
 test("price editor and mobile yellow layout support both languages", async ({
   page,
@@ -1155,7 +1279,7 @@ test("settings exports data and re-import skips existing records", async ({
   const backup = await exported.json();
   expect(backup).toMatchObject({
     format: "ngt-repair-data",
-    version: 4,
+    version: 5,
   });
   const imported = await page.request.post("/api/data/import", {
     data: backup,

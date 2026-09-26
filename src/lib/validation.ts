@@ -173,6 +173,22 @@ export const statusInput = z.object({
   pickedUpBy: z.string().trim().max(120).default(""),
   override: z.boolean().default(false),
 });
+export const warrantyInput = z.object({
+  months: z.coerce.number().int().min(0).max(120),
+  scope: text,
+  notes: text,
+});
+export const afterSalesInput = z.object({
+  reason: short,
+  notes: text,
+  fee: amountInput.default("0"),
+  dueDate: dueDateInput,
+});
+export const refundInput = z.object({
+  requestId: z.string().uuid(),
+  method: z.enum(["CASH", "CARD", "OTHER"]),
+  reason: z.string().trim().min(1).max(2000),
+});
 export const ruleInput = z
   .object({
     category: z

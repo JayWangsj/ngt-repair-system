@@ -11,6 +11,7 @@ import {
 import { cents, creatablePaymentMethods, decimal, money } from "@/lib/domain";
 import { useMessages } from "./language";
 import { Button } from "./ui/button";
+import { OrderDetailCard } from "./order-detail-ui";
 
 type ProductOption = {
   id: string;
@@ -73,8 +74,12 @@ export function WorkOrderProducts({
   }
 
   return (
-    <section className="panel padded order-products">
-      <h2>{it.orderProducts.title}</h2>
+    <OrderDetailCard
+      title={it.orderProducts.title}
+      locked={closed}
+      className="order-products"
+      testId="products-card"
+    >
       <p className="muted">{it.orderProducts.description}</p>
       {lines.length ? (
         <div className="order-product-lines">
@@ -142,7 +147,7 @@ export function WorkOrderProducts({
         </form>
       )}
       {error && <p className="message error">{error}</p>}
-    </section>
+    </OrderDetailCard>
   );
 }
 

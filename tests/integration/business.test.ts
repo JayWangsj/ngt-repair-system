@@ -30,6 +30,9 @@ import {
   setUserEnabled,
   updateOrder,
   updateDueDate,
+  updateWarranty,
+  openAfterSales,
+  refundOrder,
 } from "@/lib/service";
 import { balance, type Actor } from "@/lib/domain";
 import {
@@ -220,6 +223,137 @@ describe("PostgreSQL workflow", () => {
       (await db.workOrder.findUniqueOrThrow({ where: { id: created.id } }))
         .status,
     ).toBe("COMPLETED");
+  });
+  it("locks delivered history and adds paid or free post-sale repairs independently", async () => {
+    const created = await createOrder(staff, input({ deposit: "100" }));
+    await updateWarranty(staff, created.id, {
+      months: 3,
+      scope: "Solo display sostituito",
+      notes: "Esclusi liquidi e urti",
+    });
+    await changeStatus(staff, created.id, { status: "REPAIRING" });
+    await changeStatus(staff, created.id, { status: "READY" });
+    await changeStatus(staff, created.id, {
+      status: "COMPLETED",
+      pickedUpBy: "Cliente",
+    });
+    const delivered = await db.workOrder.findUniqueOrThrow({
+      where: { id: created.id },
+    });
+    await expect(
+      updateWarranty(staff, created.id, {
+        months: 12,
+        scope: "Mutata",
+        notes: "",
+      }),
+    ).rejects.toThrow("chiusa");
+    await expect(
+      changeStatus(staff, created.id, { status: "REWORKING" }),
+    ).rejects.toThrow("post-vendita");
+    await openAfterSales(staff, created.id, {
+      reason: "Difetto ricomparso",
+      notes: "Controllare il connettore",
+      fee: "50",
+      dueDate: "2099-12-31",
+    });
+    let order = await db.workOrder.findUniqueOrThrow({
+      where: { id: created.id },
+      include: orderInclude,
+    });
+    expect(order).toMatchObject({
+      status: "REWORKING",
+      afterSalesOpen: true,
+      afterSalesDueDate: "2099-12-31",
+      warrantyMonths: 3,
+    });
+    expect(order.afterSalesFee.toString()).toBe("50");
+    expect(balance(order.items, order.payments, order)).toBe(5000);
+    await addPayment(staff, created.id, {
+      requestId: randomUUID(),
+      amount: "50",
+      method: "CARD",
+      kind: "BALANCE",
+    });
+    await changeStatus(staff, created.id, { status: "READY" });
+    await changeStatus(staff, created.id, {
+      status: "COMPLETED",
+      pickedUpBy: "Altro nome",
+    });
+    order = await db.workOrder.findUniqueOrThrow({
+      where: { id: created.id },
+      include: orderInclude,
+    });
+    expect(order.pickedUpAt?.toISOString()).toBe(
+      delivered.pickedUpAt?.toISOString(),
+    );
+    expect(order.pickedUpBy).toBe("Cliente");
+    expect(order.payments.at(-1)?.kind).toBe("AFTER_SALES");
+    await openAfterSales(staff, created.id, {
+      reason: "Verifica gratuita",
+      notes: "",
+      fee: "0",
+      dueDate: "",
+    });
+    order = await db.workOrder.findUniqueOrThrow({
+      where: { id: created.id },
+      include: orderInclude,
+    });
+    expect(order.status).toBe("REWORKING");
+    expect(order.afterSalesFee.toString()).toBe("50");
+    expect(balance(order.items, order.payments, order)).toBe(0);
+    expect(
+      await db.auditLog.count({
+        where: { entityId: created.id, action: "AFTER_SALES_OPENED" },
+      }),
+    ).toBe(2);
+  });
+  it("refunds the full received amount without deleting original payments", async () => {
+    const created = await createOrder(staff, input({ deposit: "100" }));
+    await changeStatus(staff, created.id, { status: "REPAIRING" });
+    await changeStatus(staff, created.id, { status: "READY" });
+    await changeStatus(staff, created.id, {
+      status: "COMPLETED",
+      pickedUpBy: "Cliente",
+    });
+    const requestId = randomUUID();
+    await refundOrder(staff, created.id, {
+      requestId,
+      method: "CASH",
+      reason: "Cliente non soddisfatto",
+    });
+    await refundOrder(staff, created.id, {
+      requestId,
+      method: "CASH",
+      reason: "Cliente non soddisfatto",
+    });
+    const order = await db.workOrder.findUniqueOrThrow({
+      where: { id: created.id },
+      include: orderInclude,
+    });
+    expect(order.status).toBe("REFUNDED");
+    expect(order.payments).toHaveLength(2);
+    expect(order.payments.map((payment) => payment.amount.toString())).toEqual([
+      "100",
+      "-100",
+    ]);
+    expect(order.payments.at(-1)?.kind).toBe("REFUND");
+    expect(
+      order.payments.reduce((sum, payment) => sum + Number(payment.amount), 0),
+    ).toBe(0);
+    expect(balance(order.items, order.payments, order)).toBe(0);
+    await expect(
+      openAfterSales(staff, created.id, {
+        reason: "Non consentito",
+        notes: "",
+        fee: "0",
+        dueDate: "",
+      }),
+    ).rejects.toThrow("consegnata");
+    expect(
+      await db.auditLog.count({
+        where: { entityId: created.id, action: "REFUND_ISSUED" },
+      }),
+    ).toBe(1);
   });
   it("assigns stable daily repair and retail codes", async () => {
     const first = await createOrder(staff, input({ deposit: "0" }));
@@ -1245,7 +1379,7 @@ describe("versioned data backup and merge import", () => {
     const backup = await exportBusinessData();
     expect(backup).toMatchObject({
       format: "ngt-repair-data",
-      version: 4,
+      version: 5,
     });
     expect(backup.data.orders).toHaveLength(1);
     expect(backup.data.payments.map((payment) => payment.kind).sort()).toEqual([

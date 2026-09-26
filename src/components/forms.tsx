@@ -1,6 +1,5 @@
 "use client";
 import {
-  createContext,
   useContext,
   useState,
   useEffect,
@@ -27,6 +26,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Plus, Trash2, Check } from "lucide-react";
 import { Button } from "./ui/button";
+import { FormCloseContext } from "./ui/form-close-context";
 import { useMessages, useLanguage } from "./language";
 import { translateError } from "@/lib/i18n";
 import {
@@ -65,6 +65,9 @@ import {
   deviceAction,
   deleteDeviceAction,
   deleteRulesAction,
+  warrantyAction,
+  afterSalesAction,
+  refundAction,
 } from "@/app/actions";
 
 export type RuleView = {
@@ -1022,8 +1025,6 @@ export function QuoteSummary({
 }
 
 type ActionResult = { ok: boolean; error?: string };
-const DialogCloseContext = createContext<(() => void) | null>(null);
-
 function ActionForm({
   action,
   children,
@@ -1036,7 +1037,7 @@ function ActionForm({
   onSuccess?: () => void;
 }) {
   const it = useMessages();
-  const closeDialog = useContext(DialogCloseContext);
+  const closeDialog = useContext(FormCloseContext);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -1252,6 +1253,124 @@ export function EditOrderForm({
       </Field>
       <Field label={it.notes}>
         <textarea name="notes" defaultValue={values.notes} maxLength={2000} />
+      </Field>
+    </ActionForm>
+  );
+}
+
+export function WarrantyForm({
+  id,
+  values,
+}: {
+  id: string;
+  values: { months: number; scope: string; notes: string };
+}) {
+  const it = useMessages();
+  const presets = [0, 1, 3, 6, 12];
+  const [months, setMonths] = useState(
+    presets.includes(values.months) ? String(values.months) : "custom",
+  );
+  return (
+    <ActionForm
+      submit={it.save}
+      action={(data) =>
+        warrantyAction(id, {
+          months: months === "custom" ? str(data, "customMonths") : months,
+          scope: str(data, "scope"),
+          notes: str(data, "notes"),
+        })
+      }
+    >
+      <Field label={it.warranty.duration}>
+        <select
+          value={months}
+          onChange={(event) => setMonths(event.target.value)}
+        >
+          <option value="0">{it.warranty.none}</option>
+          <option value="1">{it.warranty.oneMonth}</option>
+          <option value="3">{it.warranty.threeMonths}</option>
+          <option value="6">{it.warranty.sixMonths}</option>
+          <option value="12">{it.warranty.twelveMonths}</option>
+          <option value="custom">{it.warranty.custom}</option>
+        </select>
+      </Field>
+      {months === "custom" && (
+        <Field label={it.warranty.customMonths}>
+          <input
+            name="customMonths"
+            type="number"
+            min="1"
+            max="120"
+            defaultValue={values.months || 1}
+            required
+          />
+        </Field>
+      )}
+      <Field label={it.warranty.scope}>
+        <textarea name="scope" defaultValue={values.scope} maxLength={2000} />
+      </Field>
+      <Field label={it.warranty.notes}>
+        <textarea name="notes" defaultValue={values.notes} maxLength={2000} />
+      </Field>
+    </ActionForm>
+  );
+}
+
+export function AfterSalesForm({ id }: { id: string }) {
+  const it = useMessages();
+  return (
+    <ActionForm
+      submit={it.afterSales.openRework}
+      action={(data) => afterSalesAction(id, Object.fromEntries(data))}
+    >
+      <Field label={it.afterSales.reason}>
+        <input name="reason" required maxLength={120} />
+      </Field>
+      <Field label={it.afterSales.notes}>
+        <textarea name="notes" maxLength={2000} />
+      </Field>
+      <Field label={it.afterSales.fee}>
+        <input name="fee" inputMode="decimal" defaultValue="0" required />
+      </Field>
+      <Field label={it.afterSales.dueDate}>
+        <input type="date" name="dueDate" min={romeDay()} />
+      </Field>
+    </ActionForm>
+  );
+}
+
+export function RefundForm({ id, received }: { id: string; received: number }) {
+  const it = useMessages();
+  const [requestId] = useState(() => crypto.randomUUID());
+  return (
+    <ActionForm
+      submit={it.afterSales.confirmRefund}
+      action={(data) =>
+        refundAction(id, {
+          requestId,
+          method: str(data, "method"),
+          reason: str(data, "reason"),
+        })
+      }
+    >
+      <p className="message warning">{it.afterSales.refundWarning}</p>
+      <Field label={it.afterSales.currentReceived}>
+        <input readOnly value={money(received)} />
+      </Field>
+      <Field label={it.afterSales.refundAmount}>
+        <input readOnly value={money(received)} />
+      </Field>
+      <Field label={it.afterSales.refundMethod}>
+        <select name="method">
+          {creatablePaymentMethods.map((method) => (
+            <option value={method} key={method}>
+              {it.methods[method]}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field label={it.afterSales.refundReason}>
+        <textarea name="reason" required maxLength={2000} />
       </Field>
     </ActionForm>
   );
@@ -2006,9 +2125,9 @@ export function FormDialog({
       <div className="dialog-heading">
         <h2 id={titleId}>{title}</h2>
       </div>
-      <DialogCloseContext.Provider value={onClose}>
+      <FormCloseContext.Provider value={onClose}>
         {children}
-      </DialogCloseContext.Provider>
+      </FormCloseContext.Provider>
     </dialog>
   );
 }

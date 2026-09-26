@@ -4,6 +4,8 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const env = { ...process.env };
+const distDir = env.NEXT_DIST_DIR || ".next";
+const port = env.E2E_PORT || "3000";
 
 if (!env.DATABASE_URL) {
   const data = await readFile(".local/test.env", "utf8");
@@ -17,17 +19,18 @@ if (!new URL(env.DATABASE_URL).pathname.endsWith("_test")) {
   throw new Error("End-to-end tests require a dedicated *_test database.");
 }
 
-env.AUTH_URL = "http://localhost:3000";
+env.AUTH_URL = `http://localhost:${port}`;
 env.AUTH_TRUST_HOST = "true";
 env.AUTH_SECRET ||= "ci-test-only-auth-secret-32-characters-minimum";
 env.HOSTNAME = "127.0.0.1";
-env.PORT = "3000";
+env.PORT = port;
+env.PLAYWRIGHT_BASE_URL = `http://127.0.0.1:${port}`;
 
-await cp(".next/static", ".next/standalone/.next/static", {
+await cp(`${distDir}/static`, `${distDir}/standalone/${distDir}/static`, {
   recursive: true,
 });
 
-const server = spawn(process.execPath, [".next/standalone/server.js"], {
+const server = spawn(process.execPath, [`${distDir}/standalone/server.js`], {
   env,
   stdio: "inherit",
   windowsHide: true,
@@ -57,7 +60,7 @@ async function waitForServer() {
       throw new Error(`Application server exited ${server.exitCode}.`);
     }
     try {
-      const response = await fetch("http://127.0.0.1:3000/api/health");
+      const response = await fetch(`http://127.0.0.1:${port}/api/health`);
       if (response.ok) return;
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, 500));

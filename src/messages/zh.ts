@@ -145,6 +145,7 @@ export const zh: typeof it = {
     title: "附加商品",
     description: "维修配件由维修项目自动匹配；这里只添加有库存的客户附加商品。",
     repairParts: "维修配件",
+    repairAmount: "维修款",
     retailAddons: "附加商品",
     add: "添加商品",
     product: "商品",

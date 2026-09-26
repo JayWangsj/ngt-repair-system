@@ -1,6 +1,7 @@
 "use client";
 import {
   useContext,
+  useCallback,
   useState,
   useEffect,
   useRef,
@@ -26,7 +27,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Plus, Trash2, Check } from "lucide-react";
 import { Button } from "./ui/button";
-import { FormCloseContext } from "./ui/form-close-context";
+import { FormAutoSaveContext, FormCloseContext } from "./ui/form-close-context";
 import { useMessages, useLanguage } from "./language";
 import { translateError } from "@/lib/i18n";
 import {
@@ -1038,31 +1039,94 @@ function ActionForm({
 }) {
   const it = useMessages();
   const closeDialog = useContext(FormCloseContext);
+  const registerAutoSave = useContext(FormAutoSaveContext);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+  const form = useRef<HTMLFormElement>(null);
+  const initial = useRef("");
+  const initialized = useRef(false);
+  const activeSave = useRef<Promise<boolean> | null>(null);
   const router = useRouter();
+  const snapshot = useCallback((element: HTMLFormElement) => {
+    return JSON.stringify(
+      Array.from(element.elements).flatMap((control) => {
+        if (!(
+          control instanceof HTMLInputElement ||
+          control instanceof HTMLSelectElement ||
+          control instanceof HTMLTextAreaElement
+        ))
+          return [];
+        return [
+          [
+            control.name,
+            control.type,
+            "checked" in control ? control.checked : null,
+            control.value,
+          ],
+        ];
+      }),
+    );
+  }, []);
+  const save = useCallback(
+    (element: HTMLFormElement) => {
+      if (activeSave.current) return activeSave.current;
+      const current = snapshot(element);
+      if (registerAutoSave && current === initial.current)
+        return Promise.resolve(true);
+      const request = (async () => {
+        setPending(true);
+        setError("");
+        setSuccess(false);
+        try {
+          const result = await action(new FormData(element));
+          if (!result.ok) {
+            setError(result.error ?? "Errore");
+            return false;
+          }
+          initial.current = current;
+          setSuccess(true);
+          onSuccess?.();
+          router.refresh();
+          return true;
+        } catch {
+          setError("Connessione non disponibile. Riprova.");
+          return false;
+        } finally {
+          setPending(false);
+          activeSave.current = null;
+        }
+      })();
+      activeSave.current = request;
+      return request;
+    },
+    [action, onSuccess, registerAutoSave, router, snapshot],
+  );
+  useEffect(() => {
+    if (!form.current || initialized.current) return;
+    initialized.current = true;
+    initial.current = snapshot(form.current);
+  }, [snapshot]);
+  useEffect(() => {
+    if (!registerAutoSave) return;
+    registerAutoSave(() =>
+      form.current ? save(form.current) : Promise.resolve(true),
+    );
+    return () => registerAutoSave(null);
+  }, [registerAutoSave, save]);
   async function handle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPending(true);
-    setError("");
-    setSuccess(false);
-    try {
-      const result = await action(new FormData(event.currentTarget));
-      if (!result.ok) setError(result.error ?? "Errore");
-      else {
-        setSuccess(true);
-        onSuccess?.();
-        router.refresh();
-      }
-    } catch {
-      setError("Connessione non disponibile. Riprova.");
-    } finally {
-      setPending(false);
+    if (await save(event.currentTarget)) {
+      if (registerAutoSave) closeDialog?.();
     }
   }
   return (
-    <form onSubmit={handle} className="action-form" aria-busy={pending}>
+    <form
+      ref={form}
+      onSubmit={handle}
+      className="action-form"
+      aria-busy={pending}
+    >
       {children}
       <Message error={error} success={success} />
       {closeDialog ? (

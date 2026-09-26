@@ -100,7 +100,10 @@ export async function OrderTable({
           hideCustomer={hideCustomer}
           compact={compact}
           rows={orders.map((order) => {
-            const due = settlement(order.items, order).due;
+            const due =
+              order.status === "REFUNDED"
+                ? 0
+                : settlement(order.items, order).due;
             const remaining = balance(order.items, order.payments, order);
             return {
               id: order.id,
@@ -114,7 +117,7 @@ export async function OrderTable({
               dueDate: order.dueDate ?? "",
               overdue: isOverdue(order),
               due,
-              paid: due - remaining,
+              paid: order.status === "REFUNDED" ? 0 : due - remaining,
               balance: remaining,
             };
           })}

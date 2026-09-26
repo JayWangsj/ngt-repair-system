@@ -179,6 +179,7 @@ export const it = {
     description:
       "I ricambi richiesti derivano dagli interventi; qui puoi aggiungere articoli disponibili per il cliente.",
     repairParts: "Ricambi usati",
+    repairAmount: "Riparazione",
     retailAddons: "Articolo aggiuntivo",
     add: "Aggiungi prodotto",
     product: "Prodotto",

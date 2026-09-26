@@ -228,15 +228,21 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await expect(row).not.toHaveClass(/order-row-active/);
 
   const customerLink = row.locator(".order-customer-link");
+  const customerUnderline = customerLink.locator("span");
+  expect(
+    await customerUnderline.evaluate(
+      (text) => getComputedStyle(text, "::after").transform,
+    ),
+  ).toBe("matrix(0, 0, 0, 1, 0, 0)");
   await customerLink.hover();
-  await expect(customerLink).toHaveCSS(
+  await expect(customerLink.locator("svg")).toHaveCSS(
     "transform",
-    "matrix(1.01, 0, 0, 1.01, 0, 0)",
+    "matrix(1, 0, 0, 1, 4, 0)",
   );
   expect(
-    await customerLink
-      .locator("span")
-      .evaluate((text) => getComputedStyle(text, "::after").transform),
+    await customerUnderline.evaluate(
+      (text) => getComputedStyle(text, "::after").transform,
+    ),
   ).toBe("matrix(1, 0, 0, 1, 0, 0)");
   await customerLink.evaluate((link) =>
     link.addEventListener("click", (event) => event.preventDefault()),
@@ -472,10 +478,15 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   const productsTop = await products.evaluate(
     (element) => element.getBoundingClientRect().top,
   );
+  const detailsEdit = details.getByRole("button", { name: "Modifica dati" });
+  await page.mouse.move(0, 0);
+  await expect(detailsEdit).toHaveCSS("opacity", "0");
+  await details.hover();
+  await expect(detailsEdit).toHaveCSS("opacity", "1");
   const customerLink = details.locator(".order-customer-link");
   await customerLink.hover();
   await expect(customerLink).toHaveCSS("transform", "none");
-  await expect(customerLink.locator("span").last()).toHaveCSS(
+  await expect(customerLink.locator("svg")).toHaveCSS(
     "transform",
     "matrix(1, 0, 0, 1, 4, 0)",
   );
@@ -488,6 +499,18 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     await products.evaluate((element) => element.getBoundingClientRect().top),
   ).toBe(productsTop);
 
+  const productControls = products.locator(
+    ".order-product-form select, .order-product-form input, .order-product-form .button",
+  );
+  const productBoxes = await productControls.evaluateAll((elements) =>
+    elements.map((element) => {
+      const box = element.getBoundingClientRect();
+      return { bottom: box.bottom, height: box.height };
+    }),
+  );
+  expect(new Set(productBoxes.map(({ bottom }) => bottom)).size).toBe(1);
+  expect(new Set(productBoxes.map(({ height }) => height)).size).toBe(1);
+
   await details.getByRole("button", { name: "Modifica dati" }).click();
   await expect(details).toHaveClass(/is-editing/);
   await expect(
@@ -496,8 +519,25 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await details
     .getByLabel("Problema segnalato")
     .fill("Fotocamera non funziona");
-  await details.getByRole("button", { name: "Annulla" }).click();
+  await quote.hover();
+  await quote.getByRole("button", { name: "Modifica dati" }).click();
   await expect(details).not.toHaveClass(/is-editing/);
+  await expect(details).toContainText("Fotocamera non funziona");
+  await expect(quote).toHaveClass(/is-editing/);
+  await quote.getByRole("button", { name: "Annulla" }).click();
+
+  await details.hover();
+  await details.getByRole("button", { name: "Modifica dati" }).click();
+  await details.getByLabel("Problema segnalato").fill("");
+  await page.locator(".balance-card").click();
+  await expect(details).toHaveClass(/is-editing/);
+  await expect(details.locator(".message.error")).toBeVisible();
+  await details
+    .getByLabel("Problema segnalato")
+    .fill("Fotocamera non funziona ancora");
+  await details.getByRole("button", { name: "Salva" }).click();
+  await expect(details).not.toHaveClass(/is-editing/);
+  await expect(details).toContainText("Fotocamera non funziona ancora");
 
   await quote.getByRole("button", { name: "Preventivo" }).click();
   await expect(quote.locator(".quote-summary")).toBeHidden();
@@ -508,10 +548,12 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     quote.getByRole("button", { name: "Aggiungi intervento" }),
   ).toBeVisible();
   await quote.getByRole("button", { name: "Annulla" }).click();
+  await warranty.hover();
   await warranty.getByRole("button", { name: "Modifica dati" }).click();
   await warranty.getByLabel("Durata garanzia").selectOption("3");
   await warranty.getByLabel("Copertura").fill("Solo il componente sostituito");
   await warranty.getByRole("button", { name: "Salva" }).click();
+  await expect(warranty).not.toHaveClass(/is-editing/);
   await expect(warranty).toContainText("3 mesi");
 
   await state(page, "READY");
@@ -552,6 +594,7 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   ).toHaveCount(0);
   await page.getByLabel("Importo (€)", { exact: true }).fill("50");
   await page.getByRole("button", { name: "Registra incasso" }).click();
+  await expect(page.locator(".balance-card>strong")).toContainText("0,00");
   await state(page, "READY");
   await page
     .getByLabel("Nome di chi ritira", { exact: true })
@@ -569,11 +612,40 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     .click();
   await expect(page.locator(".detail-status .badge")).toHaveText("Rimborsato");
   await expect(page.locator(".balance-card>strong")).toContainText("0,00");
+  await expect(page.locator(".balance-card")).toContainText("Totale: 0,00 €");
+  await expect(page.locator(".balance-card")).toContainText(
+    "Incassato: 0,00 €",
+  );
+  await expect(page.locator(".balance-card")).toContainText(
+    "Riparazione: 0,00 €",
+  );
   await expect(page.locator(".payments-card")).toContainText("-125,00");
   await expect(page.getByTestId("history-card")).toContainText(
     "Rimborso 125,00",
   );
   await expect(page.getByText("Rimborsato · contenuti bloccati")).toBeVisible();
+
+  const refundedCode = await page.locator("h1").textContent();
+  await page.goto("/orders");
+  const refundedRow = page
+    .locator("tbody tr")
+    .filter({ hasText: refundedCode ?? "" });
+  await refundedRow.click();
+  await expect(
+    refundedRow.getByLabel("Consegna prevista", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    refundedRow.getByLabel("Incassato", { exact: true }),
+  ).toHaveCount(0);
+  await expect(refundedRow.locator(".order-payment-values")).toContainText(
+    "Totale0,00 €",
+  );
+  await expect(refundedRow.locator(".order-payment-values")).toContainText(
+    "Incassato0,00 €",
+  );
+  await expect(refundedRow.locator(".order-payment-values")).toContainText(
+    "Da pagare0,00 €",
+  );
 });
 test("price editor and mobile yellow layout support both languages", async ({
   page,

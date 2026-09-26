@@ -79,10 +79,18 @@ export default async function Detail({
   ]);
   const totals = settlement(order.items, order);
   const remaining = balance(order.items, order.payments, order);
-  const received = order.payments.reduce(
+  const receivedTotal = order.payments.reduce(
     (sum, payment) => sum + cents(payment.amount),
     0,
   );
+  const refunded = order.status === "REFUNDED";
+  const received = refunded ? 0 : receivedTotal;
+  const currentDue = refunded ? 0 : totals.due;
+  const repairAmount = refunded
+    ? 0
+    : totals.due - totals.productTotal - totals.afterSalesTotal;
+  const productAmount = refunded ? 0 : totals.productTotal;
+  const afterSalesAmount = refunded ? 0 : totals.afterSalesTotal;
   const originalLocked =
     order.afterSalesOpen ||
     ["COMPLETED", "REWORKING", "REFUNDED", "CANCELLED"].includes(order.status);
@@ -229,12 +237,6 @@ export default async function Detail({
             title={it.details}
             locked={originalLocked}
             testId="details-card"
-            headerExtra={
-              <CustomerDetailLink
-                href={`/customers/${order.device.customerId}`}
-                name={order.device.customer.name}
-              />
-            }
             edit={
               <EditOrderForm
                 id={id}
@@ -250,7 +252,12 @@ export default async function Detail({
             <dl className="detail-list">
               <div>
                 <dt>{it.customer}</dt>
-                <dd>{order.device.customer.name}</dd>
+                <dd>
+                  <CustomerDetailLink
+                    href={`/customers/${order.device.customerId}`}
+                    name={order.device.customer.name}
+                  />
+                </dd>
               </div>
               <div>
                 <dt>{it.phone}</dt>
@@ -459,21 +466,18 @@ export default async function Detail({
             <strong>{money(remaining)}</strong>
             <div>
               <span>
-                {it.orderProducts.repairParts}:{" "}
-                {money(
-                  totals.due - totals.productTotal - totals.afterSalesTotal,
-                )}
+                {it.orderProducts.repairAmount}: {money(repairAmount)}
               </span>
               <span>
-                {it.orderProducts.retailAddons}: {money(totals.productTotal)}
+                {it.orderProducts.retailAddons}: {money(productAmount)}
               </span>
-              {totals.afterSalesTotal > 0 && (
+              {afterSalesAmount > 0 && (
                 <span>
-                  {it.afterSales.feeEvent}: {money(totals.afterSalesTotal)}
+                  {it.afterSales.feeEvent}: {money(afterSalesAmount)}
                 </span>
               )}
               <span>
-                {it.total}: {money(totals.due)}
+                {it.total}: {money(currentDue)}
               </span>
               <span>
                 {it.paid}: {money(received)}
@@ -567,7 +571,7 @@ export default async function Detail({
           </section>
 
           {order.status === "COMPLETED" && (
-            <AfterSalesActions orderId={id} received={received} />
+            <AfterSalesActions orderId={id} received={receivedTotal} />
           )}
         </div>
       </div>

@@ -1,10 +1,16 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
-import { ChevronDown, ChevronUp, Pencil } from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { ChevronDown, ChevronRight, ChevronUp, Pencil } from "lucide-react";
 import Link from "next/link";
 import { Button } from "./ui/button";
-import { FormCloseContext } from "./ui/form-close-context";
+import { FormAutoSaveContext, FormCloseContext } from "./ui/form-close-context";
 import { AfterSalesForm, FormDialog, RefundForm } from "./forms";
 import { useMessages } from "./language";
 
@@ -12,7 +18,6 @@ export function OrderDetailCard({
   title,
   children,
   edit,
-  headerExtra,
   locked = false,
   className = "",
   defaultExpanded = true,
@@ -21,7 +26,6 @@ export function OrderDetailCard({
   title: string;
   children: ReactNode;
   edit?: ReactNode;
-  headerExtra?: ReactNode;
   locked?: boolean;
   className?: string;
   defaultExpanded?: boolean;
@@ -30,10 +34,42 @@ export function OrderDetailCard({
   const it = useMessages();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [editing, setEditing] = useState(false);
+  const card = useRef<HTMLElement>(null);
+  const save = useRef<(() => Promise<boolean>) | null>(null);
+  const saving = useRef(false);
   const editable = Boolean(edit) && !locked;
   const closeEdit = () => setEditing(false);
+  const registerSave = useCallback(
+    (handler: (() => Promise<boolean>) | null) => {
+      save.current = handler;
+    },
+    [],
+  );
+  useEffect(() => {
+    if (!editing) return;
+    async function outside(event: MouseEvent) {
+      const target = event.target;
+      if (!(target instanceof Node) || card.current?.contains(target)) return;
+      const clickTarget =
+        target instanceof HTMLElement ? target : target.parentElement;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (saving.current) return;
+      saving.current = true;
+      const saved = (await save.current?.()) ?? true;
+      saving.current = false;
+      if (!saved) return;
+      setEditing(false);
+      requestAnimationFrame(() => {
+        if (clickTarget?.isConnected) clickTarget.click();
+      });
+    }
+    document.addEventListener("click", outside, true);
+    return () => document.removeEventListener("click", outside, true);
+  }, [editing]);
   return (
     <section
+      ref={card}
       className={`panel padded order-detail-card ${editable ? "is-editable" : ""} ${editing ? "is-editing" : ""} ${locked ? "is-locked" : ""} ${className}`}
       data-testid={testId}
     >
@@ -49,7 +85,6 @@ export function OrderDetailCard({
           {expanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
         </button>
         <div className="order-card-actions">
-          {headerExtra}
           {editing && <small>{it.editing}</small>}
           {editable && !editing && (
             <button
@@ -74,9 +109,11 @@ export function OrderDetailCard({
       >
         <div className="order-card-body">
           {editing ? (
-            <FormCloseContext.Provider value={closeEdit}>
-              {edit}
-            </FormCloseContext.Provider>
+            <FormAutoSaveContext.Provider value={registerSave}>
+              <FormCloseContext.Provider value={closeEdit}>
+                {edit}
+              </FormCloseContext.Provider>
+            </FormAutoSaveContext.Provider>
           ) : (
             children
           )}
@@ -95,12 +132,12 @@ export function CustomerDetailLink({
 }) {
   return (
     <Link
-      className="order-customer-link"
+      className="order-link order-customer-link"
       href={href}
       onClick={(event) => event.stopPropagation()}
     >
       <span>{name}</span>
-      <span aria-hidden="true">&gt;</span>
+      <ChevronRight size={15} aria-hidden="true" />
     </Link>
   );
 }

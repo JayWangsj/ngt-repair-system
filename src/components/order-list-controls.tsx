@@ -104,7 +104,7 @@ function DueDateControl({
   const [value, setValue] = useState(row.dueDate);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
-  const closed = ["COMPLETED", "CANCELLED"].includes(row.status);
+  const closed = ["COMPLETED", "REFUNDED", "CANCELLED"].includes(row.status);
   if (!active || closed)
     return (
       <div className="order-static-value">
@@ -173,7 +173,8 @@ function PaymentControl({
       </span>
       <span>
         <small>{it.paid}</small>
-        {active && row.status !== "CANCELLED" ? (
+        {active &&
+        !["COMPLETED", "REFUNDED", "CANCELLED"].includes(row.status) ? (
           <input
             aria-label={it.paid}
             value={value}
@@ -242,6 +243,7 @@ export function OrderListBody({
                   onClick={(event) => event.stopPropagation()}
                 >
                   <span>{row.customerName}</span>
+                  <ChevronRight size={15} aria-hidden="true" />
                 </Link>
               </td>
             )}

@@ -1135,6 +1135,29 @@ describe("unified product inventory", () => {
 });
 
 describe("work order products and combined checkout", () => {
+  it("rejects partial checkout without recording a payment or changing status", async () => {
+    const order = await createOrder(staff, input({ deposit: "20" }));
+    await changeStatus(staff, order.id, { status: "REPAIRING" });
+    await changeStatus(staff, order.id, { status: "READY" });
+
+    await expect(
+      checkoutWorkOrder(staff, order.id, {
+        requestId: randomUUID(),
+        amount: "79",
+        method: "CASH",
+        pickedUpBy: "Test Cliente",
+      }),
+    ).rejects.toThrow("saldo deve essere zero");
+
+    const unchanged = await db.workOrder.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { payments: true },
+    });
+    expect(unchanged.status).toBe("READY");
+    expect(unchanged.payments).toHaveLength(1);
+    expect(unchanged.payments[0].amount.toString()).toBe("20");
+  });
+
   it("deducts repair parts at READY once and allocates combined payment", async () => {
     const part = await createProduct(staff, {
       requestId: randomUUID(),

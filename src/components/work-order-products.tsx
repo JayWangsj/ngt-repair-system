@@ -168,19 +168,31 @@ export function WorkOrderCheckout({
   const [requestId] = useState(() => crypto.randomUUID());
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPending(true);
     setError("");
     const data = new FormData(event.currentTarget);
-    const result = await checkoutWorkOrderAction(orderId, {
-      requestId,
-      amount: String(data.get("amount") ?? "0"),
-      method: String(data.get("method") ?? "CASH"),
-      pickedUpBy: String(data.get("pickedUpBy") ?? ""),
-      override: data.get("override") === "on",
-    });
-    setPending(false);
-    if (!result.ok) return setError(result.error);
-    router.refresh();
+    const amount = String(data.get("amount") ?? "0");
+    try {
+      if (cents(amount) !== remaining)
+        return setError(it.orderProducts.checkoutExactAmount);
+    } catch {
+      return setError(it.validationError);
+    }
+    setPending(true);
+    try {
+      const result = await checkoutWorkOrderAction(orderId, {
+        requestId,
+        amount,
+        method: String(data.get("method") ?? "CASH"),
+        pickedUpBy: String(data.get("pickedUpBy") ?? ""),
+        override: data.get("override") === "on",
+      });
+      if (!result.ok) return setError(result.error);
+      router.refresh();
+    } catch {
+      setError(it.connectionError);
+    } finally {
+      setPending(false);
+    }
   }
   return (
     <form className="action-form" onSubmit={submit}>

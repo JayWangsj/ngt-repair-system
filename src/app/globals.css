@@ -1002,6 +1002,14 @@ textarea {
   color: var(--muted);
   font-size: 11px;
 }
+.detail-status-trigger {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+.detail-status-control .inline-order-control {
+  min-width: 185px;
+}
 .detail-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr);

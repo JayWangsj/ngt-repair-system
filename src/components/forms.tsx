@@ -1296,7 +1296,12 @@ export function EditOrderForm({
   return (
     <ActionForm
       submit={it.save}
-      action={(data) => updateOrderAction(id, Object.fromEntries(data))}
+      action={(data) =>
+        updateOrderAction(id, {
+          ...Object.fromEntries(data),
+          accessories: values.accessories,
+        })
+      }
     >
       <Field label={it.fault}>
         <textarea
@@ -1306,7 +1311,6 @@ export function EditOrderForm({
           maxLength={2000}
         />
       </Field>
-      <input type="hidden" name="accessories" value={values.accessories} />
       <Field label={it.dueDate}>
         <input
           type="date"

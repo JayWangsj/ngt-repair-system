@@ -155,6 +155,7 @@ export const zh: typeof it = {
     empty: "尚未关联商品。",
     checkout: "收款并交付",
     checkoutDescription: "登记剩余收款并完成交付。",
+    checkoutExactAmount: "收款并交付的金额必须等于当前待收余额。",
   },
   kinds: {
     DEPOSIT: "预付款",

@@ -189,6 +189,8 @@ export const it = {
     empty: "Nessun prodotto collegato.",
     checkout: "Incassa e consegna",
     checkoutDescription: "Registra l'incasso residuo e completa la consegna.",
+    checkoutExactAmount:
+      "L'importo deve essere uguale al saldo da pagare prima della consegna.",
   },
   kinds: {
     DEPOSIT: "Acconto",

@@ -48,17 +48,35 @@ function StaticStatus({ status }: { status: OrderStatus }) {
 function StatusControl({
   row,
   active,
+  allowCompletion = true,
+  onActivate,
+  onSaved,
 }: {
-  row: OrderListRow;
+  row: Pick<OrderListRow, "id" | "status" | "customerName">;
   active: boolean;
+  allowCompletion?: boolean;
+  onActivate?: () => void;
+  onSaved?: () => void;
 }) {
   const it = useMessages();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
-  const choices = transitions[row.status];
+  const choices = transitions[row.status].filter(
+    (status) => allowCompletion || status !== "COMPLETED",
+  );
   if (!active || row.status === "COMPLETED" || choices.length === 0)
-    return <StaticStatus status={row.status} />;
+    return onActivate && choices.length ? (
+      <button
+        type="button"
+        className="detail-status-trigger"
+        onClick={onActivate}
+      >
+        <StaticStatus status={row.status} />
+      </button>
+    ) : (
+      <StaticStatus status={row.status} />
+    );
   return (
     <div className="inline-order-control">
       <select
@@ -76,6 +94,7 @@ function StatusControl({
             });
             if (!result.ok) return setError(result.error);
             setError("");
+            onSaved?.();
             router.refresh();
           });
         }}
@@ -88,6 +107,34 @@ function StatusControl({
         ))}
       </select>
       {error && <small className="inline-control-error">{error}</small>}
+    </div>
+  );
+}
+
+export function DetailStatusControl({
+  id,
+  status,
+  customerName,
+}: Pick<OrderListRow, "id" | "status" | "customerName">) {
+  const [active, setActive] = useState(false);
+  const control = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!active) return;
+    function outside(event: PointerEvent) {
+      if (!control.current?.contains(event.target as Node)) setActive(false);
+    }
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, [active]);
+  return (
+    <div className="detail-status-control" ref={control}>
+      <StatusControl
+        row={{ id, status, customerName }}
+        active={active}
+        allowCompletion={false}
+        onActivate={() => setActive(true)}
+        onSaved={() => setActive(false)}
+      />
     </div>
   );
 }

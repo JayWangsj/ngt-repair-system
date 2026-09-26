@@ -19,7 +19,6 @@ import {
   EditOrderForm,
   EditQuoteForm,
   PaymentForm,
-  StatusForm,
   QuoteSummary,
   WarrantyForm,
 } from "@/components/forms";
@@ -33,6 +32,7 @@ import {
   CustomerDetailLink,
   OrderDetailCard,
 } from "@/components/order-detail-ui";
+import { DetailStatusControl } from "@/components/order-list-controls";
 
 type TimelineEvent = {
   id: string;
@@ -217,7 +217,11 @@ export default async function Detail({
         description={`${order.device.brand} ${order.device.model} · ${order.device.customer.name}`}
       />
       <div className="detail-status">
-        <Badge status={order.status} />
+        <DetailStatusControl
+          id={id}
+          status={order.status}
+          customerName={order.customerName || order.device.customer.name}
+        />
         <span>
           {it.created}: {dateTime(order.createdAt)}
         </span>
@@ -278,10 +282,6 @@ export default async function Detail({
               <div>
                 <dt>{it.notes}</dt>
                 <dd>{order.notes || "—"}</dd>
-              </div>
-              <div>
-                <dt>{it.accessories}</dt>
-                <dd>{order.accessories || "—"}</dd>
               </div>
             </dl>
             {order.pickedUpAt && (
@@ -485,52 +485,15 @@ export default async function Detail({
             </div>
           </section>
 
-          {!(["COMPLETED", "REFUNDED", "CANCELLED"] as string[]).includes(
-            order.status,
-          ) && (
+          {order.status === "READY" && (
             <section className="panel padded status-operation-card">
-              <h2>
-                {order.status === "READY"
-                  ? it.orderProducts.checkout
-                  : it.updateStatus}
-              </h2>
-              {order.status === "READY" ? (
-                <>
-                  <WorkOrderCheckout
-                    orderId={id}
-                    remaining={remaining}
-                    customerName={
-                      order.customerName || order.device.customer.name
-                    }
-                    owner={actor.role === "OWNER"}
-                  />
-                  <details className="secondary-status-action">
-                    <summary>{it.updateStatus}</summary>
-                    <StatusForm
-                      customerName={
-                        order.customerName || order.device.customer.name
-                      }
-                      key={order.status}
-                      id={id}
-                      status={order.status}
-                      remaining={remaining}
-                      owner={actor.role === "OWNER"}
-                      allowCompletion={false}
-                    />
-                  </details>
-                </>
-              ) : (
-                <StatusForm
-                  customerName={
-                    order.customerName || order.device.customer.name
-                  }
-                  key={order.status}
-                  id={id}
-                  status={order.status}
-                  remaining={remaining}
-                  owner={actor.role === "OWNER"}
-                />
-              )}
+              <h2>{it.orderProducts.checkout}</h2>
+              <WorkOrderCheckout
+                orderId={id}
+                remaining={remaining}
+                customerName={order.customerName || order.device.customer.name}
+                owner={actor.role === "OWNER"}
+              />
             </section>
           )}
 

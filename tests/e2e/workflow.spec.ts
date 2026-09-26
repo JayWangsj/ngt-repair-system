@@ -49,10 +49,8 @@ async function save(page: Page) {
   await expect(page).toHaveURL(/\/orders\/(?!new)[a-z0-9]+$/);
 }
 async function state(page: Page, next: string) {
-  await page.getByLabel("Nuovo stato", { exact: true }).selectOption(next);
-  await page
-    .getByRole("button", { name: "Aggiorna stato", exact: true })
-    .click();
+  await page.locator(".detail-status-trigger").click();
+  await page.locator(".detail-status .status-select").selectOption(next);
   await expect(page.locator(".detail-status .badge")).toContainText(
     next === "REPAIRING" ? "In riparazione" : "Da ritirare",
   );
@@ -352,9 +350,12 @@ test("creates automatic quote, receives payment and delivers", async ({
   ).toHaveCount(0);
   await expect(
     page.getByText("Accessori ricevuti", { exact: true }),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  await expect(page.locator(".status-operation-card")).toHaveCount(0);
   await expect(page.locator(".balance-card>strong")).toContainText("80,00");
   await state(page, "READY");
+  await expect(page.locator(".status-operation-card")).toHaveCount(1);
+  await expect(page.locator(".secondary-status-action")).toHaveCount(0);
   await expect(
     page.locator('select[name="kind"] option[value="DEPOSIT"]'),
   ).toHaveCount(0);
@@ -450,11 +451,19 @@ test("delivery requires a zero balance", async ({ page }) => {
   await fillOrder(page);
   await save(page);
   await state(page, "READY");
-  await page.getByLabel("Importo (€)", { exact: true }).fill("0");
+  await page.getByLabel("Importo (€)", { exact: true }).fill("99");
   await page.getByLabel("Nome di chi ritira", { exact: true }).fill("Cliente");
   await page.getByRole("button", { name: /Incassa e consegna/ }).click();
   await expect(page.locator(".detail-status .badge")).toHaveText("Da ritirare");
-  await expect(page.getByText(/saldo deve essere zero/i)).toBeVisible();
+  await expect(page.getByText(/uguale al saldo da pagare/i)).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Incassa e consegna/ }),
+  ).toBeEnabled();
+  await page.reload();
+  await expect(page.locator(".detail-status .badge")).toHaveText("Da ritirare");
+  await expect(page.getByLabel("Importo (€)", { exact: true })).toHaveValue(
+    "100.00",
+  );
   await page.getByLabel("Importo (€)", { exact: true }).fill("100");
   await page.getByRole("button", { name: /Incassa e consegna/ }).click();
   await expect(page.locator(".detail-status .badge")).toHaveText("Consegnato");

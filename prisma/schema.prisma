@@ -122,6 +122,7 @@ model Device {
 model WorkOrder {
   id               String             @id @default(cuid())
   number           Int                @unique @default(autoincrement())
+  code             String             @unique
   customerName     String             @default("")
   deviceId         String
   device           Device             @relation(fields: [deviceId], references: [id])
@@ -150,19 +151,22 @@ model WorkOrder {
 }
 
 model PriceRule {
-  id        String          @id @default(cuid())
-  category  String          @default("PHONE")
-  brand     String          @default("")
-  series    String          @default("")
-  model     String          @default("")
-  project   String
-  suggested Decimal         @db.Decimal(12, 2)
-  cost      Decimal?        @db.Decimal(12, 2)
-  minutes   Int             @default(60)
-  enabled   Boolean         @default(true)
-  notes     String          @default("")
-  updatedAt DateTime        @updatedAt @db.Timestamptz(3)
-  items     WorkOrderItem[]
+  id                String          @id @default(cuid())
+  category          String          @default("PHONE")
+  brand             String          @default("")
+  series            String          @default("")
+  model             String          @default("")
+  project           String
+  suggested         Decimal         @db.Decimal(12, 2)
+  cost              Decimal?        @db.Decimal(12, 2)
+  minutes           Int             @default(60)
+  enabled           Boolean         @default(true)
+  notes             String          @default("")
+  requiredProductId String?
+  requiredProduct   Product?        @relation("RequiredRepairProduct", fields: [requiredProductId], references: [id])
+  requiredQuantity  Int             @default(1)
+  updatedAt         DateTime        @updatedAt @db.Timestamptz(3)
+  items             WorkOrderItem[]
 
   @@unique([category, brand, series, model, project])
 }
@@ -259,15 +263,25 @@ model Product {
   movements         InventoryMovement[]
   saleItems         RetailSaleItem[]
   workOrderProducts WorkOrderProduct[]
+  requiredByRules   PriceRule[]         @relation("RequiredRepairProduct")
 
   @@index([name])
   @@index([category, usage, enabled])
   @@index([enabled, favorite])
 }
 
+model InventoryCategory {
+  id         String    @id @default(cuid())
+  name       String    @unique
+  repairOnly Boolean   @default(false)
+  deletedAt  DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+}
+
 model RetailSale {
   id        String           @id @default(cuid())
   number    Int              @unique @default(autoincrement())
+  code      String           @unique
   requestId String           @unique
   subtotal  Decimal          @db.Decimal(12, 2)
   discount  Decimal          @default(0) @db.Decimal(12, 2)

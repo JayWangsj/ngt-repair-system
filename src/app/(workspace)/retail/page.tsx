@@ -11,10 +11,16 @@ import { Button } from "@/components/ui/button";
 export default async function RetailPage() {
   await requireActor();
   const it = await getMessages();
-  const products = await db.product.findMany({
-    where: { enabled: true, usage: { in: ["RETAIL", "BOTH"] } },
-    orderBy: [{ favorite: "desc" }, { name: "asc" }],
-  });
+  const [products, categories] = await Promise.all([
+    db.product.findMany({
+      where: { enabled: true, usage: { in: ["RETAIL", "BOTH"] } },
+      orderBy: [{ favorite: "desc" }, { name: "asc" }],
+    }),
+    db.inventoryCategory.findMany({
+      where: { deletedAt: null, repairOnly: false },
+      orderBy: { name: "asc" },
+    }),
+  ]);
   return (
     <>
       <PageHeader
@@ -30,6 +36,7 @@ export default async function RetailPage() {
         }
       />
       <RetailWorkbench
+        categories={categories}
         products={products.map((product) => ({
           id: product.id,
           name: product.name,

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { normalizePhone, romeDay, statuses } from "./domain";
+import { isDiagnosticFault, normalizePhone, romeDay, statuses } from "./domain";
 const short = z.string().trim().min(1, "Campo obbligatorio").max(120);
 const text = z.string().trim().max(2000).default("");
 export const amountInput = z
@@ -41,44 +41,55 @@ export const itemInput = z.object({
   discount: amountInput.default("0"),
   saveRule: z.boolean().default(false),
 });
-export const orderInput = z.object({
-  requestId: z.string().uuid(),
-  customerName: short,
-  phone: phoneInput,
-  additionalPhones: z.array(phoneInput).max(2).default([]),
-  privacyConsent: z.boolean().default(false),
-  category: z
-    .enum([
-      "PHONE",
-      "TABLET",
-      "LAPTOP",
-      "DESKTOP",
-      "CONSOLE",
-      "SMARTWATCH",
-      "SMARTBAND",
-      "OTHER",
-    ])
-    .default("PHONE"),
-  faults: z.array(short).max(30).default([]),
-  orderDiscount: amountInput.default("0"),
-  includeVat: z.boolean().default(false),
-  paymentKind: z.enum(["DEPOSIT", "BALANCE"]).default("DEPOSIT"),
-  deviceId: z.string().max(100).default(""),
-  brand: short,
-  series: z.string().trim().max(120).default(""),
-  model: short,
-  imei: z.string().trim().max(30).default(""),
-  appearance: text,
-  accessories: text,
-  fault: z.string().trim().max(2000).default(""),
-  notes: text,
-  dueDate: dueDateInput,
-  confirmed: z.boolean().default(false),
-  confirmationNote: text,
-  items: z.array(itemInput).min(1).max(30),
-  deposit: amountInput.default("0"),
-  method: z.enum(["CASH", "CARD", "OTHER"]).default("CASH"),
-});
+export const orderInput = z
+  .object({
+    requestId: z.string().uuid(),
+    customerName: short,
+    phone: phoneInput,
+    additionalPhones: z.array(phoneInput).max(2).default([]),
+    privacyConsent: z.boolean().default(false),
+    category: z
+      .enum([
+        "PHONE",
+        "TABLET",
+        "LAPTOP",
+        "DESKTOP",
+        "CONSOLE",
+        "SMARTWATCH",
+        "SMARTBAND",
+        "OTHER",
+      ])
+      .default("PHONE"),
+    faults: z.array(short).max(30).default([]),
+    orderDiscount: amountInput.default("0"),
+    includeVat: z.boolean().default(false),
+    paymentKind: z.enum(["DEPOSIT", "BALANCE"]).default("DEPOSIT"),
+    deviceId: z.string().max(100).default(""),
+    brand: short,
+    series: z.string().trim().max(120).default(""),
+    model: short,
+    imei: z.string().trim().max(30).default(""),
+    appearance: text,
+    accessories: text,
+    fault: z.string().trim().max(2000).default(""),
+    notes: text,
+    dueDate: dueDateInput,
+    confirmed: z.boolean().default(false),
+    confirmationNote: text,
+    items: z.array(itemInput).max(30),
+    diagnosticFee: amountInput.default("10"),
+    deposit: amountInput.default("0"),
+    method: z.enum(["CASH", "CARD", "OTHER"]).default("CASH"),
+  })
+  .superRefine((value, ctx) => {
+    const diagnostic = isDiagnosticFault([...value.faults, value.fault]);
+    if (!diagnostic && value.items.length === 0)
+      ctx.addIssue({
+        code: "custom",
+        path: ["items"],
+        message: "Aggiungi almeno un intervento.",
+      });
+  });
 export const editInput = z.object({
   fault: z.string().trim().min(1).max(2000),
   notes: text,
@@ -113,6 +124,11 @@ export const productUpdateInput = z.object({
   stockQuantity: z.coerce.number().int().min(0).max(1_000_000),
   minStock: z.coerce.number().int().min(0).max(1_000_000),
   favorite: z.boolean(),
+});
+export const paidTotalInput = z.object({
+  requestId: z.string().uuid(),
+  amount: amountInput,
+  method: z.enum(["CASH", "CARD", "OTHER"]).default("CASH"),
 });
 export const inventoryAdjustmentInput = z.object({
   requestId: z.string().uuid(),
@@ -180,6 +196,8 @@ export const ruleInput = z
     minutes: z.coerce.number().int().min(0).max(10000).default(60),
     enabled: z.boolean().default(true),
     notes: text,
+    requiredProductId: z.string().trim().max(100).default(""),
+    requiredQuantity: z.coerce.number().int().min(1).max(999).default(1),
   })
   .superRefine((r, ctx) => {
     if (

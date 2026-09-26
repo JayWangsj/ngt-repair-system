@@ -38,9 +38,8 @@ export default async function Orders({
               },
             },
             { device: { customer: { phone: { contains: q } } } },
-            ...(/^(NGT-)?\d+$/i.test(q)
-              ? [{ number: Number(q.replace(/^NGT-/i, "")) }]
-              : []),
+            { code: { contains: q, mode: "insensitive" } },
+            ...(/^\d+$/.test(q) ? [{ number: Number(q) }] : []),
           ],
         }
       : {},

@@ -55,7 +55,7 @@ export default async function Detail({
         ← {it.nav.orders}
       </Link>
       <PageHeader
-        title={orderCode(order.number)}
+        title={orderCode(order.code)}
         description={`${order.device.brand} ${order.device.model} · ${order.device.customer.name}`}
       />
       <div className="detail-status">

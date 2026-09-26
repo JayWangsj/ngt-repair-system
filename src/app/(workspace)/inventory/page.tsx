@@ -6,7 +6,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { db } from "@/lib/db";
-import { cents, inventoryStatus, money } from "@/lib/domain";
+import { cents, dateTime, inventoryStatus, money } from "@/lib/domain";
 import { getMessages } from "@/lib/i18n-server";
 import { requireActor } from "@/lib/session";
 import { PageHeader } from "@/components/common";
@@ -19,10 +19,21 @@ import {
 export default async function InventoryPage() {
   await requireActor();
   const it = await getMessages();
-  const products = await db.product.findMany({
-    where: { enabled: true },
-    orderBy: [{ favorite: "desc" }, { name: "asc" }],
-  });
+  const [products, categories, audits] = await Promise.all([
+    db.product.findMany({
+      where: { enabled: true },
+      include: { movements: { orderBy: { createdAt: "desc" }, take: 20 } },
+      orderBy: [{ favorite: "desc" }, { name: "asc" }],
+    }),
+    db.inventoryCategory.findMany({
+      where: { deletedAt: null },
+      orderBy: { name: "asc" },
+    }),
+    db.auditLog.findMany({
+      where: { action: "PRODUCT_UPDATED" },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
   const productViews: ProductView[] = products.map((product) => ({
     id: product.id,
     name: product.name,
@@ -34,6 +45,29 @@ export default async function InventoryPage() {
     minStock: product.minStock,
     favorite: product.favorite,
     enabled: product.enabled,
+    history: [
+      ...product.movements.map((movement) => ({
+        id: movement.id,
+        at: dateTime(movement.createdAt),
+        label: `${movement.quantity > 0 ? "+" : ""}${movement.quantity} · ${movement.stockBefore} → ${movement.stockAfter}`,
+      })),
+      ...audits
+        .filter((audit) => audit.entityId === product.id)
+        .flatMap((audit) => {
+          const context = audit.context as {
+            before?: { costPrice?: string; salePrice?: string };
+            after?: { costPrice?: string; salePrice?: string };
+          };
+          if (!context.before || !context.after) return [];
+          return [
+            {
+              id: audit.id,
+              at: dateTime(audit.createdAt),
+              label: `${it.inventory.costPrice}: ${context.before.costPrice} → ${context.after.costPrice} · ${it.inventory.salePrice}: ${context.before.salePrice} → ${context.after.salePrice}`,
+            },
+          ];
+        }),
+    ],
   }));
   const enabled = productViews.filter((product) => product.enabled);
   const metrics = [
@@ -77,13 +111,7 @@ export default async function InventoryPage() {
       <PageHeader
         title={it.inventory.title}
         description={it.inventory.description}
-        actionNode={
-          <NewProductDialogButton
-            categories={[
-              ...new Set(productViews.map((product) => product.category)),
-            ]}
-          />
-        }
+        actionNode={<NewProductDialogButton categories={categories} />}
       />
       <div className="inventory-metrics">
         {metrics.map(({ label, value, icon: Icon }) => (
@@ -98,7 +126,7 @@ export default async function InventoryPage() {
           </div>
         ))}
       </div>
-      <InventoryWorkspace products={productViews} />
+      <InventoryWorkspace products={productViews} categories={categories} />
     </>
   );
 }

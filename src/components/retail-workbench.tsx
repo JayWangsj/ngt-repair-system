@@ -6,6 +6,7 @@ import { createRetailSaleAction } from "@/app/actions";
 import { cents, creatablePaymentMethods, money } from "@/lib/domain";
 import { useMessages } from "./language";
 import { NewProductDialogButton } from "./inventory";
+import type { CategoryView } from "./inventory";
 import { Button } from "./ui/button";
 
 type RetailProduct = {
@@ -17,7 +18,13 @@ type RetailProduct = {
   favorite: boolean;
 };
 
-export function RetailWorkbench({ products }: { products: RetailProduct[] }) {
+export function RetailWorkbench({
+  products,
+  categories: productCategories,
+}: {
+  products: RetailProduct[];
+  categories: CategoryView[];
+}) {
   const it = useMessages();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
@@ -198,9 +205,8 @@ export function RetailWorkbench({ products }: { products: RetailProduct[] }) {
           })}
           <div className="retail-new-product">
             <NewProductDialogButton
-              categories={[
-                ...new Set(products.map((product) => product.category)),
-              ]}
+              categories={productCategories}
+              mode="retail"
             />
           </div>
         </div>

@@ -7,22 +7,11 @@ import type {
   WorkOrderProduct,
   Payment,
 } from "@prisma/client";
-import { Plus, Wrench, ChevronRight } from "lucide-react";
+import { Plus, Wrench } from "lucide-react";
 import { getMessages } from "@/lib/i18n-server";
-import {
-  balance,
-  isOverdue,
-  money,
-  orderCode,
-  settlement,
-  type OrderStatus,
-} from "@/lib/domain";
+import { balance, isOverdue, settlement, type OrderStatus } from "@/lib/domain";
 import { Button } from "./ui/button";
-import {
-  OrderDueDateControl,
-  OrderPaymentControl,
-  OrderStatusControl,
-} from "./order-list-controls";
+import { OrderListBody } from "./order-list-controls";
 export async function PageHeader({
   title,
   description,
@@ -104,62 +93,32 @@ export async function OrderTable({
             <th>{it.device}</th>
             <th>{it.statusLabel}</th>
             <th>{it.dueDate}</th>
-            <th className="numeric">
-              {it.paid} / {it.total}
-            </th>
+            <th className="numeric">{it.payments}</th>
           </tr>
         </thead>
-        <tbody>
-          {orders.map((order) => (
-            <tr key={order.id}>
-              <td>
-                <Link className="order-link" href={`/orders/${order.id}`}>
-                  {orderCode(order.number)}
-                  <ChevronRight size={15} aria-hidden="true" />
-                </Link>
-              </td>
-              {!hideCustomer && (
-                <td>
-                  <Link
-                    className="order-link"
-                    href={`/customers/${order.device.customerId}`}
-                  >
-                    {order.device.customer.name}
-                  </Link>
-                </td>
-              )}
-              <td>
-                <strong>
-                  {order.device.brand} {order.device.model}
-                </strong>
-                <small
-                  className={compact ? "order-project-summary" : undefined}
-                >
-                  {order.items.map((i) => i.project).join(", ")}
-                </small>
-              </td>
-              <td>
-                <OrderStatusControl id={order.id} status={order.status} />
-              </td>
-              <td className={isOverdue(order) ? "danger-text" : ""}>
-                <OrderDueDateControl
-                  id={order.id}
-                  value={order.dueDate ?? ""}
-                  closed={["COMPLETED", "CANCELLED"].includes(order.status)}
-                />
-                {isOverdue(order) && <small>{it.overdue}</small>}
-              </td>
-              <td className="numeric">
-                <OrderPaymentControl
-                  id={order.id}
-                  due={settlement(order.items, order).due}
-                  balance={balance(order.items, order.payments, order)}
-                  disabled={order.status === "CANCELLED"}
-                />
-              </td>
-            </tr>
-          ))}
-        </tbody>
+        <OrderListBody
+          hideCustomer={hideCustomer}
+          compact={compact}
+          rows={orders.map((order) => {
+            const due = settlement(order.items, order).due;
+            const remaining = balance(order.items, order.payments, order);
+            return {
+              id: order.id,
+              code: order.code,
+              customerId: order.device.customerId,
+              customerName: order.device.customer.name,
+              brand: order.device.brand,
+              model: order.device.model,
+              projects: order.items.map((item) => item.project).join(", "),
+              status: order.status,
+              dueDate: order.dueDate ?? "",
+              overdue: isOverdue(order),
+              due,
+              paid: due - remaining,
+              balance: remaining,
+            };
+          })}
+        />
       </table>
     </div>
   );

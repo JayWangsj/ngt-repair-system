@@ -13,15 +13,18 @@ export type Actor = { id: string; name: string; role: "OWNER" | "STAFF" };
 export class BusinessError extends Error {}
 export function cents(value: string | { toString(): string }): number {
   const text = value.toString().trim().replace(",", ".");
-  if (!/^\d{1,8}(\.\d{1,2})?$/.test(text))
+  if (!/^-?\d{1,8}(\.\d{1,2})?$/.test(text))
     throw new BusinessError("Importo non valido (massimo 2 decimali).");
-  const [whole, decimal = ""] = text.split(".");
-  return Number(whole) * 100 + Number(decimal.padEnd(2, "0"));
+  const negative = text.startsWith("-");
+  const [whole, fraction = ""] = text.replace("-", "").split(".");
+  const valueInCents = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+  return negative ? -valueInCents : valueInCents;
 }
 export function decimal(value: number): string {
-  if (!Number.isSafeInteger(value) || value < 0)
+  if (!Number.isSafeInteger(value))
     throw new BusinessError("Importo non valido.");
-  return `${Math.floor(value / 100)}.${String(value % 100).padStart(2, "0")}`;
+  const absolute = Math.abs(value);
+  return `${value < 0 ? "-" : ""}${Math.floor(absolute / 100)}.${String(absolute % 100).padStart(2, "0")}`;
 }
 export function total(
   items: { final: string | { toString(): string } }[],
@@ -41,12 +44,13 @@ export function settlement(items: QuoteItem[], options: WorkOrderOptions = {}) {
   const gross = total(items);
   const itemDiscount = items.reduce((sum, item) => {
     const discount = cents(item.discount ?? "0");
-    if (discount > cents(item.final))
+    if (discount < 0 || discount > cents(item.final))
       throw new BusinessError("Lo sconto supera il prezzo.");
     return sum + discount;
   }, 0);
   const discount = itemDiscount + cents(options.orderDiscount ?? "0");
-  if (discount > gross) throw new BusinessError("Lo sconto supera il prezzo.");
+  if (discount < 0 || discount > gross)
+    throw new BusinessError("Lo sconto supera il prezzo.");
   const net = gross - discount;
   const vat = Math.round((net * 22) / 100);
   const products = options.products ?? [];
@@ -55,7 +59,7 @@ export function settlement(items: QuoteItem[], options: WorkOrderOptions = {}) {
       throw new BusinessError("Quantità prodotto non valida.");
     const line = cents(product.unitPrice) * product.quantity;
     const lineDiscount = cents(product.discount ?? "0");
-    if (lineDiscount > line)
+    if (lineDiscount < 0 || lineDiscount > line)
       throw new BusinessError("Lo sconto prodotto supera il prezzo.");
     return sum + line - lineDiscount;
   }, 0);
@@ -135,15 +139,9 @@ export function assertOwner(actor: Actor) {
   if (actor.role !== "OWNER")
     throw new BusinessError("Operazione riservata al titolare.");
 }
-export function assertDelivery(
-  actor: Actor,
-  remaining: number,
-  override: boolean,
-) {
-  if (remaining > 0 && (actor.role !== "OWNER" || !override))
-    throw new BusinessError(
-      "Saldo aperto: è necessaria la conferma esplicita del titolare.",
-    );
+export function assertDelivery(remaining: number) {
+  if (remaining !== 0)
+    throw new BusinessError("Il saldo deve essere zero prima della consegna.");
 }
 export function normalizePhone(phone: string) {
   const clean = phone.replace(/[\s().-]/g, "").replace(/^00/, "+");
@@ -199,6 +197,11 @@ export function romeDay(date = new Date()) {
     day: "2-digit",
   }).format(date);
 }
+export function isDiagnosticFault(values: string[]) {
+  return values.some((value) =>
+    ["da diagnosticare", "故障待检测"].includes(value.trim().toLowerCase()),
+  );
+}
 export function isOverdue(
   order: { status: string; dueDate: string | null },
   today = romeDay(),
@@ -221,10 +224,10 @@ export const dateTime = (date: Date | string) =>
   }).format(new Date(date));
 export const dateOnly = (date: string | null) =>
   date ? date.split("-").reverse().join("/") : "—";
-export const orderCode = (number: number) =>
-  `NGT-${String(number).padStart(5, "0")}`;
-export const saleCode = (number: number) =>
-  `R-${String(number).padStart(5, "0")}`;
+export const orderCode = (code: string | number) =>
+  typeof code === "string" ? code : `NGT-${String(code).padStart(5, "0")}`;
+export const saleCode = (code: string | number) =>
+  typeof code === "string" ? code : `R-${String(code).padStart(5, "0")}`;
 export const creatablePaymentMethods = ["CASH", "CARD", "OTHER"] as const;
 
 export type InventoryStatus = "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";

@@ -42,15 +42,10 @@ export function WorkOrderProducts({
 }) {
   const it = useMessages();
   const router = useRouter();
-  const [kind, setKind] = useState<"REPAIR_PART" | "RETAIL_ADDON">(
-    "REPAIR_PART",
-  );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const available = products.filter((product) =>
-    kind === "REPAIR_PART"
-      ? product.usage !== "RETAIL"
-      : product.usage !== "REPAIR",
+  const available = products.filter(
+    (product) => product.usage !== "REPAIR" && product.stock > 0,
   );
 
   async function add(event: FormEvent<HTMLFormElement>) {
@@ -60,7 +55,7 @@ export function WorkOrderProducts({
     const data = new FormData(event.currentTarget);
     const result = await addWorkOrderProductAction(orderId, {
       productId: String(data.get("productId") ?? ""),
-      kind,
+      kind: "RETAIL_ADDON",
       quantity: Number(data.get("quantity") ?? 1),
     });
     setPending(false);
@@ -120,20 +115,6 @@ export function WorkOrderProducts({
       {!closed && (
         <form className="order-product-form" onSubmit={add}>
           <label>
-            <span>{it.inventory.usage}</span>
-            <select
-              value={kind}
-              onChange={(event) => setKind(event.target.value as typeof kind)}
-            >
-              <option value="REPAIR_PART">
-                {it.orderProducts.repairParts}
-              </option>
-              <option value="RETAIL_ADDON">
-                {it.orderProducts.retailAddons}
-              </option>
-            </select>
-          </label>
-          <label>
             <span>{it.orderProducts.product}</span>
             <select name="productId" required>
               <option value="">{it.selectOption}</option>
@@ -169,7 +150,6 @@ export function WorkOrderCheckout({
   orderId,
   remaining,
   customerName,
-  owner,
 }: {
   orderId: string;
   remaining: number;
@@ -223,12 +203,6 @@ export function WorkOrderCheckout({
         <span>{it.pickedUpBy}</span>
         <input name="pickedUpBy" defaultValue={customerName} required />
       </label>
-      {owner && remaining > 0 && (
-        <label className="checkbox">
-          <input name="override" type="checkbox" />
-          {it.override}
-        </label>
-      )}
       {error && <p className="message error">{error}</p>}
       <Button disabled={pending}>
         {pending

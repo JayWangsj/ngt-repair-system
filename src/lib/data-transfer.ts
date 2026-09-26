@@ -273,6 +273,14 @@ export async function importBusinessData(
         });
         imported++;
       }
+      await tx.inventoryCategory.upsert({
+        where: { name: source.category },
+        create: {
+          name: source.category,
+          repairOnly: source.usage === "REPAIR",
+        },
+        update: {},
+      });
       entityIds.set(source.id, source.id);
     }
 
@@ -324,6 +332,9 @@ export async function importBusinessData(
           data: {
             id: source.id,
             number: source.number,
+            code:
+              source.code ??
+              `V-LEGACY${String(source.number).padStart(6, "0")}`,
             requestId: source.requestId,
             subtotal: source.subtotal,
             discount: source.discount,
@@ -464,6 +475,14 @@ export async function importBusinessData(
             minutes: source.minutes,
             enabled: source.enabled,
             notes: source.notes,
+            requiredProductId:
+              source.requiredProductId &&
+              (await tx.product.findUnique({
+                where: { id: source.requiredProductId },
+              }))
+                ? source.requiredProductId
+                : null,
+            requiredQuantity: source.requiredQuantity ?? 1,
             updatedAt: date(source.updatedAt) ?? new Date(),
           },
         });
@@ -498,6 +517,8 @@ export async function importBusinessData(
         data: {
           id: source.id,
           number: source.number,
+          code:
+            source.code ?? `R-LEGACY${String(source.number).padStart(6, "0")}`,
           customerName: source.customerName,
           deviceId,
           status: source.status,

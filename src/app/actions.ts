@@ -83,6 +83,10 @@ export async function paymentAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.addPayment(actor, id, input));
 }
+export async function setPaidTotalAction(id: string, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.setPaidTotal(actor, id, input));
+}
 export async function createProductAction(input: unknown) {
   const actor = await requireActor();
   return execute(() => service.createProduct(actor, input));
@@ -98,6 +102,14 @@ export async function updateProductAction(id: string, input: unknown) {
 export async function deleteProductsAction(ids: string[]) {
   const actor = await requireActor();
   return execute(() => service.deleteProducts(actor, ids));
+}
+export async function saveInventoryCategoryAction(input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.saveInventoryCategory(actor, input));
+}
+export async function deleteInventoryCategoryAction(id: string) {
+  const actor = await requireActor();
+  return execute(() => service.deleteInventoryCategory(actor, id));
 }
 export async function createRetailSaleAction(input: unknown) {
   const actor = await requireActor();

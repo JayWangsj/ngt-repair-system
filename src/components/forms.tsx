@@ -38,7 +38,7 @@ import {
   normalizeBrand,
   normalizeModel,
 } from "@/lib/catalog";
-import { romeDay, settlement } from "@/lib/domain";
+import { isDiagnosticFault, romeDay, settlement } from "@/lib/domain";
 import {
   cents,
   decimal,
@@ -79,6 +79,8 @@ export type RuleView = {
   minutes: number;
   notes: string;
   enabled: boolean;
+  requiredProductId?: string | null;
+  requiredQuantity?: number;
 };
 
 function InlineRuleField({
@@ -100,7 +102,6 @@ function InlineRuleField({
   const [pending, setPending] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const saving = useRef(false);
-  useEffect(() => setValue(rule[field]), [rule, field]);
   useEffect(() => {
     if (editing) input.current?.select();
   }, [editing]);
@@ -439,6 +440,7 @@ export function NewOrderForm({
         confirmed: false,
         confirmationNote: "",
         items: [blankItem()],
+        diagnosticFee: "10",
         deposit: "0",
         method: "CASH",
         paymentKind: "DEPOSIT",
@@ -449,9 +451,12 @@ export function NewOrderForm({
   );
   const values = useWatch({ control }) as z.input<typeof orderInput>;
   const category = values.category ?? "PHONE";
+  const diagnostic = isDiagnosticFault([
+    ...(values.faults ?? []),
+    values.fault ?? "",
+  ]);
   useEffect(() => {
     if ((values.phone ?? "").trim().length < 6) {
-      setCustomer(null);
       return;
     }
     let active = true;
@@ -875,21 +880,31 @@ export function NewOrderForm({
         </Field>
       </Section>
       <Section number="03" title={it.quoteSection}>
-        <ItemsEditor
-          items={values.items.map((i) => ({
-            ...i,
-            adjustmentReason: i.adjustmentReason ?? "",
-          }))}
-          onChange={(items) => setValue("items", items)}
-          rules={rules}
-          device={{
-            category,
-            brand: values.brand,
-            series: values.series ?? "",
-            model: values.model,
-          }}
-          discounts
-        />
+        {diagnostic ? (
+          <Field label={it.diagnosticFee}>
+            <input
+              {...register("diagnosticFee")}
+              required
+              inputMode="decimal"
+            />
+          </Field>
+        ) : (
+          <ItemsEditor
+            items={values.items.map((i) => ({
+              ...i,
+              adjustmentReason: i.adjustmentReason ?? "",
+            }))}
+            onChange={(items) => setValue("items", items)}
+            rules={rules}
+            device={{
+              category,
+              brand: values.brand,
+              series: values.series ?? "",
+              model: values.model,
+            }}
+            discounts
+          />
+        )}
         <div className="quote-adjustments">
           <Button
             type="button"
@@ -916,7 +931,11 @@ export function NewOrderForm({
           </label>
         </div>
         <QuoteSummary
-          items={values.items}
+          items={
+            diagnostic
+              ? [{ final: values.diagnosticFee ?? "10", discount: "0" }]
+              : values.items
+          }
           orderDiscount={values.orderDiscount ?? "0"}
           includeVat={values.includeVat ?? false}
         />
@@ -1312,11 +1331,13 @@ export function EditQuoteForm({
 export function RuleForm({
   rule,
   rules = [],
+  repairProducts = [],
   initial,
   onSuccess,
 }: {
   rule?: RuleView;
   rules?: RuleView[];
+  repairProducts?: { id: string; name: string; stockQuantity: number }[];
   initial?: Partial<RuleView>;
   onSuccess?: (device: {
     category: string;
@@ -1332,6 +1353,9 @@ export function RuleForm({
   const [brand, setBrand] = useState(rule?.brand ?? initial?.brand ?? "");
   const [model, setModel] = useState(rule?.model ?? initial?.model ?? "");
   const [project, setProject] = useState(rule?.project ?? "");
+  const [requiredProductId, setRequiredProductId] = useState(
+    rule?.requiredProductId ?? "",
+  );
   return (
     <ActionForm
       submit={it.save}
@@ -1349,6 +1373,7 @@ export function RuleForm({
           brand,
           model,
           project,
+          requiredProductId,
           series: model ? "" : (rule?.series ?? ""),
           minutes: rule?.minutes ?? 60,
           enabled: true,
@@ -1433,6 +1458,32 @@ export function RuleForm({
             defaultValue={rule?.cost ?? ""}
           />
         </Field>
+      </div>
+      <div className="form-grid">
+        <Field label={it.requiredPart}>
+          <select
+            value={requiredProductId}
+            onChange={(event) => setRequiredProductId(event.target.value)}
+          >
+            <option value="">{it.noRequiredPart}</option>
+            {repairProducts.map((product) => (
+              <option value={product.id} key={product.id}>
+                {product.name} · {product.stockQuantity}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {requiredProductId && (
+          <Field label={it.orderProducts.quantity}>
+            <input
+              name="requiredQuantity"
+              type="number"
+              min="1"
+              max="999"
+              defaultValue={rule?.requiredQuantity ?? 1}
+            />
+          </Field>
+        )}
       </div>
       <Field label={it.notes}>
         <input name="notes" defaultValue={rule?.notes} maxLength={2000} />
@@ -1614,7 +1665,13 @@ export function DeviceForm({
     </ActionForm>
   );
 }
-export function PriceList({ rules }: { rules: RuleView[] }) {
+export function PriceList({
+  rules,
+  repairProducts,
+}: {
+  rules: RuleView[];
+  repairProducts: { id: string; name: string; stockQuantity: number }[];
+}) {
   const it = useMessages();
   const { locale } = useLanguage();
   const router = useRouter();
@@ -1625,6 +1682,7 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
   const [expanded, setExpanded] = useState<string[]>([]);
   const [batchMode, setBatchMode] = useState(false);
   const [creating, setCreating] = useState<Partial<RuleView> | null>(null);
+  const [editing, setEditing] = useState<RuleView | null>(null);
   const [saved, setSaved] = useState(false);
   const reveal = useRef("");
   const groups = groupPriceRules(rules, query);
@@ -1733,6 +1791,7 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
           <RuleForm
             initial={creating}
             rules={rules}
+            repairProducts={repairProducts}
             onSuccess={(device) => {
               setCreating(null);
               setSaved(true);
@@ -1745,6 +1804,20 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
               ];
               setExpanded((current) => [...new Set([...current, ...paths])]);
               reveal.current = "group-" + paths[2];
+            }}
+          />
+        </FormDialog>
+      )}
+      {editing && (
+        <FormDialog title={it.editQuote} onClose={() => setEditing(null)}>
+          <RuleForm
+            rule={editing}
+            rules={rules}
+            repairProducts={repairProducts}
+            onSuccess={() => {
+              setEditing(null);
+              setSaved(true);
+              router.refresh();
             }}
           />
         </FormDialog>
@@ -1864,7 +1937,13 @@ export function PriceList({ rules }: { rules: RuleView[] }) {
                                   onError={setError}
                                   onSaved={() => setSaved(true)}
                                 />
-                                <span className="price-row-delete">
+                                <span className="price-row-delete record-actions">
+                                  <RecordIcon
+                                    kind="edit"
+                                    label={it.editQuote}
+                                    disabled={pending}
+                                    onClick={() => setEditing(rule)}
+                                  />
                                   <RecordIcon
                                     kind="delete"
                                     label={it.deleteRule}

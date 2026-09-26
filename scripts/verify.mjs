@@ -15,9 +15,9 @@ if (!new URL(env.DATABASE_URL).pathname.endsWith("_test"))
 env.AUTH_URL = "http://localhost:3000";
 env.AUTH_TRUST_HOST = "true";
 env.AUTH_SECRET ||= "ci-test-only-auth-secret-32-characters-minimum";
-function run(file, args) {
+function run(file, args, nodeArgs = []) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [file, ...args], {
+    const child = spawn(process.execPath, [...nodeArgs, file, ...args], {
       env,
       stdio: "inherit",
       windowsHide: true,
@@ -35,6 +35,6 @@ await run(require.resolve("vitest/vitest.mjs"), [
   "vitest.integration.config.ts",
 ]);
 if (!process.argv.includes("--integration-only")) {
-  await run(require.resolve("tsx/cli"), ["scripts/seed-test.ts"]);
-  await run(require.resolve("@playwright/test/cli"), ["test"]);
+  await run("scripts/seed-test.ts", [], ["--experimental-strip-types"]);
+  await run("scripts/run-e2e.mjs", []);
 }

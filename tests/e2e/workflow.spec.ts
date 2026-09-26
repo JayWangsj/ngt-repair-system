@@ -156,6 +156,15 @@ test("creates and edits a product directly in the inventory row", async ({
   page,
 }) => {
   await page.goto("/inventory");
+  const repairPartRow = page.getByRole("row", { name: /Batteria Test/ });
+  await expect(repairPartRow).toContainText("Riparazione");
+  await expect(repairPartRow.locator("td").nth(4)).toHaveText("—");
+  await repairPartRow.click();
+  await expect(repairPartRow.locator("td").nth(4).locator("input")).toHaveCount(
+    0,
+  );
+  await page.getByRole("heading", { name: "Magazzino" }).click();
+
   await page.getByRole("button", { name: "Nuovo prodotto" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Prodotto", { exact: true }).fill("Cavo USB-C E2E");
@@ -195,38 +204,48 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await expect(page.locator('input[name="month"]')).toHaveValue(
     /^\d{4}-\d{2}$/,
   );
-  const status = page
-    .locator('select.status-select:has(option[value="PARTS_MISSING"])')
-    .first();
+  const row = page.locator("tbody tr").first();
+  await row.click();
+  const status = row.locator(
+    'select.status-select:has(option[value="PARTS_MISSING"])',
+  );
   await expect(status).toBeVisible();
   await status.selectOption("PARTS_MISSING");
   await expect(status).toHaveClass(/status-parts_missing/);
-  const row = status.locator("xpath=ancestor::tr");
   await expect(
     row.getByLabel("Consegna prevista", { exact: true }),
   ).toBeEnabled();
-  await expect(row.locator(".order-payment-trigger")).toHaveCount(1);
+  await expect(row.getByLabel("Incassato", { exact: true })).toBeVisible();
+  await row.getByLabel("Consegna prevista", { exact: true }).fill("2099-11-30");
+  await row.getByLabel("Incassato", { exact: true }).fill("30");
+  await page.getByRole("heading", { name: "Riparazioni" }).click();
+  await expect(row.getByLabel("Incassato", { exact: true })).toHaveCount(0);
+  await expect(row).toContainText("30,00 €");
+  await expect(row).toContainText("30/11/2099");
 });
 
-test("sales history defaults to one day and can switch to a whole month", async ({
+test("diagnostic intake hides repair projects and defaults the fee", async ({
   page,
 }) => {
+  await page.goto("/orders/new");
+  await page.getByLabel("Da diagnosticare", { exact: true }).check();
+  await expect(
+    page.getByLabel("Costo diagnosi (€)", { exact: true }),
+  ).toHaveValue("10");
+  await expect(page.getByLabel("Intervento 1", { exact: true })).toHaveCount(0);
+});
+
+test("sales history uses a monthly filter", async ({ page }) => {
   await page.goto("/retail/sales");
   await expect(
     page.getByRole("link", { name: /Vendita rapida/ }),
   ).toBeVisible();
-  await expect(page.locator('select[name="mode"]')).toHaveValue("day");
-  await expect(page.locator('input[name="period"]')).toHaveAttribute(
-    "type",
-    "date",
-  );
-  await page.locator('select[name="mode"]').selectOption("month");
-  await page.getByRole("button", { name: "Filtra", exact: true }).click();
-  await expect(page.locator('select[name="mode"]')).toHaveValue("month");
   await expect(page.locator('input[name="period"]')).toHaveAttribute(
     "type",
     "month",
   );
+  await page.getByRole("button", { name: "Filtra", exact: true }).click();
+  await expect(page.locator('select[name="mode"]')).toHaveCount(0);
 });
 
 test("completes a retail sale and opens its immutable receipt", async ({
@@ -252,6 +271,12 @@ test("completes a retail sale and opens its immutable receipt", async ({
     page.getByRole("heading", { name: /Dettaglio vendita/ }),
   ).toBeVisible();
   await expect(page.getByText("Cavo USB-C Test")).toBeVisible();
+  await page.goto("/retail/sales");
+  await page
+    .getByRole("button", { name: /^V-\d{8}\d{3}$/ })
+    .first()
+    .click();
+  await expect(page.getByRole("dialog")).toContainText("Cavo USB-C Test");
 });
 test("creates automatic quote, receives payment and delivers", async ({
   page,
@@ -266,21 +291,17 @@ test("creates automatic quote, receives payment and delivers", async ({
   await save(page);
   const productForm = page.locator(".order-product-form");
   const productSelect = productForm.locator('select[name="productId"]');
-  const repairProductId = await productSelect
-    .locator("option", { hasText: "Batteria Test" })
-    .getAttribute("value");
-  await productSelect.selectOption(repairProductId ?? "");
-  await productForm
-    .getByRole("button", { name: "Aggiungi prodotto", exact: true })
-    .click();
-  await expect(page.getByText("Batteria Test", { exact: true })).toBeVisible();
+  await expect(
+    productSelect.locator("option", { hasText: "Batteria Test" }),
+  ).toHaveCount(0);
+  await expect(
+    productSelect.locator("option", { hasText: "Cover esaurita Test" }),
+  ).toHaveCount(0);
   await expect(
     page.getByText("Accessori ricevuti", { exact: true }),
   ).toHaveCount(0);
   await expect(page.locator(".balance-card>strong")).toContainText("80,00");
-  await state(page, "REPAIRING");
   await state(page, "READY");
-  await expect(page.getByText("Scaricato dal magazzino")).toBeVisible();
   await expect(
     page.locator('select[name="kind"] option[value="DEPOSIT"]'),
   ).toHaveCount(0);
@@ -370,18 +391,16 @@ test("manual quote saves automatically and rejects overpayment", async ({
   await page.getByLabel("Cerca", { exact: true }).fill("fotocamera");
   await expect(page.getByText(/fotocamera/i).first()).toBeVisible();
 });
-test("unpaid delivery requires explicit acknowledgement", async ({ page }) => {
+test("delivery requires a zero balance", async ({ page }) => {
   await fillOrder(page);
   await save(page);
-  await state(page, "REPAIRING");
   await state(page, "READY");
   await page.getByLabel("Importo (€)", { exact: true }).fill("0");
   await page.getByLabel("Nome di chi ritira", { exact: true }).fill("Cliente");
   await page.getByRole("button", { name: /Incassa e consegna/ }).click();
   await expect(page.locator(".detail-status .badge")).toHaveText("Da ritirare");
-  await page
-    .getByLabel("Autorizzo la consegna con saldo aperto", { exact: true })
-    .check();
+  await expect(page.getByText(/saldo deve essere zero/i)).toBeVisible();
+  await page.getByLabel("Importo (€)", { exact: true }).fill("100");
   await page.getByRole("button", { name: /Incassa e consegna/ }).click();
   await expect(page.locator(".detail-status .badge")).toHaveText("Consegnato");
 });
@@ -964,10 +983,9 @@ test("compact price rows support direct icon actions and selection on mobile", a
   const row = rows.first();
   await expect(row).toBeVisible();
   await expect(page.getByRole("checkbox")).toHaveCount(0);
-  const deleteButton = row.getByRole("button", {
-    name: "Elimina preventivo",
-    exact: true,
-  });
+  await expect(
+    row.getByRole("button", { name: "Elimina preventivo", exact: true }),
+  ).toHaveCount(1);
   await expect(row.locator(".price-row-delete")).toHaveCSS("opacity", "0");
   await row.hover();
   await expect(row.locator(".price-row-delete")).toHaveCSS("opacity", "1");

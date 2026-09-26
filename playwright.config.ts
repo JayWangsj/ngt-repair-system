@@ -1,4 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+
+const externalServer = process.env.PLAYWRIGHT_REUSE_SERVER === "1";
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
@@ -14,10 +17,12 @@ export default defineConfig({
     screenshot: "only-on-failure",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  webServer: {
-    command: "node scripts/start.mjs",
-    url: "http://localhost:3000/login",
-    reuseExistingServer: false,
-    timeout: 120000,
-  },
+  webServer: externalServer
+    ? undefined
+    : {
+        command: "node scripts/start.mjs",
+        url: "http://localhost:3000/login",
+        reuseExistingServer: false,
+        timeout: 120000,
+      },
 });

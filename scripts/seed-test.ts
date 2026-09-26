@@ -13,6 +13,7 @@ async function main() {
   await db.inventoryMovement.deleteMany();
   await db.workOrderProduct.deleteMany();
   await db.product.deleteMany();
+  await db.inventoryCategory.deleteMany();
   await db.statusHistory.deleteMany();
   await db.workOrderItem.deleteMany();
   await db.workOrder.deleteMany();
@@ -74,6 +75,14 @@ async function main() {
       favorite: false,
     },
   ]) {
+    await db.inventoryCategory.upsert({
+      where: { name: product.category },
+      create: {
+        name: product.category,
+        repairOnly: product.usage === "REPAIR",
+      },
+      update: {},
+    });
     const created = await db.product.create({ data: product });
     if (product.stockQuantity > 0)
       await db.inventoryMovement.create({

@@ -9,6 +9,7 @@ import {
   decimal,
   isOverdue,
   inventoryStatus,
+  isDiagnosticFault,
   matchRule,
   normalizePhone,
   romeDay,
@@ -17,15 +18,16 @@ import {
 } from "@/lib/domain";
 import { orderInput, paymentInput, ruleInput } from "@/lib/validation";
 const staff = { id: "s", name: "Staff", role: "STAFF" as const };
-const owner = { ...staff, role: "OWNER" as const };
 describe("integer money", () => {
   it("handles euro cents exactly", () => {
     expect(total([{ final: "0.1" }, { final: "0.2" }])).toBe(30);
     expect(cents("12,05")).toBe(1205);
     expect(decimal(1205)).toBe("12.05");
+    expect(cents("-1.25")).toBe(-125);
+    expect(decimal(-125)).toBe("-1.25");
     expect(balance([{ final: "10" }], [{ amount: "2.99" }])).toBe(701);
   });
-  it.each(["-1", "NaN", "1.001", "1e2", "Infinity", "100000000", "", "1.2.3"])(
+  it.each(["NaN", "1.001", "1e2", "Infinity", "100000000", "", "1.2.3"])(
     "rejects invalid money %s",
     (value) => expect(() => cents(value)).toThrow(),
   );
@@ -39,6 +41,14 @@ describe("integer money", () => {
       repair: 8000,
       retail: 1500,
     });
+  });
+});
+
+describe("diagnostic intake", () => {
+  it("recognizes the diagnostic fault in both supported languages", () => {
+    expect(isDiagnosticFault(["Da diagnosticare"])).toBe(true);
+    expect(isDiagnosticFault(["故障待检测"])).toBe(true);
+    expect(isDiagnosticFault(["Display rotto"])).toBe(false);
   });
 });
 
@@ -130,11 +140,9 @@ describe("status and permissions", () => {
     expect(() => assertTransition("REPAIRING", "PARTS_MISSING")).not.toThrow();
     expect(() => assertTransition("PARTS_MISSING", "REPAIRING")).not.toThrow();
   });
-  it("requires explicit owner confirmation for unpaid delivery", () => {
-    expect(() => assertDelivery(staff, 100, true)).toThrow();
-    expect(() => assertDelivery(owner, 100, false)).toThrow();
-    expect(() => assertDelivery(owner, 100, true)).not.toThrow();
-    expect(() => assertDelivery(staff, 0, false)).not.toThrow();
+  it("requires a zero balance for delivery", () => {
+    expect(() => assertDelivery(100)).toThrow();
+    expect(() => assertDelivery(0)).not.toThrow();
     expect(() => assertOwner(staff)).toThrow();
   });
 });

@@ -9,7 +9,9 @@ import {
   BusinessError,
   cents,
   decimal,
+  isDiagnosticFault,
   matchRule,
+  romeDay,
   total,
   settlement,
   type Actor,
@@ -24,6 +26,7 @@ import {
   quoteInput,
   orderInput,
   paymentInput,
+  paidTotalInput,
   productInput,
   productUpdateInput,
   inventoryAdjustmentInput,
@@ -49,6 +52,100 @@ export const orderInclude = {
   },
   history: { orderBy: { createdAt: "asc" as const } },
 };
+async function nextDailyCode(
+  tx: Tx,
+  kind: "order" | "sale",
+  date = new Date(),
+) {
+  const prefix = `${kind === "order" ? "R" : "V"}-${romeDay(date).replaceAll("-", "")}`;
+  const latest =
+    kind === "order"
+      ? await tx.workOrder.findFirst({
+          where: { code: { startsWith: prefix } },
+          orderBy: { code: "desc" },
+          select: { code: true },
+        })
+      : await tx.retailSale.findFirst({
+          where: { code: { startsWith: prefix } },
+          orderBy: { code: "desc" },
+          select: { code: true },
+        });
+  const sequence = latest ? Number(latest.code.slice(-3)) + 1 : 1;
+  if (sequence > 999) throw new BusinessError("Limite giornaliero raggiunto.");
+  return `${prefix}${String(sequence).padStart(3, "0")}`;
+}
+
+type SnapshotItem = Awaited<ReturnType<typeof snapshots>>[number];
+async function requiredPartLines(tx: Tx, items: SnapshotItem[]) {
+  const ruleIds = items.flatMap((item) => (item.ruleId ? [item.ruleId] : []));
+  if (!ruleIds.length) return [];
+  const rules = await tx.priceRule.findMany({
+    where: { id: { in: ruleIds }, requiredProductId: { not: null } },
+    include: { requiredProduct: true },
+  });
+  const quantities = new Map<
+    string,
+    {
+      product: NonNullable<(typeof rules)[number]["requiredProduct"]>;
+      quantity: number;
+    }
+  >();
+  for (const item of items) {
+    const rule = rules.find((candidate) => candidate.id === item.ruleId);
+    if (!rule?.requiredProduct) continue;
+    const current = quantities.get(rule.requiredProduct.id);
+    quantities.set(rule.requiredProduct.id, {
+      product: rule.requiredProduct,
+      quantity: (current?.quantity ?? 0) + rule.requiredQuantity,
+    });
+  }
+  return [...quantities.values()];
+}
+
+function partsMissing(
+  lines: { quantity: number; product: { stockQuantity: number } }[],
+) {
+  return lines.some((line) => line.product.stockQuantity < line.quantity);
+}
+
+async function refreshPartStatuses(tx: Tx, actor: Actor, productId: string) {
+  const orders = await tx.workOrder.findMany({
+    where: {
+      status: { in: ["REPAIRING", "PARTS_MISSING"] },
+      products: { some: { productId, kind: "REPAIR_PART", consumedAt: null } },
+    },
+    include: { products: { include: { product: true } } },
+  });
+  for (const order of orders) {
+    const next = partsMissing(
+      order.products.filter(
+        (line) => line.kind === "REPAIR_PART" && !line.consumedAt,
+      ),
+    )
+      ? "PARTS_MISSING"
+      : "REPAIRING";
+    if (next === order.status) continue;
+    await tx.workOrder.update({
+      where: { id: order.id },
+      data: { status: next },
+    });
+    await tx.statusHistory.create({
+      data: {
+        orderId: order.id,
+        from: order.status,
+        to: next,
+        actorId: actor.id,
+        actorName: actor.name,
+        note: "",
+      },
+    });
+    await audit(tx, actor, order.id, "STATUS_CHANGED", {
+      from: order.status,
+      to: next,
+      reason: "INVENTORY_AVAILABILITY",
+    });
+  }
+}
 export async function transact<T>(
   work: (tx: Tx) => Promise<T>,
   client: PrismaClient = db,
@@ -244,7 +341,29 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
       throw new BusinessError(
         "Il dispositivo non appartiene al cliente selezionato.",
       );
-    const items = await snapshots(tx, actor, device, data.items);
+    const diagnostic = isDiagnosticFault([...data.faults, data.fault]);
+    const items = diagnostic
+      ? [
+          {
+            project: "Diagnosi",
+            final: decimal(cents(data.diagnosticFee)),
+            discount: decimal(0),
+            suggested: null,
+            ruleId: undefined,
+            matchLevel: "DIAGNOSTIC",
+            adjustmentReason: "",
+            minutes: 0,
+          },
+        ]
+      : await snapshots(tx, actor, device, data.items);
+    const requiredParts = await requiredPartLines(tx, items);
+    const initialStatus = diagnostic
+      ? "DIAGNOSING"
+      : requiredParts.some(
+            ({ product, quantity }) => product.stockQuantity < quantity,
+          )
+        ? "PARTS_MISSING"
+        : "REPAIRING";
     const quote = settlement(items, data);
     if (cents(data.deposit) > quote.due)
       throw new BusinessError("L'acconto supera il totale.");
@@ -265,6 +384,7 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
       });
     const order = await tx.workOrder.create({
       data: {
+        code: await nextDailyCode(tx, "order"),
         deviceId: device.id,
         customerName: customer.name,
         fault: [...faults, data.fault].filter(Boolean).join("; "),
@@ -276,9 +396,26 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
         notes: data.notes,
         confirmedAt: data.confirmed ? new Date() : null,
         confirmationNote: data.confirmed ? data.confirmationNote : "",
+        status: initialStatus,
         items: { create: items },
+        products: requiredParts.length
+          ? {
+              create: requiredParts.map(({ product, quantity }) => ({
+                productId: product.id,
+                productName: product.name,
+                category: product.category,
+                kind: "REPAIR_PART" as const,
+                unitPrice: decimal(0),
+                quantity,
+              })),
+            }
+          : undefined,
         history: {
-          create: { to: "RECEIVED", actorId: actor.id, actorName: actor.name },
+          create: {
+            to: initialStatus,
+            actorId: actor.id,
+            actorName: actor.name,
+          },
         },
         payments:
           cents(data.deposit) > 0
@@ -308,6 +445,7 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
       requestId: data.requestId,
       total: decimal(total(items)),
       confirmed: data.confirmed,
+      initialStatus,
     });
     if (cents(data.deposit) > 0)
       await audit(tx, actor, order.id, "PAYMENT_ADDED", {
@@ -408,6 +546,15 @@ export async function replaceQuote(
       })),
     });
     await tx.workOrderItem.deleteMany({ where: { orderId: id } });
+    await tx.workOrderProduct.deleteMany({
+      where: { orderId: id, kind: "REPAIR_PART", consumedAt: null },
+    });
+    const requiredParts = await requiredPartLines(tx, items);
+    const nextStatus = requiredParts.some(
+      ({ product, quantity }) => product.stockQuantity < quantity,
+    )
+      ? "PARTS_MISSING"
+      : "REPAIRING";
     await tx.workOrder.update({
       where: { id },
       data: {
@@ -416,8 +563,32 @@ export async function replaceQuote(
         includeVat: options.includeVat,
         confirmedAt: null,
         confirmationNote: "",
+        ...(order.status === "READY" ? {} : { status: nextStatus }),
+        products: requiredParts.length
+          ? {
+              create: requiredParts.map(({ product, quantity }) => ({
+                productId: product.id,
+                productName: product.name,
+                category: product.category,
+                kind: "REPAIR_PART" as const,
+                unitPrice: decimal(0),
+                quantity,
+              })),
+            }
+          : undefined,
       },
     });
+    if (order.status !== "READY" && order.status !== nextStatus)
+      await tx.statusHistory.create({
+        data: {
+          orderId: id,
+          from: order.status,
+          to: nextStatus,
+          actorId: actor.id,
+          actorName: actor.name,
+          note: "",
+        },
+      });
   });
 }
 export async function confirmQuote(
@@ -530,6 +701,94 @@ export async function addPayment(actorInput: Actor, id: string, raw: unknown) {
     return payment;
   });
 }
+
+export async function setPaidTotal(
+  actorInput: Actor,
+  id: string,
+  raw: unknown,
+) {
+  const data = paidTotalInput.parse(raw);
+  const target = cents(data.amount);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const existing = await tx.auditLog.findFirst({
+      where: {
+        action: "PAYMENT_TOTAL_SET",
+        context: { path: ["requestId"], equals: data.requestId },
+      },
+    });
+    if (existing) return;
+    const order = await tx.workOrder.findUniqueOrThrow({
+      where: { id },
+      include: {
+        items: true,
+        products: true,
+        payments: { include: { allocations: true } },
+      },
+    });
+    if (order.status === "CANCELLED")
+      throw new BusinessError("La scheda è annullata.");
+    const due = settlement(order.items, order).due;
+    if (target > due) throw new BusinessError("L'incassato supera il totale.");
+    const current = order.payments.reduce(
+      (sum, payment) => sum + cents(payment.amount),
+      0,
+    );
+    const delta = target - current;
+    if (!delta) return;
+    const repairPaid = order.payments
+      .flatMap((payment) => payment.allocations)
+      .filter((allocation) => allocation.source === "REPAIR")
+      .reduce((sum, allocation) => sum + cents(allocation.amount), 0);
+    const retailPaid = current - repairPaid;
+    const split =
+      delta > 0
+        ? allocatePayment(delta, due - current, 0)
+        : allocatePayment(
+            -delta,
+            Math.max(0, repairPaid),
+            Math.max(0, retailPaid),
+          );
+    const payment = await tx.payment.create({
+      data: {
+        requestId: data.requestId,
+        orderId: id,
+        amount: decimal(delta),
+        method: data.method,
+        kind: "OTHER",
+        actorId: actor.id,
+        actorName: actor.name,
+        allocations: {
+          create: [
+            ...(split.repair
+              ? [
+                  {
+                    source: "REPAIR" as const,
+                    amount: decimal(delta > 0 ? split.repair : -split.repair),
+                  },
+                ]
+              : []),
+            ...(split.retail
+              ? [
+                  {
+                    source: "RETAIL" as const,
+                    amount: decimal(delta > 0 ? split.retail : -split.retail),
+                  },
+                ]
+              : []),
+          ],
+        },
+      },
+    });
+    await audit(tx, actor, id, "PAYMENT_TOTAL_SET", {
+      requestId: data.requestId,
+      paymentId: payment.id,
+      before: decimal(current),
+      after: decimal(target),
+      difference: decimal(delta),
+    });
+  });
+}
 export async function changeStatus(
   actorInput: Actor,
   id: string,
@@ -540,9 +799,26 @@ export async function changeStatus(
     const actor = await currentActor(tx, actorInput);
     const order = await tx.workOrder.findUniqueOrThrow({
       where: { id },
-      include: { items: true, products: true, payments: true },
+      include: {
+        items: true,
+        products: { include: { product: true } },
+        payments: true,
+      },
     });
+    if (order.status === data.status) return;
     assertTransition(order.status, data.status);
+
+    if (
+      order.status === "DIAGNOSING" &&
+      order.items.every((item) => item.matchLevel === "DIAGNOSTIC")
+    )
+      throw new BusinessError(
+        "Conferma il guasto e gli interventi prima di cambiare stato.",
+      );
+    if (data.status === "REPAIRING" && partsMissing(order.products))
+      throw new BusinessError(
+        "Ricambi insufficienti: rifornisci il magazzino prima di avviare la riparazione.",
+      );
 
     if (data.status === "CANCELLED" && order.payments.length)
       throw new BusinessError(
@@ -551,11 +827,7 @@ export async function changeStatus(
     if (data.status === "COMPLETED") {
       if (!data.pickedUpBy)
         throw new BusinessError("Indica chi ritira il dispositivo.");
-      assertDelivery(
-        actor,
-        balance(order.items, order.payments, order),
-        data.override,
-      );
+      assertDelivery(balance(order.items, order.payments, order));
     }
     if (data.status === "READY")
       await consumeWorkOrderProducts(tx, actor, id, "REPAIR_PART");
@@ -614,6 +886,7 @@ export async function savePriceRule(
       project: input.project.toLowerCase(),
       suggested: decimal(cents(input.suggested)),
       cost: input.cost ? decimal(cents(input.cost)) : null,
+      requiredProductId: input.requiredProductId || null,
     };
     const before = id
       ? await tx.priceRule.findUniqueOrThrow({ where: { id } })
@@ -775,6 +1048,14 @@ export async function createProduct(actorInput: Actor, raw: unknown) {
         enabled: data.enabled,
       },
     });
+    await tx.inventoryCategory.upsert({
+      where: { name: data.category },
+      create: {
+        name: data.category,
+        repairOnly: data.usage === "REPAIR",
+      },
+      update: { deletedAt: null },
+    });
     if (data.initialStock > 0)
       await applyInventoryMovement(tx, actor, {
         requestId: data.requestId,
@@ -789,6 +1070,36 @@ export async function createProduct(actorInput: Actor, raw: unknown) {
       initialStock: data.initialStock,
     });
     return product;
+  });
+}
+
+export async function saveInventoryCategory(actorInput: Actor, raw: unknown) {
+  const data = z
+    .object({
+      name: z.string().trim().min(1).max(120),
+      repairOnly: z.boolean().default(false),
+    })
+    .parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const category = await tx.inventoryCategory.upsert({
+      where: { name: data.name },
+      create: data,
+      update: { repairOnly: data.repairOnly, deletedAt: null },
+    });
+    await audit(tx, actor, category.id, "INVENTORY_CATEGORY_SAVED", data);
+    return category;
+  });
+}
+
+export async function deleteInventoryCategory(actorInput: Actor, id: string) {
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const category = await tx.inventoryCategory.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    });
+    await audit(tx, actor, category.id, "INVENTORY_CATEGORY_DELETED");
   });
 }
 
@@ -811,6 +1122,7 @@ export async function adjustInventory(
       quantity: movement.quantity,
       type: movement.type,
     });
+    await refreshPartStatuses(tx, actor, productId);
     return movement;
   });
 }
@@ -850,6 +1162,16 @@ export async function updateProduct(
       });
     await audit(tx, actor, productId, "PRODUCT_UPDATED", {
       stockChange,
+      before: {
+        costPrice: current.costPrice.toString(),
+        salePrice: current.salePrice.toString(),
+        stockQuantity: current.stockQuantity,
+      },
+      after: {
+        costPrice: decimal(cents(data.costPrice)),
+        salePrice: decimal(cents(data.salePrice)),
+        stockQuantity: data.stockQuantity,
+      },
       fields: [
         "name",
         "category",
@@ -860,6 +1182,7 @@ export async function updateProduct(
         "favorite",
       ],
     });
+    await refreshPartStatuses(tx, actor, productId);
   });
 }
 
@@ -1014,7 +1337,7 @@ export async function checkoutWorkOrder(
     const remaining = balance(order.items, order.payments, order);
     if (amount > remaining)
       throw new BusinessError("L'importo supera il saldo da pagare.");
-    assertDelivery(actor, remaining - amount, data.override);
+    assertDelivery(remaining - amount);
     if (amount > 0) {
       const repairDue = settlement(order.items, {
         orderDiscount: order.orderDiscount,
@@ -1139,6 +1462,7 @@ export async function createRetailSale(actorInput: Actor, raw: unknown) {
     const itemCount = lines.reduce((sum, line) => sum + line.quantity, 0);
     const sale = await tx.retailSale.create({
       data: {
+        code: await nextDailyCode(tx, "sale"),
         requestId: data.requestId,
         subtotal: decimal(subtotal),
         discount: decimal(discount),

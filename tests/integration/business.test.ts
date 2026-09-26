@@ -26,6 +26,7 @@ import {
   orderInclude,
   replaceQuote,
   savePriceRule,
+  setPaidTotal,
   setUserEnabled,
   updateOrder,
   updateDueDate,
@@ -67,6 +68,7 @@ beforeAll(async () => {
   await db.inventoryMovement.deleteMany();
   await db.workOrderProduct.deleteMany();
   await db.product.deleteMany();
+  await db.inventoryCategory.deleteMany();
   await db.statusHistory.deleteMany();
   await db.workOrderItem.deleteMany();
   await db.workOrder.deleteMany();
@@ -101,6 +103,7 @@ beforeEach(async () => {
   await db.inventoryMovement.deleteMany();
   await db.workOrderProduct.deleteMany();
   await db.product.deleteMany();
+  await db.inventoryCategory.deleteMany();
   await db.statusHistory.deleteMany();
   await db.workOrderItem.deleteMany();
   await db.workOrder.deleteMany();
@@ -123,7 +126,6 @@ describe("PostgreSQL workflow", () => {
   it("registers, quotes, receives balance, delivers and audits every change", async () => {
     const created = await createOrder(staff, input());
     await updateDueDate(staff, created.id, "2099-12-31");
-    await changeStatus(staff, created.id, { status: "DIAGNOSING" });
     await changeStatus(staff, created.id, { status: "PARTS_MISSING" });
     await changeStatus(staff, created.id, { status: "REPAIRING" });
     await changeStatus(staff, created.id, { status: "READY" });
@@ -143,7 +145,7 @@ describe("PostgreSQL workflow", () => {
     });
     expect(order.status).toBe("COMPLETED");
     expect(order.pickedUpAt).not.toBeNull();
-    expect(order.history).toHaveLength(6);
+    expect(order.history).toHaveLength(5);
     expect(order.dueDate).toBe("2099-12-31");
     expect(order.payments).toHaveLength(2);
     expect(balance(order.items, order.payments)).toBe(0);
@@ -184,7 +186,7 @@ describe("PostgreSQL workflow", () => {
     expect(await db.workOrder.count()).toBe(0);
     expect(await db.statusHistory.count()).toBe(0);
   });
-  it("blocks staff or implicit owner delivery while unpaid, allows explicit owner", async () => {
+  it("blocks delivery until the balance is zero", async () => {
     const created = await createOrder(staff, input());
     await changeStatus(staff, created.id, { status: "REPAIRING" });
     await changeStatus(staff, created.id, { status: "READY" });
@@ -194,35 +196,120 @@ describe("PostgreSQL workflow", () => {
         pickedUpBy: "Cliente",
         override: true,
       }),
-    ).rejects.toThrow("titolare");
+    ).rejects.toThrow("zero");
     await expect(
       changeStatus(owner, created.id, {
         status: "COMPLETED",
         pickedUpBy: "Cliente",
       }),
-    ).rejects.toThrow("titolare");
+    ).rejects.toThrow("zero");
     expect(
       (await db.workOrder.findUniqueOrThrow({ where: { id: created.id } }))
         .status,
     ).toBe("READY");
+    await setPaidTotal(staff, created.id, {
+      requestId: randomUUID(),
+      amount: "100",
+      method: "OTHER",
+    });
     await changeStatus(owner, created.id, {
       status: "COMPLETED",
       pickedUpBy: "Cliente",
-      override: true,
     });
-    const log = await db.auditLog.findFirstOrThrow({
-      where: { entityId: created.id, action: "ORDER_DELIVERED" },
-    });
-    expect(log.context).toMatchObject({
-      unpaidOverride: true,
-      balance: "80.00",
-    });
-    await addPayment(staff, created.id, {
+    expect(
+      (await db.workOrder.findUniqueOrThrow({ where: { id: created.id } }))
+        .status,
+    ).toBe("COMPLETED");
+  });
+  it("assigns stable daily repair and retail codes", async () => {
+    const first = await createOrder(staff, input({ deposit: "0" }));
+    const second = await createOrder(
+      staff,
+      input({ requestId: randomUUID(), deposit: "0" }),
+    );
+    expect(first.code).toMatch(/^R-\d{8}001$/);
+    expect(second.code).toMatch(/^R-\d{8}002$/);
+    const product = await createProduct(owner, {
       requestId: randomUUID(),
-      amount: "80",
-      method: "OTHER",
-      kind: "BALANCE",
+      name: "Cavo USB",
+      category: "Cavi",
+      usage: "RETAIL",
+      costPrice: "2",
+      salePrice: "10",
+      initialStock: 2,
+      minStock: 0,
     });
+    const sale = await createRetailSale(staff, {
+      requestId: randomUUID(),
+      items: [{ productId: product.id, quantity: 1 }],
+      discount: "0",
+      method: "CASH",
+    });
+    expect(sale.code).toMatch(/^V-\d{8}001$/);
+  });
+  it("creates diagnostic orders without repair items and uses the editable fee", async () => {
+    const order = await createOrder(
+      staff,
+      input({
+        faults: ["Da diagnosticare"],
+        fault: "",
+        items: [],
+        diagnosticFee: "12.50",
+        deposit: "0",
+      }),
+    );
+    const saved = await db.workOrder.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { items: true },
+    });
+    expect(saved.status).toBe("DIAGNOSING");
+    expect(saved.items[0]).toMatchObject({
+      project: "Diagnosi",
+      matchLevel: "DIAGNOSTIC",
+    });
+    expect(saved.items[0].final.toString()).toBe("12.5");
+    await expect(
+      changeStatus(staff, order.id, { status: "REPAIRING" }),
+    ).rejects.toThrow("interventi");
+  });
+  it("uses optional quote parts to drive missing-parts status", async () => {
+    const part = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Display iPhone 13",
+      category: "Ricambi",
+      usage: "REPAIR",
+      costPrice: "40",
+      salePrice: "0",
+      initialStock: 0,
+      minStock: 1,
+    });
+    const rule = await db.priceRule.findFirstOrThrow({
+      where: { project: "display" },
+    });
+    await savePriceRule(owner, rule.id, {
+      category: rule.category,
+      brand: rule.brand,
+      model: rule.model,
+      project: rule.project,
+      suggested: rule.suggested.toString(),
+      requiredProductId: part.id,
+      requiredQuantity: 1,
+    });
+    const order = await createOrder(staff, input({ deposit: "0" }));
+    expect(order.status).toBe("PARTS_MISSING");
+    await expect(
+      changeStatus(staff, order.id, { status: "REPAIRING" }),
+    ).rejects.toThrow("Ricambi insufficienti");
+    await adjustInventory(owner, part.id, {
+      requestId: randomUUID(),
+      quantity: 1,
+      type: "STOCK_IN",
+      note: "",
+    });
+    expect(
+      (await db.workOrder.findUniqueOrThrow({ where: { id: order.id } }))
+        .status,
+    ).toBe("REPAIRING");
   });
   it("allows repair without the removed quote confirmation field and preserves repricing history", async () => {
     const order = await createOrder(staff, input({ confirmed: false }));

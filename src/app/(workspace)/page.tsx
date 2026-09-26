@@ -367,7 +367,7 @@ export default async function Dashboard({
               key={order.id}
             >
               <span>
-                <strong>{orderCode(order.number)}</strong>
+                <strong>{orderCode(order.code)}</strong>
                 <small>
                   {order.device.brand} {order.device.model}
                 </small>
@@ -393,7 +393,7 @@ export default async function Dashboard({
               key={sale.id}
             >
               <span>
-                <strong>{saleCode(sale.number)}</strong>
+                <strong>{saleCode(sale.code)}</strong>
                 <small>{dateTime(sale.createdAt)}</small>
               </span>
               <strong>{money(cents(sale.total))}</strong>

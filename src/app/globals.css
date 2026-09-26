@@ -2438,7 +2438,7 @@ details[open] > summary {
   border-bottom: 1px solid var(--line);
 }
 .inline-rule-project {
-  flex: 1;
+  flex: 0 1 420px;
   min-width: 0;
   font-size: 13px;
   overflow-wrap: anywhere;
@@ -2958,6 +2958,14 @@ summary.record-icon::-webkit-details-marker {
   padding: 4px 7px;
   font-size: 11px;
 }
+.inventory-table input[type="number"]::-webkit-inner-spin-button,
+.inventory-table input[type="number"]::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.inventory-table input[type="number"] {
+  appearance: textfield;
+}
 .inventory-name-edit {
   display: flex;
   align-items: center;
@@ -3021,6 +3029,88 @@ summary.record-icon::-webkit-details-marker {
 }
 .product-name svg {
   color: #d69a00;
+}
+.inventory-table tbody td:first-child input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+}
+.inventory-history {
+  margin-top: 5px;
+}
+.inventory-history summary {
+  min-height: 0;
+  padding: 2px 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+.inventory-history ol {
+  display: grid;
+  gap: 5px;
+  min-width: 250px;
+  padding: 8px 0 0 18px;
+}
+.inventory-history li small {
+  display: block;
+  color: var(--muted);
+}
+.inventory-category-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 36px;
+  align-items: end;
+  gap: 6px;
+}
+.inventory-category-field .icon-button {
+  margin-bottom: 1px;
+}
+.inventory-table tbody tr.order-row-active,
+.table-panel tbody tr.order-row-active {
+  background: #fff9df;
+}
+.table-panel tbody tr:has(.order-payment-values) {
+  cursor: pointer;
+}
+.order-static-value {
+  display: grid;
+  gap: 3px;
+}
+.order-payment-values {
+  display: grid;
+  gap: 3px;
+  min-width: 145px;
+}
+.order-payment-values > span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.order-payment-values small {
+  color: var(--muted);
+  font-weight: 500;
+}
+.order-payment-values input {
+  width: 78px;
+  min-height: 30px;
+  padding: 4px 6px;
+  text-align: right;
+}
+.order-balance-value {
+  color: var(--muted);
+  font-size: 11px;
+}
+.sale-number-button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.retail-sale-dialog {
+  display: grid;
+  gap: 16px;
+}
+.order-product-form {
+  grid-template-columns: minmax(220px, 1fr) 90px auto;
 }
 .inventory-disabled {
   opacity: 0.58;

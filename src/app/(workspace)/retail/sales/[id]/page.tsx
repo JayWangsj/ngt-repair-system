@@ -21,10 +21,8 @@ export default async function RetailSaleDetail({
   return (
     <>
       <PageHeader
-        title={`${it.retail.detail} · ${saleCode(sale.number)}`}
+        title={`${it.retail.detail} · ${saleCode(sale.code)}`}
         description={`${dateTime(sale.createdAt)} · ${sale.actorName}`}
-        actionHref="/retail/sales"
-        actionLabel={it.retail.salesHistory}
       />
       <div className="detail-grid retail-detail-grid">
         <section className="panel table-panel">

@@ -1,16 +1,25 @@
 "use client";
 
-import { useMemo, useState, useTransition, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+  type FormEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Star, Trash2 } from "lucide-react";
 import {
   createProductAction,
+  deleteInventoryCategoryAction,
   deleteProductsAction,
   updateProductAction,
 } from "@/app/actions";
 import { decimal, inventoryStatus, money } from "@/lib/domain";
 import { useMessages } from "./language";
 import { Field, FormDialog } from "./forms";
+import { EditableSelect } from "./editable-select";
 import { Button } from "./ui/button";
 
 export type ProductView = {
@@ -24,6 +33,13 @@ export type ProductView = {
   minStock: number;
   favorite: boolean;
   enabled: boolean;
+  history: { id: string; at: string; label: string }[];
+};
+
+export type CategoryView = {
+  id: string;
+  name: string;
+  repairOnly: boolean;
 };
 
 const presetCategories = [
@@ -37,14 +53,19 @@ const presetCategories = [
 function ProductForm({
   categories,
   onClose,
+  mode,
 }: {
-  categories: string[];
+  categories: CategoryView[];
   onClose: () => void;
+  mode: "inventory" | "retail";
 }) {
   const it = useMessages();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const [category, setCategory] = useState("");
+  const [usage, setUsage] = useState<"RETAIL" | "REPAIR" | "BOTH">("RETAIL");
+  const [hiddenCategories, setHiddenCategories] = useState<string[]>([]);
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -52,10 +73,13 @@ function ProductForm({
       const result = await createProductAction({
         requestId: crypto.randomUUID(),
         name: String(form.get("name") ?? ""),
-        category: String(form.get("category") ?? ""),
-        usage: String(form.get("usage") ?? ""),
+        category,
+        usage: mode === "retail" ? "RETAIL" : usage,
         costPrice: String(form.get("costPrice") ?? ""),
-        salePrice: String(form.get("salePrice") ?? ""),
+        salePrice:
+          mode === "inventory" && usage === "REPAIR"
+            ? "0"
+            : String(form.get("salePrice") ?? ""),
         initialStock: String(form.get("initialStock") ?? "0"),
         minStock: String(form.get("minStock") ?? "0"),
         favorite: form.get("favorite") === "on",
@@ -66,33 +90,67 @@ function ProductForm({
       router.refresh();
     });
   }
-  const options = [...new Set([...presetCategories, ...categories])].sort();
+  const options = [
+    ...new Set([
+      ...presetCategories,
+      ...categories
+        .filter(
+          (item) =>
+            !hiddenCategories.includes(item.id) &&
+            (mode === "inventory" || !item.repairOnly),
+        )
+        .map((item) => item.name),
+    ]),
+  ]
+    .filter((item) => mode === "inventory" || item.toLowerCase() !== "ricambi")
+    .sort();
   return (
     <form className="dialog-form" onSubmit={submit} aria-busy={pending}>
       <div className="form-grid">
         <Field label={it.inventory.product}>
           <input name="name" required maxLength={120} autoFocus />
         </Field>
-        <Field label={it.inventory.category}>
-          <input
-            name="category"
-            list="inventory-categories"
+        <div className="inventory-category-field">
+          <EditableSelect
+            label={it.inventory.category}
+            value={category}
+            onChange={setCategory}
+            options={options}
             required
-            maxLength={120}
           />
-          <datalist id="inventory-categories">
-            {options.map((item) => (
-              <option key={item} value={item} />
-            ))}
-          </datalist>
-        </Field>
-        <Field label={it.inventory.usage}>
-          <select name="usage" defaultValue="RETAIL">
-            <option value="RETAIL">{it.inventory.retail}</option>
-            <option value="REPAIR">{it.inventory.repair}</option>
-            <option value="BOTH">{it.inventory.both}</option>
-          </select>
-        </Field>
+          {categories.some((item) => item.name === category) && (
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={it.remove + " " + category}
+              onClick={async () => {
+                const selected = categories.find(
+                  (item) => item.name === category,
+                );
+                if (!selected) return;
+                const result = await deleteInventoryCategoryAction(selected.id);
+                if (!result.ok) return setError(result.error);
+                setHiddenCategories([...hiddenCategories, selected.id]);
+                setCategory("");
+              }}
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
+        </div>
+        {mode === "inventory" && (
+          <Field label={it.inventory.usage}>
+            <select
+              name="usage"
+              value={usage}
+              onChange={(event) => setUsage(event.target.value as typeof usage)}
+            >
+              <option value="RETAIL">{it.inventory.retail}</option>
+              <option value="REPAIR">{it.inventory.repair}</option>
+              <option value="BOTH">{it.inventory.both}</option>
+            </select>
+          </Field>
+        )}
         <Field label={it.inventory.costPrice}>
           <input
             name="costPrice"
@@ -101,14 +159,16 @@ function ProductForm({
             required
           />
         </Field>
-        <Field label={it.inventory.salePrice}>
-          <input
-            name="salePrice"
-            inputMode="decimal"
-            defaultValue="0"
-            required
-          />
-        </Field>
+        {(mode === "retail" || usage !== "REPAIR") && (
+          <Field label={it.inventory.salePrice}>
+            <input
+              name="salePrice"
+              inputMode="decimal"
+              defaultValue="0"
+              required
+            />
+          </Field>
+        )}
         <Field label={it.inventory.initialStock}>
           <input
             name="initialStock"
@@ -150,8 +210,10 @@ function ProductForm({
 
 export function NewProductDialogButton({
   categories,
+  mode = "inventory",
 }: {
-  categories: string[];
+  categories: CategoryView[];
+  mode?: "inventory" | "retail";
 }) {
   const it = useMessages();
   const [open, setOpen] = useState(false);
@@ -166,7 +228,11 @@ export function NewProductDialogButton({
           title={it.inventory.newProduct}
           onClose={() => setOpen(false)}
         >
-          <ProductForm categories={categories} onClose={() => setOpen(false)} />
+          <ProductForm
+            categories={categories}
+            mode={mode}
+            onClose={() => setOpen(false)}
+          />
         </FormDialog>
       )}
     </>
@@ -210,7 +276,13 @@ function StockEditor({
   );
 }
 
-export function InventoryWorkspace({ products }: { products: ProductView[] }) {
+export function InventoryWorkspace({
+  products,
+  categories: categoryOptions,
+}: {
+  products: ProductView[];
+  categories: CategoryView[];
+}) {
   const it = useMessages();
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -223,10 +295,19 @@ export function InventoryWorkspace({ products }: { products: ProductView[] }) {
   const [drafts, setDrafts] = useState<Record<string, ProductView>>({});
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const table = useRef<HTMLTableElement>(null);
   const categories = useMemo(
     () => [...new Set(products.map((product) => product.category))].sort(),
     [products],
   );
+  useEffect(() => {
+    function outside(event: PointerEvent) {
+      if (!table.current?.contains(event.target as Node))
+        requestAnimationFrame(() => setSelectedId(""));
+    }
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, []);
   const filtered = useMemo(
     () =>
       products.filter((product) => {
@@ -366,7 +447,7 @@ export function InventoryWorkspace({ products }: { products: ProductView[] }) {
       {error && <p className="message error">{error}</p>}
       {filtered.length ? (
         <div className="table-scroll">
-          <table className="inventory-table">
+          <table className="inventory-table" ref={table}>
             <thead>
               <tr>
                 {batchMode && <th />}
@@ -442,38 +523,47 @@ export function InventoryWorkspace({ products }: { products: ProductView[] }) {
                         </div>
                       ) : (
                         <span className="product-name">
-                          <strong>{product.name}</strong>
                           {product.favorite && (
                             <Star size={14} fill="currentColor" />
                           )}
+                          <strong>{product.name}</strong>
                         </span>
+                      )}
+                      {product.history.length > 0 && (
+                        <details
+                          className="inventory-history"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <summary>{it.history}</summary>
+                          <ol>
+                            {product.history.slice(0, 20).map((entry) => (
+                              <li key={entry.id}>
+                                <span>{entry.label}</span>
+                                <small>{entry.at}</small>
+                              </li>
+                            ))}
+                          </ol>
+                        </details>
                       )}
                     </td>
                     <td>
                       {selected ? (
-                        <>
-                          <input
-                            list={`categories-${product.id}`}
-                            value={product.category}
-                            onChange={(event) =>
-                              setDrafts((current) => ({
-                                ...current,
-                                [product.id]: {
-                                  ...product,
-                                  category: event.target.value,
-                                },
-                              }))
-                            }
-                            onBlur={() => save(product, {})}
-                          />
-                          <datalist id={`categories-${product.id}`}>
-                            {[
-                              ...new Set([...presetCategories, ...categories]),
-                            ].map((item) => (
-                              <option key={item} value={item} />
-                            ))}
-                          </datalist>
-                        </>
+                        <select
+                          value={product.category}
+                          onChange={(event) =>
+                            save(product, { category: event.target.value })
+                          }
+                        >
+                          {[
+                            ...new Set([
+                              product.category,
+                              ...presetCategories,
+                              ...categoryOptions.map((item) => item.name),
+                            ]),
+                          ].map((item) => (
+                            <option key={item}>{item}</option>
+                          ))}
+                        </select>
                       ) : (
                         product.category
                       )}
@@ -516,7 +606,9 @@ export function InventoryWorkspace({ products }: { products: ProductView[] }) {
                       )}
                     </td>
                     <td className="numeric">
-                      {selected ? (
+                      {product.usage === "REPAIR" ? (
+                        "—"
+                      ) : selected ? (
                         <input
                           className="price-input"
                           inputMode="decimal"
@@ -535,20 +627,28 @@ export function InventoryWorkspace({ products }: { products: ProductView[] }) {
                       )}
                     </td>
                     <td>
-                      <StockEditor
-                        value={product.stockQuantity}
-                        label={it.inventory.currentStock}
-                        onSave={(value) =>
-                          save(product, { stockQuantity: value })
-                        }
-                      />
+                      {selected ? (
+                        <StockEditor
+                          value={product.stockQuantity}
+                          label={it.inventory.currentStock}
+                          onSave={(value) =>
+                            save(product, { stockQuantity: value })
+                          }
+                        />
+                      ) : (
+                        product.stockQuantity
+                      )}
                     </td>
                     <td>
-                      <StockEditor
-                        value={product.minStock}
-                        label={it.inventory.minimumStock}
-                        onSave={(value) => save(product, { minStock: value })}
-                      />
+                      {selected ? (
+                        <StockEditor
+                          value={product.minStock}
+                          label={it.inventory.minimumStock}
+                          onSave={(value) => save(product, { minStock: value })}
+                        />
+                      ) : (
+                        product.minStock
+                      )}
                     </td>
                     <td>
                       <span

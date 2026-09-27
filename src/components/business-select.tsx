@@ -28,8 +28,23 @@ function useDropdown(open: boolean) {
   const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
   function place() {
     const rect = trigger.current?.getBoundingClientRect();
-    if (rect)
-      setPosition({ top: rect.bottom + 5, left: rect.left, width: rect.width });
+    if (!rect) return;
+    const panelWidth = panel.current?.offsetWidth ?? rect.width;
+    const panelHeight = panel.current?.offsetHeight ?? 0;
+    const gap = 5;
+    const edge = 12;
+    const below = rect.bottom + gap;
+    const fitsBelow = below + panelHeight <= window.innerHeight - edge;
+    const fitsAbove = rect.top - gap - panelHeight >= edge;
+    const top =
+      !fitsBelow && fitsAbove
+        ? rect.top - gap - panelHeight
+        : Math.min(below, window.innerHeight - panelHeight - edge);
+    const left = Math.min(
+      Math.max(edge, rect.left),
+      Math.max(edge, window.innerWidth - panelWidth - edge),
+    );
+    setPosition({ top: Math.max(edge, top), left, width: rect.width });
   }
   useLayoutEffect(() => {
     if (open) place();

@@ -23,6 +23,12 @@ async function enterBusinessValue(
   await scope.getByRole("button", { name: label, exact: true }).click();
   const panel = page.locator(".business-select-panel");
   await panel.getByRole("searchbox").fill(value);
+  expect(
+    await panel.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return box.top >= 0 && box.bottom <= window.innerHeight;
+    }),
+  ).toBe(true);
   await panel.locator(".business-select-custom").click();
 }
 async function fillOrder(

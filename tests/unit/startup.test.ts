@@ -24,4 +24,26 @@ describe("Windows persistent startup", () => {
     expect(installer).toContain("Start-ScheduledTask");
     expect(uninstaller).toContain("Unregister-ScheduledTask");
   });
+
+  it("keeps the isolated test preview on a fixed restart-safe port", async () => {
+    const service = await readFile(
+      "scripts/windows-preview-service.ps1",
+      "utf8",
+    );
+    const installer = await readFile(
+      "scripts/install-windows-preview-startup.ps1",
+      "utf8",
+    );
+    const uninstaller = await readFile(
+      "scripts/uninstall-windows-preview-startup.ps1",
+      "utf8",
+    );
+    expect(service).toContain('"test.env"');
+    expect(service).toContain('$env:PORT = "3236"');
+    expect(service).toContain('"scripts/windows-db.mjs" -Port 55432');
+    expect(service).toContain('"scripts/start.mjs" -Port 3236');
+    expect(installer).toContain('$taskName = "NGT Test Preview"');
+    expect(installer).toContain("New-ScheduledTaskTrigger -AtLogOn");
+    expect(uninstaller).toContain("Unregister-ScheduledTask");
+  });
 });

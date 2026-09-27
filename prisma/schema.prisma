@@ -124,36 +124,41 @@ model Device {
 }
 
 model WorkOrder {
-  id               String             @id @default(cuid())
-  number           Int                @unique @default(autoincrement())
-  code             String             @unique
-  customerName     String             @default("")
-  deviceId         String
-  device           Device             @relation(fields: [deviceId], references: [id])
-  status           Status             @default(RECEIVED)
-  orderDiscount    Decimal            @default(0) @db.Decimal(12, 2)
-  includeVat       Boolean            @default(false)
-  fault            String
-  appearance       String             @default("")
-  accessories      String             @default("")
-  notes            String             @default("")
-  dueDate          String?
-  confirmedAt      DateTime?          @db.Timestamptz(3)
-  confirmationNote String             @default("")
-  pickedUpAt       DateTime?          @db.Timestamptz(3)
-  pickedUpBy       String?
-  warrantyMonths   Int                @default(0)
-  warrantyScope    String             @default("")
-  warrantyNotes    String             @default("")
-  afterSalesFee    Decimal            @default(0) @db.Decimal(12, 2)
+  id                String             @id @default(cuid())
+  number            Int                @unique @default(autoincrement())
+  code              String             @unique
+  customerName      String             @default("")
+  deviceId          String
+  device            Device             @relation(fields: [deviceId], references: [id])
+  status            Status             @default(RECEIVED)
+  orderDiscount     Decimal            @default(0) @db.Decimal(12, 2)
+  includeVat        Boolean            @default(false)
+  inspectionMode    Boolean            @default(false)
+  inspectionFee     Decimal            @default(0) @db.Decimal(12, 2)
+  inspectionResult  String             @default("")
+  faultNote         String             @default("")
+  fault             String
+  appearance        String             @default("")
+  accessories       String             @default("")
+  notes             String             @default("")
+  dueDate           String?
+  confirmedAt       DateTime?          @db.Timestamptz(3)
+  confirmationNote  String             @default("")
+  pickedUpAt        DateTime?          @db.Timestamptz(3)
+  pickedUpBy        String?
+  warrantyMonths    Int                @default(0)
+  warrantyScope     String             @default("")
+  warrantyNotes     String             @default("")
+  afterSalesFee     Decimal            @default(0) @db.Decimal(12, 2)
   afterSalesDueDate String?
-  afterSalesOpen   Boolean            @default(false)
-  createdAt        DateTime           @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime           @updatedAt @db.Timestamptz(3)
-  items            WorkOrderItem[]
-  products         WorkOrderProduct[]
-  payments         Payment[]
-  history          StatusHistory[]
+  afterSalesOpen    Boolean            @default(false)
+  createdAt         DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime           @updatedAt @db.Timestamptz(3)
+  items             WorkOrderItem[]
+  faults            WorkOrderFault[]
+  products          WorkOrderProduct[]
+  payments          Payment[]
+  history           StatusHistory[]
 
   @@index([status, dueDate])
   @@index([deviceId])
@@ -248,13 +253,30 @@ model AuditLog {
 }
 
 model FaultOption {
-  id       String  @id @default(cuid())
-  category String
-  name     String
-  key      String
-  hidden   Boolean @default(false)
+  id        String           @id @default(cuid())
+  category  String
+  name      String
+  key       String
+  note      String           @default("")
+  sortOrder Int              @default(0)
+  hidden    Boolean          @default(false)
+  orders    WorkOrderFault[]
 
   @@unique([category, key])
+  @@index([category, hidden, sortOrder])
+}
+
+model WorkOrderFault {
+  id           String       @id @default(cuid())
+  orderId      String
+  order        WorkOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  catalogId    String?
+  catalog      FaultOption? @relation(fields: [catalogId], references: [id], onDelete: Restrict)
+  nameSnapshot String
+  custom       Boolean      @default(false)
+
+  @@index([orderId])
+  @@index([catalogId])
 }
 
 model Product {

@@ -1,18 +1,27 @@
 import { db } from "@/lib/db";
 import { requireActor } from "@/lib/session";
-import { NewOrderForm } from "@/components/forms";
+import { NewOrderWizard } from "@/components/new-order-form";
 import { PageHeader } from "@/components/common";
 import { getMessages } from "@/lib/i18n-server";
 export default async function NewOrder() {
   const it = await getMessages();
-  const actor = await requireActor();
+  await requireActor();
   const rules = await db.priceRule.findMany({
     where: { enabled: true },
     orderBy: { project: "asc" },
   });
   const [faultOptions, devices, customers] = await Promise.all([
     db.faultOption.findMany({
-      select: { category: true, name: true, hidden: true },
+      select: {
+        id: true,
+        category: true,
+        name: true,
+        note: true,
+        hidden: true,
+        sortOrder: true,
+        _count: { select: { orders: true } },
+      },
+      orderBy: [{ category: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
     }),
     db.device.findMany({
       where: { deletedAt: null, customer: { deletedAt: null } },
@@ -33,11 +42,13 @@ export default async function NewOrder() {
   return (
     <>
       <PageHeader title={it.newOrder} description={it.ordersDescription} />
-      <NewOrderForm
-        faultOptions={faultOptions}
+      <NewOrderWizard
+        faultOptions={faultOptions.map(({ _count, ...fault }) => ({
+          ...fault,
+          usageCount: _count.orders,
+        }))}
         devices={devices}
         customers={customers}
-        owner={actor.role === "OWNER"}
         rules={rules.map((r) => ({
           ...r,
           suggested: r.suggested.toString(),

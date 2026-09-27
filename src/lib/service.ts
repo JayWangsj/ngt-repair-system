@@ -12,7 +12,6 @@ import {
   isDiagnosticFault,
   matchRule,
   romeDay,
-  total,
   settlement,
   type Actor,
 } from "./domain";
@@ -24,6 +23,8 @@ import {
   editInput,
   itemInput,
   quoteInput,
+  inspectionQuoteInput,
+  faultCatalogInput,
   orderInput,
   paymentInput,
   paidTotalInput,
@@ -55,6 +56,7 @@ function originalOrderLocked(order: {
 export const orderInclude = {
   device: { include: { customer: true } },
   items: true,
+  faults: { include: { catalog: true } },
   products: true,
   payments: {
     orderBy: { receivedAt: "asc" as const },
@@ -351,20 +353,10 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
       throw new BusinessError(
         "Il dispositivo non appartiene al cliente selezionato.",
       );
-    const diagnostic = isDiagnosticFault([...data.faults, data.fault]);
+    const diagnostic =
+      data.inspectionMode || isDiagnosticFault([...data.faults, data.fault]);
     const items = diagnostic
-      ? [
-          {
-            project: "Diagnosi",
-            final: decimal(cents(data.diagnosticFee)),
-            discount: decimal(0),
-            suggested: null,
-            ruleId: undefined,
-            matchLevel: "DIAGNOSTIC",
-            adjustmentReason: "",
-            minutes: 0,
-          },
-        ]
+      ? []
       : await snapshots(tx, actor, device, data.items);
     const requiredParts = await requiredPartLines(tx, items);
     const initialStatus = diagnostic
@@ -374,30 +366,69 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
           )
         ? "PARTS_MISSING"
         : "REPAIRING";
-    const quote = settlement(items, data);
+    const quote = settlement(items, {
+      ...data,
+      inspectionFee: diagnostic ? data.diagnosticFee : "0",
+    });
     if (cents(data.deposit) > quote.due)
       throw new BusinessError("L'acconto supera il totale.");
-    const faults = [
+    const legacyFaults = [
       ...new Map(
-        data.faults.map((name) => [name.trim().toLowerCase(), name.trim()]),
+        data.faults
+          .filter((name) => !isDiagnosticFault([name]))
+          .map((name) => [name.trim().toLowerCase(), name.trim()]),
       ).values(),
     ];
-    if (!faults.length && !data.fault)
-      throw new BusinessError("Indica il problema segnalato.");
-    for (const name of faults)
-      await tx.faultOption.upsert({
-        where: {
-          category_key: { category: device.category, key: name.toLowerCase() },
-        },
-        create: { category: device.category, name, key: name.toLowerCase() },
+    const selectedCatalog = await tx.faultOption.findMany({
+      where: {
+        id: { in: data.standardFaultIds },
+        category: device.category,
+        hidden: false,
+      },
+    });
+    if (selectedCatalog.length !== data.standardFaultIds.length)
+      throw new BusinessError(
+        "Uno dei problemi selezionati non è disponibile.",
+      );
+    for (const name of legacyFaults) {
+      const key = name.toLowerCase();
+      const fault = await tx.faultOption.upsert({
+        where: { category_key: { category: device.category, key } },
+        create: { category: device.category, name, key },
         update: {},
       });
+      if (!selectedCatalog.some((item) => item.id === fault.id))
+        selectedCatalog.push(fault);
+    }
+    const customFaults = [
+      ...new Set(data.customFaults.map((name) => name.trim())),
+    ];
+    const faultNote = data.faultNote || (data.inspectionMode ? data.fault : "");
+    if (
+      !diagnostic &&
+      !selectedCatalog.length &&
+      !customFaults.length &&
+      !data.fault
+    )
+      throw new BusinessError("Indica il problema segnalato.");
+    const faultSnapshot = diagnostic
+      ? "Da diagnosticare"
+      : [
+          ...selectedCatalog.map((item) => item.name),
+          ...customFaults,
+          data.fault,
+        ]
+          .filter(Boolean)
+          .join("; ");
     const order = await tx.workOrder.create({
       data: {
         code: await nextDailyCode(tx, "order"),
         deviceId: device.id,
         customerName: customer.name,
-        fault: [...faults, data.fault].filter(Boolean).join("; "),
+        fault: faultSnapshot,
+        faultNote,
+        inspectionMode: diagnostic,
+        inspectionFee: decimal(diagnostic ? cents(data.diagnosticFee) : 0),
         orderDiscount: decimal(cents(data.orderDiscount)),
         includeVat: data.includeVat,
         appearance: data.appearance,
@@ -408,6 +439,21 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
         confirmationNote: data.confirmed ? data.confirmationNote : "",
         status: initialStatus,
         items: { create: items },
+        faults: diagnostic
+          ? undefined
+          : {
+              create: [
+                ...selectedCatalog.map((item) => ({
+                  catalogId: item.id,
+                  nameSnapshot: item.name,
+                  custom: false,
+                })),
+                ...customFaults.map((name) => ({
+                  nameSnapshot: name,
+                  custom: true,
+                })),
+              ],
+            },
         products: requiredParts.length
           ? {
               create: requiredParts.map(({ product, quantity }) => ({
@@ -453,10 +499,15 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
     });
     await audit(tx, actor, order.id, "ORDER_CREATED", {
       requestId: data.requestId,
-      total: decimal(total(items)),
+      total: decimal(quote.due),
       confirmed: data.confirmed,
       initialStatus,
+      inspectionMode: diagnostic,
     });
+    if (diagnostic)
+      await audit(tx, actor, order.id, "INSPECTION_STARTED", {
+        fee: decimal(cents(data.diagnosticFee)),
+      });
     if (cents(data.deposit) > 0)
       await audit(tx, actor, order.id, "PAYMENT_ADDED", {
         amount: decimal(cents(data.deposit)),
@@ -470,14 +521,114 @@ export async function updateOrder(actorInput: Actor, id: string, raw: unknown) {
   const data = editInput.parse(raw);
   return transact(async (tx) => {
     const actor = await currentActor(tx, actorInput);
-    const order = await tx.workOrder.findUniqueOrThrow({ where: { id } });
+    const order = await tx.workOrder.findUniqueOrThrow({
+      where: { id },
+      include: { faults: true },
+    });
     if (originalOrderLocked(order))
       throw new BusinessError("La scheda è chiusa.");
+    const { customFaults, ...fields } = data;
+    if (customFaults) {
+      await tx.workOrderFault.deleteMany({
+        where: { orderId: id, custom: true },
+      });
+      if (customFaults.length)
+        await tx.workOrderFault.createMany({
+          data: customFaults.map((nameSnapshot) => ({
+            orderId: id,
+            nameSnapshot,
+            custom: true,
+          })),
+        });
+    }
+    const standardSnapshots = order.faults
+      .filter((fault) => !fault.custom)
+      .map((fault) => fault.nameSnapshot);
     await tx.workOrder.update({
       where: { id },
-      data: { ...data, dueDate: data.dueDate || null },
+      data: {
+        ...fields,
+        ...(customFaults
+          ? { fault: [...standardSnapshots, ...customFaults].join("; ") }
+          : {}),
+        dueDate: data.dueDate || null,
+      },
     });
     await audit(tx, actor, id, "ORDER_UPDATED", { fields: Object.keys(data) });
+  });
+}
+
+export async function completeInspection(
+  actorInput: Actor,
+  id: string,
+  raw: unknown,
+) {
+  const data = inspectionQuoteInput.parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const order = await tx.workOrder.findUniqueOrThrow({
+      where: { id },
+      include: orderInclude,
+    });
+    if (order.status !== "DIAGNOSING" || !order.inspectionMode)
+      throw new BusinessError("La scheda non è in diagnosi.");
+    const items = await snapshots(tx, actor, order.device, data.items);
+    const requiredParts = await requiredPartLines(tx, items);
+    if (
+      balance(items, order.payments, {
+        ...data,
+        inspectionFee: order.inspectionFee,
+        products: order.products,
+      }) < 0
+    )
+      throw new BusinessError(
+        "Il nuovo totale è inferiore agli incassi già registrati.",
+      );
+    await tx.workOrderProduct.deleteMany({
+      where: { orderId: id, kind: "REPAIR_PART", consumedAt: null },
+    });
+    await tx.workOrderItem.deleteMany({ where: { orderId: id } });
+    await tx.workOrder.update({
+      where: { id },
+      data: {
+        inspectionResult: data.inspectionResult,
+        items: { create: items },
+        orderDiscount: decimal(cents(data.orderDiscount)),
+        includeVat: data.includeVat,
+        dueDate: data.dueDate || null,
+        status: "WAITING_APPROVAL",
+        products: requiredParts.length
+          ? {
+              create: requiredParts.map(({ product, quantity }) => ({
+                productId: product.id,
+                productName: product.name,
+                category: product.category,
+                kind: "REPAIR_PART" as const,
+                unitPrice: decimal(0),
+                quantity,
+              })),
+            }
+          : undefined,
+      },
+    });
+    await tx.statusHistory.create({
+      data: {
+        orderId: id,
+        from: "DIAGNOSING",
+        to: "WAITING_APPROVAL",
+        actorId: actor.id,
+        actorName: actor.name,
+      },
+    });
+    await audit(tx, actor, id, "INSPECTION_COMPLETED", {
+      result: data.inspectionResult,
+    });
+    await audit(tx, actor, id, "QUOTE_CREATED", {
+      items: items.map((item) => ({
+        project: item.project,
+        final: item.final,
+      })),
+    });
   });
 }
 export async function updateDueDate(
@@ -514,6 +665,10 @@ export async function replaceQuote(
     });
     if (originalOrderLocked(order))
       throw new BusinessError("La scheda è chiusa.");
+    if (order.status === "DIAGNOSING")
+      throw new BusinessError(
+        "Completa prima la diagnosi e crea il preventivo.",
+      );
     const items = await snapshots(
       tx,
       actor,
@@ -523,8 +678,11 @@ export async function replaceQuote(
     );
     const options = parsed ?? order;
     if (
-      balance(items, order.payments, { ...options, products: order.products }) <
-      0
+      balance(items, order.payments, {
+        ...options,
+        inspectionFee: order.inspectionFee,
+        products: order.products,
+      }) < 0
     )
       throw new BusinessError(
         "Il nuovo totale è inferiore agli incassi già registrati.",
@@ -565,6 +723,8 @@ export async function replaceQuote(
     )
       ? "PARTS_MISSING"
       : "REPAIRING";
+    const quoteStatus =
+      order.status === "WAITING_APPROVAL" ? "WAITING_APPROVAL" : nextStatus;
     await tx.workOrder.update({
       where: { id },
       data: {
@@ -573,7 +733,7 @@ export async function replaceQuote(
         includeVat: options.includeVat,
         confirmedAt: null,
         confirmationNote: "",
-        ...(order.status === "READY" ? {} : { status: nextStatus }),
+        ...(order.status === "READY" ? {} : { status: quoteStatus }),
         products: requiredParts.length
           ? {
               create: requiredParts.map(({ product, quantity }) => ({
@@ -588,12 +748,12 @@ export async function replaceQuote(
           : undefined,
       },
     });
-    if (order.status !== "READY" && order.status !== nextStatus)
+    if (order.status !== "READY" && order.status !== quoteStatus)
       await tx.statusHistory.create({
         data: {
           orderId: id,
           from: order.status,
-          to: nextStatus,
+          to: quoteStatus,
           actorId: actor.id,
           actorName: actor.name,
           note: "",
@@ -609,14 +769,40 @@ export async function confirmQuote(
   const note = z.string().trim().min(1).max(2000).parse(raw);
   return transact(async (tx) => {
     const actor = await currentActor(tx, actorInput);
-    const order = await tx.workOrder.findUniqueOrThrow({ where: { id } });
+    const order = await tx.workOrder.findUniqueOrThrow({
+      where: { id },
+      include: { products: { include: { product: true } } },
+    });
     if (originalOrderLocked(order))
       throw new BusinessError("La scheda è chiusa.");
+    const nextStatus = partsMissing(order.products)
+      ? "PARTS_MISSING"
+      : "REPAIRING";
     await tx.workOrder.update({
       where: { id },
-      data: { confirmedAt: new Date(), confirmationNote: note },
+      data: {
+        confirmedAt: new Date(),
+        confirmationNote: note,
+        ...(order.status === "WAITING_APPROVAL" ? { status: nextStatus } : {}),
+      },
     });
     await audit(tx, actor, id, "QUOTE_CONFIRMED");
+    if (order.status === "WAITING_APPROVAL") {
+      await tx.statusHistory.create({
+        data: {
+          orderId: id,
+          from: "WAITING_APPROVAL",
+          to: nextStatus,
+          actorId: actor.id,
+          actorName: actor.name,
+          note,
+        },
+      });
+      await audit(tx, actor, id, "STATUS_CHANGED", {
+        from: "WAITING_APPROVAL",
+        to: nextStatus,
+      });
+    }
   });
 }
 export async function addPayment(actorInput: Actor, id: string, raw: unknown) {
@@ -823,13 +1009,6 @@ export async function changeStatus(
       throw new BusinessError("Usa l'operazione post-vendita dedicata.");
     assertTransition(order.status, data.status);
 
-    if (
-      order.status === "DIAGNOSING" &&
-      order.items.every((item) => item.matchLevel === "DIAGNOSTIC")
-    )
-      throw new BusinessError(
-        "Conferma il guasto e gli interventi prima di cambiare stato.",
-      );
     if (data.status === "REPAIRING" && partsMissing(order.products))
       throw new BusinessError(
         "Ricambi insufficienti: rifornisci il magazzino prima di avviare la riparazione.",
@@ -1917,5 +2096,99 @@ export async function restoreFault(
       update: { hidden: false },
     });
     await audit(tx, actor, fault.id, "FAULT_RESTORED", data);
+  });
+}
+
+export async function saveFault(
+  actorInput: Actor,
+  id: string | null,
+  raw: unknown,
+) {
+  const data = faultCatalogInput.parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const key = data.name.toLocaleLowerCase("it");
+    const duplicate = await tx.faultOption.findUnique({
+      where: { category_key: { category: data.category, key } },
+    });
+    if (duplicate && duplicate.id !== id)
+      throw new BusinessError("Questo problema esiste già.");
+    const previous = id
+      ? await tx.faultOption.findUniqueOrThrow({ where: { id } })
+      : null;
+    if (previous && previous.category !== data.category)
+      throw new BusinessError("Categoria problema non valida.");
+    const sortOrder = previous
+      ? previous.sortOrder
+      : ((
+          await tx.faultOption.aggregate({
+            where: { category: data.category },
+            _max: { sortOrder: true },
+          })
+        )._max.sortOrder ?? -1) + 1;
+    const fault = previous
+      ? await tx.faultOption.update({
+          where: { id: previous.id },
+          data: { name: data.name, key, note: data.note, hidden: data.hidden },
+        })
+      : await tx.faultOption.create({
+          data: { ...data, key, sortOrder },
+        });
+    await audit(
+      tx,
+      actor,
+      fault.id,
+      previous ? "FAULT_UPDATED" : "FAULT_CREATED",
+      {
+        before: previous
+          ? { name: previous.name, hidden: previous.hidden }
+          : null,
+        after: { name: fault.name, hidden: fault.hidden },
+      },
+    );
+    return fault;
+  });
+}
+
+export async function deleteFault(actorInput: Actor, id: string) {
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const fault = await tx.faultOption.findUniqueOrThrow({
+      where: { id },
+      include: { _count: { select: { orders: true } } },
+    });
+    if (fault._count.orders > 0)
+      throw new BusinessError(
+        "Il problema è già usato: puoi nasconderlo, ma non eliminarlo.",
+      );
+    await tx.faultOption.delete({ where: { id } });
+    await audit(tx, actor, id, "FAULT_PERMANENTLY_DELETED", {
+      name: fault.name,
+      category: fault.category,
+    });
+  });
+}
+
+export async function reorderFaults(
+  actorInput: Actor,
+  category: string,
+  ids: unknown,
+) {
+  const parsed = z.array(z.string().min(1)).max(200).parse(ids);
+  const parsedCategory = deviceInput.shape.category.parse(category);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const found = await tx.faultOption.findMany({
+      where: { category: parsedCategory, id: { in: parsed } },
+      select: { id: true },
+    });
+    if (found.length !== parsed.length)
+      throw new BusinessError("Ordinamento problemi non valido.");
+    await Promise.all(
+      parsed.map((id, sortOrder) =>
+        tx.faultOption.update({ where: { id }, data: { sortOrder } }),
+      ),
+    );
+    await audit(tx, actor, parsedCategory, "FAULTS_REORDERED", { ids: parsed });
   });
 }

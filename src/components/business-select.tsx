@@ -104,6 +104,7 @@ export function SelectDropdown({
   const all = groups.flatMap((group) => group.options);
   const currentValue = value ?? internalValue;
   const selected = all.find((option) => option.value === currentValue);
+  const displayValue = selected?.label ?? currentValue;
   const needle = query.trim().toLocaleLowerCase();
   const filtered = groups
     .map((group) => ({
@@ -195,8 +196,8 @@ export function SelectDropdown({
           }
         }}
       >
-        <span className={selected ? "" : "is-placeholder"}>
-          {selected?.label ?? placeholder}
+        <span className={displayValue ? "" : "is-placeholder"}>
+          {displayValue || placeholder}
         </span>
         <ChevronDown size={15} aria-hidden="true" />
       </button>

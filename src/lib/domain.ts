@@ -44,10 +44,15 @@ export type ProductCharge = {
 export type WorkOrderOptions = QuoteOptions & {
   products?: ProductCharge[];
   afterSalesFee?: Amount;
+  inspectionFee?: Amount;
   status?: OrderStatus;
 };
 export function settlement(items: QuoteItem[], options: WorkOrderOptions = {}) {
-  const gross = total(items);
+  const inspectionTotal = cents(options.inspectionFee ?? "0");
+  if (inspectionTotal < 0)
+    throw new BusinessError("Costo diagnosi non valido.");
+  const repairGross = total(items);
+  const gross = repairGross + inspectionTotal;
   const itemDiscount = items.reduce((sum, item) => {
     const discount = cents(item.discount ?? "0");
     if (discount < 0 || discount > cents(item.final))
@@ -73,6 +78,8 @@ export function settlement(items: QuoteItem[], options: WorkOrderOptions = {}) {
   if (afterSalesTotal < 0)
     throw new BusinessError("Costo post-vendita non valido.");
   return {
+    inspectionTotal,
+    repairGross,
     gross,
     discount,
     net,
@@ -122,14 +129,8 @@ export const transitions: Record<OrderStatus, OrderStatus[]> = {
     "PARTS_MISSING",
     "CANCELLED",
   ],
-  DIAGNOSING: [
-    "WAITING_APPROVAL",
-    "REPAIRING",
-    "PARTS_MISSING",
-    "READY",
-    "CANCELLED",
-  ],
-  WAITING_APPROVAL: ["DIAGNOSING", "REPAIRING", "PARTS_MISSING", "CANCELLED"],
+  DIAGNOSING: ["CANCELLED"],
+  WAITING_APPROVAL: ["CANCELLED"],
   REPAIRING: ["WAITING_APPROVAL", "PARTS_MISSING", "READY", "CANCELLED"],
   PARTS_MISSING: [
     "DIAGNOSING",

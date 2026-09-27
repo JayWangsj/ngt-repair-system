@@ -61,6 +61,19 @@ describe("integer money", () => {
       }),
     ).toBe(0);
   });
+  it("keeps inspection fees separate from repair items and applies the shared IVA rule", () => {
+    expect(
+      settlement([], { inspectionFee: "30", includeVat: false }),
+    ).toMatchObject({
+      inspectionTotal: 3000,
+      repairGross: 0,
+      vat: 660,
+      due: 3000,
+    });
+    expect(settlement([], { inspectionFee: "30", includeVat: true }).due).toBe(
+      3660,
+    );
+  });
 });
 
 describe("diagnostic intake", () => {
@@ -158,6 +171,10 @@ describe("status and permissions", () => {
     expect(() => assertTransition("REPAIRING", "READY")).not.toThrow();
     expect(() => assertTransition("REPAIRING", "PARTS_MISSING")).not.toThrow();
     expect(() => assertTransition("PARTS_MISSING", "REPAIRING")).not.toThrow();
+    expect(() => assertTransition("DIAGNOSING", "REPAIRING")).toThrow();
+    expect(() => assertTransition("DIAGNOSING", "READY")).toThrow();
+    expect(() => assertTransition("DIAGNOSING", "COMPLETED")).toThrow();
+    expect(() => assertTransition("DIAGNOSING", "CANCELLED")).not.toThrow();
   });
   it("requires a zero balance for delivery", () => {
     expect(() => assertDelivery(100)).toThrow();

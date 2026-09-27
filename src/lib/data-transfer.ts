@@ -14,6 +14,7 @@ import type {
   PriceRule,
   StatusHistory,
   WorkOrder,
+  WorkOrderFault,
   WorkOrderItem,
 } from "@prisma/client";
 import { Prisma } from "@prisma/client";
@@ -22,7 +23,7 @@ import { BusinessError, type Actor } from "./domain";
 import { normalizeBrand, normalizeModel } from "./catalog";
 
 export const BACKUP_FORMAT = "ngt-repair-data";
-export const BACKUP_VERSION = 5;
+export const BACKUP_VERSION = 6;
 
 type JsonRow<T> = {
   [K in keyof T]: T[K] extends Date
@@ -52,6 +53,7 @@ type BackupData = {
   retailSaleItems: JsonRow<RetailSaleItem>[];
   paymentAllocations: JsonRow<PaymentAllocation>[];
   workOrderProducts: JsonRow<WorkOrderProduct>[];
+  workOrderFaults: JsonRow<WorkOrderFault>[];
 };
 export type BackupFile = {
   format: typeof BACKUP_FORMAT;
@@ -100,13 +102,16 @@ function ensureBackup(value: unknown): BackupFile {
     (candidate.data as Partial<BackupData>).paymentAllocations ?? [];
   const workOrderProducts =
     (candidate.data as Partial<BackupData>).workOrderProducts ?? [];
+  const workOrderFaults =
+    (candidate.data as Partial<BackupData>).workOrderFaults ?? [];
   if (
     !Array.isArray(products) ||
     !Array.isArray(inventoryMovements) ||
     !Array.isArray(retailSales) ||
     !Array.isArray(retailSaleItems) ||
     !Array.isArray(paymentAllocations) ||
-    !Array.isArray(workOrderProducts)
+    !Array.isArray(workOrderProducts) ||
+    !Array.isArray(workOrderFaults)
   )
     throw new BusinessError("File di backup incompleto.");
   return {
@@ -119,6 +124,7 @@ function ensureBackup(value: unknown): BackupFile {
       retailSaleItems,
       paymentAllocations,
       workOrderProducts,
+      workOrderFaults,
     },
   };
 }
@@ -148,6 +154,7 @@ export async function exportBusinessData(): Promise<BackupFile> {
     retailSaleItems,
     paymentAllocations,
     workOrderProducts,
+    workOrderFaults,
   ] = await Promise.all([
     db.customer.findMany({ orderBy: { createdAt: "asc" } }),
     db.customerPhone.findMany({ orderBy: { phone: "asc" } }),
@@ -172,6 +179,7 @@ export async function exportBusinessData(): Promise<BackupFile> {
     db.retailSaleItem.findMany({ orderBy: { id: "asc" } }),
     db.paymentAllocation.findMany({ orderBy: { id: "asc" } }),
     db.workOrderProduct.findMany({ orderBy: { id: "asc" } }),
+    db.workOrderFault.findMany({ orderBy: { id: "asc" } }),
   ]);
   const data = JSON.parse(
     JSON.stringify({
@@ -191,6 +199,7 @@ export async function exportBusinessData(): Promise<BackupFile> {
       retailSaleItems,
       paymentAllocations,
       workOrderProducts,
+      workOrderFaults,
     }),
   ) as BackupData;
   return {
@@ -213,6 +222,7 @@ export async function clearBusinessData(actor: Actor) {
     await tx.inventoryMovement.deleteMany();
     await tx.product.deleteMany();
     await tx.statusHistory.deleteMany();
+    await tx.workOrderFault.deleteMany();
     await tx.workOrderItem.deleteMany();
     await tx.workOrder.deleteMany();
     await tx.device.deleteMany();
@@ -246,6 +256,7 @@ export async function importBusinessData(
     const saleIds = new Map<string, string>();
     const paymentIds = new Map<string, string>();
     const entityIds = new Map<string, string>();
+    const faultIds = new Map<string, string>();
     const orderSourceIds = new Set(backup.data.orders.map((order) => order.id));
 
     for (const source of backup.data.products) {
@@ -524,6 +535,10 @@ export async function importBusinessData(
           status: source.status,
           orderDiscount: source.orderDiscount,
           includeVat: source.includeVat,
+          inspectionMode: source.inspectionMode ?? false,
+          inspectionFee: source.inspectionFee ?? "0",
+          inspectionResult: source.inspectionResult ?? "",
+          faultNote: source.faultNote ?? "",
           fault: source.fault,
           appearance: source.appearance,
           accessories: source.accessories,
@@ -722,6 +737,30 @@ export async function importBusinessData(
       if (exists) skipped++;
       else {
         await tx.faultOption.create({ data: source });
+        imported++;
+      }
+      faultIds.set(source.id, exists?.id ?? source.id);
+    }
+    for (const source of backup.data.workOrderFaults) {
+      const orderId = orderIds.get(source.orderId);
+      if (!orderId) {
+        skipped++;
+        continue;
+      }
+      const exists = await tx.workOrderFault.findUnique({
+        where: { id: source.id },
+      });
+      if (exists) skipped++;
+      else {
+        await tx.workOrderFault.create({
+          data: {
+            ...source,
+            orderId,
+            catalogId: source.catalogId
+              ? (faultIds.get(source.catalogId) ?? null)
+              : null,
+          },
+        });
         imported++;
       }
     }

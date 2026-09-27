@@ -5,8 +5,16 @@ import { Download, Upload, Trash2 } from "lucide-react";
 import { clearDataAction } from "@/app/actions";
 import { LanguageSwitch, useMessages } from "./language";
 import { Button } from "./ui/button";
+import {
+  FaultCatalogManager,
+  type FaultCatalogItem,
+} from "./fault-catalog-manager";
 
-export function SettingsTools() {
+export function SettingsTools({
+  faultOptions,
+}: {
+  faultOptions: FaultCatalogItem[];
+}) {
   const it = useMessages();
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
@@ -122,6 +130,14 @@ export function SettingsTools() {
       <section className="panel padded settings-card">
         <h2>{it.language}</h2>
         <LanguageSwitch />
+      </section>
+      <section className="panel padded settings-card">
+        <h2>{it.faultCatalog}</h2>
+        <p>{it.faultCatalogDescription}</p>
+        <FaultCatalogManager
+          items={faultOptions}
+          triggerLabel={it.manageFaults}
+        />
       </section>
       <section className="panel padded settings-card">
         <h2>{it.dataManagement}</h2>

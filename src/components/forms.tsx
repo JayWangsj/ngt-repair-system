@@ -298,21 +298,49 @@ export function ItemsEditor({
         return (
           <div className="quote-item" key={index}>
             <div className="form-grid">
-              <EditableSelect
-                label={`${it.project} ${index + 1}`}
-                value={item.project}
-                options={deviceProjects(rules, device)}
-                required
-                onChange={(project) => {
-                  const found = matchRule(rules, device, project);
-                  update(index, {
-                    project,
-                    final: found?.rule.suggested ?? "",
-                    discount: "0",
-                    saveRule: false,
-                  });
-                }}
-              />
+              <Field label={`${it.project} ${index + 1}`}>
+                <SearchableCombobox
+                  value={item.project}
+                  ariaLabel={`${it.project} ${index + 1}`}
+                  placeholder={it.afterSales.projectPlaceholder}
+                  searchPlaceholder={it.afterSales.projectSearch}
+                  emptyText={it.afterSales.noProjectMatches}
+                  customLabel={it.afterSales.addCustomProject}
+                  groups={[
+                    {
+                      label: it.afterSales.otherProjects,
+                      options: deviceProjects(rules, device).map((project) => {
+                        const found = matchRule(rules, device, project);
+                        return {
+                          value: project,
+                          label: project,
+                          trailing: found
+                            ? money(cents(found.rule.suggested))
+                            : undefined,
+                          secondary: found?.rule.notes || undefined,
+                        };
+                      }),
+                    },
+                  ]}
+                  onCustom={(project) =>
+                    update(index, {
+                      project,
+                      final: "",
+                      discount: "0",
+                      saveRule: false,
+                    })
+                  }
+                  onChange={(project) => {
+                    const found = matchRule(rules, device, project);
+                    update(index, {
+                      project,
+                      final: found?.rule.suggested ?? "",
+                      discount: "0",
+                      saveRule: false,
+                    });
+                  }}
+                />
+              </Field>
               <Field label={`${it.final} ${index + 1}`}>
                 <input
                   inputMode="decimal"
@@ -1019,15 +1047,17 @@ export function QuoteSummary({
   items,
   orderDiscount,
   includeVat,
+  inspectionFee = "0",
 }: {
   items: { final: string; discount?: string }[];
   orderDiscount: string;
   includeVat: boolean;
+  inspectionFee?: string;
 }) {
   const it = useMessages();
   let q;
   try {
-    q = settlement(items, { orderDiscount, includeVat });
+    q = settlement(items, { orderDiscount, includeVat, inspectionFee });
   } catch {
     return <p className="help">{it.validationError}</p>;
   }
@@ -1323,27 +1353,95 @@ export function EditOrderForm({
   id: string;
   values: {
     fault: string;
+    faultNote: string;
+    standardFaults: string[];
+    customFaults: string[];
     notes: string;
     accessories: string;
     dueDate: string | null;
   };
 }) {
   const it = useMessages();
+  const [customFaults, setCustomFaults] = useState(values.customFaults);
+  const [customFaultsTouched, setCustomFaultsTouched] = useState(false);
+  const structured =
+    values.standardFaults.length > 0 || values.customFaults.length > 0;
   return (
     <ActionForm
       submit={it.save}
       action={(data) =>
         updateOrderAction(id, {
           ...Object.fromEntries(data),
+          customFaults: customFaultsTouched ? customFaults : undefined,
           accessories: values.accessories,
         })
       }
     >
+      {structured ? (
+        <>
+          {values.standardFaults.length > 0 && (
+            <div className="fault-chip-grid">
+              {values.standardFaults.map((fault) => (
+                <span className="fault-choice is-selected" key={fault}>
+                  <span>{fault}</span>
+                </span>
+              ))}
+            </div>
+          )}
+          {customFaults.map((fault, index) => (
+            <div className="phone-row" key={index}>
+              <Field label={`${it.otherFault} ${index + 1}`}>
+                <textarea
+                  required
+                  maxLength={200}
+                  value={fault}
+                  onChange={(event) => {
+                    setCustomFaults((current) =>
+                      current.map((value, i) =>
+                        i === index ? event.target.value : value,
+                      ),
+                    );
+                    setCustomFaultsTouched(true);
+                  }}
+                />
+              </Field>
+              <RecordIcon
+                kind="delete"
+                label={`${it.remove} ${fault}`}
+                onClick={() => {
+                  setCustomFaults((current) =>
+                    current.filter((_, i) => i !== index),
+                  );
+                  setCustomFaultsTouched(true);
+                }}
+              />
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setCustomFaults((current) => [...current, ""]);
+              setCustomFaultsTouched(true);
+            }}
+          >
+            <Plus size={15} />
+            {it.otherFault}
+          </Button>
+        </>
+      ) : null}
       <Field label={it.fault}>
         <textarea
           name="fault"
           required
           defaultValue={values.fault}
+          maxLength={2000}
+        />
+      </Field>
+      <Field label={it.faultNotes}>
+        <textarea
+          name="faultNote"
+          defaultValue={values.faultNote}
           maxLength={2000}
         />
       </Field>
@@ -1774,6 +1872,7 @@ export function EditQuoteForm({
   initial,
   initialDiscount = "0",
   initialVat = false,
+  inspectionFee = "0",
   rules,
   device,
 }: {
@@ -1781,6 +1880,7 @@ export function EditQuoteForm({
   initial: ItemView[];
   initialDiscount?: string;
   initialVat?: boolean;
+  inspectionFee?: string;
   rules: RuleView[];
   device: { category: string; brand: string; series: string; model: string };
   owner: boolean;
@@ -1837,6 +1937,7 @@ export function EditQuoteForm({
         items={items}
         orderDiscount={orderDiscount}
         includeVat={includeVat}
+        inspectionFee={inspectionFee}
       />
     </ActionForm>
   );

@@ -75,6 +75,10 @@ export async function quoteAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.replaceQuote(actor, id, input));
 }
+export async function completeInspectionAction(id: string, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.completeInspection(actor, id, input));
+}
 export async function confirmAction(id: string, note: string) {
   const actor = await requireActor();
   return execute(() => service.confirmQuote(actor, id, note));
@@ -218,6 +222,18 @@ export async function deleteRulesAction(ids: string[]) {
 export async function hideFaultAction(category: string, name: string) {
   const actor = await requireActor();
   return execute(() => service.hideFault(actor, category, name));
+}
+export async function saveFaultAction(id: string | null, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.saveFault(actor, id, input));
+}
+export async function deleteFaultAction(id: string) {
+  const actor = await requireActor();
+  return execute(() => service.deleteFault(actor, id));
+}
+export async function reorderFaultsAction(category: string, ids: string[]) {
+  const actor = await requireActor();
+  return execute(() => service.reorderFaults(actor, category, ids));
 }
 export async function restoreFaultAction(category: string, name: string) {
   const actor = await requireActor();

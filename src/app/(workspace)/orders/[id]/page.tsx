@@ -19,6 +19,7 @@ import { Badge, PageHeader } from "@/components/common";
 import {
   EditOrderForm,
   EditQuoteForm,
+  ConfirmForm,
   PaymentForm,
   QuoteSummary,
   WarrantyForm,
@@ -34,6 +35,7 @@ import {
   OrderDetailCard,
 } from "@/components/order-detail-ui";
 import { DetailStatusControl } from "@/components/order-list-controls";
+import { CompleteInspectionButton } from "@/components/inspection-quote";
 
 type TimelineEvent = {
   id: string;
@@ -64,7 +66,14 @@ export default async function Detail({
       where: {
         entityId: id,
         action: {
-          in: ["ORDER_CREATED", "AFTER_SALES_OPENED", "REFUND_ISSUED"],
+          in: [
+            "ORDER_CREATED",
+            "INSPECTION_STARTED",
+            "INSPECTION_COMPLETED",
+            "QUOTE_CREATED",
+            "AFTER_SALES_OPENED",
+            "REFUND_ISSUED",
+          ],
         },
       },
       orderBy: { createdAt: "asc" },
@@ -134,6 +143,29 @@ export default async function Detail({
         id: audit.id,
         at: order.createdAt,
         title: it.actions.ORDER_CREATED,
+        actor: audit.actorName,
+      });
+    if (audit.action === "INSPECTION_STARTED")
+      events.push({
+        id: audit.id,
+        at: audit.createdAt,
+        title: it.actions.INSPECTION_STARTED,
+        actor: audit.actorName,
+        detail: `${it.diagnosticFee}: ${money(cents(String(context.fee ?? "0")))}`,
+      });
+    if (audit.action === "INSPECTION_COMPLETED")
+      events.push({
+        id: audit.id,
+        at: audit.createdAt,
+        title: it.actions.INSPECTION_COMPLETED,
+        actor: audit.actorName,
+        detail: String(context.result ?? ""),
+      });
+    if (audit.action === "QUOTE_CREATED")
+      events.push({
+        id: audit.id,
+        at: audit.createdAt,
+        title: it.actions.QUOTE_CREATED,
         actor: audit.actorName,
       });
     if (audit.action === "AFTER_SALES_OPENED") {
@@ -267,6 +299,13 @@ export default async function Detail({
                 id={id}
                 values={{
                   fault: order.fault,
+                  faultNote: order.faultNote,
+                  standardFaults: order.faults
+                    .filter((fault) => !fault.custom)
+                    .map((fault) => fault.nameSnapshot),
+                  customFaults: order.faults
+                    .filter((fault) => fault.custom)
+                    .map((fault) => fault.nameSnapshot),
                   notes: order.notes,
                   accessories: order.accessories,
                   dueDate: order.dueDate,
@@ -294,8 +333,24 @@ export default async function Detail({
               </div>
               <div>
                 <dt>{it.fault}</dt>
-                <dd>{faultLabel(order.fault, locale)}</dd>
+                <dd>
+                  {order.inspectionMode && !order.inspectionResult
+                    ? it.inspectionPending
+                    : faultLabel(order.fault, locale)}
+                </dd>
               </div>
+              {order.faultNote && (
+                <div>
+                  <dt>{it.faultNotes}</dt>
+                  <dd>{order.faultNote}</dd>
+                </div>
+              )}
+              {order.inspectionResult && (
+                <div>
+                  <dt>{it.inspectionResult}</dt>
+                  <dd>{order.inspectionResult}</dd>
+                </div>
+              )}
               <div>
                 <dt>{it.dueDate}</dt>
                 <dd>{dateOnly(order.dueDate)}</dd>
@@ -335,78 +390,142 @@ export default async function Detail({
           />
 
           <OrderDetailCard
-            title={it.quote}
-            locked={originalLocked}
+            title={
+              order.status === "DIAGNOSING" ? it.inspectionAndQuote : it.quote
+            }
+            locked={originalLocked || order.status === "DIAGNOSING"}
             testId="quote-card"
             edit={
-              <EditQuoteForm
-                key={order.updatedAt.toISOString()}
-                id={id}
-                initialDiscount={order.orderDiscount.toString()}
-                initialVat={order.includeVat}
-                initial={order.items.map((item) => ({
-                  project: item.project,
-                  final: item.final.toString(),
-                  discount: item.discount.toString(),
-                  adjustmentReason: item.adjustmentReason,
-                }))}
-                device={{
-                  category: order.device.category,
-                  brand: order.device.brand,
-                  series: order.device.series,
-                  model: order.device.model,
-                }}
-                owner={actor.role === "OWNER"}
-                rules={rules.map((rule) => ({
-                  ...rule,
-                  suggested: rule.suggested.toString(),
-                  cost: undefined,
-                  updatedAt: undefined,
-                }))}
-              />
+              order.status !== "DIAGNOSING" ? (
+                <EditQuoteForm
+                  key={order.updatedAt.toISOString()}
+                  id={id}
+                  initialDiscount={order.orderDiscount.toString()}
+                  initialVat={order.includeVat}
+                  inspectionFee={order.inspectionFee.toString()}
+                  initial={order.items.map((item) => ({
+                    project: item.project,
+                    final: item.final.toString(),
+                    discount: item.discount.toString(),
+                    adjustmentReason: item.adjustmentReason,
+                  }))}
+                  device={{
+                    category: order.device.category,
+                    brand: order.device.brand,
+                    series: order.device.series,
+                    model: order.device.model,
+                  }}
+                  owner={actor.role === "OWNER"}
+                  rules={rules.map((rule) => ({
+                    ...rule,
+                    suggested: rule.suggested.toString(),
+                    cost: undefined,
+                    updatedAt: undefined,
+                  }))}
+                />
+              ) : undefined
             }
           >
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{it.project}</th>
-                    <th>{it.suggested}</th>
-                    <th>{it.final}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {order.items.map((item) => (
-                    <tr key={item.id}>
-                      <td>
-                        <strong>{item.project}</strong>
-                        <small>
-                          {it.levels[item.matchLevel as keyof typeof it.levels]}{" "}
-                          · {item.minutes} min
-                        </small>
-                        {item.adjustmentReason && (
-                          <small>{item.adjustmentReason}</small>
-                        )}
-                      </td>
-                      <td>
-                        {item.suggested === null
-                          ? "—"
-                          : money(cents(item.suggested))}
-                      </td>
-                      <td>{money(cents(item.final))}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <QuoteSummary
-              items={order.items.map((item) => ({
-                final: item.final.toString(),
-                discount: item.discount.toString(),
-              }))}
-              orderDiscount={order.orderDiscount.toString()}
-              includeVat={order.includeVat}
-            />
+            {order.status === "DIAGNOSING" ? (
+              <div className="inspection-detail">
+                <div className="inspection-banner">
+                  <span aria-hidden="true">⌕</span>
+                  <div>
+                    <strong>{it.inspectionInProgress}</strong>
+                    <p>{it.inspectionDetailHelp}</p>
+                  </div>
+                </div>
+                <dl className="quote-summary">
+                  <div>
+                    <dt>{it.inspectionFeeNet}</dt>
+                    <dd>{money(cents(order.inspectionFee))}</dd>
+                  </div>
+                  <div>
+                    <dt>{it.vatAmount}</dt>
+                    <dd>{money(totals.vat)}</dd>
+                  </div>
+                  <div>
+                    <dt>{it.includeVat}</dt>
+                    <dd>{order.includeVat ? it.yes : it.no}</dd>
+                  </div>
+                  <div>
+                    <dt>{it.total}</dt>
+                    <dd>{money(totals.due)}</dd>
+                  </div>
+                </dl>
+                <CompleteInspectionButton
+                  orderId={id}
+                  inspectionFee={order.inspectionFee.toString()}
+                  device={{
+                    category: order.device.category,
+                    brand: order.device.brand,
+                    series: order.device.series,
+                    model: order.device.model,
+                  }}
+                  rules={rules.map((rule) => ({
+                    ...rule,
+                    suggested: rule.suggested.toString(),
+                    cost: undefined,
+                    updatedAt: undefined,
+                  }))}
+                />
+              </div>
+            ) : (
+              <>
+                {order.inspectionMode && (
+                  <p className="inspection-fee-line">
+                    <span>{it.inspectionFeeNet}</span>
+                    <strong>{money(cents(order.inspectionFee))}</strong>
+                  </p>
+                )}
+                <div className="table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>{it.project}</th>
+                        <th>{it.suggested}</th>
+                        <th>{it.final}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {order.items.map((item) => (
+                        <tr key={item.id}>
+                          <td>
+                            <strong>{item.project}</strong>
+                            <small>
+                              {
+                                it.levels[
+                                  item.matchLevel as keyof typeof it.levels
+                                ]
+                              }{" "}
+                              · {item.minutes} min
+                            </small>
+                            {item.adjustmentReason && (
+                              <small>{item.adjustmentReason}</small>
+                            )}
+                          </td>
+                          <td>
+                            {item.suggested === null
+                              ? "—"
+                              : money(cents(item.suggested))}
+                          </td>
+                          <td>{money(cents(item.final))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <QuoteSummary
+                  items={order.items.map((item) => ({
+                    final: item.final.toString(),
+                    discount: item.discount.toString(),
+                  }))}
+                  orderDiscount={order.orderDiscount.toString()}
+                  includeVat={order.includeVat}
+                  inspectionFee={order.inspectionFee.toString()}
+                />
+              </>
+            )}
           </OrderDetailCard>
 
           <OrderDetailCard
@@ -489,6 +608,11 @@ export default async function Detail({
               <span>
                 {it.orderProducts.repairAmount}: {money(repairAmount)}
               </span>
+              {totals.inspectionTotal > 0 && (
+                <span>
+                  {it.inspectionFeeLabel}: {money(totals.inspectionTotal)}
+                </span>
+              )}
               <span>
                 {it.orderProducts.retailAddons}: {money(productAmount)}
               </span>
@@ -516,6 +640,14 @@ export default async function Detail({
                 remaining={remaining}
                 customerName={order.customerName || order.device.customer.name}
               />
+            </section>
+          )}
+
+          {order.status === "WAITING_APPROVAL" && (
+            <section className="panel padded status-operation-card">
+              <h2>{it.confirm}</h2>
+              <p className="muted">{it.customerApprovalHelp}</p>
+              <ConfirmForm id={id} />
             </section>
           )}
 

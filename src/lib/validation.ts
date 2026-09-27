@@ -61,6 +61,12 @@ export const orderInput = z
       ])
       .default("PHONE"),
     faults: z.array(short).max(30).default([]),
+    standardFaultIds: z.array(z.string().min(1).max(100)).max(30).default([]),
+    customFaults: z
+      .array(z.string().trim().min(1).max(200))
+      .max(30)
+      .default([]),
+    inspectionMode: z.boolean().default(false),
     orderDiscount: amountInput.default("0"),
     includeVat: z.boolean().default(false),
     paymentKind: z.enum(["DEPOSIT", "BALANCE"]).default("DEPOSIT"),
@@ -72,6 +78,7 @@ export const orderInput = z
     appearance: text,
     accessories: text,
     fault: z.string().trim().max(2000).default(""),
+    faultNote: z.string().trim().max(2000).default(""),
     notes: text,
     dueDate: dueDateInput,
     confirmed: z.boolean().default(false),
@@ -82,16 +89,42 @@ export const orderInput = z
     method: z.enum(["CASH", "CARD", "OTHER"]).default("CASH"),
   })
   .superRefine((value, ctx) => {
-    const diagnostic = isDiagnosticFault([...value.faults, value.fault]);
+    const diagnostic =
+      value.inspectionMode || isDiagnosticFault([...value.faults, value.fault]);
+    if (
+      !diagnostic &&
+      value.standardFaultIds.length === 0 &&
+      value.customFaults.length === 0 &&
+      value.faults.length === 0 &&
+      !value.fault
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["standardFaultIds"],
+        message: "Seleziona almeno un problema o attiva la diagnosi.",
+      });
     if (!diagnostic && value.items.length === 0)
       ctx.addIssue({
         code: "custom",
         path: ["items"],
         message: "Aggiungi almeno un intervento.",
       });
+    if (diagnostic && centsSafe(value.diagnosticFee) <= 0)
+      ctx.addIssue({
+        code: "custom",
+        path: ["diagnosticFee"],
+        message: "Inserisci un costo diagnosi valido.",
+      });
   });
+
+function centsSafe(value: string) {
+  const normalized = Number(value.replace(",", "."));
+  return Number.isFinite(normalized) ? Math.round(normalized * 100) : -1;
+}
 export const editInput = z.object({
   fault: z.string().trim().min(1).max(2000),
+  faultNote: text,
+  customFaults: z.array(z.string().trim().min(1).max(200)).max(30).optional(),
   notes: text,
   appearance: text,
   accessories: text,
@@ -243,6 +276,27 @@ export const quoteInput = z.object({
   items: z.array(itemInput).min(1).max(30),
   orderDiscount: amountInput.default("0"),
   includeVat: z.boolean().default(false),
+});
+
+export const inspectionQuoteInput = quoteInput.extend({
+  inspectionResult: z.string().trim().min(1).max(2000),
+  dueDate: dueDateInput,
+});
+
+export const faultCatalogInput = z.object({
+  category: z.enum([
+    "PHONE",
+    "TABLET",
+    "LAPTOP",
+    "DESKTOP",
+    "CONSOLE",
+    "SMARTWATCH",
+    "SMARTBAND",
+    "OTHER",
+  ]),
+  name: short,
+  note: text,
+  hidden: z.boolean().default(false),
 });
 
 export const customerInput = z

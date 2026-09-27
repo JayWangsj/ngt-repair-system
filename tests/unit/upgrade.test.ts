@@ -9,6 +9,8 @@ describe("discounts and fixed IVA", () => {
   ];
   it("combines discounts once and toggles only IVA receivable", () => {
     expect(settlement(items, { orderDiscount: "5" })).toEqual({
+      inspectionTotal: 0,
+      repairGross: 15000,
       gross: 15000,
       discount: 1500,
       net: 13500,

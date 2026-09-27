@@ -15,6 +15,7 @@ async function main() {
   await db.product.deleteMany();
   await db.inventoryCategory.deleteMany();
   await db.statusHistory.deleteMany();
+  await db.workOrderFault.deleteMany();
   await db.workOrderItem.deleteMany();
   await db.workOrder.deleteMany();
   await db.device.deleteMany();
@@ -22,6 +23,45 @@ async function main() {
   await db.priceRule.deleteMany();
   await db.faultOption.deleteMany();
   await db.user.deleteMany();
+  const customer = await db.customer.create({
+    data: { name: "Cliente Playwright", phone: "+393331234567" },
+  });
+  await db.device.create({
+    data: {
+      customerId: customer.id,
+      category: "PHONE",
+      brand: "Apple",
+      model: "iPhone 13",
+    },
+  });
+  await db.faultOption.createMany({
+    data: [
+      {
+        category: "PHONE",
+        name: "Display rotto",
+        key: "display rotto",
+        sortOrder: 0,
+      },
+      {
+        category: "PHONE",
+        name: "Non si accende",
+        key: "non si accende",
+        sortOrder: 1,
+      },
+      {
+        category: "PHONE",
+        name: "Danno da liquido",
+        key: "danno da liquido",
+        sortOrder: 2,
+      },
+      {
+        category: "PHONE",
+        name: "Problema di ricarica",
+        key: "problema di ricarica",
+        sortOrder: 3,
+      },
+    ],
+  });
   const passwordHash = await hash("Test-Only-Password-2026", 12);
   await db.user.createMany({
     data: [

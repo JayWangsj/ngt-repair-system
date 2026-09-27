@@ -112,7 +112,9 @@ export async function OrderTable({
               customerName: order.device.customer.name,
               brand: order.device.brand,
               model: order.device.model,
-              projects: order.items.map((item) => item.project).join(", "),
+              projects: order.inspectionMode
+                ? it.inspectionPending
+                : order.items.map((item) => item.project).join(", "),
               status: order.status,
               dueDate: order.dueDate ?? "",
               overdue: isOverdue(order),

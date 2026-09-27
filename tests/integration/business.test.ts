@@ -11,6 +11,9 @@ import {
   deletePriceRules,
   hideFault,
   restoreFault,
+  saveFault,
+  deleteFault,
+  reorderFaults,
   addPayment,
   addWorkOrderProduct,
   checkoutWorkOrder,
@@ -21,6 +24,7 @@ import {
   updateProduct,
   deleteProducts,
   confirmQuote,
+  completeInspection,
   createOrder,
   createUser,
   orderInclude,
@@ -402,7 +406,8 @@ describe("PostgreSQL workflow", () => {
     const order = await createOrder(
       staff,
       input({
-        faults: ["Da diagnosticare"],
+        inspectionMode: true,
+        faults: [],
         fault: "",
         items: [],
         diagnosticFee: "12.50",
@@ -414,14 +419,32 @@ describe("PostgreSQL workflow", () => {
       include: { items: true },
     });
     expect(saved.status).toBe("DIAGNOSING");
-    expect(saved.items[0]).toMatchObject({
-      project: "Diagnosi",
-      matchLevel: "DIAGNOSTIC",
-    });
-    expect(saved.items[0].final.toString()).toBe("12.5");
+    expect(saved.inspectionMode).toBe(true);
+    expect(saved.inspectionFee.toString()).toBe("12.5");
+    expect(saved.items).toHaveLength(0);
     await expect(
       changeStatus(staff, order.id, { status: "REPAIRING" }),
-    ).rejects.toThrow("interventi");
+    ).rejects.toThrow("Cambio di stato");
+    await completeInspection(staff, order.id, {
+      inspectionResult: "Display assembly damaged",
+      items: [{ project: "Display", final: "100", adjustmentReason: "" }],
+      orderDiscount: "0",
+      includeVat: false,
+      dueDate: "2026-10-01",
+    });
+    const quoted = await db.workOrder.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { items: true },
+    });
+    expect(quoted.status).toBe("WAITING_APPROVAL");
+    expect(quoted.inspectionFee.toString()).toBe("12.5");
+    expect(quoted.inspectionResult).toBe("Display assembly damaged");
+    expect(quoted.items).toHaveLength(1);
+    await confirmQuote(staff, order.id, "Confermato per telefono");
+    expect(
+      (await db.workOrder.findUniqueOrThrow({ where: { id: order.id } }))
+        .status,
+    ).toBe("REPAIRING");
   });
   it("uses optional quote parts to drive missing-parts status", async () => {
     const part = await createProduct(owner, {
@@ -958,6 +981,49 @@ describe("1.2 customer and catalog management", () => {
       (await db.workOrder.findUniqueOrThrow({ where: { id: order.id } })).fault,
     ).toBe("Display rotto");
   });
+  it("manages ordered fault catalog entries without rewriting historical snapshots", async () => {
+    const first = await saveFault(owner, null, {
+      category: "PHONE",
+      name: "Schermo intermittente",
+      note: "",
+      hidden: false,
+    });
+    const second = await saveFault(owner, null, {
+      category: "PHONE",
+      name: "Audio debole",
+      note: "",
+      hidden: false,
+    });
+    const order = await createOrder(
+      owner,
+      input({
+        fault: "",
+        faults: [],
+        standardFaultIds: [first.id],
+        customFaults: ["Il difetto compare solo a caldo"],
+      }),
+    );
+    await saveFault(owner, first.id, {
+      category: "PHONE",
+      name: "Schermo lampeggiante",
+      note: "",
+      hidden: true,
+    });
+    await reorderFaults(owner, "PHONE", [second.id, first.id]);
+    const snapshots = await db.workOrderFault.findMany({
+      where: { orderId: order.id },
+      orderBy: { custom: "asc" },
+    });
+    expect(snapshots.map((fault) => fault.nameSnapshot)).toEqual([
+      "Schermo intermittente",
+      "Il difetto compare solo a caldo",
+    ]);
+    await expect(deleteFault(owner, first.id)).rejects.toThrow("già usato");
+    await deleteFault(owner, second.id);
+    expect(
+      await db.faultOption.findUnique({ where: { id: second.id } }),
+    ).toBeNull();
+  });
   it("normalizes brand and model names and isolates identical quotes by device type", async () => {
     const phone = await createOrder(
       owner,
@@ -1437,7 +1503,7 @@ describe("versioned data backup and merge import", () => {
     const backup = await exportBusinessData();
     expect(backup).toMatchObject({
       format: "ngt-repair-data",
-      version: 5,
+      version: 6,
     });
     expect(backup.data.orders).toHaveLength(1);
     expect(backup.data.payments.map((payment) => payment.kind).sort()).toEqual([

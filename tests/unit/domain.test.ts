@@ -192,27 +192,27 @@ describe("Italian localization and validation", () => {
     expect(romeDay(new Date("2026-07-01T22:30:00Z"))).toBe("2026-07-02");
     expect(romeDay(new Date("2026-01-01T23:30:00Z"))).toBe("2026-01-02");
   });
-  it("starts warranty at actual delivery and clamps calendar month ends", () => {
+  it("starts warranty at actual delivery and adds exact days", () => {
     expect(
-      warrantyPeriod(new Date("2026-01-31T12:00:00Z"), 1, "2026-02-28"),
-    ).toEqual({ start: "2026-01-31", end: "2026-02-28", active: true });
-    expect(warrantyPeriod(null, 3)).toBeNull();
+      warrantyPeriod(new Date("2026-09-27T12:00:00Z"), 90, "2026-12-01"),
+    ).toEqual({ start: "2026-09-27", end: "2026-12-26", active: true });
+    expect(warrantyPeriod(null, 90)).toBeNull();
   });
   it("reports warranty progress and expiry without exceeding its bounds", () => {
     const delivery = new Date("2026-01-01T12:00:00Z");
-    expect(warrantyProgress(delivery, 1, "2026-01-16")).toMatchObject({
-      progress: 48,
-      remainingPercent: 52,
-      remainingDays: 16,
+    expect(warrantyProgress(delivery, 30, "2026-01-16")).toMatchObject({
+      progress: 50,
+      remainingPercent: 50,
+      remainingDays: 15,
       state: "ACTIVE",
     });
-    expect(warrantyProgress(delivery, 1, "2026-02-02")).toMatchObject({
+    expect(warrantyProgress(delivery, 30, "2026-02-02")).toMatchObject({
       progress: 100,
       remainingPercent: 0,
       remainingDays: 0,
       state: "EXPIRED",
     });
-    expect(warrantyProgress(null, 3, "2026-01-16")).toBeNull();
+    expect(warrantyProgress(null, 90, "2026-01-16")).toBeNull();
   });
   it("excludes closed orders from overdue", () => {
     expect(

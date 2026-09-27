@@ -786,9 +786,11 @@ td small {
   align-items: end;
   gap: 12px;
   margin: 26px 0 20px;
+  flex-wrap: wrap;
 }
 .grow {
-  flex: 1;
+  flex: 1 1 360px;
+  min-width: 260px;
 }
 .filters label {
   margin: 0;
@@ -796,6 +798,18 @@ td small {
 .filters input,
 .filters select {
   min-width: 130px;
+}
+.filters > label:not(.grow) {
+  flex: 0 0 150px;
+  min-width: 130px;
+  white-space: nowrap;
+}
+.filters > label:nth-of-type(4) {
+  flex-basis: 155px;
+}
+.filters > .button {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 .filters input {
   width: 100%;
@@ -930,6 +944,12 @@ textarea {
 }
 .quote-item label {
   margin-bottom: 10px;
+}
+.quote-item > .form-grid {
+  grid-template-columns: minmax(260px, 1fr) minmax(120px, 145px);
+}
+.quote-required-part {
+  max-width: 620px;
 }
 .quote-hint {
   font-size: 11px;
@@ -2187,12 +2207,24 @@ details[open] > summary {
 }
 .order-step-card {
   overflow: visible;
+  transform: translateY(0) scale(1);
   transition:
     transform var(--motion-base) var(--ease-ui),
-    box-shadow var(--motion-base) var(--ease-ui);
+    box-shadow var(--motion-base) var(--ease-ui),
+    border-color var(--motion-base) var(--ease-ui),
+    background var(--motion-base) var(--ease-ui);
 }
-.order-step-card:hover {
-  transform: scale(1.003) translateY(-1px);
+.order-step-card:hover:not(.is-selected) {
+  transform: translateY(-1px) scale(1.003);
+  border-color: #e7c95a;
+  box-shadow: 0 7px 18px #8060000c;
+  background: #fffefb;
+}
+.order-step-card.is-selected {
+  transform: translateY(0) scale(1.002);
+  border-color: #ead889;
+  box-shadow: inset 2px 0 #f4c62d;
+  background: #fffefb;
 }
 .order-step-heading {
   width: 100%;
@@ -2230,15 +2262,51 @@ details[open] > summary {
 .order-step-state {
   font-size: 0.76rem;
   color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #f1f1ed;
 }
-.order-step-card.is-complete .order-step-state {
+.order-step-card.is-in-progress .order-step-state {
+  color: #806000;
+  background: #fff4c7;
+}
+.order-step-card.is-completed .order-step-state {
   color: #397650;
+  background: #e9f5ec;
+}
+.order-step-chevron {
+  transition: transform var(--motion-base) var(--ease-ui);
+}
+.order-step-card.is-selected .order-step-chevron {
+  transform: rotate(180deg);
+}
+.order-step-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    grid-template-rows var(--motion-slow) var(--ease-ui),
+    opacity var(--motion-base) var(--ease-ui),
+    transform var(--motion-base) var(--ease-ui);
+}
+.order-step-collapse.is-expanded {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: translateY(0);
 }
 .order-step-body {
   border-top: 1px solid var(--line);
   padding: 20px;
   display: grid;
   gap: 16px;
+  min-height: 0;
+  overflow: hidden;
+  visibility: hidden;
+}
+.order-step-collapse.is-expanded .order-step-body {
+  overflow: visible;
+  visibility: visible;
 }
 .selected-customer-summary {
   display: grid;
@@ -2462,7 +2530,7 @@ details[open] > summary {
 }
 .fault-manager-toolbar {
   display: grid;
-  grid-template-columns: 170px minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(180px, 1fr) auto;
   align-items: end;
 }
 .fault-search {
@@ -2487,7 +2555,7 @@ details[open] > summary {
 }
 .fault-manager-row {
   display: grid;
-  grid-template-columns: auto minmax(150px, 1fr) 55px 60px minmax(230px, auto);
+  grid-template-columns: auto minmax(150px, 1fr) auto minmax(100px, auto);
   gap: 10px;
   align-items: center;
   padding: 9px 11px;
@@ -2502,6 +2570,40 @@ details[open] > summary {
   justify-content: flex-end;
   align-items: center;
   gap: 4px;
+}
+.fault-enabled-switch {
+  margin: 0;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.fault-enabled-switch input {
+  width: 32px;
+  min-height: 18px;
+  height: 18px;
+  appearance: none;
+  border-radius: 999px;
+  background: #d9ddd9;
+  transition: background var(--motion-base) var(--ease-ui);
+}
+.fault-enabled-switch input::before {
+  display: block;
+  width: 14px;
+  height: 14px;
+  margin: 2px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 1px 3px #0002;
+  content: "";
+  transition: transform var(--motion-base) var(--ease-ui);
+}
+.fault-enabled-switch input:checked {
+  background: #d7b52b;
+}
+.fault-enabled-switch input:checked::before {
+  transform: translateX(14px);
 }
 .inspection-detail {
   display: grid;
@@ -2577,7 +2679,9 @@ details[open] > summary {
 }
 @media (prefers-reduced-motion: reduce) {
   .new-order-back,
-  .order-step-card {
+  .order-step-card,
+  .order-step-collapse,
+  .order-step-chevron {
     transition: none;
   }
   .new-order-back:hover,

@@ -78,6 +78,7 @@ export function SelectDropdown({
   emptyText = "",
   customLabel,
   onCustom,
+  onCommit,
   clearable = false,
   loading = false,
   className = "",
@@ -95,6 +96,7 @@ export function SelectDropdown({
   emptyText?: string;
   customLabel?: string;
   onCustom?: (query: string) => void;
+  onCommit?: (query: string) => void;
   clearable?: boolean;
   loading?: boolean;
   className?: string;
@@ -131,6 +133,7 @@ export function SelectDropdown({
 
   const close = useCallback(
     ({ focus = false }: { focus?: boolean } = {}) => {
+      if (searchable && query.trim()) onCommit?.(query.trim());
       setOpen(false);
       setQuery("");
       setActive(0);
@@ -141,7 +144,7 @@ export function SelectDropdown({
           searchable ? search.current?.focus() : simpleTrigger.current?.focus(),
         );
     },
-    [searchable],
+    [onCommit, query, searchable],
   );
   function openDropdown() {
     const element = trigger.current;
@@ -172,6 +175,14 @@ export function SelectDropdown({
     else if (event.key === "Enter" && visible[active]) {
       event.preventDefault();
       choose(visible[active]);
+    } else if (
+      event.key === "Enter" &&
+      searchable &&
+      query.trim() &&
+      onCustom
+    ) {
+      event.preventDefault();
+      onCustom(query.trim());
     }
   }
   useEffect(() => {
@@ -274,7 +285,9 @@ export function SelectDropdown({
               disabled={disabled}
               onClick={(event) => {
                 event.stopPropagation();
-                onCustom(query.trim());
+                const next = query.trim();
+                close();
+                onCustom(next);
               }}
             >
               <Plus size={14} aria-hidden="true" />
@@ -407,7 +420,11 @@ export function SelectDropdown({
                   {onCustom && customLabel && (
                     <button
                       type="button"
-                      onClick={() => onCustom(query.trim())}
+                      onClick={() => {
+                        const next = query.trim();
+                        close();
+                        onCustom(next);
+                      }}
                     >
                       <Plus size={14} aria-hidden="true" />
                       {customLabel}

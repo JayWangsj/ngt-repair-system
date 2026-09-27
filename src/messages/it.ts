@@ -38,7 +38,7 @@ export const it = {
   inspectionClearConfirm:
     "Passando alla diagnosi verranno rimossi i problemi inseriti per questa scheda. Continuare?",
   setInspection: "Imposta diagnosi",
-  inspectionActive: "Diagnosi attiva",
+  inspectionActive: "✓ Diagnosi attiva",
   inspectionModeTitle: "Modalità diagnosi attiva",
   inspectionQuoteHelp:
     "Incassa il costo di diagnosi. Dopo la verifica potrai inserire risultato, interventi e preventivo definitivo.",
@@ -100,6 +100,7 @@ export const it = {
   deleteDevice: "Elimina dispositivo",
   deleteFault: "Elimina problema",
   manageFaults: "Gestisci problemi",
+  manageFaultsFor: "Problemi frequenti per nuove schede · {device}",
   finishFaultManagement: "Fine gestione",
   hiddenFaults: "Problemi eliminati",
   restoreFault: "Ripristina problema",
@@ -356,7 +357,17 @@ export const it = {
   dueDate: "Consegna prevista",
   diagnosticFee: "Costo diagnosi (€)",
   requiredPart: "Ricambio richiesto",
+  newPart: "Nuovo ricambio",
   noRequiredPart: "Nessun ricambio richiesto",
+  requiredPartOutOfStock:
+    "Il ricambio selezionato non è disponibile: la scheda verrà creata in attesa ricambi.",
+  useExistingCustomer: "Usa questo cliente",
+  saveCustomer: "Salva cliente",
+  cancelOrder: "Annulla scheda",
+  cancelOrderWarning:
+    "La lavorazione si fermerà; dovuto, incassato e saldo corrente saranno azzerati. I movimenti storici resteranno registrati.",
+  cancelReasonOptional: "Motivo dell'annullamento (facoltativo)",
+  confirmCancelOrder: "Conferma annullamento",
   created: "Accettazione",
   statusLabel: "Stato",
   details: "Dettagli",
@@ -401,6 +412,7 @@ export const it = {
   editing: "Modifica in corso",
   lockedDelivered: "Consegnato · contenuti bloccati",
   lockedRefunded: "Rimborsato · contenuti bloccati",
+  lockedCancelled: "Annullato · contenuti bloccati",
   currentStatus: "Stato attuale",
   warranty: {
     title: "Garanzia",
@@ -418,6 +430,8 @@ export const it = {
     custom: "Personalizzata",
     customMonths: "Durata personalizzata (mesi)",
     months: "mesi",
+    customDays: "Durata personalizzata (giorni)",
+    days: "giorni",
     scope: "Copertura",
     notes: "Note garanzia",
   },
@@ -550,6 +564,8 @@ export const it = {
   passwordHint: "Almeno 12 caratteri",
   enable: "Riattiva",
   disable: "Disattiva",
+  enabledState: "Attivo",
+  disabledState: "Disattivato",
   login: "Accedi al laboratorio",
   loginDescription: "Il lavoro di oggi, organizzato meglio.",
   loginError:

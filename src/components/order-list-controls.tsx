@@ -20,6 +20,8 @@ import {
 import { useMessages } from "./language";
 import { StatusDropdown } from "./status-dropdown";
 import { WorkOrderCheckoutDialog } from "./work-order-products";
+import { Field, FormDialog } from "./forms";
+import { Button } from "./ui/button";
 
 export type OrderListRow = {
   id: string;
@@ -62,6 +64,8 @@ function StatusControl({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
   const choices = transitions[row.status].filter(
     (status) => !["REWORKING", "REFUNDED"].includes(status),
   );
@@ -80,6 +84,10 @@ function StatusControl({
         onChange={(next) => {
           if (next === "COMPLETED") {
             setCheckoutOpen(true);
+            return;
+          }
+          if (next === "CANCELLED") {
+            setCancelOpen(true);
             return;
           }
           startTransition(async () => {
@@ -104,6 +112,52 @@ function StatusControl({
         remaining={row.balance}
         customerName={row.customerName}
       />
+      {cancelOpen && (
+        <FormDialog
+          title={it.cancelOrder}
+          subtitle={it.cancelOrderWarning}
+          onClose={() => setCancelOpen(false)}
+        >
+          <form
+            className="dialog-form"
+            data-form-dialog-body
+            onSubmit={(event) => {
+              event.preventDefault();
+              startTransition(async () => {
+                const result = await statusAction(row.id, {
+                  status: "CANCELLED",
+                  note: cancelReason,
+                  pickedUpBy: "",
+                });
+                if (!result.ok) return setError(result.error);
+                setCancelOpen(false);
+                setError("");
+                router.refresh();
+              });
+            }}
+          >
+            <Field label={it.cancelReasonOptional}>
+              <textarea
+                value={cancelReason}
+                onChange={(event) => setCancelReason(event.target.value)}
+                maxLength={2000}
+              />
+            </Field>
+            <div className="dialog-actions">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCancelOpen(false)}
+              >
+                {it.cancel}
+              </Button>
+              <Button variant="danger" disabled={pending}>
+                {it.confirmCancelOrder}
+              </Button>
+            </div>
+          </form>
+        </FormDialog>
+      )}
     </div>
   );
 }

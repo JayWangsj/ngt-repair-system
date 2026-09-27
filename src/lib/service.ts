@@ -55,7 +55,7 @@ function originalOrderLocked(order: {
 }
 export const orderInclude = {
   device: { include: { customer: true } },
-  items: true,
+  items: { include: { requiredProduct: true } },
   faults: { include: { catalog: true } },
   products: true,
   payments: {
@@ -89,26 +89,29 @@ async function nextDailyCode(
 
 type SnapshotItem = Awaited<ReturnType<typeof snapshots>>[number];
 async function requiredPartLines(tx: Tx, items: SnapshotItem[]) {
-  const ruleIds = items.flatMap((item) => (item.ruleId ? [item.ruleId] : []));
-  if (!ruleIds.length) return [];
-  const rules = await tx.priceRule.findMany({
-    where: { id: { in: ruleIds }, requiredProductId: { not: null } },
-    include: { requiredProduct: true },
+  const productIds = items.flatMap((item) =>
+    item.requiredProductId ? [item.requiredProductId] : [],
+  );
+  if (!productIds.length) return [];
+  const products = await tx.product.findMany({
+    where: { id: { in: productIds }, enabled: true },
   });
   const quantities = new Map<
     string,
     {
-      product: NonNullable<(typeof rules)[number]["requiredProduct"]>;
+      product: (typeof products)[number];
       quantity: number;
     }
   >();
   for (const item of items) {
-    const rule = rules.find((candidate) => candidate.id === item.ruleId);
-    if (!rule?.requiredProduct) continue;
-    const current = quantities.get(rule.requiredProduct.id);
-    quantities.set(rule.requiredProduct.id, {
-      product: rule.requiredProduct,
-      quantity: (current?.quantity ?? 0) + rule.requiredQuantity,
+    const product = products.find(
+      (candidate) => candidate.id === item.requiredProductId,
+    );
+    if (!product) continue;
+    const current = quantities.get(product.id);
+    quantities.set(product.id, {
+      product,
+      quantity: (current?.quantity ?? 0) + item.requiredQuantity,
     });
   }
   return [...quantities.values()];
@@ -278,6 +281,13 @@ async function snapshots(
       matchLevel: match?.level ?? "MANUAL",
       adjustmentReason: item.adjustmentReason,
       minutes: match?.rule.minutes ?? 0,
+      requiredProductId: item.requiredProductRemoved
+        ? null
+        : item.requiredProductId || match?.rule.requiredProductId || null,
+      requiredQuantity:
+        item.requiredProductId || !match?.rule.requiredProductId
+          ? item.requiredQuantity
+          : match.rule.requiredQuantity,
     });
   }
   return results;
@@ -527,7 +537,58 @@ export async function updateOrder(actorInput: Actor, id: string, raw: unknown) {
     });
     if (originalOrderLocked(order))
       throw new BusinessError("La scheda è chiusa.");
-    const { customFaults, ...fields } = data;
+    const { customFaults, standardFaultIds, customerId, ...fields } = data;
+    let deviceId = order.deviceId;
+    if (customerId) {
+      const [customer, device] = await Promise.all([
+        tx.customer.findFirst({ where: { id: customerId, deletedAt: null } }),
+        tx.device.findUniqueOrThrow({ where: { id: order.deviceId } }),
+      ]);
+      if (!customer) throw new BusinessError("Cliente non disponibile.");
+      if (device.customerId !== customer.id) {
+        const clone = await tx.device.create({
+          data: {
+            customerId: customer.id,
+            category: device.category,
+            brand: device.brand,
+            series: device.series,
+            model: device.model,
+            imei: device.imei,
+            appearance: device.appearance,
+            accessories: device.accessories,
+          },
+        });
+        deviceId = clone.id;
+      }
+    }
+    if (standardFaultIds) {
+      const device = await tx.device.findUniqueOrThrow({
+        where: { id: deviceId },
+      });
+      const selected = await tx.faultOption.findMany({
+        where: {
+          id: { in: standardFaultIds },
+          category: device.category,
+          hidden: false,
+        },
+      });
+      if (selected.length !== standardFaultIds.length)
+        throw new BusinessError(
+          "Uno dei problemi selezionati non è disponibile.",
+        );
+      await tx.workOrderFault.deleteMany({
+        where: { orderId: id, custom: false },
+      });
+      if (selected.length)
+        await tx.workOrderFault.createMany({
+          data: selected.map((fault) => ({
+            orderId: id,
+            catalogId: fault.id,
+            nameSnapshot: fault.name,
+            custom: false,
+          })),
+        });
+    }
     if (customFaults) {
       await tx.workOrderFault.deleteMany({
         where: { orderId: id, custom: true },
@@ -541,15 +602,27 @@ export async function updateOrder(actorInput: Actor, id: string, raw: unknown) {
           })),
         });
     }
-    const standardSnapshots = order.faults
-      .filter((fault) => !fault.custom)
-      .map((fault) => fault.nameSnapshot);
+    const standardSnapshots = standardFaultIds
+      ? (
+          await tx.workOrderFault.findMany({
+            where: { orderId: id, custom: false },
+          })
+        ).map((fault) => fault.nameSnapshot)
+      : order.faults
+          .filter((fault) => !fault.custom)
+          .map((fault) => fault.nameSnapshot);
+    const customSnapshots =
+      customFaults ??
+      order.faults
+        .filter((fault) => fault.custom)
+        .map((fault) => fault.nameSnapshot);
     await tx.workOrder.update({
       where: { id },
       data: {
         ...fields,
-        ...(customFaults
-          ? { fault: [...standardSnapshots, ...customFaults].join("; ") }
+        deviceId,
+        ...(customFaults || standardFaultIds
+          ? { fault: [...standardSnapshots, ...customSnapshots].join("; ") }
           : {}),
         dueDate: data.dueDate || null,
       },
@@ -1014,10 +1087,6 @@ export async function changeStatus(
         "Ricambi insufficienti: rifornisci il magazzino prima di avviare la riparazione.",
       );
 
-    if (data.status === "CANCELLED" && order.payments.length)
-      throw new BusinessError(
-        "Sono presenti incassi: gestire il rimborso prima dell'annullamento. I rimborsi non sono inclusi nel MVP.",
-      );
     if (data.status === "COMPLETED") {
       if (!data.pickedUpBy)
         throw new BusinessError("Indica chi ritira il dispositivo.");
@@ -1059,6 +1128,18 @@ export async function changeStatus(
       {
         from: order.status,
         to: data.status,
+        ...(data.status === "CANCELLED"
+          ? {
+              originalDue: decimal(settlement(order.items, order).due),
+              originalReceived: decimal(
+                order.payments.reduce(
+                  (sum, payment) => sum + cents(payment.amount),
+                  0,
+                ),
+              ),
+              reason: data.note,
+            }
+          : {}),
         unpaidOverride:
           data.status === "COMPLETED" &&
           balance(order.items, order.payments, order) > 0,
@@ -1652,7 +1733,7 @@ export async function updateWarranty(
     await tx.workOrder.update({
       where: { id },
       data: {
-        warrantyMonths: data.months,
+        warrantyDays: data.days,
         warrantyScope: data.scope,
         warrantyNotes: data.notes,
       },

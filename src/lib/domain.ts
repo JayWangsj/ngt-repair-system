@@ -115,7 +115,7 @@ export function balance(
   payments: { amount: string | { toString(): string } }[],
   options: WorkOrderOptions = {},
 ) {
-  if (options.status === "REFUNDED") return 0;
+  if (options.status === "REFUNDED" || options.status === "CANCELLED") return 0;
   return (
     settlement(items, options).due -
     payments.reduce((sum, payment) => sum + cents(payment.amount), 0)
@@ -139,9 +139,9 @@ export const transitions: Record<OrderStatus, OrderStatus[]> = {
     "READY",
     "CANCELLED",
   ],
-  READY: ["REPAIRING", "COMPLETED"],
+  READY: ["REPAIRING", "COMPLETED", "CANCELLED"],
   COMPLETED: [],
-  REWORKING: ["READY"],
+  REWORKING: ["READY", "CANCELLED"],
   REFUNDED: [],
   CANCELLED: [],
 };
@@ -159,27 +159,22 @@ export function assertDelivery(remaining: number) {
 }
 export function warrantyPeriod(
   deliveredAt: Date | null,
-  months: number,
+  days: number,
   today = romeDay(),
 ) {
-  if (!deliveredAt || months <= 0) return null;
+  if (!deliveredAt || days <= 0) return null;
   const start = romeDay(deliveredAt);
-  const [year, month, day] = start.split("-").map(Number);
-  const targetMonth = month - 1 + months;
-  const targetYear = year + Math.floor(targetMonth / 12);
-  const normalizedMonth = ((targetMonth % 12) + 12) % 12;
-  const lastDay = new Date(
-    Date.UTC(targetYear, normalizedMonth + 1, 0),
-  ).getUTCDate();
-  const end = `${targetYear}-${String(normalizedMonth + 1).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
+  const date = new Date(`${start}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  const end = date.toISOString().slice(0, 10);
   return { start, end, active: today <= end };
 }
 export function warrantyProgress(
   deliveredAt: Date | null,
-  months: number,
+  days: number,
   today = romeDay(),
 ) {
-  const period = warrantyPeriod(deliveredAt, months, today);
+  const period = warrantyPeriod(deliveredAt, days, today);
   if (!period) return null;
   const day = (value: string) => Date.parse(`${value}T00:00:00Z`) / 86_400_000;
   const start = day(period.start);

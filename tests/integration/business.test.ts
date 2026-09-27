@@ -231,7 +231,7 @@ describe("PostgreSQL workflow", () => {
   it("locks delivered history and adds paid or free post-sale repairs independently", async () => {
     const created = await createOrder(staff, input({ deposit: "100" }));
     await updateWarranty(staff, created.id, {
-      months: 3,
+      days: 90,
       scope: "Solo display sostituito",
       notes: "Esclusi liquidi e urti",
     });
@@ -246,7 +246,7 @@ describe("PostgreSQL workflow", () => {
     });
     await expect(
       updateWarranty(staff, created.id, {
-        months: 12,
+        days: 365,
         scope: "Mutata",
         notes: "",
       }),
@@ -271,7 +271,7 @@ describe("PostgreSQL workflow", () => {
       status: "REWORKING",
       afterSalesOpen: true,
       afterSalesDueDate: "2099-12-31",
-      warrantyMonths: 3,
+      warrantyDays: 90,
     });
     expect(order.afterSalesFee.toString()).toBe("50");
     const openedAudit = await db.auditLog.findFirstOrThrow({
@@ -776,11 +776,19 @@ describe("PostgreSQL workflow", () => {
       updateOrder(staff, order.id, { fault: "Edit" }),
     ).rejects.toThrow("chiusa");
   });
-  it("prevents cancellation with retained payments", async () => {
+  it("cancels with retained payment history and zero current balance", async () => {
     const order = await createOrder(staff, input());
-    await expect(
-      changeStatus(staff, order.id, { status: "CANCELLED" }),
-    ).rejects.toThrow("rimborso");
+    await changeStatus(staff, order.id, {
+      status: "CANCELLED",
+      note: "Cliente rinuncia",
+    });
+    const cancelled = await db.workOrder.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { items: true, payments: true },
+    });
+    expect(cancelled.status).toBe("CANCELLED");
+    expect(cancelled.payments).toHaveLength(1);
+    expect(balance(cancelled.items, cancelled.payments, cancelled)).toBe(0);
   });
 });
 describe("server-side access control", () => {

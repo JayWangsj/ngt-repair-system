@@ -1,20 +1,12 @@
 "use client";
 
-import Link from "next/link";
-import { useMemo, useState } from "react";
-import {
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Search,
-  UserRound,
-  X,
-} from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, Search, UserRound, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   createOrderAction,
+  customerAction,
   lookupCustomerAction,
-  saveFaultAction,
 } from "@/app/actions";
 import {
   brands,
@@ -34,17 +26,14 @@ import {
 import { uniqueOptions } from "@/lib/options";
 import { SearchableCombobox, SimpleSelect } from "./business-select";
 import {
-  CustomerForm,
   Field,
   FormDialog,
   ItemsEditor,
+  type CategoryView,
   type RuleView,
 } from "./forms";
-import {
-  FaultCatalogManager,
-  findSimilarFault,
-  type FaultCatalogItem,
-} from "./fault-catalog-manager";
+import { type FaultCatalogItem } from "./fault-catalog-manager";
+import { FaultSelector } from "./fault-selector";
 import { useLanguage, useMessages } from "./language";
 import { Button } from "./ui/button";
 
@@ -64,6 +53,9 @@ type Item = {
   discount?: string;
   saveRule?: boolean;
   discountVisible?: boolean;
+  requiredProductId?: string;
+  requiredQuantity?: number;
+  requiredProductRemoved?: boolean;
 };
 
 function safeCents(value: string) {
@@ -79,45 +71,55 @@ function StepCard({
   title,
   state,
   summary,
-  open,
+  selected,
+  expanded,
   onToggle,
   children,
 }: {
   number: string;
   title: string;
-  state: "empty" | "current" | "complete";
+  state: "not-started" | "in-progress" | "completed";
   summary?: string;
-  open: boolean;
+  selected: boolean;
+  expanded: boolean;
   onToggle: () => void;
   children: React.ReactNode;
 }) {
   const it = useMessages();
   const label =
-    state === "complete"
+    state === "completed"
       ? it.stepComplete
-      : state === "current"
+      : state === "in-progress"
         ? it.stepCurrent
         : it.stepEmpty;
   return (
-    <section className={`panel order-step-card is-${state}`}>
+    <section
+      className={`panel order-step-card is-${state} ${selected ? "is-selected" : ""}`}
+    >
       <button
         type="button"
         className="order-step-heading"
         onClick={onToggle}
-        aria-expanded={open}
+        aria-expanded={expanded}
       >
         <span className="section-number">{number}</span>
         <span className="order-step-title">
           <strong>
             {title}{" "}
-            {state === "complete" && <Check size={16} aria-hidden="true" />}
+            {state === "completed" && <Check size={16} aria-hidden="true" />}
           </strong>
           {summary && <small>{summary}</small>}
         </span>
         <span className="order-step-state">{label}</span>
-        {open ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+        <ChevronDown className="order-step-chevron" size={17} />
       </button>
-      {open && <div className="order-step-body">{children}</div>}
+      <div
+        className={`order-step-collapse ${expanded ? "is-expanded" : ""}`}
+        aria-hidden={!expanded}
+        inert={!expanded || undefined}
+      >
+        <div className="order-step-body">{children}</div>
+      </div>
     </section>
   );
 }
@@ -127,20 +129,32 @@ export function NewOrderWizard({
   faultOptions,
   devices,
   customers,
+  products,
+  productCategories,
 }: {
   rules: RuleView[];
   faultOptions: FaultCatalogItem[];
   devices: { category: string; brand: string; model: string }[];
   customers: CustomerOption[];
+  products: { id: string; name: string; category: string; stock: number }[];
+  productCategories: CategoryView[];
 }) {
   const it = useMessages();
   const { locale } = useLanguage();
   const router = useRouter();
   const [requestId] = useState(() => crypto.randomUUID());
-  const [openSteps, setOpenSteps] = useState([true, true, true, false]);
+  const [selectedStep, setSelectedStep] = useState<number | null>(0);
+  const [expandedStep, setExpandedStep] = useState<number | null>(0);
   const [customerId, setCustomerId] = useState("");
   const [customer, setCustomer] = useState<CustomerDetail>(null);
+  const [choosingCustomer, setChoosingCustomer] = useState(false);
   const [newCustomer, setNewCustomer] = useState(false);
+  const [customerQuery, setCustomerQuery] = useState("");
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [newCustomerPending, setNewCustomerPending] = useState(false);
+  const [duplicateCustomer, setDuplicateCustomer] =
+    useState<CustomerDetail>(null);
   const [deviceId, setDeviceId] = useState("");
   const [category, setCategory] = useState<Category>("PHONE");
   const [brand, setBrand] = useState("");
@@ -153,11 +167,6 @@ export function NewOrderWizard({
   const [customFaults, setCustomFaults] = useState<string[]>([]);
   const [faultNote, setFaultNote] = useState("");
   const [faults, setFaults] = useState(faultOptions);
-  const [otherFaultOpen, setOtherFaultOpen] = useState(false);
-  const [otherDescription, setOtherDescription] = useState("");
-  const [saveCommon, setSaveCommon] = useState(false);
-  const [commonName, setCommonName] = useState("");
-  const [allowSimilar, setAllowSimilar] = useState(false);
   const [inspectionMode, setInspectionMode] = useState(false);
   const [inspectionFee, setInspectionFee] = useState("30");
   const [dueDate, setDueDate] = useState("");
@@ -166,13 +175,13 @@ export function NewOrderWizard({
   ]);
   const [orderDiscount, setOrderDiscount] = useState("0");
   const [includeVat, setIncludeVat] = useState(false);
-  const [paymentNow, setPaymentNow] = useState(false);
   const [deposit, setDeposit] = useState("0");
   const [method, setMethod] =
     useState<(typeof creatablePaymentMethods)[number]>("CASH");
   const [touched, setTouched] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const completed = useRef([false, false, false]);
 
   const catalog = faults
     .filter((fault) => fault.category === category && !fault.hidden)
@@ -239,9 +248,13 @@ export function NewOrderWizard({
   );
 
   function toggleStep(index: number) {
-    setOpenSteps((current) =>
-      current.map((value, i) => (i === index ? !value : value)),
-    );
+    if (selectedStep === index && expandedStep === index) {
+      setExpandedStep(null);
+      setSelectedStep(null);
+      return;
+    }
+    setSelectedStep(index);
+    setExpandedStep(index);
   }
   function clearDevice() {
     setDeviceId("");
@@ -254,7 +267,6 @@ export function NewOrderWizard({
     if (inspectionMode) setInspectionMode(false);
   }
   async function selectCustomer(id: string) {
-    setCustomerId(id);
     const selected = customers.find((candidate) => candidate.id === id);
     if (!selected) {
       setCustomer(null);
@@ -262,39 +274,50 @@ export function NewOrderWizard({
       return;
     }
     const detail = await lookupCustomerAction(selected.phone);
+    if (!detail) return;
+    setCustomerId(id);
     setCustomer(detail);
+    setChoosingCustomer(false);
+    setCustomerQuery("");
     clearDevice();
   }
-  async function addOtherFault() {
-    const description = otherDescription.trim();
-    if (!description) return;
-    if (saveCommon) {
-      const name = commonName.trim();
-      if (!name) return;
-      const match = findSimilarFault(name, catalog);
-      if (match?.kind === "exact") {
-        setSelectedFaults((current) => [
-          ...new Set([...current, match.item.id]),
-        ]);
-      } else {
-        if (match?.kind === "similar" && !allowSimilar) return;
-        const result = await saveFaultAction(null, {
-          category,
-          name,
-          note: "",
-          hidden: false,
-        });
-        if (!result.ok) return setError(result.error);
-        router.refresh();
+  function openCustomerDialog(query: string) {
+    const value = query.trim();
+    const looksLikePhone = /^[+\d\s().-]{6,}$/.test(value);
+    setCustomerQuery(value);
+    setNewCustomerName(looksLikePhone ? "" : value);
+    setNewCustomerPhone(looksLikePhone ? value : "");
+    setDuplicateCustomer(null);
+    setNewCustomer(true);
+  }
+  async function saveNewCustomer() {
+    if (newCustomerPending) return;
+    setNewCustomerPending(true);
+    setError("");
+    try {
+      const existing = await lookupCustomerAction(newCustomerPhone);
+      if (existing) {
+        setDuplicateCustomer(existing);
+        return;
       }
+      const result = await customerAction(null, {
+        name: newCustomerName,
+        phone: newCustomerPhone,
+        additionalPhones: [],
+      });
+      if (!result.ok) return setError(result.error);
+      if (!result.id) return setError(it.connectionError);
+      const created = await lookupCustomerAction(newCustomerPhone);
+      if (!created) return setError(it.connectionError);
+      setCustomerId(created.id);
+      setCustomer(created);
+      setCustomerQuery("");
+      setNewCustomer(false);
+      clearDevice();
+      router.refresh();
+    } finally {
+      setNewCustomerPending(false);
     }
-    setCustomFaults((current) => [...current, description]);
-    leaveInspection();
-    setOtherFaultOpen(false);
-    setOtherDescription("");
-    setCommonName("");
-    setSaveCommon(false);
-    setAllowSimilar(false);
   }
   async function submit() {
     if (pending) return;
@@ -333,7 +356,7 @@ export function NewOrderWizard({
         diagnosticFee: inspectionFee,
         orderDiscount,
         includeVat,
-        deposit: paymentNow ? deposit : "0",
+        deposit,
         method,
         paymentKind: "DEPOSIT",
       });
@@ -347,11 +370,39 @@ export function NewOrderWizard({
   }
 
   const stepStates = [
-    validCustomer ? "complete" : "current",
-    validStep2 ? "complete" : validCustomer ? "current" : "empty",
-    validQuote ? "complete" : validStep2 ? "current" : "empty",
-    paymentNow && safeCents(deposit) > 0 ? "complete" : "empty",
+    validCustomer ? "completed" : "in-progress",
+    validStep2 ? "completed" : validCustomer ? "in-progress" : "not-started",
+    validQuote ? "completed" : validStep2 ? "in-progress" : "not-started",
+    safeCents(deposit) > 0 ? "completed" : "not-started",
   ] as const;
+  useEffect(() => {
+    const values = [validCustomer, validStep2, validQuote];
+    const completedIndex = values.findIndex(
+      (value, index) =>
+        value && !completed.current[index] && selectedStep === index,
+    );
+    completed.current = values;
+    if (completedIndex < 0 || completedIndex >= 2) return;
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (reduced) {
+      setSelectedStep(completedIndex + 1);
+      setExpandedStep(completedIndex + 1);
+      return;
+    }
+    const closeTimer = window.setTimeout(() => {
+      setExpandedStep(null);
+      setSelectedStep(null);
+      window.setTimeout(() => {
+        setSelectedStep(completedIndex + 1);
+        setExpandedStep(completedIndex + 1);
+      }, 70);
+    }, 100);
+    return () => {
+      window.clearTimeout(closeTimer);
+    };
+  }, [selectedStep, validCustomer, validQuote, validStep2]);
   const faultSummary = inspectionMode
     ? it.inspectionPending
     : [
@@ -363,12 +414,6 @@ export function NewOrderWizard({
 
   return (
     <>
-      <Link
-        href="/orders"
-        className="button button-outline back-link new-order-back"
-      >
-        ← {it.backToOrders}
-      </Link>
       <div className="new-order-layout">
         <form
           className="order-form order-wizard"
@@ -381,21 +426,22 @@ export function NewOrderWizard({
             number="01"
             title={it.customerSection}
             state={stepStates[0]}
-            open={openSteps[0]}
+            selected={selectedStep === 0}
+            expanded={expandedStep === 0}
             onToggle={() => toggleStep(0)}
             summary={customer?.name}
           >
-            {!customer ? (
+            {!customer || choosingCustomer ? (
               <Field label={`${it.searchCustomer} *`}>
                 <SearchableCombobox
-                  value={customerId}
+                  value={customerId || customerQuery}
                   onChange={(id) => void selectCustomer(id)}
                   ariaLabel={it.searchCustomer}
                   placeholder={it.customerSearchPlaceholder}
                   searchPlaceholder={it.customerSearchPlaceholder}
                   emptyText={it.noCustomerMatches}
                   customLabel={it.addCustomer}
-                  onCustom={() => setNewCustomer(true)}
+                  onCustom={openCustomerDialog}
                   groups={[
                     {
                       options: customers.map((entry) => ({
@@ -421,9 +467,7 @@ export function NewOrderWizard({
                   type="button"
                   variant="ghost"
                   onClick={() => {
-                    setCustomer(null);
-                    setCustomerId("");
-                    clearDevice();
+                    setChoosingCustomer(true);
                   }}
                 >
                   <X size={15} /> {it.reselect}
@@ -439,7 +483,8 @@ export function NewOrderWizard({
             number="02"
             title={it.deviceSection}
             state={stepStates[1]}
-            open={openSteps[1]}
+            selected={selectedStep === 1}
+            expanded={expandedStep === 1}
             onToggle={() => toggleStep(1)}
             summary={
               validDevice
@@ -528,14 +573,21 @@ export function NewOrderWizard({
               <Field label={`${it.model} *`}>
                 <SearchableCombobox
                   value={model}
-                  onChange={(value) => setModel(normalizeModel(value))}
+                  onChange={(value) =>
+                    setModel(normalizeModel(value, modelOptions))
+                  }
                   disabled={!!deviceId || !brand}
                   ariaLabel={it.model}
                   placeholder={it.manualEntry}
                   searchPlaceholder={it.search}
                   emptyText={it.noMatches}
                   customLabel={it.customModel}
-                  onCustom={(value) => setModel(normalizeModel(value))}
+                  onCustom={(value) =>
+                    setModel(normalizeModel(value, modelOptions))
+                  }
+                  onCommit={(value) =>
+                    setModel(normalizeModel(value, modelOptions))
+                  }
                   clearable
                   groups={[
                     {
@@ -553,51 +605,16 @@ export function NewOrderWizard({
                 {!brand ? it.selectBrandError : it.selectModelError}
               </p>
             )}
-            <div className="fault-options-heading">
-              <strong>{it.reportedFaults}</strong>
-              <FaultCatalogManager
-                items={faults}
-                initialCategory={category}
-                onChanged={setFaults}
-              />
-            </div>
-            <div className="fault-chip-grid">
-              {catalog.map((fault) => {
-                const checked = selectedFaults.includes(fault.id);
-                return (
-                  <label
-                    className={`fault-choice ${checked ? "is-selected" : ""}`}
-                    key={fault.id}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(event) => {
-                        setSelectedFaults((current) =>
-                          event.target.checked
-                            ? [...current, fault.id]
-                            : current.filter((id) => id !== fault.id),
-                        );
-                        if (event.target.checked) leaveInspection();
-                      }}
-                    />
-                    <span>
-                      {checked && <Check size={14} />}
-                      {fault.name}
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-            <div className="fault-actions">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setOtherFaultOpen(true)}
-              >
-                <span>+</span> {it.otherFault}
-              </Button>
-            </div>
+            <FaultSelector
+              category={category}
+              items={faults}
+              selected={selectedFaults}
+              onItemsChange={setFaults}
+              onChange={(ids) => {
+                setSelectedFaults(ids);
+                if (ids.length) leaveInspection();
+              }}
+            />
             {customFaults.map((description, index) => (
               <div className="custom-fault-row" key={`${description}-${index}`}>
                 <span>{description}</span>
@@ -634,15 +651,7 @@ export function NewOrderWizard({
                 type="button"
                 variant={inspectionMode ? "outline" : "default"}
                 onClick={() => {
-                  if (inspectionMode) return;
-                  if (
-                    customFaults.length &&
-                    !window.confirm(it.inspectionClearConfirm)
-                  )
-                    return;
-                  setSelectedFaults([]);
-                  setCustomFaults([]);
-                  setInspectionMode(true);
+                  setInspectionMode((value) => !value);
                 }}
               >
                 {inspectionMode ? it.inspectionActive : it.setInspection}
@@ -666,7 +675,8 @@ export function NewOrderWizard({
             number="03"
             title={it.quoteSection}
             state={stepStates[2]}
-            open={openSteps[2]}
+            selected={selectedStep === 2}
+            expanded={expandedStep === 2}
             onToggle={() => toggleStep(2)}
             summary={
               validQuote
@@ -698,6 +708,8 @@ export function NewOrderWizard({
                 rules={rules}
                 device={{ category, brand, series, model }}
                 discounts
+                products={products}
+                productCategories={productCategories}
               />
             )}
             {touched && !validQuote && (
@@ -761,48 +773,34 @@ export function NewOrderWizard({
             number="04"
             title={it.paymentSection}
             state={stepStates[3]}
-            open={openSteps[3]}
+            selected={selectedStep === 3}
+            expanded={expandedStep === 3}
             onToggle={() => toggleStep(3)}
             summary={
-              paymentNow && safeCents(deposit) > 0
-                ? money(safeCents(deposit))
-                : undefined
+              safeCents(deposit) > 0 ? money(safeCents(deposit)) : undefined
             }
           >
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={paymentNow}
-                onChange={(event) => {
-                  setPaymentNow(event.target.checked);
-                  if (!event.target.checked) setDeposit("0");
-                }}
-              />
-              {it.paymentNow}
-            </label>
-            {paymentNow && (
-              <div className="form-grid">
-                <Field label={it.initialPayment}>
-                  <input
-                    inputMode="decimal"
-                    value={deposit}
-                    onChange={(event) => setDeposit(event.target.value)}
-                  />
-                </Field>
-                <Field label={it.paymentMethod}>
-                  <SimpleSelect
-                    value={method}
-                    onChange={(value) => setMethod(value as typeof method)}
-                    ariaLabel={it.paymentMethod}
-                    placeholder={it.selectOption}
-                    options={creatablePaymentMethods.map((value) => ({
-                      value,
-                      label: it.methods[value],
-                    }))}
-                  />
-                </Field>
-              </div>
-            )}
+            <div className="form-grid">
+              <Field label={it.initialPayment}>
+                <input
+                  inputMode="decimal"
+                  value={deposit}
+                  onChange={(event) => setDeposit(event.target.value)}
+                />
+              </Field>
+              <Field label={it.paymentMethod}>
+                <SimpleSelect
+                  value={method}
+                  onChange={(value) => setMethod(value as typeof method)}
+                  ariaLabel={it.paymentMethod}
+                  placeholder={it.selectOption}
+                  options={creatablePaymentMethods.map((value) => ({
+                    value,
+                    label: it.methods[value],
+                  }))}
+                />
+              </Field>
+            </div>
           </StepCard>
           {error && (
             <p className="message error" role="alert">
@@ -856,21 +854,24 @@ export function NewOrderWizard({
           ].map((label, index) => (
             <div
               key={label}
-              className={stepStates[index] === "complete" ? "is-complete" : ""}
+              className={stepStates[index] === "completed" ? "is-complete" : ""}
             >
               <span>
-                {stepStates[index] === "complete" ? "✓" : "○"} {label}
+                {stepStates[index] === "completed" ? "✓" : "○"} {label}
               </span>
               <small>
-                {stepStates[index] === "complete"
+                {stepStates[index] === "completed"
                   ? it.stepComplete
-                  : it.stepEmpty}
+                  : stepStates[index] === "in-progress"
+                    ? it.stepCurrent
+                    : it.stepEmpty}
               </small>
             </div>
           ))}
           <footer>
             <strong>
-              <Check size={15} /> {it.requiredStepsComplete}
+              {ready ? <Check size={15} /> : "○"}{" "}
+              {ready ? it.requiredStepsComplete : `${requiredComplete}/3`}
             </strong>
             <span>{ready ? it.canCreateOrder : it.completeRequiredSteps}</span>
           </footer>
@@ -881,133 +882,66 @@ export function NewOrderWizard({
           title={it.addCustomer}
           onClose={() => setNewCustomer(false)}
         >
-          <CustomerForm
-            onSuccess={() => {
-              setNewCustomer(false);
-              router.refresh();
-            }}
-          />
-        </FormDialog>
-      )}
-      {otherFaultOpen && (
-        <FormDialog
-          title={it.otherFault}
-          onClose={() => setOtherFaultOpen(false)}
-        >
           <form
             className="dialog-form"
             data-form-dialog-body
             onSubmit={(event) => {
               event.preventDefault();
-              void addOtherFault();
+              void saveNewCustomer();
             }}
           >
-            <Field label={`${it.faultDescription} *`}>
-              <textarea
+            <Field label={`${it.name} *`}>
+              <input
                 required
-                rows={4}
-                maxLength={200}
-                value={otherDescription}
-                onChange={(event) => setOtherDescription(event.target.value)}
+                maxLength={120}
+                value={newCustomerName}
+                onChange={(event) => setNewCustomerName(event.target.value)}
               />
             </Field>
-            <p className="help">{it.faultDescriptionHelp}</p>
-            <small className="character-count">
-              {otherDescription.length}/200
-            </small>
-            <label className="checkbox">
+            <Field label={`${it.phone} *`}>
               <input
-                type="checkbox"
-                checked={saveCommon}
-                onChange={(event) => setSaveCommon(event.target.checked)}
+                required
+                type="tel"
+                maxLength={30}
+                value={newCustomerPhone}
+                onChange={(event) => {
+                  setNewCustomerPhone(event.target.value);
+                  setDuplicateCustomer(null);
+                }}
               />
-              {it.saveAsCommonFault}
-            </label>
-            {saveCommon && (
-              <>
-                <Field label={`${it.commonFaultName} *`}>
-                  <input
-                    required
-                    maxLength={120}
-                    value={commonName}
-                    onChange={(event) => {
-                      setCommonName(event.target.value);
-                      setAllowSimilar(false);
-                    }}
-                  />
-                </Field>
-                <p className="help">{it.commonFaultHelp}</p>
-                {(() => {
-                  const match = findSimilarFault(commonName, catalog);
-                  if (!match) return null;
-                  if (match.kind === "exact")
-                    return (
-                      <div className="message warning">
-                        {it.faultAlreadyExists}
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedFaults((current) => [
-                              ...new Set([...current, match.item.id]),
-                            ]);
-                            setSaveCommon(false);
-                            setCommonName("");
-                          }}
-                        >
-                          {it.useExistingFault}
-                        </Button>
-                      </div>
-                    );
-                  return (
-                    <div className="message warning">
-                      {it.similarFault}: {match.item.name}
-                      <div>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedFaults((current) => [
-                              ...new Set([...current, match.item.id]),
-                            ]);
-                            setSaveCommon(false);
-                            setCommonName("");
-                          }}
-                        >
-                          {it.useExistingFault}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() => setAllowSimilar(true)}
-                        >
-                          {it.continueAdding}
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </>
+            </Field>
+            {duplicateCustomer && (
+              <div className="message warning duplicate-customer">
+                <strong>{it.customerFound}</strong>
+                <span>{duplicateCustomer.name}</span>
+                <small>{duplicateCustomer.phone}</small>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setCustomerId(duplicateCustomer.id);
+                    setCustomer(duplicateCustomer);
+                    setChoosingCustomer(false);
+                    setCustomerQuery("");
+                    setNewCustomer(false);
+                  }}
+                >
+                  {it.useExistingCustomer}
+                </Button>
+              </div>
             )}
+            {error && <p className="message error">{error}</p>}
             <div className="dialog-actions">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setOtherFaultOpen(false)}
+                disabled={newCustomerPending}
+                onClick={() => setNewCustomer(false)}
               >
                 {it.cancel}
               </Button>
-              <Button
-                disabled={
-                  !otherDescription.trim() ||
-                  (saveCommon &&
-                    (!commonName.trim() ||
-                      (findSimilarFault(commonName, catalog)?.kind ===
-                        "similar" &&
-                        !allowSimilar)))
-                }
-              >
-                {it.addFault}
+              <Button disabled={newCustomerPending}>
+                {newCustomerPending ? it.saving : it.saveCustomer}
               </Button>
             </div>
           </form>

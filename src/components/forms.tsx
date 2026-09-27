@@ -6,6 +6,7 @@ import {
   useEffect,
   useRef,
   useId,
+  useTransition,
   Children,
   isValidElement,
   cloneElement,
@@ -13,6 +14,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { RecordIcon } from "./ui/record-icon";
 import { EditableSelect } from "./editable-select";
 import {
@@ -63,6 +65,8 @@ import {
   SimpleSelect,
   type SelectGroup,
 } from "./business-select";
+import { FaultSelector } from "./fault-selector";
+import type { FaultCatalogItem } from "./fault-catalog-manager";
 import {
   createOrderAction,
   lookupCustomerAction,
@@ -82,6 +86,8 @@ import {
   warrantyAction,
   afterSalesAction,
   refundAction,
+  createProductAction,
+  deleteInventoryCategoryAction,
 } from "@/app/actions";
 
 export type RuleView = {
@@ -98,6 +104,7 @@ export type RuleView = {
   enabled: boolean;
   requiredProductId?: string | null;
   requiredQuantity?: number;
+  requiredProductRemoved?: boolean;
 };
 
 function InlineRuleField({
@@ -171,13 +178,16 @@ function InlineRuleField({
     </button>
   );
 }
-type ItemView = {
+export type ItemView = {
   project: string;
   final: string;
   adjustmentReason: string;
   discount?: string;
   saveRule?: boolean;
   discountVisible?: boolean;
+  requiredProductId?: string;
+  requiredQuantity?: number;
+  requiredProductRemoved?: boolean;
 };
 const blankItem = (): ItemView => ({
   project: "",
@@ -233,6 +243,213 @@ export function Field({
     </label>
   );
 }
+
+export type CategoryView = {
+  id: string;
+  name: string;
+  repairOnly: boolean;
+};
+
+export type CreatedProduct = {
+  id: string;
+  name: string;
+  category: string;
+  stock: number;
+};
+
+const presetInventoryCategories = [
+  "Accessori",
+  "Ricambi",
+  "Cavi",
+  "Caricabatterie",
+  "Usato",
+];
+
+export function ProductForm({
+  categories,
+  onClose,
+  mode,
+  initialName = "",
+  initialUsage,
+  onCreated,
+}: {
+  categories: CategoryView[];
+  onClose: () => void;
+  mode: "inventory" | "retail";
+  initialName?: string;
+  initialUsage?: "RETAIL" | "REPAIR" | "BOTH";
+  onCreated?: (product: CreatedProduct) => void;
+}) {
+  const it = useMessages();
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
+  const [category, setCategory] = useState("");
+  const [usage, setUsage] = useState<"RETAIL" | "REPAIR" | "BOTH">(
+    initialUsage ?? "RETAIL",
+  );
+  const [hiddenCategories, setHiddenCategories] = useState<string[]>([]);
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get("name") ?? "").trim();
+    const initialStock = Number(form.get("initialStock") ?? 0);
+    startTransition(async () => {
+      const result = await createProductAction({
+        requestId: crypto.randomUUID(),
+        name,
+        category,
+        usage: mode === "retail" ? "RETAIL" : usage,
+        costPrice: String(form.get("costPrice") ?? ""),
+        salePrice:
+          mode === "inventory" && usage === "REPAIR"
+            ? "0"
+            : String(form.get("salePrice") ?? ""),
+        initialStock: String(initialStock),
+        minStock: String(form.get("minStock") ?? "0"),
+        favorite: form.get("favorite") === "on",
+        enabled: true,
+      });
+      if (!result.ok) return setError(result.error);
+      if (result.id)
+        onCreated?.({
+          id: result.id,
+          name,
+          category,
+          stock: initialStock,
+        });
+      onClose();
+      if (!onCreated) router.refresh();
+    });
+  }
+  const options = [
+    ...new Set([
+      ...presetInventoryCategories,
+      ...categories
+        .filter(
+          (item) =>
+            !hiddenCategories.includes(item.id) &&
+            (mode === "inventory" || !item.repairOnly),
+        )
+        .map((item) => item.name),
+    ]),
+  ]
+    .filter((item) => mode === "inventory" || item.toLowerCase() !== "ricambi")
+    .sort();
+  return (
+    <form className="dialog-form" onSubmit={submit} aria-busy={pending}>
+      <div className="form-grid">
+        <Field label={it.inventory.product}>
+          <input
+            name="name"
+            required
+            maxLength={120}
+            autoFocus
+            defaultValue={initialName}
+          />
+        </Field>
+        <div className="inventory-category-field">
+          <EditableSelect
+            label={it.inventory.category}
+            value={category}
+            onChange={setCategory}
+            options={options}
+            required
+          />
+          {categories.some((item) => item.name === category) && (
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={it.remove + " " + category}
+              onClick={async () => {
+                const selected = categories.find(
+                  (item) => item.name === category,
+                );
+                if (!selected) return;
+                const result = await deleteInventoryCategoryAction(selected.id);
+                if (!result.ok) return setError(result.error);
+                setHiddenCategories([...hiddenCategories, selected.id]);
+                setCategory("");
+              }}
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
+        </div>
+        {mode === "inventory" && (
+          <Field label={it.inventory.usage}>
+            <SimpleSelect
+              name="usage"
+              value={usage}
+              onChange={(value) => setUsage(value as typeof usage)}
+              placeholder={it.selectOption}
+              ariaLabel={it.inventory.usage}
+              options={[
+                { value: "RETAIL", label: it.inventory.retail },
+                { value: "REPAIR", label: it.inventory.repair },
+                { value: "BOTH", label: it.inventory.both },
+              ]}
+            />
+          </Field>
+        )}
+        <Field label={it.inventory.costPrice}>
+          <input
+            name="costPrice"
+            inputMode="decimal"
+            defaultValue="0"
+            required
+          />
+        </Field>
+        {(mode === "retail" || usage !== "REPAIR") && (
+          <Field label={it.inventory.salePrice}>
+            <input
+              name="salePrice"
+              inputMode="decimal"
+              defaultValue="0"
+              required
+            />
+          </Field>
+        )}
+        <Field label={it.inventory.initialStock}>
+          <input
+            name="initialStock"
+            type="number"
+            min="0"
+            defaultValue="0"
+            required
+          />
+        </Field>
+        <Field label={it.inventory.minimumStock}>
+          <input
+            name="minStock"
+            type="number"
+            min="0"
+            defaultValue="0"
+            required
+          />
+        </Field>
+      </div>
+      <label className="checkbox">
+        <input name="favorite" type="checkbox" />
+        {it.inventory.favorite}
+      </label>
+      {error && <p className="message error">{error}</p>}
+      <div className="dialog-actions">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onClose}
+          disabled={pending}
+        >
+          {it.cancel}
+        </Button>
+        <Button disabled={pending}>{it.inventory.saveProduct}</Button>
+      </div>
+    </form>
+  );
+}
+
 function Section({
   number,
   title,
@@ -258,16 +475,31 @@ export function ItemsEditor({
   onChange,
   rules,
   device,
+  products = [],
+  productCategories = [],
   discounts = false,
 }: {
   discounts?: boolean;
   items: ItemView[];
   onChange: (items: ItemView[]) => void;
   rules: RuleView[];
+  products?: { id: string; name: string; category: string; stock: number }[];
+  productCategories?: CategoryView[];
   device: { category: string; brand: string; series: string; model: string };
   owner?: boolean;
 }) {
   const it = useMessages();
+  const [createdProducts, setCreatedProducts] = useState<CreatedProduct[]>([]);
+  const availableProducts = [
+    ...products,
+    ...createdProducts.filter(
+      (created) => !products.some((product) => product.id === created.id),
+    ),
+  ];
+  const [creatingPart, setCreatingPart] = useState<{
+    index: number;
+    query: string;
+  } | null>(null);
   const deviceKey = [
     device.category,
     device.brand,
@@ -329,6 +561,8 @@ export function ItemsEditor({
                       final: "",
                       discount: "0",
                       saveRule: false,
+                      requiredProductId: "",
+                      requiredProductRemoved: false,
                     })
                   }
                   onChange={(project) => {
@@ -338,6 +572,9 @@ export function ItemsEditor({
                       final: found?.rule.suggested ?? "",
                       discount: "0",
                       saveRule: false,
+                      requiredProductId: found?.rule.requiredProductId ?? "",
+                      requiredQuantity: found?.rule.requiredQuantity ?? 1,
+                      requiredProductRemoved: false,
                     });
                   }}
                 />
@@ -362,6 +599,41 @@ export function ItemsEditor({
                 it.noMatch
               )}
             </p>
+            <Field label={it.requiredPart} className="quote-required-part">
+              <SearchableCombobox
+                value={item.requiredProductId ?? ""}
+                onChange={(requiredProductId) =>
+                  update(index, {
+                    requiredProductId,
+                    requiredQuantity: 1,
+                    requiredProductRemoved: !requiredProductId,
+                  })
+                }
+                ariaLabel={`${it.requiredPart} ${index + 1}`}
+                placeholder={it.noRequiredPart}
+                searchPlaceholder={it.search}
+                emptyText={it.noMatches}
+                customLabel={it.newPart}
+                onCustom={(query) => setCreatingPart({ index, query })}
+                clearable
+                groups={[
+                  {
+                    options: availableProducts.map((product) => ({
+                      value: product.id,
+                      label: product.name,
+                      secondary: `${product.category} · ${it.inventory.currentStock}: ${product.stock}`,
+                      trailing: product.stock > 0 ? "●" : "○",
+                    })),
+                  },
+                ]}
+              />
+            </Field>
+            {item.requiredProductId &&
+              availableProducts.find(
+                (product) => product.id === item.requiredProductId,
+              )?.stock === 0 && (
+                <p className="message warning">{it.requiredPartOutOfStock}</p>
+              )}
             {discounts &&
               (item.discountVisible || numeric(item.discount ?? "0") > 0) && (
                 <Field label={`${it.itemDiscount} ${index + 1}`}>
@@ -420,6 +692,25 @@ export function ItemsEditor({
           {money(items.reduce((sum, item) => sum + numeric(item.final), 0))}
         </strong>
       </div>
+      {creatingPart && (
+        <FormDialog title={it.newPart} onClose={() => setCreatingPart(null)}>
+          <ProductForm
+            categories={productCategories}
+            mode="inventory"
+            initialName={creatingPart.query}
+            initialUsage="REPAIR"
+            onClose={() => setCreatingPart(null)}
+            onCreated={(product) => {
+              setCreatedProducts((current) => [...current, product]);
+              update(creatingPart.index, {
+                requiredProductId: product.id,
+                requiredQuantity: 1,
+                requiredProductRemoved: false,
+              });
+            }}
+          />
+        </FormDialog>
+      )}
     </div>
   );
 }
@@ -944,6 +1235,7 @@ export function NewOrderForm({
             items={values.items.map((i) => ({
               ...i,
               adjustmentReason: i.adjustmentReason ?? "",
+              requiredQuantity: Number(i.requiredQuantity ?? 1),
             }))}
             onChange={(items) => setValue("items", items)}
             rules={rules}
@@ -1352,114 +1644,173 @@ export function ConfirmForm({ id }: { id: string }) {
 export function EditOrderForm({
   id,
   values,
+  customers,
+  faultOptions,
 }: {
   id: string;
+  customers: {
+    id: string;
+    name: string;
+    phone: string;
+    phones: { phone: string }[];
+  }[];
+  faultOptions: FaultCatalogItem[];
   values: {
+    customerId: string;
+    category: string;
     fault: string;
     faultNote: string;
-    standardFaults: string[];
-    customFaults: string[];
+    standardFaultIds: string[];
     notes: string;
     accessories: string;
     dueDate: string | null;
   };
 }) {
   const it = useMessages();
-  const [customFaults, setCustomFaults] = useState(values.customFaults);
-  const [customFaultsTouched, setCustomFaultsTouched] = useState(false);
-  const structured =
-    values.standardFaults.length > 0 || values.customFaults.length > 0;
+  const [customerId, setCustomerId] = useState(values.customerId);
+  const [localCustomers, setLocalCustomers] = useState(customers);
+  const [addingCustomer, setAddingCustomer] = useState(false);
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerError, setCustomerError] = useState("");
+  const [customerPending, setCustomerPending] = useState(false);
+  const [standardFaultIds, setStandardFaultIds] = useState(
+    values.standardFaultIds,
+  );
+  const [faults, setFaults] = useState(faultOptions);
+  function openCustomer(query: string) {
+    const value = query.trim();
+    const phone = /^[+\d\s().-]{6,}$/.test(value);
+    setCustomerName(phone ? "" : value);
+    setCustomerPhone(phone ? value : "");
+    setCustomerError("");
+    setAddingCustomer(true);
+  }
   return (
-    <ActionForm
-      submit={it.save}
-      action={(data) =>
-        updateOrderAction(id, {
-          ...Object.fromEntries(data),
-          customFaults: customFaultsTouched ? customFaults : undefined,
-          accessories: values.accessories,
-        })
-      }
-    >
-      {structured ? (
-        <>
-          {values.standardFaults.length > 0 && (
-            <div className="fault-chip-grid">
-              {values.standardFaults.map((fault) => (
-                <span className="fault-choice is-selected" key={fault}>
-                  <span>{fault}</span>
-                </span>
-              ))}
-            </div>
-          )}
-          {customFaults.map((fault, index) => (
-            <div className="phone-row" key={index}>
-              <Field label={`${it.otherFault} ${index + 1}`}>
-                <textarea
-                  required
-                  maxLength={200}
-                  value={fault}
-                  onChange={(event) => {
-                    setCustomFaults((current) =>
-                      current.map((value, i) =>
-                        i === index ? event.target.value : value,
-                      ),
-                    );
-                    setCustomFaultsTouched(true);
-                  }}
-                />
-              </Field>
-              <RecordIcon
-                kind="delete"
-                label={`${it.remove} ${fault}`}
-                onClick={() => {
-                  setCustomFaults((current) =>
-                    current.filter((_, i) => i !== index),
-                  );
-                  setCustomFaultsTouched(true);
-                }}
-              />
-            </div>
-          ))}
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              setCustomFaults((current) => [...current, ""]);
-              setCustomFaultsTouched(true);
+    <>
+      <ActionForm
+        submit={it.save}
+        action={(data) =>
+          updateOrderAction(id, {
+            ...Object.fromEntries(data),
+            customerId,
+            standardFaultIds,
+            accessories: values.accessories,
+          })
+        }
+      >
+        <Field label={it.customer}>
+          <SearchableCombobox
+            value={customerId}
+            onChange={setCustomerId}
+            ariaLabel={it.searchCustomer}
+            placeholder={it.customerSearchPlaceholder}
+            searchPlaceholder={it.customerSearchPlaceholder}
+            emptyText={it.noCustomerMatches}
+            customLabel={it.addCustomer}
+            onCustom={openCustomer}
+            groups={[
+              {
+                options: localCustomers.map((customer) => ({
+                  value: customer.id,
+                  label: customer.name,
+                  secondary: customer.phone,
+                  keywords: customer.phones
+                    .map((phone) => phone.phone)
+                    .join(" "),
+                })),
+              },
+            ]}
+          />
+        </Field>
+        <FaultSelector
+          category={values.category}
+          items={faults}
+          selected={standardFaultIds}
+          onChange={setStandardFaultIds}
+          onItemsChange={setFaults}
+        />
+        <input type="hidden" name="fault" value={values.fault} />
+        <Field label={it.faultNotes}>
+          <textarea
+            name="faultNote"
+            defaultValue={values.faultNote}
+            maxLength={2000}
+          />
+        </Field>
+        <Field label={it.dueDate}>
+          <input
+            type="date"
+            name="dueDate"
+            min={romeDay()}
+            defaultValue={values.dueDate ?? ""}
+          />
+        </Field>
+        <Field label={it.notes}>
+          <textarea name="notes" defaultValue={values.notes} maxLength={2000} />
+        </Field>
+      </ActionForm>
+      {addingCustomer && (
+        <FormDialog
+          title={it.addCustomer}
+          onClose={() => setAddingCustomer(false)}
+        >
+          <form
+            className="dialog-form"
+            data-form-dialog-body
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (customerPending) return;
+              setCustomerPending(true);
+              setCustomerError("");
+              void customerAction(null, {
+                name: customerName,
+                phone: customerPhone,
+                additionalPhones: [],
+              })
+                .then(async (result) => {
+                  if (!result.ok) return setCustomerError(result.error);
+                  const created = await lookupCustomerAction(customerPhone);
+                  if (!created) return setCustomerError(it.connectionError);
+                  setLocalCustomers((current) => [...current, created]);
+                  setCustomerId(created.id);
+                  setAddingCustomer(false);
+                })
+                .finally(() => setCustomerPending(false));
             }}
           >
-            <Plus size={15} />
-            {it.otherFault}
-          </Button>
-        </>
-      ) : null}
-      <Field label={it.fault}>
-        <textarea
-          name="fault"
-          required
-          defaultValue={values.fault}
-          maxLength={2000}
-        />
-      </Field>
-      <Field label={it.faultNotes}>
-        <textarea
-          name="faultNote"
-          defaultValue={values.faultNote}
-          maxLength={2000}
-        />
-      </Field>
-      <Field label={it.dueDate}>
-        <input
-          type="date"
-          name="dueDate"
-          min={romeDay()}
-          defaultValue={values.dueDate ?? ""}
-        />
-      </Field>
-      <Field label={it.notes}>
-        <textarea name="notes" defaultValue={values.notes} maxLength={2000} />
-      </Field>
-    </ActionForm>
+            <Field label={`${it.name} *`}>
+              <input
+                required
+                value={customerName}
+                onChange={(event) => setCustomerName(event.target.value)}
+              />
+            </Field>
+            <Field label={`${it.phone} *`}>
+              <input
+                required
+                type="tel"
+                value={customerPhone}
+                onChange={(event) => setCustomerPhone(event.target.value)}
+              />
+            </Field>
+            {customerError && <p className="message error">{customerError}</p>}
+            <div className="dialog-actions">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAddingCustomer(false)}
+              >
+                {it.cancel}
+              </Button>
+              <Button disabled={customerPending}>
+                {customerPending ? it.saving : it.saveCustomer}
+              </Button>
+            </div>
+          </form>
+        </FormDialog>
+      )}
+    </>
   );
 }
 
@@ -1468,22 +1819,22 @@ export function WarrantyForm({
   values,
 }: {
   id: string;
-  values: { months: number; scope: string; notes: string };
+  values: { days: number; scope: string; notes: string };
 }) {
   const it = useMessages();
-  const presets = [0, 1, 3, 6, 12];
-  const [months, setMonths] = useState(
-    presets.includes(values.months) ? String(values.months) : "custom",
+  const presets = [0, 30, 60, 90, 180, 365];
+  const [days, setDays] = useState(
+    presets.includes(values.days) ? String(values.days) : "custom",
   );
   return (
     <ActionForm
       submit={it.save}
       action={(data) =>
         warrantyAction(id, {
-          months:
-            str(data, "months") === "custom"
-              ? str(data, "customMonths")
-              : str(data, "months"),
+          days:
+            str(data, "days") === "custom"
+              ? str(data, "customDays")
+              : str(data, "days"),
           scope: str(data, "scope"),
           notes: str(data, "notes"),
         })
@@ -1491,29 +1842,29 @@ export function WarrantyForm({
     >
       <Field label={it.warranty.duration}>
         <SimpleSelect
-          name="months"
-          value={months}
-          onChange={setMonths}
+          name="days"
+          value={days}
+          onChange={setDays}
           placeholder={it.selectOption}
           ariaLabel={it.warranty.duration}
           options={[
             { value: "0", label: it.warranty.none },
-            { value: "1", label: it.warranty.oneMonth },
-            { value: "3", label: it.warranty.threeMonths },
-            { value: "6", label: it.warranty.sixMonths },
-            { value: "12", label: it.warranty.twelveMonths },
+            ...[30, 60, 90, 180, 365].map((value) => ({
+              value: String(value),
+              label: `${value} ${it.warranty.days}`,
+            })),
             { value: "custom", label: it.warranty.custom },
           ]}
         />
       </Field>
-      {months === "custom" && (
-        <Field label={it.warranty.customMonths}>
+      {days === "custom" && (
+        <Field label={it.warranty.customDays}>
           <input
-            name="customMonths"
+            name="customDays"
             type="number"
             min="1"
-            max="120"
-            defaultValue={values.months || 1}
+            max="3650"
+            defaultValue={values.days || 90}
             required
           />
         </Field>
@@ -1879,6 +2230,8 @@ export function EditQuoteForm({
   inspectionFee = "0",
   rules,
   device,
+  products = [],
+  productCategories = [],
 }: {
   id: string;
   initial: ItemView[];
@@ -1886,6 +2239,8 @@ export function EditQuoteForm({
   initialVat?: boolean;
   inspectionFee?: string;
   rules: RuleView[];
+  products?: { id: string; name: string; category: string; stock: number }[];
+  productCategories?: CategoryView[];
   device: { category: string; brand: string; series: string; model: string };
   owner: boolean;
 }) {
@@ -1906,6 +2261,8 @@ export function EditQuoteForm({
         rules={rules}
         device={device}
         discounts
+        products={products}
+        productCategories={productCategories}
       />
       <div className="quote-adjustments">
         <Button
@@ -2628,7 +2985,8 @@ export function FormDialog({
       previous?.focus();
     };
   }, []);
-  return (
+  if (typeof document === "undefined") return null;
+  return createPortal(
     <dialog
       ref={dialog}
       className="form-dialog"
@@ -2659,7 +3017,8 @@ export function FormDialog({
       <FormCloseContext.Provider value={onClose}>
         {children}
       </FormCloseContext.Provider>
-    </dialog>
+    </dialog>,
+    document.body,
   );
 }
 export function NewCustomerDialog() {

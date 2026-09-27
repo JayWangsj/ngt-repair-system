@@ -40,6 +40,9 @@ export const itemInput = z.object({
   adjustmentReason: text,
   discount: amountInput.default("0"),
   saveRule: z.boolean().default(false),
+  requiredProductId: z.string().trim().max(100).default(""),
+  requiredQuantity: z.coerce.number().int().min(1).max(999).default(1),
+  requiredProductRemoved: z.boolean().default(false),
 });
 export const orderInput = z
   .object({
@@ -122,6 +125,8 @@ function centsSafe(value: string) {
   return Number.isFinite(normalized) ? Math.round(normalized * 100) : -1;
 }
 export const editInput = z.object({
+  customerId: z.string().trim().max(100).optional(),
+  standardFaultIds: z.array(z.string().min(1).max(100)).max(30).optional(),
   fault: z.string().trim().min(1).max(2000),
   faultNote: text,
   customFaults: z.array(z.string().trim().min(1).max(200)).max(30).optional(),
@@ -208,7 +213,7 @@ export const statusInput = z.object({
   override: z.boolean().default(false),
 });
 export const warrantyInput = z.object({
-  months: z.coerce.number().int().min(0).max(120),
+  days: z.coerce.number().int().min(0).max(3650),
   scope: text,
   notes: text,
 });

@@ -147,6 +147,7 @@ model WorkOrder {
   pickedUpAt        DateTime?          @db.Timestamptz(3)
   pickedUpBy        String?
   warrantyMonths    Int                @default(0)
+  warrantyDays      Int                @default(0)
   warrantyScope     String             @default("")
   warrantyNotes     String             @default("")
   afterSalesFee     Decimal            @default(0) @db.Decimal(12, 2)
@@ -187,20 +188,24 @@ model PriceRule {
 }
 
 model WorkOrderItem {
-  id               String     @id @default(cuid())
-  orderId          String
-  order            WorkOrder  @relation(fields: [orderId], references: [id])
-  ruleId           String?
-  rule             PriceRule? @relation(fields: [ruleId], references: [id])
-  project          String
-  suggested        Decimal?   @db.Decimal(12, 2)
-  discount         Decimal    @default(0) @db.Decimal(12, 2)
-  final            Decimal    @db.Decimal(12, 2)
-  matchLevel       String
-  adjustmentReason String     @default("")
-  minutes          Int        @default(0)
+  id                String     @id @default(cuid())
+  orderId           String
+  order             WorkOrder  @relation(fields: [orderId], references: [id])
+  ruleId            String?
+  rule              PriceRule? @relation(fields: [ruleId], references: [id])
+  project           String
+  suggested         Decimal?   @db.Decimal(12, 2)
+  discount          Decimal    @default(0) @db.Decimal(12, 2)
+  final             Decimal    @db.Decimal(12, 2)
+  matchLevel        String
+  adjustmentReason  String     @default("")
+  minutes           Int        @default(0)
+  requiredProductId String?
+  requiredQuantity  Int        @default(1)
+  requiredProduct   Product?   @relation("RequiredWorkOrderProduct", fields: [requiredProductId], references: [id])
 
   @@index([orderId])
+  @@index([requiredProductId])
 }
 
 model Payment {
@@ -296,6 +301,7 @@ model Product {
   saleItems         RetailSaleItem[]
   workOrderProducts WorkOrderProduct[]
   requiredByRules   PriceRule[]         @relation("RequiredRepairProduct")
+  requiredByItems   WorkOrderItem[]     @relation("RequiredWorkOrderProduct")
 
   @@index([name])
   @@index([category, usage, enabled])

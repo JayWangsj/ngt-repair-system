@@ -1,27 +1,23 @@
 "use client";
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useTransition,
-  type FormEvent,
-} from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Star, Trash2 } from "lucide-react";
-import {
-  createProductAction,
-  deleteInventoryCategoryAction,
-  deleteProductsAction,
-  updateProductAction,
-} from "@/app/actions";
+import { deleteProductsAction, updateProductAction } from "@/app/actions";
 import { decimal, inventoryStatus, money } from "@/lib/domain";
 import { useMessages } from "./language";
-import { Field, FormDialog } from "./forms";
-import { EditableSelect } from "./editable-select";
+import { FormDialog, ProductForm, type CategoryView } from "./forms";
 import { SearchableCombobox, SimpleSelect } from "./business-select";
 import { Button } from "./ui/button";
+export type { CategoryView } from "./forms";
+
+const presetCategories = [
+  "Accessori",
+  "Ricambi",
+  "Cavi",
+  "Caricabatterie",
+  "Usato",
+];
 
 export type ProductView = {
   id: string;
@@ -36,181 +32,6 @@ export type ProductView = {
   enabled: boolean;
   history: { id: string; at: string; label: string }[];
 };
-
-export type CategoryView = {
-  id: string;
-  name: string;
-  repairOnly: boolean;
-};
-
-const presetCategories = [
-  "Accessori",
-  "Ricambi",
-  "Cavi",
-  "Caricabatterie",
-  "Usato",
-];
-
-function ProductForm({
-  categories,
-  onClose,
-  mode,
-}: {
-  categories: CategoryView[];
-  onClose: () => void;
-  mode: "inventory" | "retail";
-}) {
-  const it = useMessages();
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState("");
-  const [category, setCategory] = useState("");
-  const [usage, setUsage] = useState<"RETAIL" | "REPAIR" | "BOTH">("RETAIL");
-  const [hiddenCategories, setHiddenCategories] = useState<string[]>([]);
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    startTransition(async () => {
-      const result = await createProductAction({
-        requestId: crypto.randomUUID(),
-        name: String(form.get("name") ?? ""),
-        category,
-        usage: mode === "retail" ? "RETAIL" : usage,
-        costPrice: String(form.get("costPrice") ?? ""),
-        salePrice:
-          mode === "inventory" && usage === "REPAIR"
-            ? "0"
-            : String(form.get("salePrice") ?? ""),
-        initialStock: String(form.get("initialStock") ?? "0"),
-        minStock: String(form.get("minStock") ?? "0"),
-        favorite: form.get("favorite") === "on",
-        enabled: true,
-      });
-      if (!result.ok) return setError(result.error);
-      onClose();
-      router.refresh();
-    });
-  }
-  const options = [
-    ...new Set([
-      ...presetCategories,
-      ...categories
-        .filter(
-          (item) =>
-            !hiddenCategories.includes(item.id) &&
-            (mode === "inventory" || !item.repairOnly),
-        )
-        .map((item) => item.name),
-    ]),
-  ]
-    .filter((item) => mode === "inventory" || item.toLowerCase() !== "ricambi")
-    .sort();
-  return (
-    <form className="dialog-form" onSubmit={submit} aria-busy={pending}>
-      <div className="form-grid">
-        <Field label={it.inventory.product}>
-          <input name="name" required maxLength={120} autoFocus />
-        </Field>
-        <div className="inventory-category-field">
-          <EditableSelect
-            label={it.inventory.category}
-            value={category}
-            onChange={setCategory}
-            options={options}
-            required
-          />
-          {categories.some((item) => item.name === category) && (
-            <button
-              type="button"
-              className="icon-button"
-              aria-label={it.remove + " " + category}
-              onClick={async () => {
-                const selected = categories.find(
-                  (item) => item.name === category,
-                );
-                if (!selected) return;
-                const result = await deleteInventoryCategoryAction(selected.id);
-                if (!result.ok) return setError(result.error);
-                setHiddenCategories([...hiddenCategories, selected.id]);
-                setCategory("");
-              }}
-            >
-              <Trash2 size={16} />
-            </button>
-          )}
-        </div>
-        {mode === "inventory" && (
-          <Field label={it.inventory.usage}>
-            <SimpleSelect
-              name="usage"
-              value={usage}
-              onChange={(value) => setUsage(value as typeof usage)}
-              placeholder={it.selectOption}
-              ariaLabel={it.inventory.usage}
-              options={[
-                { value: "RETAIL", label: it.inventory.retail },
-                { value: "REPAIR", label: it.inventory.repair },
-                { value: "BOTH", label: it.inventory.both },
-              ]}
-            />
-          </Field>
-        )}
-        <Field label={it.inventory.costPrice}>
-          <input
-            name="costPrice"
-            inputMode="decimal"
-            defaultValue="0"
-            required
-          />
-        </Field>
-        {(mode === "retail" || usage !== "REPAIR") && (
-          <Field label={it.inventory.salePrice}>
-            <input
-              name="salePrice"
-              inputMode="decimal"
-              defaultValue="0"
-              required
-            />
-          </Field>
-        )}
-        <Field label={it.inventory.initialStock}>
-          <input
-            name="initialStock"
-            type="number"
-            min="0"
-            defaultValue="0"
-            required
-          />
-        </Field>
-        <Field label={it.inventory.minimumStock}>
-          <input
-            name="minStock"
-            type="number"
-            min="0"
-            defaultValue="0"
-            required
-          />
-        </Field>
-      </div>
-      <label className="checkbox">
-        <input name="favorite" type="checkbox" />
-        {it.inventory.favorite}
-      </label>
-      {error && <p className="message error">{error}</p>}
-      <div className="dialog-actions">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onClose}
-          disabled={pending}
-        >
-          {it.cancel}
-        </Button>
-        <Button disabled={pending}>{it.inventory.saveProduct}</Button>
-      </div>
-    </form>
-  );
-}
 
 export function NewProductDialogButton({
   categories,

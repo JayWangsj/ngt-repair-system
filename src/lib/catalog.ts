@@ -15,20 +15,47 @@ export function normalizeBrand(value: string) {
   if (/^samsung$/i.test(brand)) return "Samsung";
   return brand ? brand[0].toLocaleUpperCase("it") + brand.slice(1) : "";
 }
-export function normalizeModel(value: string) {
-  const model = value
+export function modelKey(value: string) {
+  return value
     .trim()
-    .replace(/\s+/g, " ")
-    .replace(/i\s*phone/gi, "iPhone")
-    .replace(/pro/gi, " Pro ")
-    .replace(/max/gi, " Max ")
-    .replace(/iPhone\s*(?=\d)/g, "iPhone ")
-    .replace(/(\d)(?=Pro|Max)/g, "$1 ")
-    .replace(/Pro(?=Max)/g, "Pro ")
+    .toLocaleLowerCase("it")
+    .replace(/[\s-]+/g, "");
+}
+export function normalizeModel(value: string, catalog: string[] = []) {
+  const exact = catalog.find(
+    (candidate) => modelKey(candidate) === modelKey(value),
+  );
+  if (exact) return exact;
+  let model = value.trim().replace(/[\s-]+/g, " ");
+  if (!model) return "";
+  const compact = modelKey(model).replace(/^iphone/, "iPhone");
+  if (/^iphone/i.test(compact))
+    model = `iPhone ${compact.slice(6).replace(/(pro|max|ultra|plus|mini|duo)/gi, " $1 ")}`;
+  const knownSeries = ["Galaxy", "Pixel", "Xperia", "Moto", "Redmi Note"];
+  const series = knownSeries.find((name) =>
+    modelKey(model).startsWith(modelKey(name)),
+  );
+  if (series)
+    model = `${series} ${modelKey(model).slice(modelKey(series).length)}`;
+  model = model
+    .replace(/\biphone\b/gi, "iPhone")
+    .replace(/(\d)(pro|max|ultra)$/i, "$1 $2")
+    .replace(/([a-z])(\d)/i, "$1$2")
     .replace(/\s+/g, " ")
     .trim();
-  if (!model || model.startsWith("iPhone")) return model;
-  return model[0].toLocaleUpperCase("it") + model.slice(1);
+  return model
+    .split(" ")
+    .map((token) =>
+      token === "iPhone"
+        ? token
+        : /^(?:[A-Za-z]+\d+|\d+[A-Za-z]+)$/.test(token)
+          ? token[0].toLocaleUpperCase("it") + token.slice(1)
+          : token
+            ? token[0].toLocaleUpperCase("it") +
+              token.slice(1).toLocaleLowerCase("it")
+            : token,
+    )
+    .join(" ");
 }
 export const brands: Record<Category, string[]> = {
   PHONE: [

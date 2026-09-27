@@ -2,17 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, GripVertical, Plus, Search } from "lucide-react";
+import { GripVertical, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import {
   deleteFaultAction,
   reorderFaultsAction,
   saveFaultAction,
 } from "@/app/actions";
-import { categories } from "@/lib/catalog";
+import { categories, type Category } from "@/lib/catalog";
 import { useLanguage, useMessages } from "./language";
 import { Field, FormDialog } from "./forms";
 import { Button } from "./ui/button";
-import { SimpleSelect } from "./business-select";
 
 export type FaultCatalogItem = {
   id: string;
@@ -75,10 +74,10 @@ export function FaultCatalogManager({
   onChanged?: (items: FaultCatalogItem[]) => void;
 }) {
   const it = useMessages();
-  const router = useRouter();
   const { locale } = useLanguage();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [category, setCategory] = useState(initialCategory);
+  const category = initialCategory;
   const [drafts, setDrafts] = useState<Draft[]>(items);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Draft | null>(null);
@@ -177,7 +176,15 @@ export function FaultCatalogManager({
         {triggerLabel ?? it.manageFaults}
       </Button>
       {open && (
-        <FormDialog title={it.manageFaults} onClose={() => setOpen(false)}>
+        <FormDialog
+          title={it.manageFaults}
+          subtitle={it.manageFaultsFor.replace(
+            "{device}",
+            categories[category as Category]?.[locale === "zh" ? 1 : 0] ??
+              category,
+          )}
+          onClose={() => setOpen(false)}
+        >
           {editing ? (
             <form
               className="dialog-form"
@@ -263,20 +270,6 @@ export function FaultCatalogManager({
           ) : (
             <div className="fault-manager" data-form-dialog-body>
               <div className="catalog-toolbar fault-manager-toolbar">
-                <Field label={it.deviceType}>
-                  <SimpleSelect
-                    value={category}
-                    onChange={setCategory}
-                    ariaLabel={it.deviceType}
-                    placeholder={it.selectOption}
-                    options={Object.entries(categories).map(
-                      ([value, labels]) => ({
-                        value,
-                        label: labels[locale === "zh" ? 1 : 0],
-                      }),
-                    )}
-                  />
-                </Field>
                 <label className="fault-search">
                   <Search size={15} />
                   <input
@@ -324,34 +317,11 @@ export function FaultCatalogManager({
                   >
                     <GripVertical size={16} aria-hidden="true" />
                     <strong>{item.name}</strong>
-                    <span>{item.hidden ? "OFF" : "ON"}</span>
-                    <span>{item.usageCount}</span>
-                    <div className="fault-row-actions">
-                      <button
-                        type="button"
-                        aria-label={`${it.moveUp} ${item.name}`}
-                        onClick={() => move(item.id, -1)}
-                      >
-                        <ArrowUp size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        aria-label={`${it.moveDown} ${item.name}`}
-                        onClick={() => move(item.id, 1)}
-                      >
-                        <ArrowDown size={14} />
-                      </button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setEditing(item)}
-                      >
-                        {it.edit}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() =>
+                    <label className="fault-enabled-switch">
+                      <input
+                        type="checkbox"
+                        checked={!item.hidden}
+                        onChange={() =>
                           setDrafts((current) =>
                             current.map((candidate) =>
                               candidate.id === item.id
@@ -360,13 +330,23 @@ export function FaultCatalogManager({
                             ),
                           )
                         }
+                      />
+                      <span>
+                        {item.hidden ? it.disabledState : it.enabledState}
+                      </span>
+                    </label>
+                    <div className="fault-row-actions">
+                      <button
+                        type="button"
+                        aria-label={`${it.edit} ${item.name}`}
+                        onClick={() => setEditing(item)}
                       >
-                        {item.hidden ? it.enable : it.disable}
-                      </Button>
+                        <Pencil size={15} />
+                      </button>
                       {item.usageCount === 0 && !item.created && (
-                        <Button
+                        <button
                           type="button"
-                          variant="ghost"
+                          aria-label={`${it.remove} ${item.name}`}
                           onClick={async () => {
                             if (!window.confirm(it.permanentFaultDeleteConfirm))
                               return;
@@ -379,8 +359,8 @@ export function FaultCatalogManager({
                             );
                           }}
                         >
-                          {it.remove}
-                        </Button>
+                          <Trash2 size={15} />
+                        </button>
                       )}
                     </div>
                   </div>

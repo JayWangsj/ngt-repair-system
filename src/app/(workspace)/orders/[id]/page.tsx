@@ -1,5 +1,4 @@
 import { faultLabel } from "@/lib/catalog";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { orderInclude } from "@/lib/service";
@@ -15,7 +14,7 @@ import {
   warrantyPeriod,
   warrantyProgress,
 } from "@/lib/domain";
-import { Badge, PageHeader } from "@/components/common";
+import { BackButton, Badge, PageHeader } from "@/components/common";
 import {
   EditOrderForm,
   EditQuoteForm,
@@ -73,6 +72,7 @@ export default async function Detail({
             "QUOTE_CREATED",
             "AFTER_SALES_OPENED",
             "REFUND_ISSUED",
+            "STATUS_CHANGED",
           ],
         },
       },
@@ -80,35 +80,64 @@ export default async function Detail({
     }),
   ]);
   if (!order) notFound();
-  const [rules, products] = await Promise.all([
-    db.priceRule.findMany({ where: { enabled: true } }),
-    db.product.findMany({
-      where: { enabled: true },
-      orderBy: [{ favorite: "desc" }, { name: "asc" }],
-    }),
-  ]);
+  const [rules, products, customers, faultOptions, productCategories] =
+    await Promise.all([
+      db.priceRule.findMany({ where: { enabled: true } }),
+      db.product.findMany({
+        where: { enabled: true },
+        orderBy: [{ favorite: "desc" }, { name: "asc" }],
+      }),
+      db.customer.findMany({
+        where: { deletedAt: null },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          phones: { select: { phone: true } },
+        },
+        orderBy: { name: "asc" },
+      }),
+      db.faultOption.findMany({
+        select: {
+          id: true,
+          category: true,
+          name: true,
+          note: true,
+          hidden: true,
+          sortOrder: true,
+          _count: { select: { orders: true } },
+        },
+        orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
+      }),
+      db.inventoryCategory.findMany({
+        where: { deletedAt: null },
+        select: { id: true, name: true, repairOnly: true },
+        orderBy: { name: "asc" },
+      }),
+    ]);
   const totals = settlement(order.items, order);
   const remaining = balance(order.items, order.payments, order);
   const receivedTotal = order.payments.reduce(
     (sum, payment) => sum + cents(payment.amount),
     0,
   );
-  const refunded = order.status === "REFUNDED";
-  const received = refunded ? 0 : receivedTotal;
-  const currentDue = refunded ? 0 : totals.due;
-  const repairAmount = refunded
+  const financiallyClosed = ["REFUNDED", "CANCELLED"].includes(order.status);
+  const received = financiallyClosed ? 0 : receivedTotal;
+  const currentDue = financiallyClosed ? 0 : totals.due;
+  const repairAmount = financiallyClosed
     ? 0
     : totals.due - totals.productTotal - totals.afterSalesTotal;
-  const productAmount = refunded ? 0 : totals.productTotal;
-  const afterSalesAmount = refunded ? 0 : totals.afterSalesTotal;
+  const productAmount = financiallyClosed ? 0 : totals.productTotal;
+  const afterSalesAmount = financiallyClosed ? 0 : totals.afterSalesTotal;
   const originalLocked =
     order.afterSalesOpen ||
     ["COMPLETED", "REWORKING", "REFUNDED", "CANCELLED"].includes(order.status);
-  const warranty = warrantyPeriod(order.pickedUpAt, order.warrantyMonths);
-  const reworkWarranty = warrantyProgress(
-    order.pickedUpAt,
-    order.warrantyMonths,
-  );
+  const warrantyDays =
+    order.warrantyDays ||
+    ({ 1: 30, 3: 90, 6: 180, 12: 365 }[order.warrantyMonths] ??
+      order.warrantyMonths * 30);
+  const warranty = warrantyPeriod(order.pickedUpAt, warrantyDays);
+  const reworkWarranty = warrantyProgress(order.pickedUpAt, warrantyDays);
   const originalProjectNames = new Set(
     order.items.map((item) => item.project.trim().toLocaleLowerCase()),
   );
@@ -122,18 +151,9 @@ export default async function Detail({
         .map((rule) => [rule.project.trim().toLocaleLowerCase(), rule]),
     ).values(),
   ];
-  const duration =
-    order.warrantyMonths === 0
-      ? it.warranty.none
-      : order.warrantyMonths === 1
-        ? it.warranty.oneMonth
-        : order.warrantyMonths === 3
-          ? it.warranty.threeMonths
-          : order.warrantyMonths === 6
-            ? it.warranty.sixMonths
-            : order.warrantyMonths === 12
-              ? it.warranty.twelveMonths
-              : `${order.warrantyMonths} ${it.warranty.months}`;
+  const duration = warrantyDays
+    ? `${warrantyDays} ${it.warranty.days}`
+    : it.warranty.none;
 
   const events: TimelineEvent[] = [];
   for (const audit of audits) {
@@ -222,12 +242,27 @@ export default async function Detail({
         actor: audit.actorName,
       });
     }
+    if (audit.action === "STATUS_CHANGED" && context.to === "CANCELLED")
+      events.push({
+        id: audit.id,
+        at: audit.createdAt,
+        title: `${it.actions.STATUS_CHANGED}: ${it.status.CANCELLED}`,
+        actor: audit.actorName,
+        detail: [
+          `${it.total}: ${money(cents(String(context.originalDue ?? "0")))}`,
+          `${it.paid}: ${money(cents(String(context.originalReceived ?? "0")))}`,
+          context.reason,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      });
   }
   for (const history of order.history) {
     if (
       !history.from ||
       history.to === "REWORKING" ||
-      history.to === "REFUNDED"
+      history.to === "REFUNDED" ||
+      history.to === "CANCELLED"
     )
       continue;
     events.push({
@@ -259,9 +294,7 @@ export default async function Detail({
 
   return (
     <>
-      <Link className="button button-outline back-link" href="/orders">
-        ← {it.nav.orders}
-      </Link>
+      <BackButton href="/orders" label={it.nav.orders} />
       <PageHeader
         title={orderCode(order.code)}
         description={`${order.device.brand} ${order.device.model} · ${order.device.customer.name}`}
@@ -288,6 +321,9 @@ export default async function Detail({
       {order.status === "REFUNDED" && (
         <p className="order-lock-notice refunded">{it.lockedRefunded}</p>
       )}
+      {order.status === "CANCELLED" && (
+        <p className="order-lock-notice">{it.lockedCancelled}</p>
+      )}
       <div className="detail-grid">
         <div className="stack">
           <OrderDetailCard
@@ -297,15 +333,21 @@ export default async function Detail({
             edit={
               <EditOrderForm
                 id={id}
+                customers={customers}
+                faultOptions={faultOptions.map(({ _count, ...fault }) => ({
+                  ...fault,
+                  usageCount: _count.orders,
+                }))}
                 values={{
+                  customerId: order.device.customerId,
+                  category: order.device.category,
                   fault: order.fault,
                   faultNote: order.faultNote,
-                  standardFaults: order.faults
+                  standardFaultIds: order.faults
                     .filter((fault) => !fault.custom)
-                    .map((fault) => fault.nameSnapshot),
-                  customFaults: order.faults
-                    .filter((fault) => fault.custom)
-                    .map((fault) => fault.nameSnapshot),
+                    .flatMap((fault) =>
+                      fault.catalogId ? [fault.catalogId] : [],
+                    ),
                   notes: order.notes,
                   accessories: order.accessories,
                   dueDate: order.dueDate,
@@ -408,6 +450,8 @@ export default async function Detail({
                     final: item.final.toString(),
                     discount: item.discount.toString(),
                     adjustmentReason: item.adjustmentReason,
+                    requiredProductId: item.requiredProductId ?? "",
+                    requiredQuantity: item.requiredQuantity,
                   }))}
                   device={{
                     category: order.device.category,
@@ -422,6 +466,13 @@ export default async function Detail({
                     cost: undefined,
                     updatedAt: undefined,
                   }))}
+                  products={products.map((product) => ({
+                    id: product.id,
+                    name: product.name,
+                    category: product.category,
+                    stock: product.stockQuantity,
+                  }))}
+                  productCategories={productCategories}
                 />
               ) : undefined
             }
@@ -503,6 +554,13 @@ export default async function Detail({
                             {item.adjustmentReason && (
                               <small>{item.adjustmentReason}</small>
                             )}
+                            {item.requiredProduct && (
+                              <small>
+                                {it.requiredPart}: {item.requiredProduct.name} ·{" "}
+                                {it.inventory.currentStock}:{" "}
+                                {item.requiredProduct.stockQuantity}
+                              </small>
+                            )}
                           </td>
                           <td>
                             {item.suggested === null
@@ -536,7 +594,7 @@ export default async function Detail({
               <WarrantyForm
                 id={id}
                 values={{
-                  months: order.warrantyMonths,
+                  days: warrantyDays,
                   scope: order.warrantyScope,
                   notes: order.warrantyNotes,
                 }}
@@ -544,7 +602,7 @@ export default async function Detail({
             }
           >
             <dl className="detail-list warranty-details">
-              {order.pickedUpAt && order.warrantyMonths > 0 && (
+              {order.pickedUpAt && warrantyDays > 0 && (
                 <div>
                   <dt>{it.warranty.status}</dt>
                   <dd>

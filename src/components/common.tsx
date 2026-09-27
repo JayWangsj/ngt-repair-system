@@ -12,6 +12,13 @@ import { getMessages } from "@/lib/i18n-server";
 import { balance, isOverdue, settlement, type OrderStatus } from "@/lib/domain";
 import { Button } from "./ui/button";
 import { OrderListBody } from "./order-list-controls";
+export function BackButton({ href, label }: { href: string; label: string }) {
+  return (
+    <Link className="button button-outline back-link" href={href}>
+      ← {label}
+    </Link>
+  );
+}
 export async function PageHeader({
   title,
   description,
@@ -100,10 +107,9 @@ export async function OrderTable({
           hideCustomer={hideCustomer}
           compact={compact}
           rows={orders.map((order) => {
-            const due =
-              order.status === "REFUNDED"
-                ? 0
-                : settlement(order.items, order).due;
+            const due = ["REFUNDED", "CANCELLED"].includes(order.status)
+              ? 0
+              : settlement(order.items, order).due;
             const remaining = balance(order.items, order.payments, order);
             return {
               id: order.id,
@@ -119,7 +125,9 @@ export async function OrderTable({
               dueDate: order.dueDate ?? "",
               overdue: isOverdue(order),
               due,
-              paid: order.status === "REFUNDED" ? 0 : due - remaining,
+              paid: ["REFUNDED", "CANCELLED"].includes(order.status)
+                ? 0
+                : due - remaining,
               balance: remaining,
             };
           })}

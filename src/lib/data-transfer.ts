@@ -549,6 +549,10 @@ export async function importBusinessData(
           pickedUpAt: date(source.pickedUpAt),
           pickedUpBy: source.pickedUpBy,
           warrantyMonths: source.warrantyMonths ?? 0,
+          warrantyDays:
+            source.warrantyDays ??
+            { 1: 30, 3: 90, 6: 180, 12: 365 }[source.warrantyMonths ?? 0] ??
+            (source.warrantyMonths ?? 0) * 30,
           warrantyScope: source.warrantyScope ?? "",
           warrantyNotes: source.warrantyNotes ?? "",
           afterSalesFee: source.afterSalesFee ?? "0",
@@ -587,6 +591,8 @@ export async function importBusinessData(
             matchLevel: source.matchLevel,
             adjustmentReason: source.adjustmentReason,
             minutes: source.minutes,
+            requiredProductId: source.requiredProductId ?? null,
+            requiredQuantity: source.requiredQuantity ?? 1,
           },
         });
         imported++;

@@ -54,14 +54,15 @@ async function fillOrder(
       .getByRole("button", { name: "Nuovo cliente", exact: true })
       .click();
     const dialog = page.getByRole("dialog", { name: "Nuovo cliente" });
+    await dialog.getByLabel(/Nome e cognome/).fill(customerName);
+    await dialog.getByLabel(/Telefono/).fill(options.phone);
     await dialog
-      .getByLabel("Nome e cognome", { exact: true })
-      .fill(customerName);
-    await dialog.getByLabel("Telefono", { exact: true }).fill(options.phone);
-    await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+      .getByRole("button", { name: "Salva cliente", exact: true })
+      .click();
     await expect(dialog).toHaveCount(0);
   }
-  await chooseBusinessOption(page, "Cerca cliente", customerName);
+  if (!options.phone)
+    await chooseBusinessOption(page, "Cerca cliente", customerName);
   if (options.phone) {
     await chooseBusinessOption(page, "Marca", "Apple");
     await chooseBusinessOption(page, "Modello", "iPhone 13");
@@ -108,6 +109,15 @@ async function openPayment(page: Page) {
   const step = page.locator(".order-step-card").filter({ hasText: /^04/ });
   await step.locator(".order-step-heading").click();
 }
+async function openStep(page: Page, index: number) {
+  const card = page.locator(".order-step-card").nth(index);
+  if (
+    (await card
+      .locator(".order-step-heading")
+      .getAttribute("aria-expanded")) !== "true"
+  )
+    await card.locator(".order-step-heading").click();
+}
 async function state(page: Page, next: string) {
   const label = next === "REPAIRING" ? "In riparazione" : "Da ritirare";
   await page.locator(".detail-status .status-dropdown-trigger").click();
@@ -116,6 +126,23 @@ async function state(page: Page, next: string) {
     page.locator(".detail-status .status-dropdown-trigger"),
   ).toContainText(label);
 }
+test("new repair uses a single selected accordion step", async ({ page }) => {
+  await page.goto("/orders/new");
+  const cards = page.locator(".order-step-card");
+  await expect(cards).toHaveCount(4);
+  await expect(cards.nth(0)).toHaveClass(/is-selected/);
+  await expect(cards.nth(0).locator(".order-step-state")).toContainText(
+    "In corso",
+  );
+  await expect(page.locator(".order-step-collapse.is-expanded")).toHaveCount(1);
+  await cards.nth(3).locator(".order-step-heading").click();
+  await expect(cards.nth(3)).toHaveClass(/is-selected/);
+  await expect(cards.nth(0)).not.toHaveClass(/is-selected/);
+  await expect(page.locator(".order-step-collapse.is-expanded")).toHaveCount(1);
+  await cards.nth(3).getByLabel("Incasso alla creazione (€)").fill("10");
+  await expect(cards.nth(3)).toHaveClass(/is-selected/);
+});
+
 test("single operator opens every business page without login", async ({
   page,
 }) => {
@@ -534,9 +561,6 @@ test("creates automatic quote, receives payment and delivers", async ({
   await fillOrder(page);
   await openPayment(page);
   await page
-    .getByLabel("Registra un pagamento adesso", { exact: true })
-    .check();
-  await page
     .getByLabel("Incasso alla creazione (€)", { exact: true })
     .fill("20");
   await save(page);
@@ -579,9 +603,6 @@ test("discount and IVA persist without polluting historical prices", async ({
   await expect(page.locator(".price-breakdown")).toContainText("103,70");
   await openPayment(page);
   await page
-    .getByLabel("Registra un pagamento adesso", { exact: true })
-    .check();
-  await page
     .getByLabel("Incasso alla creazione (€)", { exact: true })
     .fill("20");
   await save(page);
@@ -603,8 +624,10 @@ test("discount and IVA persist without polluting historical prices", async ({
   await page.goto("/settings");
   await page.getByRole("button", { name: "Italiano", exact: true }).click();
   await page.goto("/orders/new");
+  await openStep(page, 1);
   await chooseBusinessOption(page, "Marca", "Apple");
   await chooseBusinessOption(page, "Modello", "iPhone 13");
+  await openStep(page, 2);
   await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
   await expect(
     page.getByLabel("Prezzo originale (€) 1", { exact: true }),
@@ -704,9 +727,6 @@ test("zero balance delivery uses the lightweight confirmation dialog", async ({
   await fillOrder(page);
   await openPayment(page);
   await page
-    .getByLabel("Registra un pagamento adesso", { exact: true })
-    .check();
-  await page
     .getByLabel("Incasso alla creazione (€)", { exact: true })
     .fill("100");
   await save(page);
@@ -730,9 +750,6 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
 }) => {
   await fillOrder(page, { manual: true });
   await openPayment(page);
-  await page
-    .getByLabel("Registra un pagamento adesso", { exact: true })
-    .check();
   await page
     .getByLabel("Incasso alla creazione (€)", { exact: true })
     .fill("75");
@@ -784,7 +801,7 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     details.getByRole("button", { name: "Dettagli" }),
   ).toBeDisabled();
   await details
-    .getByLabel("Problema segnalato")
+    .getByLabel("Descrizione aggiuntiva")
     .fill("Fotocamera non funziona");
   await quote.hover();
   await quote.getByRole("button", { name: "Modifica dati" }).click();
@@ -795,12 +812,8 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
 
   await details.hover();
   await details.getByRole("button", { name: "Modifica dati" }).click();
-  await details.getByLabel("Problema segnalato").fill("");
-  await page.locator(".balance-card").click();
-  await expect(details).toHaveClass(/is-editing/);
-  await expect(details.locator(".message.error")).toBeVisible();
   await details
-    .getByLabel("Problema segnalato")
+    .getByLabel("Descrizione aggiuntiva")
     .fill("Fotocamera non funziona ancora");
   await details.getByRole("button", { name: "Salva" }).click();
   await expect(details).not.toHaveClass(/is-editing/);
@@ -817,11 +830,11 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await quote.getByRole("button", { name: "Annulla" }).click();
   await warranty.hover();
   await warranty.getByRole("button", { name: "Modifica dati" }).click();
-  await chooseBusinessOption(page, "Durata garanzia", "3 mesi", warranty);
+  await chooseBusinessOption(page, "Durata garanzia", "90 giorni", warranty);
   await warranty.getByLabel("Copertura").fill("Solo il componente sostituito");
   await warranty.getByRole("button", { name: "Salva" }).click();
   await expect(warranty).not.toHaveClass(/is-editing/);
-  await expect(warranty).toContainText("3 mesi");
+  await expect(warranty).toContainText("90 giorni");
 
   await state(page, "READY");
   await page.getByLabel("Nome di chi ritira", { exact: true }).fill("Cliente");
@@ -1018,7 +1031,7 @@ test("price editor and mobile yellow layout support both languages", async ({
   });
 });
 
-test("confirms a new customer with three numbers and selects that customer by name", async ({
+test("creates a customer and selects it without another search", async ({
   page,
 }) => {
   const phone = "336" + Date.now().toString().slice(-7);
@@ -1027,34 +1040,12 @@ test("confirms a new customer with three numbers and selects that customer by na
     .getByRole("button", { name: "Nuovo cliente", exact: true })
     .click();
   const dialog = page.getByRole("dialog", { name: "Nuovo cliente" });
+  await dialog.getByLabel(/Nome e cognome/).fill("Tre telefoni");
+  await dialog.getByLabel(/Telefono/).fill(phone);
   await dialog
-    .getByLabel("Nome e cognome", { exact: true })
-    .fill("Tre telefoni");
-  await dialog.getByLabel("Telefono", { exact: true }).fill(phone);
-  await dialog
-    .getByRole("button", { name: "Aggiungi telefono", exact: true })
+    .getByRole("button", { name: "Salva cliente", exact: true })
     .click();
-  await dialog
-    .getByLabel("Telefono 2", { exact: true })
-    .fill("337" + phone.slice(3));
-  await dialog
-    .getByRole("button", { name: "Aggiungi telefono", exact: true })
-    .click();
-  await dialog
-    .getByLabel("Telefono 3", { exact: true })
-    .fill("338" + phone.slice(3));
-  await expect(
-    dialog.getByRole("button", { name: "Aggiungi telefono", exact: true }),
-  ).toBeDisabled();
-  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
   await expect(dialog).toHaveCount(0);
-
-  const search = page.getByRole("combobox", {
-    name: "Cerca cliente",
-    exact: true,
-  });
-  await search.fill("337" + phone.slice(3));
-  await page.getByRole("option", { name: /Tre telefoni/ }).click();
   await expect(page.locator(".selected-customer-summary")).toContainText(
     "Tre telefoni",
   );
@@ -1109,6 +1100,7 @@ test("searchable combobox keeps search, create and chevron as independent contro
   ).toBeVisible();
   await customer.press("Escape");
 
+  await openStep(page, 1);
   await chooseBusinessOption(page, "Marca", "Apple");
   const brand = page.getByRole("combobox", { name: "Marca", exact: true });
   await expect(brand).toHaveValue("Apple");
@@ -1128,6 +1120,7 @@ test("native quote choices populate prices, clear on model changes and discounts
   page,
 }) => {
   await page.goto("/orders/new");
+  await openStep(page, 1);
   const deviceType = page.getByRole("button", {
     name: "Tipo dispositivo",
     exact: true,
@@ -1147,6 +1140,7 @@ test("native quote choices populate prices, clear on model changes and discounts
   await expect(deviceType).toContainText("Telefono");
   await chooseBusinessOption(page, "Marca", "Apple");
   await chooseBusinessOption(page, "Modello", "iPhone 13");
+  await openStep(page, 2);
   await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
   await expect(
     page.getByLabel("Prezzo originale (€) 1", { exact: true }),
@@ -1168,7 +1162,9 @@ test("native quote choices populate prices, clear on model changes and discounts
     page.getByLabel("Sconto intervento (€) 1", { exact: true }),
   ).toHaveCount(0);
   await expect(page.locator(".price-breakdown")).toContainText("100,00");
+  await openStep(page, 1);
   await enterBusinessValue(page, "Modello", "Unknown model");
+  await openStep(page, 2);
   await expect(
     page.getByRole("combobox", { name: "Intervento 1", exact: true }),
   ).toHaveValue("");
@@ -1185,10 +1181,45 @@ test("native quote choices populate prices, clear on model changes and discounts
   await expect(
     page.getByText("Altri dettagli (facoltativi)", { exact: true }),
   ).toHaveCount(0);
+  await openStep(page, 1);
   await enterBusinessValue(page, "Modello", "iphone18promax");
   await expect(
     page.getByRole("combobox", { name: "Modello", exact: true }),
   ).toHaveValue("iPhone 18 Pro Max");
+});
+
+test("creates a repair part from the quote and selects it immediately", async ({
+  page,
+}) => {
+  await page.goto("/orders/new");
+  await openStep(page, 1);
+  await chooseBusinessOption(page, "Marca", "Apple");
+  await chooseBusinessOption(page, "Modello", "iPhone 13");
+  await openStep(page, 2);
+
+  await page.getByRole("button", { name: "Nuovo ricambio" }).click();
+  const dialog = page.getByRole("dialog", { name: "Nuovo ricambio" });
+  const productName = `Ricambio E2E ${Date.now()}`;
+  await dialog.getByLabel("Prodotto", { exact: true }).fill(productName);
+  await chooseBusinessOption(page, "Categoria", "Ricambi", dialog);
+  await expect(
+    dialog.getByRole("button", { name: "Utilizzo", exact: true }),
+  ).toContainText("Riparazione");
+  await dialog.getByLabel("Costo", { exact: true }).fill("12");
+  await dialog.getByLabel("Scorta iniziale", { exact: true }).fill("0");
+  await dialog.getByLabel("Scorta minima", { exact: true }).fill("1");
+  await dialog.getByRole("button", { name: "Salva prodotto" }).click();
+
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByRole("combobox", { name: "Ricambio richiesto 1", exact: true }),
+  ).toHaveValue(productName);
+  await expect(
+    page.getByText(
+      "Il ricambio selezionato non è disponibile: la scheda verrà creata in attesa ricambi.",
+      { exact: true },
+    ),
+  ).toBeVisible();
 });
 
 test("customer list searches instantly, preserves navigation and supports compact editing", async ({
@@ -1534,6 +1565,7 @@ test("hides managed faults without changing historical records", async ({
   page,
 }) => {
   await page.goto("/orders/new");
+  await openStep(page, 1);
   await page
     .getByRole("button", { name: "Gestisci problemi", exact: true })
     .click();
@@ -1541,7 +1573,7 @@ test("hides managed faults without changing historical records", async ({
   const row = dialog.locator(".fault-manager-row").filter({
     hasText: "Display rotto",
   });
-  await row.getByRole("button", { name: "Disattiva", exact: true }).click();
+  await row.locator(".fault-enabled-switch input").uncheck();
   await dialog
     .getByRole("button", { name: "Salva modifiche", exact: true })
     .click();
@@ -1550,6 +1582,7 @@ test("hides managed faults without changing historical records", async ({
     0,
   );
   await page.reload();
+  await openStep(page, 1);
   await expect(page.getByLabel("Display rotto", { exact: true })).toHaveCount(
     0,
   );
@@ -1561,7 +1594,7 @@ test("hides managed faults without changing historical records", async ({
       .getByRole("dialog", { name: "Gestisci problemi" })
       .locator(".fault-manager-row")
       .filter({ hasText: "Display rotto" }),
-  ).toContainText("OFF");
+  ).toContainText("Disattivato");
 });
 
 test("compact price rows support direct icon actions and selection on mobile", async ({
@@ -1778,6 +1811,7 @@ test("shared action affordances, price search and delivery date limit", async ({
   );
   await expect(page.locator(".filters").filter({ has: search })).toBeVisible();
   await page.goto("/orders/new");
+  await openStep(page, 1);
   const date = page.locator('input[name="dueDate"]');
   const today = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Rome",

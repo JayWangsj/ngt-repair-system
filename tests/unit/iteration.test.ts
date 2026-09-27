@@ -46,7 +46,7 @@ describe("customer phone validation", () => {
     expect(normalizeModel("iphone18promax")).toBe("iPhone 18 Pro Max");
     expect(normalizeModel("i phone18pro max")).toBe("iPhone 18 Pro Max");
     expect(normalizeModel("a17")).toBe("A17");
-    expect(normalizeModel("galaxy a17")).toBe("Galaxy a17");
+    expect(normalizeModel("galaxy a17")).toBe("Galaxy A17");
   });
 });
 describe("device-specific suggestions", () => {

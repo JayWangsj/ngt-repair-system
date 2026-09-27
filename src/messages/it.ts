@@ -69,6 +69,9 @@ export const it = {
   faultCatalogNote: "Nota (facoltativa)",
   showInNewOrder: "Mostra nelle nuove schede",
   faultSearch: "Cerca nome problema...",
+  faultDragHint:
+    "Trascina la maniglia a sinistra per modificare l'ordine nelle nuove schede.",
+  operation: "Azioni",
   saveChanges: "Salva modifiche",
   permanentFaultDeleteConfirm:
     "Eliminare definitivamente questo problema mai utilizzato?",
@@ -357,10 +360,15 @@ export const it = {
   dueDate: "Consegna prevista",
   diagnosticFee: "Costo diagnosi (€)",
   requiredPart: "Ricambio richiesto",
+  optional: "facoltativo",
+  change: "Cambia",
+  searchInventoryPart: "Cerca ricambio in magazzino...",
+  partInStock: "Disponibile",
+  partOutOfStock: "Non disponibile",
   newPart: "Nuovo ricambio",
   noRequiredPart: "Nessun ricambio richiesto",
   requiredPartOutOfStock:
-    "Il ricambio selezionato non è disponibile: la scheda verrà creata in attesa ricambi.",
+    "Il ricambio selezionato non è sufficiente: dopo la creazione la scheda passerà automaticamente a «Ricambio mancante».",
   useExistingCustomer: "Usa questo cliente",
   saveCustomer: "Salva cliente",
   cancelOrder: "Annulla scheda",

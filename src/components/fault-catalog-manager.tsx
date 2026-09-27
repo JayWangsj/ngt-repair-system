@@ -97,6 +97,22 @@ export function FaultCatalogManager({
       .includes(query.toLocaleLowerCase("it")),
   );
 
+  function openManager() {
+    setDrafts(items);
+    setQuery("");
+    setEditing(null);
+    setError("");
+    setOpen(true);
+  }
+
+  function closeManager() {
+    setDrafts(items);
+    setQuery("");
+    setEditing(null);
+    setError("");
+    setOpen(false);
+  }
+
   function move(id: string, delta: number) {
     const index = scoped.findIndex((item) => item.id === id);
     const target = index + delta;
@@ -172,7 +188,7 @@ export function FaultCatalogManager({
 
   return (
     <>
-      <Button type="button" variant="ghost" onClick={() => setOpen(true)}>
+      <Button type="button" variant="ghost" onClick={openManager}>
         {triggerLabel ?? it.manageFaults}
       </Button>
       {open && (
@@ -183,7 +199,7 @@ export function FaultCatalogManager({
             categories[category as Category]?.[locale === "zh" ? 1 : 0] ??
               category,
           )}
-          onClose={() => setOpen(false)}
+          onClose={closeManager}
         >
           {editing ? (
             <form
@@ -257,6 +273,26 @@ export function FaultCatalogManager({
               })()}
               {error && <p className="message error">{error}</p>}
               <div className="dialog-actions">
+                {editing.usageCount === 0 && !editing.created && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={async () => {
+                      if (!window.confirm(it.permanentFaultDeleteConfirm))
+                        return;
+                      const result = await deleteFaultAction(editing.id);
+                      if (!result.ok) return setError(result.error);
+                      setDrafts((current) =>
+                        current.filter(
+                          (candidate) => candidate.id !== editing.id,
+                        ),
+                      );
+                      setEditing(null);
+                    }}
+                  >
+                    <Trash2 size={15} /> {it.remove}
+                  </Button>
+                )}
                 <Button
                   type="button"
                   variant="outline"
@@ -280,6 +316,7 @@ export function FaultCatalogManager({
                 </label>
                 <Button
                   type="button"
+                  variant="outline"
                   onClick={() =>
                     setEditing({
                       id: `new-${crypto.randomUUID()}`,
@@ -297,12 +334,15 @@ export function FaultCatalogManager({
                 </Button>
               </div>
               <div className="fault-manager-list" role="table">
+                <div className="fault-manager-header" role="row">
+                  <span>{it.faultName}</span>
+                  <span>{it.statusLabel}</span>
+                  <span>{it.operation}</span>
+                </div>
                 {visible.map((item) => (
                   <div
                     className="fault-manager-row"
                     key={item.id}
-                    draggable
-                    onDragStart={() => setDragId(item.id)}
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={() => {
                       const from = scoped.findIndex(
@@ -315,7 +355,13 @@ export function FaultCatalogManager({
                       setDragId("");
                     }}
                   >
-                    <GripVertical size={16} aria-hidden="true" />
+                    <span
+                      className="fault-drag-handle"
+                      draggable
+                      onDragStart={() => setDragId(item.id)}
+                    >
+                      <GripVertical size={16} aria-hidden="true" />
+                    </span>
                     <strong>{item.name}</strong>
                     <label className="fault-enabled-switch">
                       <input
@@ -343,36 +389,18 @@ export function FaultCatalogManager({
                       >
                         <Pencil size={15} />
                       </button>
-                      {item.usageCount === 0 && !item.created && (
-                        <button
-                          type="button"
-                          aria-label={`${it.remove} ${item.name}`}
-                          onClick={async () => {
-                            if (!window.confirm(it.permanentFaultDeleteConfirm))
-                              return;
-                            const result = await deleteFaultAction(item.id);
-                            if (!result.ok) return setError(result.error);
-                            setDrafts((current) =>
-                              current.filter(
-                                (candidate) => candidate.id !== item.id,
-                              ),
-                            );
-                          }}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      )}
                     </div>
                   </div>
                 ))}
               </div>
+              <p className="fault-drag-hint">{it.faultDragHint}</p>
               {error && <p className="message error">{error}</p>}
               <div className="dialog-actions">
                 <Button
                   type="button"
                   variant="outline"
                   disabled={pending}
-                  onClick={() => setOpen(false)}
+                  onClick={closeManager}
                 >
                   {it.cancel}
                 </Button>

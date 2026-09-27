@@ -18,7 +18,7 @@ export type SelectOption = {
   value: string;
   label: string;
   secondary?: string;
-  trailing?: string;
+  trailing?: ReactNode;
   icon?: ReactNode;
   keywords?: string;
 };
@@ -79,6 +79,9 @@ export function SelectDropdown({
   customLabel,
   onCustom,
   onCommit,
+  onQueryChange,
+  customDisabled = false,
+  middleControl,
   clearable = false,
   loading = false,
   className = "",
@@ -97,6 +100,9 @@ export function SelectDropdown({
   customLabel?: string;
   onCustom?: (query: string) => void;
   onCommit?: (query: string) => void;
+  onQueryChange?: (query: string) => void;
+  customDisabled?: boolean;
+  middleControl?: ReactNode;
   clearable?: boolean;
   loading?: boolean;
   className?: string;
@@ -130,6 +136,9 @@ export function SelectDropdown({
     }))
     .filter((group) => group.options.length);
   const visible = filtered.flatMap((group) => group.options);
+  const trimmedQuery = query.trim();
+  const canCreate =
+    !!trimmedQuery && !loading && !visible.length && !customDisabled;
 
   const close = useCallback(
     ({ focus = false }: { focus?: boolean } = {}) => {
@@ -225,7 +234,7 @@ export function SelectDropdown({
       {name && <input type="hidden" name={name} value={currentValue} />}
       {searchable ? (
         <div
-          className={`business-combobox-control ${onCustom && customLabel ? "has-create" : ""}`}
+          className={`business-combobox-control ${onCustom && customLabel ? "has-create" : ""} ${middleControl ? "has-middle" : ""}`}
         >
           <div className="business-combobox-input">
             <Search size={15} aria-hidden="true" />
@@ -242,16 +251,17 @@ export function SelectDropdown({
               aria-autocomplete="list"
               aria-activedescendant={activeDescendant}
               disabled={disabled}
-              onFocus={() => {
-                if (!open) openDropdown();
-              }}
-              onClick={() => {
-                if (!open) openDropdown();
-              }}
               onChange={(event) => {
-                if (!open) openDropdown();
-                setQuery(event.target.value);
+                const next = event.target.value;
+                setQuery(next);
                 setActive(0);
+                onQueryChange?.(next);
+                if (next.trim()) {
+                  if (!open) openDropdown();
+                } else {
+                  setOpen(false);
+                  setPresent(false);
+                }
               }}
               onKeyDown={keys}
             />
@@ -266,6 +276,9 @@ export function SelectDropdown({
                   if (open) {
                     setQuery("");
                     setActive(0);
+                    setOpen(false);
+                    setPresent(false);
+                    onQueryChange?.("");
                   } else {
                     setInternalValue("");
                     onChange?.("");
@@ -277,23 +290,6 @@ export function SelectDropdown({
               </button>
             )}
           </div>
-          {onCustom && customLabel && (
-            <button
-              type="button"
-              className="business-select-create"
-              aria-label={customLabel}
-              disabled={disabled}
-              onClick={(event) => {
-                event.stopPropagation();
-                const next = query.trim();
-                close();
-                onCustom(next);
-              }}
-            >
-              <Plus size={14} aria-hidden="true" />
-              <span>{customLabel}</span>
-            </button>
-          )}
           <button
             type="button"
             className="business-combobox-chevron"
@@ -305,11 +301,30 @@ export function SelectDropdown({
             onClick={(event) => {
               event.stopPropagation();
               if (open) close({ focus: true });
-              else openDropdown();
+              else if (query.trim()) openDropdown();
+              else search.current?.focus();
             }}
           >
             <ChevronDown size={15} aria-hidden="true" />
           </button>
+          {middleControl}
+          {onCustom && customLabel && (
+            <button
+              type="button"
+              className="business-select-create"
+              aria-label={customLabel}
+              disabled={disabled || !canCreate}
+              onClick={(event) => {
+                event.stopPropagation();
+                const next = query.trim();
+                close();
+                onCustom(next);
+              }}
+            >
+              <Plus size={14} aria-hidden="true" />
+              <span>{customLabel}</span>
+            </button>
+          )}
         </div>
       ) : (
         <button
@@ -412,25 +427,7 @@ export function SelectDropdown({
                 ))}
               {!loading && !visible.length && (
                 <div className="business-select-empty">
-                  <strong>
-                    {emptyText}
-                    {query.trim() ? ` “${query.trim()}”` : ""}
-                  </strong>
-                  <small>{it.tryAnotherSearch}</small>
-                  {onCustom && customLabel && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = query.trim();
-                        close();
-                        onCustom(next);
-                      }}
-                    >
-                      <Plus size={14} aria-hidden="true" />
-                      {customLabel}
-                      {query.trim() ? ` “${query.trim()}”` : ""}
-                    </button>
-                  )}
+                  <strong>{emptyText}</strong>
                 </div>
               )}
             </div>

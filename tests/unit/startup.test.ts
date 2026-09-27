@@ -34,6 +34,10 @@ describe("Windows persistent startup", () => {
       "scripts/install-windows-preview-startup.ps1",
       "utf8",
     );
+    const launcher = await readFile(
+      "scripts/windows-preview-launcher.vbs",
+      "utf8",
+    );
     const uninstaller = await readFile(
       "scripts/uninstall-windows-preview-startup.ps1",
       "utf8",
@@ -43,7 +47,10 @@ describe("Windows persistent startup", () => {
     expect(service).toContain('"scripts/windows-db.mjs" -Port 55432');
     expect(service).toContain('"scripts/start.mjs" -Port 3236');
     expect(installer).toContain('$taskName = "NGT Test Preview"');
+    expect(installer).toContain('New-ScheduledTaskAction -Execute "wscript.exe"');
+    expect(installer).toContain("//B //Nologo");
     expect(installer).toContain("New-ScheduledTaskTrigger -AtLogOn");
+    expect(launcher).toContain("shell.Run command, 0, False");
     expect(uninstaller).toContain("Unregister-ScheduledTask");
   });
 });

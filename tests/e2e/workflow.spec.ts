@@ -1,21 +1,47 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
+
+async function chooseBusinessOption(
+  page: Page,
+  label: string,
+  option: string,
+  scope: Page | Locator = page,
+) {
+  await scope.getByRole("button", { name: label, exact: true }).click();
+  const panel = page.locator(".business-select-panel");
+  const exact = panel.getByRole("option", { name: option, exact: true });
+  if (await exact.count()) await exact.click();
+  else
+    await panel.getByRole("option").filter({ hasText: option }).first().click();
+}
+
+async function enterBusinessValue(
+  page: Page,
+  label: string,
+  value: string,
+  scope: Page | Locator = page,
+) {
+  await scope.getByRole("button", { name: label, exact: true }).click();
+  const panel = page.locator(".business-select-panel");
+  await panel.getByRole("searchbox").fill(value);
+  await panel.locator(".business-select-custom").click();
+}
 async function fillOrder(
   page: Page,
   options: { manual?: boolean; discount?: boolean; phone?: string } = {},
 ) {
   await page.goto("/orders/new");
-  await page
-    .getByLabel("Telefono", { exact: true })
-    .fill(options.phone ?? `333${Date.now().toString().slice(-7)}`);
-  await page
-    .getByLabel("Nome e cognome", { exact: true })
-    .fill("Cliente Playwright");
-  await page.getByLabel("Marca", { exact: true }).fill("Apple");
-  await page.getByLabel("Modello", { exact: true }).fill("iPhone 13");
+  await enterBusinessValue(
+    page,
+    "Telefono",
+    options.phone ?? `333${Date.now().toString().slice(-7)}`,
+  );
+  await enterBusinessValue(page, "Nome e cognome", "Cliente Playwright");
+  await chooseBusinessOption(page, "Marca", "Apple");
+  await chooseBusinessOption(page, "Modello", "iPhone 13");
   await page.getByLabel("Display rotto", { exact: true }).check();
-  await page
-    .getByLabel("Intervento 1", { exact: true })
-    .fill(options.manual ? `Fotocamera ${Date.now()}` : "sostituzione display");
+  if (options.manual)
+    await enterBusinessValue(page, "Intervento 1", `Fotocamera ${Date.now()}`);
+  else await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
   if (options.manual)
     await page.getByLabel("Prezzo originale (€) 1", { exact: true }).fill("75");
   else
@@ -167,8 +193,8 @@ test("creates and edits a product directly in the inventory row", async ({
   await page.getByRole("button", { name: "Nuovo prodotto" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Prodotto", { exact: true }).fill("Cavo USB-C E2E");
-  await dialog.getByLabel("Categoria", { exact: true }).fill("Ricarica");
-  await dialog.getByLabel("Utilizzo", { exact: true }).selectOption("BOTH");
+  await enterBusinessValue(page, "Categoria", "Ricarica", dialog);
+  await chooseBusinessOption(page, "Utilizzo", "Vendita e riparazione", dialog);
   await dialog.getByLabel("Costo", { exact: true }).fill("4.50");
   await dialog.getByLabel("Prezzo", { exact: true }).fill("12");
   await dialog.getByLabel("Scorta iniziale", { exact: true }).fill("4");
@@ -386,13 +412,16 @@ test("creates automatic quote, receives payment and delivers", async ({
     .fill("20");
   await save(page);
   const productForm = page.locator(".order-product-form");
-  const productSelect = productForm.locator('select[name="productId"]');
+  await productForm
+    .getByRole("button", { name: "Prodotto", exact: true })
+    .click();
+  await expect(page.getByRole("option", { name: /Batteria Test/ })).toHaveCount(
+    0,
+  );
   await expect(
-    productSelect.locator("option", { hasText: "Batteria Test" }),
+    page.getByRole("option", { name: /Cover esaurita Test/ }),
   ).toHaveCount(0);
-  await expect(
-    productSelect.locator("option", { hasText: "Cover esaurita Test" }),
-  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await expect(
     page.getByText("Accessori ricevuti", { exact: true }),
   ).toHaveCount(0);
@@ -401,9 +430,7 @@ test("creates automatic quote, receives payment and delivers", async ({
   await state(page, "READY");
   await expect(page.locator(".status-operation-card")).toHaveCount(1);
   await expect(page.locator(".secondary-status-action")).toHaveCount(0);
-  await expect(
-    page.locator('select[name="kind"] option[value="DEPOSIT"]'),
-  ).toHaveCount(0);
+  await expect(page.locator('select[name="kind"]')).toHaveCount(0);
   await page.getByLabel("Importo (€)", { exact: true }).fill("80");
   await page.getByRole("button", { name: /Incassa e consegna/ }).click();
   await expect(
@@ -446,11 +473,9 @@ test("discount and IVA persist without polluting historical prices", async ({
   await page.goto("/settings");
   await page.getByRole("button", { name: "Italiano", exact: true }).click();
   await page.goto("/orders/new");
-  await page.getByLabel("Marca", { exact: true }).fill("Apple");
-  await page.getByLabel("Modello", { exact: true }).fill("iPhone 13");
-  await page
-    .getByLabel("Intervento 1", { exact: true })
-    .fill("sostituzione display");
+  await chooseBusinessOption(page, "Marca", "Apple");
+  await chooseBusinessOption(page, "Modello", "iPhone 13");
+  await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
   await expect(
     page.getByLabel("Prezzo originale (€) 1", { exact: true }),
   ).toHaveValue("100");
@@ -610,7 +635,7 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   ).toBe(productsTop);
 
   const productControls = products.locator(
-    ".order-product-form select, .order-product-form input, .order-product-form .button",
+    ".order-product-form .business-select-trigger, .order-product-form input:not([type='hidden']), .order-product-form .button",
   );
   const productBoxes = await productControls.evaluateAll((elements) =>
     elements.map((element) => {
@@ -660,7 +685,7 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await quote.getByRole("button", { name: "Annulla" }).click();
   await warranty.hover();
   await warranty.getByRole("button", { name: "Modifica dati" }).click();
-  await warranty.getByLabel("Durata garanzia").selectOption("3");
+  await chooseBusinessOption(page, "Durata garanzia", "3 mesi", warranty);
   await warranty.getByLabel("Copertura").fill("Solo il componente sostituito");
   await warranty.getByRole("button", { name: "Salva" }).click();
   await expect(warranty).not.toHaveClass(/is-editing/);
@@ -687,8 +712,50 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     .getByRole("button", { name: "Riparazione in garanzia", exact: true })
     .click();
   let dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText(
+    "Avvia una nuova lavorazione per il dispositivo",
+  );
+  await expect(dialog.locator(".warranty-progress-panel")).toContainText(
+    "ancora in garanzia",
+  );
+  await expect(
+    dialog.getByRole("button", { name: "Intervento", exact: true }),
+  ).toContainText("Fotocamera");
+  await expect(
+    dialog.getByRole("radio", { name: /Riparazione in garanzia/ }),
+  ).toBeChecked();
+  await expect(dialog.getByLabel("Costo aggiuntivo (€)")).toHaveAttribute(
+    "readonly",
+  );
+  await expect(
+    dialog.getByRole("button", { name: "Chiudi", exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("button", { name: "Annulla", exact: true }),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "Chiudi", exact: true }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toHaveText(/Consegnato/);
+
+  await page
+    .getByRole("button", { name: "Riparazione in garanzia", exact: true })
+    .click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Annulla", exact: true }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toHaveText(/Consegnato/);
+
+  await page
+    .getByRole("button", { name: "Riparazione in garanzia", exact: true })
+    .click();
+  dialog = page.getByRole("dialog");
+  await dialog.getByRole("radio", { name: /Riparazione a pagamento/ }).check();
   await dialog
-    .getByLabel("Motivo della riparazione")
+    .getByLabel("Note post-vendita (facoltative)")
     .fill("Difetto ricomparso");
   await dialog.getByLabel("Costo aggiuntivo (€)").fill("50");
   await dialog
@@ -700,6 +767,13 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await expect(page.locator(".balance-card>strong")).toContainText("50,00");
   await expect(page.getByTestId("history-card")).toContainText(
     "Riparazione post-vendita aperta",
+  );
+  await expect(page.getByTestId("history-card")).toContainText("Fotocamera");
+  await expect(page.getByTestId("history-card")).toContainText(
+    "Riparazione a pagamento · 50,00 €",
+  );
+  await expect(page.getByTestId("history-card")).toContainText(
+    "Note post-vendita (facoltative): Difetto ricomparso",
   );
   await expect(
     details.getByRole("button", { name: "Modifica dati" }),
@@ -770,9 +844,7 @@ test("price editor and mobile yellow layout support both languages", async ({
     .first()
     .click();
   const form = page.getByRole("dialog");
-  await form
-    .getByLabel("Intervento", { exact: true })
-    .fill(`pulizia ${Date.now()}`);
+  await enterBusinessValue(page, "Intervento", `pulizia ${Date.now()}`, form);
   await form.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("15");
   await form.getByRole("button", { name: "Salva", exact: true }).click();
   await expect(form).not.toBeVisible();
@@ -819,8 +891,8 @@ test("confirms a new customer with three numbers and selects that customer by na
 }) => {
   const phone = "336" + Date.now().toString().slice(-7);
   await page.goto("/orders/new");
-  await page.getByLabel("Telefono", { exact: true }).fill(phone);
-  await page.getByLabel("Nome e cognome", { exact: true }).fill("Tre telefoni");
+  await enterBusinessValue(page, "Telefono", phone);
+  await enterBusinessValue(page, "Nome e cognome", "Tre telefoni");
   await page
     .getByRole("button", { name: "Aggiungi telefono", exact: true })
     .click();
@@ -845,12 +917,14 @@ test("confirms a new customer with three numbers and selects that customer by na
   ).toBeVisible();
   await page.reload();
   await expect(async () => {
-    await page
-      .getByLabel("Seleziona Nome e cognome", { exact: true })
-      .selectOption({ label: "Tre telefoni · +39" + phone });
-    await expect(page.getByLabel("Telefono", { exact: true })).toHaveValue(
-      "+39" + phone,
+    await chooseBusinessOption(
+      page,
+      "Nome e cognome",
+      "Tre telefoni · +39" + phone,
     );
+    await expect(
+      page.getByRole("button", { name: "Telefono", exact: true }),
+    ).toContainText("+39" + phone);
   }).toPass();
   await expect(page.getByLabel("Telefono 3", { exact: true })).toHaveValue(
     "+39338" + phone.slice(3),
@@ -867,62 +941,49 @@ test("confirms a new customer with three numbers and selects that customer by na
     .click();
   await expect(confirmCustomer).toBeEnabled();
   await page.goto("/orders/new");
-  await page
-    .getByLabel("Telefono", { exact: true })
-    .fill("337" + phone.slice(3));
-  await expect(page.getByLabel("Nome e cognome", { exact: true })).toHaveValue(
-    "Tre telefoni",
-  );
+  await enterBusinessValue(page, "Telefono", "337" + phone.slice(3));
+  await expect(
+    page.getByRole("button", { name: "Nome e cognome", exact: true }),
+  ).toContainText("Tre telefoni");
 
   // The lookup canonicalizes phone 2 to phone 1; selecting phone 1 again
   // must not clear the name without triggering another lookup.
-  await expect(page.getByLabel("Telefono", { exact: true })).toHaveValue(
-    "+39" + phone,
-  );
-  await page
-    .getByLabel("Seleziona Telefono", { exact: true })
-    .selectOption("+39" + phone);
-  await expect(page.getByLabel("Nome e cognome", { exact: true })).toHaveValue(
-    "Tre telefoni",
-  );
-  await page.getByLabel("Telefono", { exact: true }).fill(phone);
-  await expect(page.getByLabel("Nome e cognome", { exact: true })).toHaveValue(
-    "Tre telefoni",
-  );
+  await expect(
+    page.getByRole("button", { name: "Telefono", exact: true }),
+  ).toContainText("+39" + phone);
+  await chooseBusinessOption(page, "Telefono", "+39" + phone);
+  await expect(
+    page.getByRole("button", { name: "Nome e cognome", exact: true }),
+  ).toContainText("Tre telefoni");
+  await enterBusinessValue(page, "Telefono", phone);
+  await expect(
+    page.getByRole("button", { name: "Nome e cognome", exact: true }),
+  ).toContainText("Tre telefoni");
 });
 test("native quote choices populate prices, clear on model changes and discounts are optional", async ({
   page,
 }) => {
   await page.goto("/orders/new");
-  const deviceType = page.getByLabel("Tipo dispositivo", { exact: true });
+  const deviceType = page.getByRole("button", {
+    name: "Tipo dispositivo",
+    exact: true,
+  });
   await expect(async () => {
-    await deviceType.selectOption("TABLET");
-    await expect(deviceType).toHaveValue("TABLET");
+    await chooseBusinessOption(page, "Tipo dispositivo", "Tablet");
+    await expect(deviceType).toContainText("Tablet");
   }).toPass();
-  await page
-    .getByLabel("Seleziona Marca", { exact: true })
-    .selectOption("Apple");
+  await chooseBusinessOption(page, "Marca", "Apple");
+  await page.getByRole("button", { name: "Modello", exact: true }).click();
+  await expect(page.getByRole("option", { name: /^iPad/ })).not.toHaveCount(0);
   await expect(
-    page
-      .getByLabel("Seleziona Modello", { exact: true })
-      .locator('option[value^="iPad"]'),
-  ).not.toHaveCount(0);
-  await expect(
-    page
-      .getByLabel("Seleziona Modello", { exact: true })
-      .locator('option[value="iPhone 13"]'),
+    page.getByRole("option", { name: "iPhone 13", exact: true }),
   ).toHaveCount(0);
-  await deviceType.selectOption("PHONE");
-  await expect(deviceType).toHaveValue("PHONE");
-  await page
-    .getByLabel("Seleziona Marca", { exact: true })
-    .selectOption("Apple");
-  await page
-    .getByLabel("Seleziona Modello", { exact: true })
-    .selectOption("iPhone 13");
-  await page
-    .getByLabel("Seleziona Intervento 1", { exact: true })
-    .selectOption("sostituzione display");
+  await page.keyboard.press("Escape");
+  await chooseBusinessOption(page, "Tipo dispositivo", "Telefono");
+  await expect(deviceType).toContainText("Telefono");
+  await chooseBusinessOption(page, "Marca", "Apple");
+  await chooseBusinessOption(page, "Modello", "iPhone 13");
+  await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
   await expect(
     page.getByLabel("Prezzo originale (€) 1", { exact: true }),
   ).toHaveValue("100");
@@ -943,26 +1004,25 @@ test("native quote choices populate prices, clear on model changes and discounts
     page.getByLabel("Sconto intervento (€) 1", { exact: true }),
   ).toHaveCount(0);
   await expect(page.locator(".quote-summary")).toContainText("100,00");
-  await page.getByLabel("Modello", { exact: true }).fill("Unknown model");
-  await expect(page.getByLabel("Intervento 1", { exact: true })).toHaveValue(
-    "",
-  );
+  await enterBusinessValue(page, "Modello", "Unknown model");
+  await expect(
+    page.getByRole("button", { name: "Intervento 1", exact: true }),
+  ).toContainText("Seleziona o scrivi un nuovo valore");
   await expect(
     page.getByLabel("Prezzo originale (€) 1", { exact: true }),
   ).toHaveValue("");
+  await page.getByRole("button", { name: "Intervento 1", exact: true }).click();
   await expect(
-    page
-      .getByLabel("Seleziona Intervento 1", { exact: true })
-      .locator("option"),
-  ).toHaveCount(1);
+    page.locator(".business-select-panel").getByRole("option"),
+  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await expect(
     page.getByText("Altri dettagli (facoltativi)", { exact: true }),
   ).toHaveCount(0);
-  await page.getByLabel("Modello", { exact: true }).fill("iphone18promax");
-  await page.getByLabel("Modello", { exact: true }).blur();
-  await expect(page.getByLabel("Modello", { exact: true })).toHaveValue(
-    "iPhone 18 Pro Max",
-  );
+  await enterBusinessValue(page, "Modello", "iphone18promax");
+  await expect(
+    page.getByRole("button", { name: "Modello", exact: true }),
+  ).toContainText("iPhone 18 Pro Max");
 });
 
 test("customer list searches instantly, preserves navigation and supports compact editing", async ({
@@ -973,7 +1033,7 @@ test("customer list searches instantly, preserves navigation and supports compac
   const name =
     "Cliente interfaccia molto lungo per verifica della disposizione";
   await fillOrder(page, { phone });
-  await page.getByLabel("Nome e cognome", { exact: true }).fill(name);
+  await enterBusinessValue(page, "Nome e cognome", name);
   await save(page);
   await page.goto("/customers");
   await page.getByLabel("Cerca", { exact: true }).fill(phone);
@@ -1020,7 +1080,7 @@ test("customer list searches instantly, preserves navigation and supports compac
     .getByRole("button", { name: "Modifica dispositivo", exact: true })
     .click();
   dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Modello", { exact: true }).fill("Unsaved model");
+  await enterBusinessValue(page, "Modello", "Unsaved model", dialog);
   await dialog.getByRole("button", { name: "Annulla", exact: true }).click();
   await expect(page.locator(".customer-device-row")).not.toContainText(
     "Unsaved model",
@@ -1220,18 +1280,16 @@ test("quote tree supports contextual dialogs, search, editing and empty branch r
     .first()
     .click();
   let dialog = page.getByRole("dialog");
-  await dialog
-    .getByLabel("Tipo dispositivo", { exact: true })
-    .selectOption("SMARTWATCH");
-  await dialog.getByLabel("Marca", { exact: true }).fill("Apple");
-  await dialog.getByLabel("Modello", { exact: true }).fill("Watch Modal");
-  await dialog.getByLabel("Intervento", { exact: true }).fill("Test battery");
+  await chooseBusinessOption(page, "Tipo dispositivo", "Smartwatch", dialog);
+  await enterBusinessValue(page, "Marca", "Apple", dialog);
+  await enterBusinessValue(page, "Modello", "Watch Modal", dialog);
+  await enterBusinessValue(page, "Intervento", "Test battery", dialog);
   await dialog.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("bad");
   await dialog.getByRole("button", { name: "Salva", exact: true }).click();
   await expect(dialog.getByRole("alert")).toBeVisible();
-  await expect(dialog.getByLabel("Modello", { exact: true })).toHaveValue(
-    "Watch Modal",
-  );
+  await expect(
+    dialog.getByRole("button", { name: "Modello", exact: true }),
+  ).toContainText("Watch Modal");
   await dialog.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("40");
   await dialog.getByRole("button", { name: "Salva", exact: true }).click();
   await expect(dialog).not.toBeVisible();
@@ -1244,15 +1302,15 @@ test("quote tree supports contextual dialogs, search, editing and empty branch r
   await model.getByRole("button", { name: "Intervento", exact: true }).click();
   dialog = page.getByRole("dialog");
   await expect(
-    dialog.getByLabel("Tipo dispositivo", { exact: true }),
-  ).toHaveValue("SMARTWATCH");
-  await expect(dialog.getByLabel("Marca", { exact: true })).toHaveValue(
-    "Apple",
-  );
-  await expect(dialog.getByLabel("Modello", { exact: true })).toHaveValue(
-    "Watch Modal",
-  );
-  await dialog.getByLabel("Intervento", { exact: true }).fill("Test screen");
+    dialog.getByRole("button", { name: "Tipo dispositivo", exact: true }),
+  ).toContainText("Smartwatch");
+  await expect(
+    dialog.getByRole("button", { name: "Marca", exact: true }),
+  ).toContainText("Apple");
+  await expect(
+    dialog.getByRole("button", { name: "Modello", exact: true }),
+  ).toContainText("Watch Modal");
+  await enterBusinessValue(page, "Intervento", "Test screen", dialog);
   await dialog.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("70");
   await dialog.getByRole("button", { name: "Salva", exact: true }).click();
   await expect(dialog).not.toBeVisible();
@@ -1288,10 +1346,12 @@ test("quote tree supports contextual dialogs, search, editing and empty branch r
     .getByRole("button", { name: "Nuova regola", exact: true })
     .first()
     .click();
-  await page
-    .getByRole("dialog")
-    .getByLabel("Tipo dispositivo", { exact: true })
-    .selectOption("SMARTBAND");
+  await chooseBusinessOption(
+    page,
+    "Tipo dispositivo",
+    "Smartband",
+    page.getByRole("dialog"),
+  );
   expect(
     await page
       .getByRole("dialog")
@@ -1422,7 +1482,7 @@ test("price editor supports individual and batch deletion", async ({
   await page.getByRole("button", { name: "iPhone 13", exact: true }).click();
   await page.getByRole("button", { name: "Intervento", exact: true }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Intervento", { exact: true }).fill("Da eliminare");
+  await enterBusinessValue(page, "Intervento", "Da eliminare", dialog);
   await dialog.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("25");
   await dialog.getByRole("button", { name: "Salva", exact: true }).click();
   const removable = page
@@ -1497,7 +1557,7 @@ for (const width of [1280, 390]) {
       }
       await trigger.click();
       const dialog = page.getByRole("dialog");
-      await expect(dialog.locator("input, select").first()).toBeFocused();
+      await expect(dialog.locator(":focus")).toHaveCount(1);
       const cancel = dialog.getByRole("button", {
         name: "Annulla",
         exact: true,

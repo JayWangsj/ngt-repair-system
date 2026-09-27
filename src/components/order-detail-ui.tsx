@@ -11,7 +11,13 @@ import { ChevronDown, ChevronRight, ChevronUp, Pencil } from "lucide-react";
 import Link from "next/link";
 import { Button } from "./ui/button";
 import { FormAutoSaveContext, FormCloseContext } from "./ui/form-close-context";
-import { AfterSalesForm, FormDialog, RefundForm } from "./forms";
+import {
+  AfterSalesForm,
+  FormDialog,
+  RefundForm,
+  type AfterSalesProject,
+  type AfterSalesWarranty,
+} from "./forms";
 import { useMessages } from "./language";
 
 export function OrderDetailCard({
@@ -146,9 +152,15 @@ export function CustomerDetailLink({
 export function AfterSalesActions({
   orderId,
   received,
+  warranty,
+  originalProjects,
+  catalogProjects,
 }: {
   orderId: string;
   received: number;
+  warranty: AfterSalesWarranty;
+  originalProjects: AfterSalesProject[];
+  catalogProjects: AfterSalesProject[];
 }) {
   const it = useMessages();
   const [dialog, setDialog] = useState<"rework" | "refund" | null>(null);
@@ -170,9 +182,16 @@ export function AfterSalesActions({
       {dialog === "rework" && (
         <FormDialog
           title={it.afterSales.openRework}
+          subtitle={it.afterSales.reworkSubtitle}
           onClose={() => setDialog(null)}
         >
-          <AfterSalesForm id={orderId} />
+          <AfterSalesForm
+            id={orderId}
+            warranty={warranty}
+            originalProjects={originalProjects}
+            catalogProjects={catalogProjects}
+            onSuccess={() => setDialog(null)}
+          />
         </FormDialog>
       )}
       {dialog === "refund" && (

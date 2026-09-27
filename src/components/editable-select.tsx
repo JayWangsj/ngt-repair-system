@@ -1,8 +1,7 @@
 "use client";
-import { useId } from "react";
 import { useMessages } from "./language";
 import { uniqueOptions } from "@/lib/options";
-/** Same native option menu as device type, with a text field for new values. */
+import { SearchableCombobox } from "./business-select";
 export function EditableSelect({
   label,
   value,
@@ -25,45 +24,40 @@ export function EditableSelect({
   normalize?: (value: string) => string;
 }) {
   const it = useMessages();
-  const id = useId();
   const normalized = options.map((o) =>
     typeof o === "string" ? { value: o, label: o } : o,
   );
   const unique = uniqueOptions(normalized.map((o) => o.value));
+  const choices = unique.map((option) => ({
+    value: option,
+    label:
+      normalized.find(
+        (item) => item.value.toLowerCase() === option.toLowerCase(),
+      )?.label ?? option,
+  }));
+  if (value && !choices.some((option) => option.value === value))
+    choices.unshift({ value, label: value });
   return (
     <div className="editable-field">
-      <label htmlFor={id}>{label}</label>
-      <div className="editable-select">
-        <input
-          id={id}
-          name={name}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onBlur={(e) => normalize && onChange(normalize(e.target.value))}
-          required={required}
-          readOnly={readOnly}
-          maxLength={maxLength}
-          autoComplete="off"
-          placeholder={it.manualEntry}
-        />
-        <select
-          aria-label={it.selectOption + " " + label}
-          disabled={readOnly}
-          value=""
-          onChange={(e) => {
-            if (e.target.value)
-              onChange(normalize ? normalize(e.target.value) : e.target.value);
-          }}
-        >
-          <option value="">{it.selectOption}</option>
-          {unique.map((v) => (
-            <option key={v} value={v}>
-              {normalized.find((o) => o.value.toLowerCase() === v.toLowerCase())
-                ?.label ?? v}
-            </option>
-          ))}
-        </select>
-      </div>
+      <label>{label}</label>
+      <SearchableCombobox
+        name={name}
+        value={value}
+        onChange={(next) => onChange(normalize ? normalize(next) : next)}
+        groups={[{ options: choices }]}
+        disabled={readOnly}
+        placeholder={it.manualEntry}
+        ariaLabel={label}
+        searchPlaceholder={it.manualEntry}
+        emptyText={it.noMatches}
+        customLabel={it.manualEntry}
+        onCustom={(next) => {
+          if (!required || next) {
+            const trimmed = next.slice(0, maxLength);
+            onChange(normalize ? normalize(trimmed) : trimmed);
+          }
+        }}
+      />
     </div>
   );
 }

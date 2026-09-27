@@ -20,6 +20,7 @@ import { decimal, inventoryStatus, money } from "@/lib/domain";
 import { useMessages } from "./language";
 import { Field, FormDialog } from "./forms";
 import { EditableSelect } from "./editable-select";
+import { SearchableCombobox, SimpleSelect } from "./business-select";
 import { Button } from "./ui/button";
 
 export type ProductView = {
@@ -140,15 +141,18 @@ function ProductForm({
         </div>
         {mode === "inventory" && (
           <Field label={it.inventory.usage}>
-            <select
+            <SimpleSelect
               name="usage"
               value={usage}
-              onChange={(event) => setUsage(event.target.value as typeof usage)}
-            >
-              <option value="RETAIL">{it.inventory.retail}</option>
-              <option value="REPAIR">{it.inventory.repair}</option>
-              <option value="BOTH">{it.inventory.both}</option>
-            </select>
+              onChange={(value) => setUsage(value as typeof usage)}
+              placeholder={it.selectOption}
+              ariaLabel={it.inventory.usage}
+              options={[
+                { value: "RETAIL", label: it.inventory.retail },
+                { value: "REPAIR", label: it.inventory.repair },
+                { value: "BOTH", label: it.inventory.both },
+              ]}
+            />
           </Field>
         )}
         <Field label={it.inventory.costPrice}>
@@ -372,36 +376,40 @@ export function InventoryWorkspace({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        <select
-          aria-label={it.inventory.category}
+        <SimpleSelect
           value={category}
-          onChange={(event) => setCategory(event.target.value)}
-        >
-          <option value="">{it.inventory.allCategories}</option>
-          {categories.map((item) => (
-            <option key={item}>{item}</option>
-          ))}
-        </select>
-        <select
-          aria-label={it.inventory.usage}
+          onChange={setCategory}
+          placeholder={it.inventory.allCategories}
+          ariaLabel={it.inventory.category}
+          options={[
+            { value: "", label: it.inventory.allCategories },
+            ...categories.map((item) => ({ value: item, label: item })),
+          ]}
+        />
+        <SimpleSelect
           value={usage}
-          onChange={(event) => setUsage(event.target.value)}
-        >
-          <option value="">{it.inventory.allUsages}</option>
-          <option value="RETAIL">{it.inventory.retail}</option>
-          <option value="REPAIR">{it.inventory.repair}</option>
-          <option value="BOTH">{it.inventory.both}</option>
-        </select>
-        <select
-          aria-label={it.inventory.status}
+          onChange={setUsage}
+          placeholder={it.inventory.allUsages}
+          ariaLabel={it.inventory.usage}
+          options={[
+            { value: "", label: it.inventory.allUsages },
+            { value: "RETAIL", label: it.inventory.retail },
+            { value: "REPAIR", label: it.inventory.repair },
+            { value: "BOTH", label: it.inventory.both },
+          ]}
+        />
+        <SimpleSelect
           value={status}
-          onChange={(event) => setStatus(event.target.value)}
-        >
-          <option value="">{it.inventory.allStatuses}</option>
-          <option value="IN_STOCK">{it.inventory.inStock}</option>
-          <option value="LOW_STOCK">{it.inventory.low}</option>
-          <option value="OUT_OF_STOCK">{it.inventory.out}</option>
-        </select>
+          onChange={setStatus}
+          placeholder={it.inventory.allStatuses}
+          ariaLabel={it.inventory.status}
+          options={[
+            { value: "", label: it.inventory.allStatuses },
+            { value: "IN_STOCK", label: it.inventory.inStock },
+            { value: "LOW_STOCK", label: it.inventory.low },
+            { value: "OUT_OF_STOCK", label: it.inventory.out },
+          ]}
+        />
       </div>
       <div className="catalog-toolbar inventory-batch-toolbar">
         <Button
@@ -548,40 +556,46 @@ export function InventoryWorkspace({
                     </td>
                     <td>
                       {selected ? (
-                        <select
+                        <SearchableCombobox
                           value={product.category}
-                          onChange={(event) =>
-                            save(product, { category: event.target.value })
-                          }
-                        >
-                          {[
-                            ...new Set([
-                              product.category,
-                              ...presetCategories,
-                              ...categoryOptions.map((item) => item.name),
-                            ]),
-                          ].map((item) => (
-                            <option key={item}>{item}</option>
-                          ))}
-                        </select>
+                          onChange={(category) => save(product, { category })}
+                          groups={[
+                            {
+                              options: [
+                                ...new Set([
+                                  product.category,
+                                  ...presetCategories,
+                                  ...categoryOptions.map((item) => item.name),
+                                ]),
+                              ].map((item) => ({ value: item, label: item })),
+                            },
+                          ]}
+                          placeholder={it.selectOption}
+                          ariaLabel={it.inventory.category}
+                          searchPlaceholder={it.inventory.search}
+                          emptyText={it.noMatches}
+                        />
                       ) : (
                         product.category
                       )}
                     </td>
                     <td>
                       {selected ? (
-                        <select
+                        <SimpleSelect
                           value={product.usage}
-                          onChange={(event) =>
+                          onChange={(value) =>
                             save(product, {
-                              usage: event.target.value as ProductView["usage"],
+                              usage: value as ProductView["usage"],
                             })
                           }
-                        >
-                          <option value="RETAIL">{it.inventory.retail}</option>
-                          <option value="REPAIR">{it.inventory.repair}</option>
-                          <option value="BOTH">{it.inventory.both}</option>
-                        </select>
+                          placeholder={it.selectOption}
+                          ariaLabel={it.inventory.usage}
+                          options={[
+                            { value: "RETAIL", label: it.inventory.retail },
+                            { value: "REPAIR", label: it.inventory.repair },
+                            { value: "BOTH", label: it.inventory.both },
+                          ]}
+                        />
                       ) : (
                         usageLabel(product.usage)
                       )}

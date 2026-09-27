@@ -16,6 +16,7 @@ import {
   settlement,
   total,
   warrantyPeriod,
+  warrantyProgress,
 } from "@/lib/domain";
 import { orderInput, paymentInput, ruleInput } from "@/lib/validation";
 const staff = { id: "s", name: "Staff", role: "STAFF" as const };
@@ -179,6 +180,22 @@ describe("Italian localization and validation", () => {
       warrantyPeriod(new Date("2026-01-31T12:00:00Z"), 1, "2026-02-28"),
     ).toEqual({ start: "2026-01-31", end: "2026-02-28", active: true });
     expect(warrantyPeriod(null, 3)).toBeNull();
+  });
+  it("reports warranty progress and expiry without exceeding its bounds", () => {
+    const delivery = new Date("2026-01-01T12:00:00Z");
+    expect(warrantyProgress(delivery, 1, "2026-01-16")).toMatchObject({
+      progress: 48,
+      remainingPercent: 52,
+      remainingDays: 16,
+      state: "ACTIVE",
+    });
+    expect(warrantyProgress(delivery, 1, "2026-02-02")).toMatchObject({
+      progress: 100,
+      remainingPercent: 0,
+      remainingDays: 0,
+      state: "EXPIRED",
+    });
+    expect(warrantyProgress(null, 3, "2026-01-16")).toBeNull();
   });
   it("excludes closed orders from overdue", () => {
     expect(

@@ -13,6 +13,7 @@ import { useMessages } from "./language";
 import { Button } from "./ui/button";
 import { OrderDetailCard } from "./order-detail-ui";
 import { FormDialog } from "./forms";
+import { SearchableCombobox, SimpleSelect } from "./business-select";
 
 type ProductOption = {
   id: string;
@@ -46,6 +47,7 @@ export function WorkOrderProducts({
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [selectedProduct, setSelectedProduct] = useState("");
   const available = products.filter(
     (product) => product.usage !== "REPAIR" && product.stock > 0,
   );
@@ -62,6 +64,7 @@ export function WorkOrderProducts({
     });
     setPending(false);
     if (!result.ok) return setError(result.error);
+    setSelectedProduct("");
     router.refresh();
   }
 
@@ -122,15 +125,26 @@ export function WorkOrderProducts({
         <form className="order-product-form" onSubmit={add}>
           <label>
             <span>{it.orderProducts.product}</span>
-            <select name="productId" required>
-              <option value="">{it.selectOption}</option>
-              {available.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.name} · {money(cents(product.salePrice))} ·{" "}
-                  {product.stock}
-                </option>
-              ))}
-            </select>
+            <SearchableCombobox
+              name="productId"
+              value={selectedProduct}
+              onChange={setSelectedProduct}
+              groups={[
+                {
+                  options: available.map((product) => ({
+                    value: product.id,
+                    label: product.name,
+                    secondary: `${it.inventory.currentStock}: ${product.stock}`,
+                    trailing: money(cents(product.salePrice)),
+                    keywords: product.category,
+                  })),
+                },
+              ]}
+              placeholder={it.selectOption}
+              ariaLabel={it.orderProducts.product}
+              searchPlaceholder={it.search}
+              emptyText={it.orderProducts.empty}
+            />
           </label>
           <label>
             <span>{it.orderProducts.quantity}</span>
@@ -142,7 +156,7 @@ export function WorkOrderProducts({
               defaultValue="1"
             />
           </label>
-          <Button disabled={pending || !available.length}>
+          <Button disabled={pending || !available.length || !selectedProduct}>
             {it.orderProducts.add}
           </Button>
         </form>
@@ -173,6 +187,7 @@ export function WorkOrderCheckout({
   const [error, setError] = useState("");
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const [amount, setAmount] = useState(decimal(remaining));
+  const [method, setMethod] = useState("CASH");
   let enteredAmount = 0;
   try {
     enteredAmount = cents(amount || "0");
@@ -203,7 +218,7 @@ export function WorkOrderCheckout({
       const result = await checkoutWorkOrderAction(orderId, {
         requestId,
         amount: submittedAmount,
-        method: String(data.get("method") ?? "CASH"),
+        method,
         pickedUpBy: String(data.get("pickedUpBy") ?? ""),
         pickedUpAt: new Date(String(data.get("pickedUpAt"))).toISOString(),
         override: data.get("override") === "on",
@@ -257,13 +272,17 @@ export function WorkOrderCheckout({
           </label>
           <label>
             <span>{it.paymentMethod}</span>
-            <select name="method">
-              {creatablePaymentMethods.map((method) => (
-                <option key={method} value={method}>
-                  {it.methods[method]}
-                </option>
-              ))}
-            </select>
+            <SimpleSelect
+              name="method"
+              value={method}
+              onChange={setMethod}
+              placeholder={it.selectOption}
+              ariaLabel={it.paymentMethod}
+              options={creatablePaymentMethods.map((option) => ({
+                value: option,
+                label: it.methods[option],
+              }))}
+            />
           </label>
         </>
       )}

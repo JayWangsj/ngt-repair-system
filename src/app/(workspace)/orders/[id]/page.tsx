@@ -13,6 +13,7 @@ import {
   orderCode,
   settlement,
   warrantyPeriod,
+  warrantyProgress,
 } from "@/lib/domain";
 import { Badge, PageHeader } from "@/components/common";
 import {
@@ -95,6 +96,23 @@ export default async function Detail({
     order.afterSalesOpen ||
     ["COMPLETED", "REWORKING", "REFUNDED", "CANCELLED"].includes(order.status);
   const warranty = warrantyPeriod(order.pickedUpAt, order.warrantyMonths);
+  const reworkWarranty = warrantyProgress(
+    order.pickedUpAt,
+    order.warrantyMonths,
+  );
+  const originalProjectNames = new Set(
+    order.items.map((item) => item.project.trim().toLocaleLowerCase()),
+  );
+  const catalogProjects = [
+    ...new Map(
+      rules
+        .filter(
+          (rule) =>
+            !originalProjectNames.has(rule.project.trim().toLocaleLowerCase()),
+        )
+        .map((rule) => [rule.project.trim().toLocaleLowerCase(), rule]),
+    ).values(),
+  ];
   const duration =
     order.warrantyMonths === 0
       ? it.warranty.none
@@ -119,7 +137,14 @@ export default async function Detail({
         actor: audit.actorName,
       });
     if (audit.action === "AFTER_SALES_OPENED") {
-      const detail = [context.reason, context.notes]
+      const treatment =
+        context.treatment === "WARRANTY"
+          ? it.afterSales.warrantyTreatment
+          : it.afterSales.paidTreatment;
+      const detail = [
+        `${String(context.project ?? context.reason)} · ${treatment} · ${money(cents(String(context.fee ?? "0")))}`,
+        context.notes ? `${it.afterSales.notes}: ${context.notes}` : null,
+      ]
         .filter(Boolean)
         .join(" · ");
       events.push({
@@ -129,13 +154,6 @@ export default async function Detail({
         actor: audit.actorName,
         detail,
       });
-      if (context.fee && cents(String(context.fee)) > 0)
-        events.push({
-          id: `${audit.id}:fee`,
-          at: audit.createdAt,
-          title: `${it.afterSales.feeEvent} +${money(cents(String(context.fee)))}`,
-          actor: audit.actorName,
-        });
     }
     if (audit.action === "REFUND_ISSUED") {
       const originalMethods = Array.isArray(context.originalMethods)
@@ -538,7 +556,26 @@ export default async function Detail({
           </section>
 
           {order.status === "COMPLETED" && (
-            <AfterSalesActions orderId={id} received={receivedTotal} />
+            <AfterSalesActions
+              orderId={id}
+              received={receivedTotal}
+              warranty={reworkWarranty}
+              originalProjects={order.items.map((item) => ({
+                value: `original:${item.id}`,
+                id: item.ruleId ?? item.id,
+                name: item.project,
+                source: "original",
+                price: money(cents(item.final)),
+              }))}
+              catalogProjects={catalogProjects.map((rule) => ({
+                value: `catalog:${rule.id}`,
+                id: rule.id,
+                name: rule.project,
+                source: "catalog",
+                price: money(cents(rule.suggested)),
+                description: rule.notes,
+              }))}
+            />
           )}
         </div>
       </div>

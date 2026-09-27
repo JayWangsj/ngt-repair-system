@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { getMessages } from "@/lib/i18n-server";
 import { PageHeader, OrderTable } from "@/components/common";
+import { SimpleSelect } from "@/components/business-select";
 import { balance, isOverdue, romeDay, statuses } from "@/lib/domain";
 import { requireActor } from "@/lib/session";
 export default async function Orders({
@@ -72,26 +73,33 @@ export default async function Orders({
         </label>
         <label>
           <span className="sr-only">{it.statusLabel}</span>
-          <select name="status" defaultValue={query.status ?? ""}>
-            <option value="">
-              {it.all} · {it.statusLabel}
-            </option>
-            {statuses.map((s) => (
-              <option key={s} value={s}>
-                {it.status[s]}
-              </option>
-            ))}
-          </select>
+          <SimpleSelect
+            name="status"
+            defaultValue={query.status ?? ""}
+            placeholder={`${it.all} · ${it.statusLabel}`}
+            ariaLabel={it.statusLabel}
+            options={[
+              { value: "", label: `${it.all} · ${it.statusLabel}` },
+              ...statuses.map((status) => ({
+                value: status,
+                label: it.status[status],
+              })),
+            ]}
+          />
         </label>
         <label>
           <span className="sr-only">{it.attention}</span>
-          <select name="attention" defaultValue={query.attention ?? ""}>
-            <option value="">
-              {it.all} · {it.attention}
-            </option>
-            <option value="overdue">{it.overdue}</option>
-            <option value="unpaid">{it.unpaid}</option>
-          </select>
+          <SimpleSelect
+            name="attention"
+            defaultValue={query.attention ?? ""}
+            placeholder={`${it.all} · ${it.attention}`}
+            ariaLabel={it.attention}
+            options={[
+              { value: "", label: `${it.all} · ${it.attention}` },
+              { value: "overdue", label: it.overdue },
+              { value: "unpaid", label: it.unpaid },
+            ]}
+          />
         </label>
         <button className="button button-outline">{it.filter}</button>
       </form>

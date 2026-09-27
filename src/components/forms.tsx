@@ -25,7 +25,15 @@ import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Trash2, Check } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Check,
+  ShieldCheck,
+  Wrench,
+  Settings,
+  X,
+} from "lucide-react";
 import { Button } from "./ui/button";
 import { FormAutoSaveContext, FormCloseContext } from "./ui/form-close-context";
 import { useMessages, useLanguage } from "./language";
@@ -50,6 +58,11 @@ import {
   type OrderStatus,
 } from "@/lib/domain";
 import { orderInput } from "@/lib/validation";
+import {
+  SearchableCombobox,
+  SimpleSelect,
+  type SelectGroup,
+} from "./business-select";
 import {
   createOrderAction,
   lookupCustomerAction,
@@ -722,11 +735,11 @@ export function NewOrderForm({
       <Section number="02" title={it.deviceSection}>
         {customer && customer.devices.length > 0 && (
           <Field label={it.chooseDevice}>
-            <select
+            <SimpleSelect
               value={values.deviceId}
-              onChange={(e) => {
-                const d = customer.devices.find((d) => d.id === e.target.value);
-                setValue("deviceId", e.target.value);
+              onChange={(deviceId) => {
+                const d = customer.devices.find((d) => d.id === deviceId);
+                setValue("deviceId", deviceId);
                 const nextCategory = (d?.category ?? "PHONE") as Category;
                 setValue("category", nextCategory);
                 for (const key of [
@@ -740,35 +753,38 @@ export function NewOrderForm({
                 setValue("faults", []);
                 setLocalFaults([]);
               }}
-            >
-              <option value="">{it.newDevice}</option>
-              {customer.devices.map((d) => (
-                <option value={d.id} key={d.id}>
-                  {d.brand} {d.model} {d.imei}
-                </option>
-              ))}
-            </select>
+              placeholder={it.newDevice}
+              ariaLabel={it.chooseDevice}
+              options={[
+                { value: "", label: it.newDevice },
+                ...customer.devices.map((device) => ({
+                  value: device.id,
+                  label: `${device.brand} ${device.model}`,
+                  secondary: device.imei ?? undefined,
+                })),
+              ]}
+            />
           </Field>
         )}
         <div className="form-grid three">
           <Field label={it.deviceType}>
-            <select
-              {...register("category", {
-                onChange: (event) => {
-                  setValue("category", event.target.value as Category);
-                  clearDevice();
-                  setValue("faults", []);
-                  setLocalFaults([]);
-                },
-              })}
+            <input type="hidden" {...register("category")} />
+            <SimpleSelect
+              value={category}
+              onChange={(next) => {
+                setValue("category", next as Category);
+                clearDevice();
+                setValue("faults", []);
+                setLocalFaults([]);
+              }}
               disabled={!!values.deviceId}
-            >
-              {Object.entries(categories).map(([key, names]) => (
-                <option key={key} value={key}>
-                  {names[locale === "zh" ? 1 : 0]}
-                </option>
-              ))}
-            </select>
+              placeholder={it.selectOption}
+              ariaLabel={it.deviceType}
+              options={Object.entries(categories).map(([key, names]) => ({
+                value: key,
+                label: names[locale === "zh" ? 1 : 0],
+              }))}
+            />
           </Field>
           <EditableSelect
             label={it.brand}
@@ -963,13 +979,22 @@ export function NewOrderForm({
             </Field>
 
             <Field label={it.paymentMethod}>
-              <select {...register("method")}>
-                {creatablePaymentMethods.map((method) => (
-                  <option key={method} value={method}>
-                    {it.methods[method]}
-                  </option>
-                ))}
-              </select>
+              <input type="hidden" {...register("method")} />
+              <SimpleSelect
+                value={values.method}
+                onChange={(method) =>
+                  setValue(
+                    "method",
+                    method as (typeof creatablePaymentMethods)[number],
+                  )
+                }
+                placeholder={it.selectOption}
+                ariaLabel={it.paymentMethod}
+                options={creatablePaymentMethods.map((method) => ({
+                  value: method,
+                  label: it.methods[method],
+                }))}
+              />
             </Field>
           </div>
         )}
@@ -1031,11 +1056,13 @@ function ActionForm({
   children,
   submit,
   onSuccess,
+  disabled = false,
 }: {
   action: (data: FormData) => Promise<ActionResult>;
   children: ReactNode;
   submit: string;
   onSuccess?: () => void;
+  disabled?: boolean;
 }) {
   const it = useMessages();
   const closeDialog = useContext(FormCloseContext);
@@ -1139,10 +1166,14 @@ function ActionForm({
           >
             {it.cancel}
           </Button>
-          <Button disabled={pending}>{pending ? it.saving : submit}</Button>
+          <Button disabled={pending || disabled}>
+            {pending ? it.saving : submit}
+          </Button>
         </div>
       ) : (
-        <Button disabled={pending}>{pending ? it.saving : submit}</Button>
+        <Button disabled={pending || disabled}>
+          {pending ? it.saving : submit}
+        </Button>
       )}
     </form>
   );
@@ -1157,6 +1188,7 @@ export function PaymentForm({
 }) {
   const it = useMessages();
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const [method, setMethod] = useState("CASH");
   return (
     <ActionForm
       submit={it.addPayment}
@@ -1165,7 +1197,7 @@ export function PaymentForm({
         paymentAction(id, {
           requestId,
           amount: str(data, "amount"),
-          method: str(data, "method"),
+          method,
           kind: "BALANCE",
         })
       }
@@ -1180,13 +1212,17 @@ export function PaymentForm({
           />
         </Field>
         <Field label={it.paymentMethod}>
-          <select name="method">
-            {creatablePaymentMethods.map((method) => (
-              <option value={method} key={method}>
-                {it.methods[method]}
-              </option>
-            ))}
-          </select>
+          <SimpleSelect
+            name="method"
+            value={method}
+            onChange={setMethod}
+            placeholder={it.selectOption}
+            ariaLabel={it.paymentMethod}
+            options={creatablePaymentMethods.map((option) => ({
+              value: option,
+              label: it.methods[option],
+            }))}
+          />
         </Field>
       </div>
     </ActionForm>
@@ -1225,16 +1261,16 @@ export function StatusForm({
       }
     >
       <Field label={it.nextStatus}>
-        <select
+        <SimpleSelect
           value={selected}
-          onChange={(e) => setSelected(e.target.value as OrderStatus)}
-        >
-          {choices.map((s) => (
-            <option key={s} value={s}>
-              {it.status[s]}
-            </option>
-          ))}
-        </select>
+          onChange={(value) => setSelected(value as OrderStatus)}
+          placeholder={it.selectOption}
+          ariaLabel={it.nextStatus}
+          options={choices.map((status) => ({
+            value: status,
+            label: it.status[status],
+          }))}
+        />
       </Field>
       {selected === "COMPLETED" && (
         <>
@@ -1350,17 +1386,20 @@ export function WarrantyForm({
       }
     >
       <Field label={it.warranty.duration}>
-        <select
+        <SimpleSelect
           value={months}
-          onChange={(event) => setMonths(event.target.value)}
-        >
-          <option value="0">{it.warranty.none}</option>
-          <option value="1">{it.warranty.oneMonth}</option>
-          <option value="3">{it.warranty.threeMonths}</option>
-          <option value="6">{it.warranty.sixMonths}</option>
-          <option value="12">{it.warranty.twelveMonths}</option>
-          <option value="custom">{it.warranty.custom}</option>
-        </select>
+          onChange={setMonths}
+          placeholder={it.selectOption}
+          ariaLabel={it.warranty.duration}
+          options={[
+            { value: "0", label: it.warranty.none },
+            { value: "1", label: it.warranty.oneMonth },
+            { value: "3", label: it.warranty.threeMonths },
+            { value: "6", label: it.warranty.sixMonths },
+            { value: "12", label: it.warranty.twelveMonths },
+            { value: "custom", label: it.warranty.custom },
+          ]}
+        />
       </Field>
       {months === "custom" && (
         <Field label={it.warranty.customMonths}>
@@ -1384,25 +1423,303 @@ export function WarrantyForm({
   );
 }
 
-export function AfterSalesForm({ id }: { id: string }) {
+export type AfterSalesProject = {
+  value: string;
+  id: string;
+  name: string;
+  source: "original" | "catalog" | "custom";
+  price: string;
+  description?: string;
+};
+export type AfterSalesWarranty = {
+  start: string;
+  end: string;
+  progress: number;
+  remainingPercent: number;
+  remainingDays: number;
+  state: "ACTIVE" | "EXPIRING" | "EXPIRED";
+} | null;
+
+function WarrantyProgressPanel({ warranty }: { warranty: AfterSalesWarranty }) {
   const it = useMessages();
+  const [progress, setProgress] = useState(0);
+  useEffect(() => {
+    if (!warranty) return;
+    const delay = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? 0
+      : 100;
+    const timer = window.setTimeout(
+      () => setProgress(warranty.progress),
+      delay,
+    );
+    return () => window.clearTimeout(timer);
+  }, [warranty]);
+  if (!warranty)
+    return (
+      <section className="warranty-progress-panel is-none">
+        <ShieldCheck size={19} aria-hidden="true" />
+        <div>
+          <strong>{it.afterSales.noWarranty}</strong>
+          <p>{it.afterSales.noWarrantyHint}</p>
+        </div>
+      </section>
+    );
+  const tone =
+    warranty.state === "EXPIRED"
+      ? "expired"
+      : warranty.remainingPercent <= 20
+        ? "ending"
+        : warranty.remainingPercent <= 50
+          ? "warning"
+          : "healthy";
+  const title =
+    warranty.state === "EXPIRED"
+      ? it.afterSales.warrantyExpired
+      : warranty.state === "EXPIRING"
+        ? it.afterSales.warrantyExpiring
+        : it.afterSales.warrantyActive;
+  return (
+    <section className={`warranty-progress-panel is-${tone}`}>
+      <ShieldCheck size={19} aria-hidden="true" />
+      <div className="warranty-progress-content">
+        <strong>{title}</strong>
+        <p>
+          {it.afterSales.warrantyUntil} {warranty.end.replaceAll("-", "/")}
+          {warranty.state !== "EXPIRED" &&
+            ` · ${it.afterSales.remainingDays.replace("{count}", String(warranty.remainingDays))}`}
+        </p>
+        <div className="warranty-progress-labels">
+          <span>
+            {progress}% {it.afterSales.used}
+          </span>
+          <span>
+            {100 - progress}% {it.afterSales.remaining}
+          </span>
+        </div>
+        <div className="warranty-progress-track" aria-hidden="true">
+          <span style={{ width: `${progress}%` }} />
+        </div>
+        <div className="warranty-progress-dates">
+          <span>{warranty.start.replaceAll("-", "/")}</span>
+          <span>{warranty.end.replaceAll("-", "/")}</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function AfterSalesForm({
+  id,
+  warranty,
+  originalProjects,
+  catalogProjects,
+  onSuccess,
+}: {
+  id: string;
+  warranty: AfterSalesWarranty;
+  originalProjects: AfterSalesProject[];
+  catalogProjects: AfterSalesProject[];
+  onSuccess?: () => void;
+}) {
+  const it = useMessages();
+  const [selected, setSelected] = useState(
+    originalProjects.length === 1 ? originalProjects[0].value : "",
+  );
+  const [customName, setCustomName] = useState("");
+  const [custom, setCustom] = useState(false);
+  const initialProject =
+    originalProjects.length === 1 ? originalProjects[0] : null;
+  const [treatment, setTreatment] = useState<"WARRANTY" | "PAID">(
+    warranty && warranty.state !== "EXPIRED" && initialProject
+      ? "WARRANTY"
+      : "PAID",
+  );
+  const [fee, setFee] = useState("0");
+  const [notes, setNotes] = useState("");
+  const treatmentChanged = useRef(false);
+  const customProject: AfterSalesProject | null = custom
+    ? {
+        value: "custom",
+        id: "",
+        name: customName || it.afterSales.customProject,
+        source: "custom",
+        price: "",
+      }
+    : null;
+  const projects = [
+    ...originalProjects,
+    ...catalogProjects,
+    ...(customProject ? [customProject] : []),
+  ];
+  const project = projects.find((item) => item.value === selected) ?? null;
+  const recommend = (next: AfterSalesProject | null) =>
+    warranty && warranty.state !== "EXPIRED" && next?.source === "original"
+      ? "WARRANTY"
+      : "PAID";
+  const groups: SelectGroup[] = [
+    {
+      label: it.afterSales.originalProjects,
+      options: originalProjects.map((item) => ({
+        value: item.value,
+        label: item.name,
+        secondary: it.afterSales.originalProject,
+        trailing: item.price,
+        icon: <Wrench size={15} aria-hidden="true" />,
+        keywords: item.description,
+      })),
+    },
+    {
+      label: it.afterSales.otherProjects,
+      options: catalogProjects.map((item) => ({
+        value: item.value,
+        label: item.name,
+        secondary: item.description || it.afterSales.catalogProject,
+        trailing: item.price,
+        icon: <Settings size={15} aria-hidden="true" />,
+        keywords: item.description,
+      })),
+    },
+    ...(customProject
+      ? [
+          {
+            label: it.afterSales.customProject,
+            options: [
+              {
+                value: customProject.value,
+                label: customProject.name,
+                secondary: it.afterSales.customProject,
+              },
+            ],
+          },
+        ]
+      : []),
+  ];
+  function select(value: string) {
+    setSelected(value);
+    const next = projects.find((item) => item.value === value) ?? null;
+    if (!treatmentChanged.current) {
+      const recommended = recommend(next);
+      setTreatment(recommended);
+      if (recommended === "WARRANTY") setFee("0");
+    }
+  }
   return (
     <ActionForm
       submit={it.afterSales.openRework}
-      action={(data) => afterSalesAction(id, Object.fromEntries(data))}
+      onSuccess={onSuccess}
+      disabled={!project || (project.source === "custom" && !customName.trim())}
+      action={(data) =>
+        afterSalesAction(id, {
+          reason: project?.name ?? "",
+          projectId: project?.id ?? "",
+          projectSource: project?.source ?? "custom",
+          treatment,
+          notes: str(data, "notes"),
+          fee: treatment === "WARRANTY" ? "0" : fee,
+          dueDate: str(data, "dueDate"),
+        })
+      }
     >
-      <Field label={it.afterSales.reason}>
-        <input name="reason" required maxLength={120} />
+      <WarrantyProgressPanel warranty={warranty} />
+      <Field label={`${it.afterSales.project} *`}>
+        <SearchableCombobox
+          value={selected}
+          onChange={select}
+          groups={groups}
+          placeholder={it.afterSales.projectPlaceholder}
+          ariaLabel={it.afterSales.project}
+          searchPlaceholder={it.afterSales.projectSearch}
+          emptyText={it.afterSales.noProjectMatches}
+          customLabel={
+            customName
+              ? it.afterSales.customProject
+              : it.afterSales.addCustomProject
+          }
+          onCustom={(query) => {
+            setCustom(true);
+            setCustomName(query);
+            setSelected("custom");
+            if (!treatmentChanged.current) setTreatment("PAID");
+          }}
+        />
       </Field>
-      <Field label={it.afterSales.notes}>
-        <textarea name="notes" maxLength={2000} />
+      {custom && (
+        <Field label={`${it.afterSales.projectName} *`}>
+          <input
+            value={customName}
+            onChange={(event) => setCustomName(event.target.value)}
+            maxLength={120}
+            required
+            autoFocus
+          />
+        </Field>
+      )}
+      {project &&
+        project.source !== "original" &&
+        warranty &&
+        warranty.state !== "EXPIRED" && (
+          <p className="after-sales-hint">{it.afterSales.nonOriginalHint}</p>
+        )}
+      <fieldset className="after-sales-treatment">
+        <legend>{it.afterSales.treatment}</legend>
+        {(["WARRANTY", "PAID"] as const).map((choice) => (
+          <label
+            className={`after-sales-radio ${treatment === choice ? "is-selected" : ""}`}
+            key={choice}
+          >
+            <input
+              type="radio"
+              name="treatment"
+              value={choice}
+              checked={treatment === choice}
+              onChange={() => {
+                treatmentChanged.current = true;
+                setTreatment(choice);
+                if (choice === "WARRANTY") setFee("0");
+              }}
+            />
+            <span>
+              <strong>
+                {choice === "WARRANTY"
+                  ? it.afterSales.warrantyTreatment
+                  : it.afterSales.paidTreatment}
+              </strong>
+              <small>
+                {choice === "WARRANTY"
+                  ? it.afterSales.warrantyTreatmentHint
+                  : it.afterSales.paidTreatmentHint}
+              </small>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      <Field label={it.afterSales.notes} className="after-sales-notes">
+        <textarea
+          name="notes"
+          rows={3}
+          maxLength={200}
+          value={notes}
+          placeholder={it.afterSales.notesPlaceholder}
+          onChange={(event) => setNotes(event.target.value)}
+        />
+        <small>{notes.length}/200</small>
       </Field>
-      <Field label={it.afterSales.fee}>
-        <input name="fee" inputMode="decimal" defaultValue="0" required />
-      </Field>
-      <Field label={it.afterSales.dueDate}>
-        <input type="date" name="dueDate" min={romeDay()} />
-      </Field>
+      <div className="after-sales-grid">
+        <Field label={it.afterSales.fee}>
+          <input
+            name="fee"
+            inputMode="decimal"
+            value={fee}
+            min="0"
+            readOnly={treatment === "WARRANTY"}
+            onChange={(event) => setFee(event.target.value)}
+            required
+          />
+        </Field>
+        <Field label={it.afterSales.dueDate}>
+          <input type="date" name="dueDate" min={romeDay()} />
+        </Field>
+      </div>
     </ActionForm>
   );
 }
@@ -1410,13 +1727,14 @@ export function AfterSalesForm({ id }: { id: string }) {
 export function RefundForm({ id, received }: { id: string; received: number }) {
   const it = useMessages();
   const [requestId] = useState(() => crypto.randomUUID());
+  const [method, setMethod] = useState("CASH");
   return (
     <ActionForm
       submit={it.afterSales.confirmRefund}
       action={(data) =>
         refundAction(id, {
           requestId,
-          method: str(data, "method"),
+          method,
           reason: str(data, "reason"),
         })
       }
@@ -1429,13 +1747,17 @@ export function RefundForm({ id, received }: { id: string; received: number }) {
         <input readOnly value={money(received)} />
       </Field>
       <Field label={it.afterSales.refundMethod}>
-        <select name="method">
-          {creatablePaymentMethods.map((method) => (
-            <option value={method} key={method}>
-              {it.methods[method]}
-            </option>
-          ))}
-        </select>
+        <SimpleSelect
+          name="method"
+          value={method}
+          onChange={setMethod}
+          placeholder={it.selectOption}
+          ariaLabel={it.afterSales.refundMethod}
+          options={creatablePaymentMethods.map((option) => ({
+            value: option,
+            label: it.methods[option],
+          }))}
+        />
       </Field>
       <Field label={it.afterSales.refundReason}>
         <textarea name="reason" required maxLength={2000} />
@@ -1569,20 +1891,20 @@ export function RuleForm({
     >
       <div className="form-grid three">
         <Field label={it.deviceType}>
-          <select
+          <SimpleSelect
             value={category}
-            onChange={(e) => {
-              setCategory(e.target.value as Category);
+            onChange={(value) => {
+              setCategory(value as Category);
               setBrand("");
               setModel("");
             }}
-          >
-            {Object.entries(categories).map(([key, names]) => (
-              <option key={key} value={key}>
-                {names[locale === "zh" ? 1 : 0]}
-              </option>
-            ))}
-          </select>
+            placeholder={it.selectOption}
+            ariaLabel={it.deviceType}
+            options={Object.entries(categories).map(([key, names]) => ({
+              value: key,
+              label: names[locale === "zh" ? 1 : 0],
+            }))}
+          />
         </Field>
         <EditableSelect
           label={it.brand}
@@ -1648,17 +1970,26 @@ export function RuleForm({
       </div>
       <div className="form-grid">
         <Field label={it.requiredPart}>
-          <select
+          <SearchableCombobox
             value={requiredProductId}
-            onChange={(event) => setRequiredProductId(event.target.value)}
-          >
-            <option value="">{it.noRequiredPart}</option>
-            {repairProducts.map((product) => (
-              <option value={product.id} key={product.id}>
-                {product.name} · {product.stockQuantity}
-              </option>
-            ))}
-          </select>
+            onChange={setRequiredProductId}
+            groups={[
+              {
+                options: [
+                  { value: "", label: it.noRequiredPart },
+                  ...repairProducts.map((product) => ({
+                    value: product.id,
+                    label: product.name,
+                    secondary: `${it.inventory.currentStock}: ${product.stockQuantity}`,
+                  })),
+                ],
+              },
+            ]}
+            placeholder={it.noRequiredPart}
+            ariaLabel={it.requiredPart}
+            searchPlaceholder={it.search}
+            emptyText={it.noMatches}
+          />
         </Field>
         {requiredProductId && (
           <Field label={it.orderProducts.quantity}>
@@ -1814,21 +2145,21 @@ export function DeviceForm({
       }
     >
       <Field label={it.deviceType}>
-        <select
+        <SimpleSelect
           name="category"
           value={category}
-          onChange={(e) => {
-            setCategory(e.target.value as Category);
+          onChange={(value) => {
+            setCategory(value as Category);
             setBrand("");
             setModel("");
           }}
-        >
-          {Object.entries(categories).map(([key, names]) => (
-            <option key={key} value={key}>
-              {names[locale === "zh" ? 1 : 0]}
-            </option>
-          ))}
-        </select>
+          placeholder={it.selectOption}
+          ariaLabel={it.deviceType}
+          options={Object.entries(categories).map(([key, names]) => ({
+            value: key,
+            label: names[locale === "zh" ? 1 : 0],
+          }))}
+        />
       </Field>
       <EditableSelect
         label={it.brand}
@@ -2157,13 +2488,16 @@ export function PriceList({
 
 export function FormDialog({
   title,
+  subtitle,
   onClose,
   children,
 }: {
   title: string;
+  subtitle?: string;
   onClose: () => void;
   children: ReactNode;
 }) {
+  const it = useMessages();
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const busy = () =>
@@ -2192,7 +2526,21 @@ export function FormDialog({
       }}
     >
       <div className="dialog-heading">
-        <h2 id={titleId}>{title}</h2>
+        <div>
+          <h2 id={titleId}>{title}</h2>
+          {subtitle && <p>{subtitle}</p>}
+        </div>
+        <button
+          type="button"
+          className="dialog-close icon-button"
+          aria-label={it.close}
+          title={it.close}
+          onClick={() => {
+            if (!busy()) onClose();
+          }}
+        >
+          <X size={18} aria-hidden="true" />
+        </button>
       </div>
       <FormCloseContext.Provider value={onClose}>
         {children}

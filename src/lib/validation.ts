@@ -181,6 +181,9 @@ export const warrantyInput = z.object({
 });
 export const afterSalesInput = z.object({
   reason: short,
+  projectId: z.string().trim().max(120).default(""),
+  projectSource: z.enum(["original", "catalog", "custom"]).default("custom"),
+  treatment: z.enum(["WARRANTY", "PAID"]).default("PAID"),
   notes: text,
   fee: amountInput.default("0"),
   dueDate: dueDateInput,

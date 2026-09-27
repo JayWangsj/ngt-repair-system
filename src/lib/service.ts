@@ -1422,14 +1422,15 @@ export async function checkoutWorkOrder(
     if (remaining - amount > 0)
       return tx.workOrder.findUniqueOrThrow({ where: { id: orderId } });
     assertDelivery(remaining - amount);
+    const deliveredAt = data.pickedUpAt
+      ? new Date(data.pickedUpAt)
+      : new Date();
     await consumeWorkOrderProducts(tx, actor, orderId, "RETAIL_ADDON");
     await tx.workOrder.update({
       where: { id: orderId },
       data: {
         status: "COMPLETED",
-        pickedUpAt:
-          order.pickedUpAt ??
-          (data.pickedUpAt ? new Date(data.pickedUpAt) : new Date()),
+        pickedUpAt: order.pickedUpAt ?? deliveredAt,
         pickedUpBy: order.pickedUpBy ?? data.pickedUpBy,
         afterSalesOpen: false,
         afterSalesDueDate: null,
@@ -1443,6 +1444,7 @@ export async function checkoutWorkOrder(
         actorId: actor.id,
         actorName: actor.name,
         note: "",
+        createdAt: deliveredAt,
       },
     });
     await audit(tx, actor, orderId, "ORDER_CHECKED_OUT", {
@@ -1450,6 +1452,8 @@ export async function checkoutWorkOrder(
       requestId: data.requestId,
       method: amount > 0 ? data.method : null,
       unpaidOverride: remaining - amount > 0,
+      deliveredAt: deliveredAt.toISOString(),
+      pickedUpBy: data.pickedUpBy,
     });
     return tx.workOrder.findUniqueOrThrow({ where: { id: orderId } });
   });
@@ -1484,7 +1488,7 @@ export async function openAfterSales(
   raw: unknown,
 ) {
   const data = afterSalesInput.parse(raw);
-  const fee = cents(data.fee);
+  const fee = data.treatment === "WARRANTY" ? 0 : cents(data.fee);
   return transact(async (tx) => {
     const actor = await currentActor(tx, actorInput);
     const order = await tx.workOrder.findUniqueOrThrow({ where: { id } });
@@ -1513,6 +1517,10 @@ export async function openAfterSales(
     });
     await audit(tx, actor, id, "AFTER_SALES_OPENED", {
       reason: data.reason,
+      project: data.reason,
+      projectId: data.projectId || null,
+      projectSource: data.projectSource,
+      treatment: data.treatment,
       notes: data.notes,
       fee: decimal(fee),
       dueDate: data.dueDate || null,

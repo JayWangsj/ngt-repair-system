@@ -251,7 +251,10 @@ describe("PostgreSQL workflow", () => {
       changeStatus(staff, created.id, { status: "REWORKING" }),
     ).rejects.toThrow("post-vendita");
     await openAfterSales(staff, created.id, {
-      reason: "Difetto ricomparso",
+      reason: "Sostituzione display",
+      projectId: "original-display",
+      projectSource: "original",
+      treatment: "PAID",
       notes: "Controllare il connettore",
       fee: "50",
       dueDate: "2099-12-31",
@@ -267,6 +270,18 @@ describe("PostgreSQL workflow", () => {
       warrantyMonths: 3,
     });
     expect(order.afterSalesFee.toString()).toBe("50");
+    const openedAudit = await db.auditLog.findFirstOrThrow({
+      where: { entityId: created.id, action: "AFTER_SALES_OPENED" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(openedAudit.context).toMatchObject({
+      project: "Sostituzione display",
+      projectId: "original-display",
+      projectSource: "original",
+      treatment: "PAID",
+      notes: "Controllare il connettore",
+      fee: "50.00",
+    });
     expect(balance(order.items, order.payments, order)).toBe(5000);
     await addPayment(staff, created.id, {
       requestId: randomUUID(),
@@ -290,8 +305,10 @@ describe("PostgreSQL workflow", () => {
     expect(order.payments.at(-1)?.kind).toBe("AFTER_SALES");
     await openAfterSales(staff, created.id, {
       reason: "Verifica gratuita",
+      projectSource: "custom",
+      treatment: "WARRANTY",
       notes: "",
-      fee: "0",
+      fee: "99",
       dueDate: "",
     });
     order = await db.workOrder.findUniqueOrThrow({

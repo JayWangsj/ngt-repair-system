@@ -173,6 +173,39 @@ export function warrantyPeriod(
   const end = `${targetYear}-${String(normalizedMonth + 1).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
   return { start, end, active: today <= end };
 }
+export function warrantyProgress(
+  deliveredAt: Date | null,
+  months: number,
+  today = romeDay(),
+) {
+  const period = warrantyPeriod(deliveredAt, months, today);
+  if (!period) return null;
+  const day = (value: string) => Date.parse(`${value}T00:00:00Z`) / 86_400_000;
+  const start = day(period.start);
+  const end = day(period.end);
+  const current = day(today);
+  const totalDays = Math.max(0, end - start);
+  const elapsedDays = current - start;
+  const progress =
+    totalDays > 0
+      ? Math.min(100, Math.max(0, Math.round((elapsedDays / totalDays) * 100)))
+      : current >= end
+        ? 100
+        : 0;
+  const remainingPercent = 100 - progress;
+  const remainingDays = Math.max(0, Math.ceil(end - current));
+  return {
+    ...period,
+    progress,
+    remainingPercent,
+    remainingDays,
+    state: !period.active
+      ? ("EXPIRED" as const)
+      : remainingPercent <= 20
+        ? ("EXPIRING" as const)
+        : ("ACTIVE" as const),
+  };
+}
 export function normalizePhone(phone: string) {
   const clean = phone.replace(/[\s().-]/g, "").replace(/^00/, "+");
   if (!/^\+?\d{6,15}$/.test(clean))

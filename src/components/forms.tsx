@@ -306,6 +306,7 @@ export function ItemsEditor({
                   searchPlaceholder={it.afterSales.projectSearch}
                   emptyText={it.afterSales.noProjectMatches}
                   customLabel={it.afterSales.addCustomProject}
+                  clearable
                   groups={[
                     {
                       label: it.afterSales.otherProjects,
@@ -816,6 +817,7 @@ export function NewOrderForm({
           </Field>
           <EditableSelect
             label={it.brand}
+            createLabel={it.customBrand}
             value={values.brand}
             required
             readOnly={!!values.deviceId}
@@ -829,6 +831,7 @@ export function NewOrderForm({
           />
           <EditableSelect
             label={it.model}
+            createLabel={it.customModel}
             value={values.model}
             required
             readOnly={!!values.deviceId}
@@ -1743,6 +1746,7 @@ export function AfterSalesForm({
             setSelected("custom");
             if (!treatmentChanged.current) setTreatment("PAID");
           }}
+          clearable
         />
       </Field>
       {custom && (
@@ -2013,6 +2017,7 @@ export function RuleForm({
         </Field>
         <EditableSelect
           label={it.brand}
+          createLabel={it.customBrand}
           value={brand}
           onChange={(v) => {
             setBrand(v);
@@ -2026,6 +2031,7 @@ export function RuleForm({
         />
         <EditableSelect
           label={it.model}
+          createLabel={it.customModel}
           value={model}
           onChange={setModel}
           options={uniqueOptions(
@@ -2042,6 +2048,7 @@ export function RuleForm({
       </div>
       <EditableSelect
         label={it.project}
+        createLabel={it.afterSales.addCustomProject}
         value={project}
         onChange={setProject}
         options={uniqueOptions(
@@ -2268,6 +2275,7 @@ export function DeviceForm({
       </Field>
       <EditableSelect
         label={it.brand}
+        createLabel={it.customBrand}
         value={brand}
         onChange={setBrand}
         options={brands[category] ?? []}
@@ -2276,6 +2284,7 @@ export function DeviceForm({
       />
       <EditableSelect
         label={it.model}
+        createLabel={it.customModel}
         value={model}
         onChange={setModel}
         options={models[category]?.[brand] ?? []}

@@ -144,6 +144,7 @@ export function WorkOrderProducts({
               ariaLabel={it.orderProducts.product}
               searchPlaceholder={it.search}
               emptyText={it.orderProducts.empty}
+              clearable
             />
           </label>
           <label>

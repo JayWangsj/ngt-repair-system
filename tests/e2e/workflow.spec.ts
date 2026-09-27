@@ -6,8 +6,10 @@ async function chooseBusinessOption(
   option: string,
   scope: Page | Locator = page,
 ) {
-  await scope.getByRole("button", { name: label, exact: true }).click();
-  const panel = page.locator(".business-select-panel");
+  const combobox = scope.getByRole("combobox", { name: label, exact: true });
+  const simpleSelect = scope.getByRole("button", { name: label, exact: true });
+  await combobox.or(simpleSelect).first().click();
+  const panel = page.locator(".business-select-panel.is-entering");
   const exact = panel.getByRole("option", { name: option, exact: true });
   if (await exact.count()) await exact.click();
   else
@@ -20,16 +22,21 @@ async function enterBusinessValue(
   value: string,
   scope: Page | Locator = page,
 ) {
-  await scope.getByRole("button", { name: label, exact: true }).click();
-  const panel = page.locator(".business-select-panel");
-  await panel.getByRole("searchbox").fill(value);
+  const combobox = scope.getByRole("combobox", { name: label, exact: true });
+  await combobox.click();
+  await combobox.fill(value);
+  const panel = page.locator(".business-select-panel.is-entering");
   expect(
     await panel.evaluate((element) => {
       const box = element.getBoundingClientRect();
       return box.top >= 0 && box.bottom <= window.innerHeight;
     }),
   ).toBe(true);
-  await panel.locator(".business-select-custom").click();
+  await combobox
+    .locator("xpath=ancestor::*[contains(@class, 'business-combobox-control')]")
+    .locator(".business-select-create")
+    .click();
+  await combobox.press("Escape");
 }
 async function fillOrder(
   page: Page,
@@ -44,9 +51,8 @@ async function fillOrder(
   const customerName = options.name ?? "Cliente Playwright";
   if (options.phone) {
     await page
-      .getByRole("button", { name: "Cerca cliente", exact: true })
+      .getByRole("button", { name: "Nuovo cliente", exact: true })
       .click();
-    await page.locator(".business-select-custom").click();
     const dialog = page.getByRole("dialog", { name: "Nuovo cliente" });
     await dialog
       .getByLabel("Nome e cognome", { exact: true })
@@ -536,7 +542,7 @@ test("creates automatic quote, receives payment and delivers", async ({
   await save(page);
   const productForm = page.locator(".order-product-form");
   await productForm
-    .getByRole("button", { name: "Prodotto", exact: true })
+    .getByRole("combobox", { name: "Prodotto", exact: true })
     .click();
   await expect(page.getByRole("option", { name: /Batteria Test/ })).toHaveCount(
     0,
@@ -761,7 +767,7 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   ).toBe(productsTop);
 
   const productControls = products.locator(
-    ".order-product-form .business-select-trigger, .order-product-form input:not([type='hidden']), .order-product-form .button",
+    ".order-product-form .business-combobox-control, .order-product-form > label > input:not([type='hidden']), .order-product-form .button",
   );
   const productBoxes = await productControls.evaluateAll((elements) =>
     elements.map((element) => {
@@ -845,8 +851,8 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     "ancora in garanzia",
   );
   await expect(
-    dialog.getByRole("button", { name: "Intervento", exact: true }),
-  ).toContainText("Fotocamera");
+    dialog.getByRole("combobox", { name: "Intervento", exact: true }),
+  ).toHaveValue(/^Fotocamera/);
   await expect(
     dialog.getByRole("radio", { name: /Riparazione in garanzia/ }),
   ).toBeChecked();
@@ -1018,9 +1024,8 @@ test("confirms a new customer with three numbers and selects that customer by na
   const phone = "336" + Date.now().toString().slice(-7);
   await page.goto("/orders/new");
   await page
-    .getByRole("button", { name: "Cerca cliente", exact: true })
+    .getByRole("button", { name: "Nuovo cliente", exact: true })
     .click();
-  await page.locator(".business-select-custom").click();
   const dialog = page.getByRole("dialog", { name: "Nuovo cliente" });
   await dialog
     .getByLabel("Nome e cognome", { exact: true })
@@ -1044,10 +1049,10 @@ test("confirms a new customer with three numbers and selects that customer by na
   await dialog.getByRole("button", { name: "Salva", exact: true }).click();
   await expect(dialog).toHaveCount(0);
 
-  await page
-    .getByRole("button", { name: "Cerca cliente", exact: true })
-    .click();
-  const search = page.locator(".business-select-panel").getByRole("searchbox");
+  const search = page.getByRole("combobox", {
+    name: "Cerca cliente",
+    exact: true,
+  });
   await search.fill("337" + phone.slice(3));
   await page.getByRole("option", { name: /Tre telefoni/ }).click();
   await expect(page.locator(".selected-customer-summary")).toContainText(
@@ -1057,6 +1062,68 @@ test("confirms a new customer with three numbers and selects that customer by na
     "+39" + phone,
   );
 });
+
+test("searchable combobox keeps search, create and chevron as independent controls", async ({
+  page,
+}) => {
+  await page.goto("/orders/new");
+  const customer = page.getByRole("combobox", {
+    name: "Cerca cliente",
+    exact: true,
+  });
+  const createCustomer = page.getByRole("button", {
+    name: "Nuovo cliente",
+    exact: true,
+  });
+  const customerControl = customer.locator(
+    "xpath=ancestor::*[contains(@class, 'business-combobox-control')]",
+  );
+  const expand = customerControl.getByRole("button", {
+    name: "Apri opzioni",
+    exact: true,
+  });
+
+  await expect(customer).toBeVisible();
+  await expect(createCustomer).toBeVisible();
+  await expand.click();
+  await expect(customer).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    page.locator(".business-select-panel.is-entering input"),
+  ).toHaveCount(0);
+  await customerControl
+    .getByRole("button", { name: "Chiudi opzioni", exact: true })
+    .click();
+  await expect(customer).toHaveAttribute("aria-expanded", "false");
+
+  await createCustomer.click();
+  await expect(customer).toHaveAttribute("aria-expanded", "false");
+  const dialog = page.getByRole("dialog", { name: "Nuovo cliente" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Chiudi", exact: true }).click();
+
+  await customer.fill("cliente-in-trovabile");
+  const panel = page.locator(".business-select-panel.is-entering");
+  await expect(panel).toContainText("Nessun cliente corrispondente");
+  await expect(
+    panel.getByRole("button", { name: /Nuovo cliente/ }),
+  ).toBeVisible();
+  await customer.press("Escape");
+
+  await chooseBusinessOption(page, "Marca", "Apple");
+  const brand = page.getByRole("combobox", { name: "Marca", exact: true });
+  await expect(brand).toHaveValue("Apple");
+  const brandControl = brand.locator(
+    "xpath=ancestor::*[contains(@class, 'business-combobox-control')]",
+  );
+  await brandControl
+    .getByRole("button", { name: "Cancella selezione", exact: true })
+    .click();
+  await expect(brand).toHaveValue("");
+  await expect(
+    page.getByRole("combobox", { name: "Modello", exact: true }),
+  ).toBeDisabled();
+});
+
 test("native quote choices populate prices, clear on model changes and discounts are optional", async ({
   page,
 }) => {
@@ -1070,7 +1137,7 @@ test("native quote choices populate prices, clear on model changes and discounts
     await expect(deviceType).toContainText("Tablet");
   }).toPass();
   await chooseBusinessOption(page, "Marca", "Apple");
-  await page.getByRole("button", { name: "Modello", exact: true }).click();
+  await page.getByRole("combobox", { name: "Modello", exact: true }).click();
   await expect(page.getByRole("option", { name: /^iPad/ })).not.toHaveCount(0);
   await expect(
     page.getByRole("option", { name: "iPhone 13", exact: true }),
@@ -1103,14 +1170,16 @@ test("native quote choices populate prices, clear on model changes and discounts
   await expect(page.locator(".price-breakdown")).toContainText("100,00");
   await enterBusinessValue(page, "Modello", "Unknown model");
   await expect(
-    page.getByRole("button", { name: "Intervento 1", exact: true }),
-  ).toContainText("Cerca o seleziona un intervento");
+    page.getByRole("combobox", { name: "Intervento 1", exact: true }),
+  ).toHaveValue("");
   await expect(
     page.getByLabel("Prezzo originale (€) 1", { exact: true }),
   ).toHaveValue("");
-  await page.getByRole("button", { name: "Intervento 1", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "Intervento 1", exact: true })
+    .click();
   await expect(
-    page.locator(".business-select-panel").getByRole("option"),
+    page.locator(".business-select-panel.is-entering").getByRole("option"),
   ).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(
@@ -1118,8 +1187,8 @@ test("native quote choices populate prices, clear on model changes and discounts
   ).toHaveCount(0);
   await enterBusinessValue(page, "Modello", "iphone18promax");
   await expect(
-    page.getByRole("button", { name: "Modello", exact: true }),
-  ).toContainText("iPhone 18 Pro Max");
+    page.getByRole("combobox", { name: "Modello", exact: true }),
+  ).toHaveValue("iPhone 18 Pro Max");
 });
 
 test("customer list searches instantly, preserves navigation and supports compact editing", async ({
@@ -1384,8 +1453,8 @@ test("quote tree supports contextual dialogs, search, editing and empty branch r
   await dialog.getByRole("button", { name: "Salva", exact: true }).click();
   await expect(dialog.getByRole("alert")).toBeVisible();
   await expect(
-    dialog.getByRole("button", { name: "Modello", exact: true }),
-  ).toContainText("Watch Modal");
+    dialog.getByRole("combobox", { name: "Modello", exact: true }),
+  ).toHaveValue("Watch Modal");
   await dialog.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("40");
   await dialog.getByRole("button", { name: "Salva", exact: true }).click();
   await expect(dialog).not.toBeVisible();
@@ -1401,11 +1470,11 @@ test("quote tree supports contextual dialogs, search, editing and empty branch r
     dialog.getByRole("button", { name: "Tipo dispositivo", exact: true }),
   ).toContainText("Smartwatch");
   await expect(
-    dialog.getByRole("button", { name: "Marca", exact: true }),
-  ).toContainText("Apple");
+    dialog.getByRole("combobox", { name: "Marca", exact: true }),
+  ).toHaveValue("Apple");
   await expect(
-    dialog.getByRole("button", { name: "Modello", exact: true }),
-  ).toContainText("Watch Modal");
+    dialog.getByRole("combobox", { name: "Modello", exact: true }),
+  ).toHaveValue("Watch Modal");
   await enterBusinessValue(page, "Intervento", "Test screen", dialog);
   await dialog.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("70");
   await dialog.getByRole("button", { name: "Salva", exact: true }).click();

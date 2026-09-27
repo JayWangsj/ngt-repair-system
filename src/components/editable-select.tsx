@@ -12,6 +12,7 @@ export function EditableSelect({
   name,
   maxLength = 120,
   normalize,
+  createLabel,
 }: {
   label: string;
   value: string;
@@ -22,6 +23,7 @@ export function EditableSelect({
   name?: string;
   maxLength?: number;
   normalize?: (value: string) => string;
+  createLabel?: string;
 }) {
   const it = useMessages();
   const normalized = options.map((o) =>
@@ -50,7 +52,7 @@ export function EditableSelect({
         ariaLabel={label}
         searchPlaceholder={it.manualEntry}
         emptyText={it.noMatches}
-        customLabel={it.manualEntry}
+        customLabel={createLabel ?? it.newValue}
         onCustom={(next) => {
           if (!required || next) {
             const trimmed = next.slice(0, maxLength);

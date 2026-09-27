@@ -415,7 +415,6 @@ export function NewOrderWizard({
                 <UserRound size={19} />
                 <div>
                   <strong>{customer.name}</strong>
-                  <span>{it.existingCustomer}</span>
                   <small>{customer.phone}</small>
                 </div>
                 <Button
@@ -513,8 +512,9 @@ export function NewOrderWizard({
                   placeholder={it.manualEntry}
                   searchPlaceholder={it.search}
                   emptyText={it.noMatches}
-                  customLabel={it.manualEntry}
+                  customLabel={it.customBrand}
                   onCustom={(value) => setBrand(normalizeBrand(value))}
+                  clearable
                   groups={[
                     {
                       options: brandOptions.map((value) => ({
@@ -534,8 +534,9 @@ export function NewOrderWizard({
                   placeholder={it.manualEntry}
                   searchPlaceholder={it.search}
                   emptyText={it.noMatches}
-                  customLabel={it.manualEntry}
+                  customLabel={it.customModel}
                   onCustom={(value) => setModel(normalizeModel(value))}
+                  clearable
                   groups={[
                     {
                       options: modelOptions.map((value) => ({

@@ -1379,7 +1379,10 @@ export function WarrantyForm({
       submit={it.save}
       action={(data) =>
         warrantyAction(id, {
-          months: months === "custom" ? str(data, "customMonths") : months,
+          months:
+            str(data, "months") === "custom"
+              ? str(data, "customMonths")
+              : str(data, "months"),
           scope: str(data, "scope"),
           notes: str(data, "notes"),
         })
@@ -1387,6 +1390,7 @@ export function WarrantyForm({
     >
       <Field label={it.warranty.duration}>
         <SimpleSelect
+          name="months"
           value={months}
           onChange={setMonths}
           placeholder={it.selectOption}

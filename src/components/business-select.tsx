@@ -79,11 +79,13 @@ export function SelectDropdown({
   customLabel,
   onCustom,
   onCommit,
+  onClose,
   onQueryChange,
   customDisabled = false,
   middleControl,
   clearable = false,
   loading = false,
+  autoFocusQuery,
   className = "",
 }: {
   value?: string;
@@ -100,11 +102,13 @@ export function SelectDropdown({
   customLabel?: string;
   onCustom?: (query: string) => void;
   onCommit?: (query: string) => void;
+  onClose?: () => void;
   onQueryChange?: (query: string) => void;
   customDisabled?: boolean;
   middleControl?: ReactNode;
   clearable?: boolean;
   loading?: boolean;
+  autoFocusQuery?: string;
   className?: string;
 }) {
   const it = useMessages();
@@ -117,6 +121,7 @@ export function SelectDropdown({
   const search = useRef<HTMLInputElement>(null);
   const simpleTrigger = useRef<HTMLButtonElement>(null);
   const closingTimer = useRef<number | null>(null);
+  const initialFocusApplied = useRef(false);
   const id = useId();
   const optionId = (index: number) => `${id}-option-${index}`;
   const { trigger, panel, position } = useDropdown(present);
@@ -141,11 +146,15 @@ export function SelectDropdown({
     !!trimmedQuery && !loading && !visible.length && !customDisabled;
 
   const close = useCallback(
-    ({ focus = false }: { focus?: boolean } = {}) => {
-      if (searchable && query.trim()) onCommit?.(query.trim());
+    ({
+      focus = false,
+      commit = true,
+    }: { focus?: boolean; commit?: boolean } = {}) => {
+      if (commit && searchable && query.trim()) onCommit?.(query.trim());
       setOpen(false);
       setQuery("");
       setActive(0);
+      onClose?.();
       if (closingTimer.current) window.clearTimeout(closingTimer.current);
       closingTimer.current = window.setTimeout(() => setPresent(false), 180);
       if (focus)
@@ -153,7 +162,7 @@ export function SelectDropdown({
           searchable ? search.current?.focus() : simpleTrigger.current?.focus(),
         );
     },
-    [onCommit, query, searchable],
+    [onClose, onCommit, query, searchable],
   );
   function openDropdown() {
     const element = trigger.current;
@@ -166,7 +175,7 @@ export function SelectDropdown({
   function choose(option: SelectOption) {
     setInternalValue(option.value);
     onChange?.(option.value);
-    close();
+    close({ commit: false });
     if (searchable) search.current?.blur();
     else requestAnimationFrame(() => simpleTrigger.current?.focus());
   }
@@ -211,6 +220,30 @@ export function SelectDropdown({
     if (open && searchable)
       requestAnimationFrame(() => search.current?.focus());
   }, [open, searchable]);
+  useEffect(() => {
+    if (
+      !searchable ||
+      autoFocusQuery === undefined ||
+      initialFocusApplied.current
+    )
+      return;
+    initialFocusApplied.current = true;
+    const frame = requestAnimationFrame(() => {
+      const element = trigger.current;
+      if (!element || disabled) return;
+      if (closingTimer.current) window.clearTimeout(closingTimer.current);
+      setPortalTarget(element.closest("dialog") ?? document.body);
+      setQuery(autoFocusQuery);
+      setActive(0);
+      setPresent(true);
+      setOpen(true);
+      requestAnimationFrame(() => {
+        search.current?.focus();
+        search.current?.select();
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [autoFocusQuery, disabled, searchable, trigger]);
   useEffect(
     () => () => {
       if (closingTimer.current) window.clearTimeout(closingTimer.current);
@@ -301,8 +334,7 @@ export function SelectDropdown({
             onClick={(event) => {
               event.stopPropagation();
               if (open) close({ focus: true });
-              else if (query.trim()) openDropdown();
-              else search.current?.focus();
+              else openDropdown();
             }}
           >
             <ChevronDown size={15} aria-hidden="true" />
@@ -317,7 +349,7 @@ export function SelectDropdown({
               onClick={(event) => {
                 event.stopPropagation();
                 const next = query.trim();
-                close();
+                close({ commit: false });
                 onCustom(next);
               }}
             >

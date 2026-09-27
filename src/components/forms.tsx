@@ -523,13 +523,34 @@ export function ItemsEditor({
     previousDevice.current = deviceKey;
     setProjectQueries({});
     setEditingParts({});
+    const projects = deviceProjects(rules, device);
     onChange(
-      items.map((item) => ({
-        ...item,
-        project: "",
-        final: "",
-        discount: "0",
-      })),
+      items.map((item) => {
+        const project = projects.find(
+          (candidate) =>
+            candidate.toLocaleLowerCase("it") ===
+            item.project.trim().toLocaleLowerCase("it"),
+        );
+        const found = project ? matchRule(rules, device, project) : null;
+        return project && found
+          ? {
+              ...item,
+              project,
+              final: found.rule.suggested,
+              requiredProductId: found.rule.requiredProductId ?? "",
+              requiredQuantity: found.rule.requiredQuantity ?? 1,
+              requiredProductRemoved: false,
+            }
+          : {
+              ...item,
+              project: "",
+              final: "",
+              discount: "0",
+              requiredProductId: "",
+              requiredQuantity: 1,
+              requiredProductRemoved: false,
+            };
+      }),
     );
   }, [deviceKey, device, items, rules, onChange]);
   const update = (index: number, patch: Partial<ItemView>) =>
@@ -539,6 +560,7 @@ export function ItemsEditor({
   return (
     <div className="items-editor">
       {items.map((item, index) => {
+        const projects = deviceProjects(rules, device);
         const match = matchRule(rules, device, item.project);
         const projectQuery = projectQueries[index] ?? "";
         const priceEnabled = !!(item.project.trim() || projectQuery.trim());
@@ -556,7 +578,11 @@ export function ItemsEditor({
               ariaLabel={`${it.project} ${index + 1}`}
               placeholder={it.afterSales.projectPlaceholder}
               searchPlaceholder={it.afterSales.projectSearch}
-              emptyText={it.afterSales.noProjectMatches}
+              emptyText={
+                projects.length
+                  ? it.afterSales.noProjectMatches
+                  : it.afterSales.noDeviceProjects
+              }
               customLabel={it.afterSales.addCustomProject}
               customDisabled={!validAmount(item.final)}
               clearable
@@ -576,7 +602,7 @@ export function ItemsEditor({
               }
               groups={[
                 {
-                  options: deviceProjects(rules, device).map((project) => {
+                  options: projects.map((project) => {
                     const found = matchRule(rules, device, project);
                     return {
                       value: project,
@@ -594,23 +620,6 @@ export function ItemsEditor({
                   ...current,
                   [index]: query,
                 }));
-                if (!query.trim()) {
-                  update(index, {
-                    project: "",
-                    final: "",
-                    discount: "0",
-                    requiredProductId: "",
-                    requiredQuantity: 1,
-                    requiredProductRemoved: false,
-                  });
-                } else if (item.project) {
-                  update(index, {
-                    project: "",
-                    requiredProductId: "",
-                    requiredQuantity: 1,
-                    requiredProductRemoved: false,
-                  });
-                }
               }}
               onCustom={(project) => {
                 setProjectQueries((current) => ({ ...current, [index]: "" }));
@@ -717,6 +726,15 @@ export function ItemsEditor({
                   placeholder={it.searchInventoryPart}
                   searchPlaceholder={it.searchInventoryPart}
                   emptyText={it.noMatches}
+                  autoFocusQuery={
+                    editingParts[index] ? selectedProduct?.name : undefined
+                  }
+                  onClose={() =>
+                    setEditingParts((current) => ({
+                      ...current,
+                      [index]: false,
+                    }))
+                  }
                   customLabel={it.newPart}
                   onCustom={(query) => setCreatingPart({ index, query })}
                   clearable

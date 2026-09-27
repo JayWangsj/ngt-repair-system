@@ -953,6 +953,13 @@ textarea {
   gap: 8px;
   max-width: 620px;
 }
+.quote-required-part ~ label,
+.quote-required-part ~ .item-actions {
+  margin-top: 18px;
+}
+.items-editor > .button {
+  margin-top: 8px;
+}
 .quote-required-part-label {
   color: #5d6864;
   font-size: 11px;
@@ -1039,6 +1046,7 @@ textarea {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-top: 18px;
 }
 .item-actions label {
   margin: 8px 0 0;
@@ -2267,6 +2275,9 @@ details[open] > summary {
 }
 .order-wizard {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
 }
 .order-step-card {
   overflow: visible;
@@ -2321,6 +2332,9 @@ details[open] > summary {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.order-step-title small.is-error {
+  color: #9d312e;
 }
 .order-step-state {
   font-size: 0.76rem;
@@ -2433,6 +2447,16 @@ details[open] > summary {
 .fault-choice input:focus-visible + span {
   outline: 2px solid #b58e00;
   outline-offset: 2px;
+}
+.fault-choice:has(input:disabled) span {
+  cursor: default;
+  opacity: 0.55;
+  background: #f4f5f5;
+}
+.device-dependency-hint {
+  margin: -4px 0 0;
+  color: #806000;
+  font-size: 0.78rem;
 }
 .fault-actions {
   display: flex;
@@ -2589,7 +2613,7 @@ details[open] > summary {
 .fault-manager {
   min-width: min(720px, 78vw);
   display: grid;
-  gap: 14px;
+  gap: 20px;
 }
 .catalog-toolbar.fault-manager-toolbar {
   display: grid;
@@ -2673,28 +2697,39 @@ details[open] > summary {
   display: inline-flex;
   flex-direction: row;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   white-space: nowrap;
 }
 .fault-enabled-switch input {
+  position: relative;
+  flex: 0 0 32px;
   width: 32px;
   min-height: 18px;
   height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 0;
   appearance: none;
   border-radius: 999px;
   background: #d9ddd9;
   transition: background var(--motion-base) var(--ease-ui);
 }
 .fault-enabled-switch input::before {
+  position: absolute;
+  top: 2px;
+  left: 2px;
   display: block;
   width: 14px;
   height: 14px;
-  margin: 2px;
   border-radius: 50%;
   background: white;
   box-shadow: 0 1px 3px #0002;
   content: "";
   transition: transform var(--motion-base) var(--ease-ui);
+}
+.fault-enabled-switch > span {
+  display: inline-flex;
+  align-items: center;
 }
 .fault-enabled-switch input:checked {
   background: #d7b52b;

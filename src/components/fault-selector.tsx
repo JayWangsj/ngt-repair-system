@@ -11,12 +11,14 @@ export function FaultSelector({
   category,
   items,
   selected,
+  disabled = false,
   onChange,
   onItemsChange,
 }: {
   category: string;
   items: FaultCatalogItem[];
   selected: string[];
+  disabled?: boolean;
   onChange: (ids: string[]) => void;
   onItemsChange?: (items: FaultCatalogItem[]) => void;
 }) {
@@ -52,6 +54,7 @@ export function FaultSelector({
               <input
                 type="checkbox"
                 checked={checked}
+                disabled={disabled}
                 onChange={(event) =>
                   onChange(
                     event.target.checked

@@ -11,6 +11,7 @@ import {
 import {
   brands,
   categories,
+  modelKey,
   models,
   normalizeBrand,
   normalizeModel,
@@ -71,6 +72,7 @@ function StepCard({
   title,
   state,
   summary,
+  summaryError = false,
   selected,
   expanded,
   onToggle,
@@ -80,6 +82,7 @@ function StepCard({
   title: string;
   state: "not-started" | "in-progress" | "completed";
   summary?: string;
+  summaryError?: boolean;
   selected: boolean;
   expanded: boolean;
   onToggle: () => void;
@@ -108,7 +111,9 @@ function StepCard({
             {title}{" "}
             {state === "completed" && <Check size={16} aria-hidden="true" />}
           </strong>
-          {summary && <small>{summary}</small>}
+          {summary && (
+            <small className={summaryError ? "is-error" : ""}>{summary}</small>
+          )}
         </span>
         <span className="order-step-state">{label}</span>
         <ChevronDown className="order-step-chevron" size={17} />
@@ -156,6 +161,7 @@ export function NewOrderWizard({
   const [duplicateCustomer, setDuplicateCustomer] =
     useState<CustomerDetail>(null);
   const [deviceId, setDeviceId] = useState("");
+  const [autoMatchedDevice, setAutoMatchedDevice] = useState(false);
   const [category, setCategory] = useState<Category>("PHONE");
   const [brand, setBrand] = useState("");
   const [series, setSeries] = useState("");
@@ -181,6 +187,7 @@ export function NewOrderWizard({
   const [touched, setTouched] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [step2LeftIncomplete, setStep2LeftIncomplete] = useState(false);
   const completed = useRef([false, false, false]);
 
   const catalog = faults
@@ -217,10 +224,10 @@ export function NewOrderWizard({
     ].filter(Boolean),
   );
   const validCustomer = !!customerId && !!customer;
-  const validDevice = !!brand.trim() && !!model.trim();
+  const validDevice = !!category && !!brand.trim() && !!model.trim();
   const validFault =
     inspectionMode || selectedFaults.length > 0 || customFaults.length > 0;
-  const validStep2 = validDevice && validFault;
+  const validStep2 = validDevice && validFault && !!dueDate;
   const validQuote = inspectionMode
     ? safeCents(inspectionFee) > 0
     : items.length > 0 &&
@@ -248,7 +255,10 @@ export function NewOrderWizard({
   );
 
   function toggleStep(index: number) {
+    if (selectedStep === 1 && index !== 1 && !validStep2)
+      setStep2LeftIncomplete(true);
     if (selectedStep === index && expandedStep === index) {
+      if (index === 1 && !validStep2) setStep2LeftIncomplete(true);
       setExpandedStep(null);
       setSelectedStep(null);
       return;
@@ -258,10 +268,41 @@ export function NewOrderWizard({
   }
   function clearDevice() {
     setDeviceId("");
+    setAutoMatchedDevice(false);
     setBrand("");
     setSeries("");
     setModel("");
     setImei("");
+  }
+  function matchCustomerDevice(
+    nextCategory: Category,
+    nextBrand: string,
+    nextModel: string,
+  ) {
+    if (deviceId && !autoMatchedDevice) return;
+    const matches =
+      customer?.devices.filter(
+        (device) =>
+          device.category === nextCategory &&
+          normalizeBrand(device.brand).toLocaleLowerCase("it") ===
+            normalizeBrand(nextBrand).toLocaleLowerCase("it") &&
+          modelKey(device.model) === modelKey(nextModel),
+      ) ?? [];
+    if (matches.length !== 1) {
+      setDeviceId("");
+      setAutoMatchedDevice(false);
+      return;
+    }
+    const [match] = matches;
+    setDeviceId(match.id);
+    setAutoMatchedDevice(true);
+    setCategory(match.category as Category);
+    setBrand(match.brand);
+    setSeries(match.series);
+    setModel(match.model);
+    setImei(match.imei ?? "");
+    setAppearance(match.appearance);
+    setAccessories(match.accessories);
   }
   function leaveInspection() {
     if (inspectionMode) setInspectionMode(false);
@@ -281,6 +322,7 @@ export function NewOrderWizard({
     setCustomerQuery("");
     clearDevice();
   }
+
   function openCustomerDialog(query: string) {
     const value = query.trim();
     const looksLikePhone = /^[+\d\s().-]{6,}$/.test(value);
@@ -411,6 +453,15 @@ export function NewOrderWizard({
           .filter(Boolean),
         ...customFaults,
       ].join(", ");
+  const step2Missing = !brand.trim()
+    ? it.selectBrandError
+    : !model.trim()
+      ? it.selectModelError
+      : !validFault
+        ? it.selectFaultError
+        : !dueDate
+          ? it.selectDueDateError
+          : "";
 
   return (
     <>
@@ -440,6 +491,7 @@ export function NewOrderWizard({
                   placeholder={it.customerSearchPlaceholder}
                   searchPlaceholder={it.customerSearchPlaceholder}
                   emptyText={it.noCustomerMatches}
+                  autoFocusQuery={choosingCustomer ? customer?.name : undefined}
                   customLabel={it.addCustomer}
                   onCustom={openCustomerDialog}
                   groups={[
@@ -487,10 +539,13 @@ export function NewOrderWizard({
             expanded={expandedStep === 1}
             onToggle={() => toggleStep(1)}
             summary={
-              validDevice
-                ? `${categories[category][locale === "zh" ? 1 : 0]} · ${brand} · ${model}${faultSummary ? ` · ${faultSummary}` : ""}`
-                : undefined
+              step2LeftIncomplete && !validStep2
+                ? step2Missing
+                : validDevice
+                  ? `${categories[category][locale === "zh" ? 1 : 0]} · ${brand} · ${model}${faultSummary ? ` · ${faultSummary}` : ""}`
+                  : undefined
             }
+            summaryError={step2LeftIncomplete && !validStep2}
           >
             {customer?.devices?.length ? (
               <Field label={it.chooseDevice}>
@@ -501,6 +556,7 @@ export function NewOrderWizard({
                       (entry) => entry.id === id,
                     );
                     setDeviceId(id);
+                    setAutoMatchedDevice(false);
                     if (device) {
                       setCategory(device.category as Category);
                       setBrand(device.brand);
@@ -533,7 +589,7 @@ export function NewOrderWizard({
                     clearDevice();
                     setSelectedFaults([]);
                   }}
-                  disabled={!!deviceId}
+                  disabled={!!deviceId && !autoMatchedDevice}
                   ariaLabel={it.deviceType}
                   placeholder={it.selectOption}
                   options={Object.entries(categories).map(
@@ -548,17 +604,25 @@ export function NewOrderWizard({
                 <SearchableCombobox
                   value={brand}
                   onChange={(value) => {
-                    setBrand(normalizeBrand(value));
+                    const nextBrand = normalizeBrand(value);
+                    setBrand(nextBrand);
                     setModel("");
                     setSeries("");
+                    matchCustomerDevice(category, nextBrand, "");
                   }}
-                  disabled={!!deviceId}
+                  disabled={!!deviceId && !autoMatchedDevice}
                   ariaLabel={it.brand}
                   placeholder={it.manualEntry}
                   searchPlaceholder={it.search}
                   emptyText={it.noMatches}
                   customLabel={it.customBrand}
-                  onCustom={(value) => setBrand(normalizeBrand(value))}
+                  onCustom={(value) => {
+                    const nextBrand = normalizeBrand(value);
+                    setBrand(nextBrand);
+                    setModel("");
+                    setSeries("");
+                    matchCustomerDevice(category, nextBrand, "");
+                  }}
                   clearable
                   groups={[
                     {
@@ -573,21 +637,27 @@ export function NewOrderWizard({
               <Field label={`${it.model} *`}>
                 <SearchableCombobox
                   value={model}
-                  onChange={(value) =>
-                    setModel(normalizeModel(value, modelOptions))
-                  }
-                  disabled={!!deviceId || !brand}
+                  onChange={(value) => {
+                    const nextModel = normalizeModel(value, modelOptions);
+                    setModel(nextModel);
+                    matchCustomerDevice(category, brand, nextModel);
+                  }}
+                  disabled={(!!deviceId && !autoMatchedDevice) || !brand}
                   ariaLabel={it.model}
                   placeholder={it.manualEntry}
                   searchPlaceholder={it.search}
                   emptyText={it.noMatches}
                   customLabel={it.customModel}
-                  onCustom={(value) =>
-                    setModel(normalizeModel(value, modelOptions))
-                  }
-                  onCommit={(value) =>
-                    setModel(normalizeModel(value, modelOptions))
-                  }
+                  onCustom={(value) => {
+                    const nextModel = normalizeModel(value, modelOptions);
+                    setModel(nextModel);
+                    matchCustomerDevice(category, brand, nextModel);
+                  }}
+                  onCommit={(value) => {
+                    const nextModel = normalizeModel(value, modelOptions);
+                    setModel(nextModel);
+                    matchCustomerDevice(category, brand, nextModel);
+                  }}
                   clearable
                   groups={[
                     {
@@ -605,10 +675,33 @@ export function NewOrderWizard({
                 {!brand ? it.selectBrandError : it.selectModelError}
               </p>
             )}
+            {!validDevice && (
+              <p className="device-dependency-hint">{it.completeDeviceFirst}</p>
+            )}
+            <div
+              className={`inspection-choice ${inspectionMode ? "is-active" : ""}`}
+            >
+              <Search size={20} />
+              <div>
+                <strong>{it.inspectionPending}</strong>
+                <p>{it.inspectionHelp}</p>
+              </div>
+              <Button
+                type="button"
+                variant={inspectionMode ? "outline" : "default"}
+                disabled={!validDevice}
+                onClick={() => {
+                  setInspectionMode((value) => !value);
+                }}
+              >
+                {inspectionMode ? it.inspectionActive : it.setInspection}
+              </Button>
+            </div>
             <FaultSelector
               category={category}
               items={faults}
               selected={selectedFaults}
+              disabled={!validDevice || inspectionMode}
               onItemsChange={setFaults}
               onChange={(ids) => {
                 setSelectedFaults(ids);
@@ -639,24 +732,6 @@ export function NewOrderWizard({
                 onChange={(event) => setFaultNote(event.target.value)}
               />
             </Field>
-            <div
-              className={`inspection-choice ${inspectionMode ? "is-active" : ""}`}
-            >
-              <Search size={20} />
-              <div>
-                <strong>{it.inspectionPending}</strong>
-                <p>{it.inspectionHelp}</p>
-              </div>
-              <Button
-                type="button"
-                variant={inspectionMode ? "outline" : "default"}
-                onClick={() => {
-                  setInspectionMode((value) => !value);
-                }}
-              >
-                {inspectionMode ? it.inspectionActive : it.setInspection}
-              </Button>
-            </div>
             {touched && !validFault && (
               <p className="field-error">{it.selectFaultError}</p>
             )}
@@ -666,6 +741,7 @@ export function NewOrderWizard({
                 type="date"
                 min={romeDay()}
                 value={dueDate}
+                disabled={!validDevice || !validFault}
                 onChange={(event) => setDueDate(event.target.value)}
               />
             </Field>

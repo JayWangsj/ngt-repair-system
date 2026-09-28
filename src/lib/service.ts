@@ -314,6 +314,10 @@ async function snapshots(
             ...key,
             suggested: decimal(final),
             minutes: match?.rule.minutes ?? 60,
+            requiredProductId: item.saveRule
+              ? item.requiredProductId || null
+              : null,
+            requiredQuantity: item.saveRule ? item.requiredQuantity : 1,
           },
           update: { suggested: decimal(final), enabled: true },
         });

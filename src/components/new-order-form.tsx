@@ -20,6 +20,7 @@ import {
 import {
   cents,
   creatablePaymentMethods,
+  matchRule,
   money,
   romeDay,
   settlement,
@@ -245,9 +246,23 @@ export function NewOrderWizard({
   const validQuote = inspectionMode
     ? safeCents(inspectionFee) > 0
     : items.length > 0 &&
-      items.every((item) => item.project.trim() && validAmount(item.final));
+      items.every(
+        (item) =>
+          item.project.trim() &&
+          validAmount(item.final) &&
+          (item.saveRule ||
+            !!matchRule(
+              rules,
+              { category, brand, series, model },
+              item.project,
+            )),
+      );
   const hasCompleteQuoteItem = items.some(
-    (item) => item.project.trim() && validAmount(item.final),
+    (item) =>
+      item.project.trim() &&
+      validAmount(item.final) &&
+      (item.saveRule ||
+        !!matchRule(rules, { category, brand, series, model }, item.project)),
   );
   const requiredComplete = [validCustomer, validStep2, validQuote].filter(
     Boolean,
@@ -484,7 +499,6 @@ export function NewOrderWizard({
           className="order-form order-wizard"
           onSubmit={(event) => {
             event.preventDefault();
-            void submit();
           }}
         >
           <StepCard
@@ -954,7 +968,11 @@ export function NewOrderWizard({
               >
                 {it.cancel}
               </Button>
-              <Button disabled={!ready || pending}>
+              <Button
+                type="button"
+                disabled={!ready || pending}
+                onClick={() => void submit()}
+              >
                 {pending ? it.saving : it.create}
               </Button>
             </span>

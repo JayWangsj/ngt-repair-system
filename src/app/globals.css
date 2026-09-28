@@ -2632,14 +2632,15 @@ details[open] > summary {
   margin-top: -10px;
 }
 .fault-manager {
+  --fault-manager-columns: 16px minmax(150px, 1fr) 150px 32px;
   min-width: min(720px, 78vw);
   display: grid;
   gap: 20px;
 }
-.form-dialog > .fault-manager {
+.form-dialog > [data-form-dialog-body].fault-manager {
   max-height: none;
   overflow: visible;
-  padding: 4px 8px 2px 2px;
+  padding: 4px 8px 4px 2px;
 }
 .catalog-toolbar.fault-manager-toolbar {
   display: grid;
@@ -2663,6 +2664,13 @@ details[open] > summary {
   background: #fff;
   height: 42px;
 }
+.fault-search:hover {
+  border-color: #c9b96f;
+}
+.fault-search:focus-within {
+  border-color: #c99c00;
+  box-shadow: 0 0 0 3px #f4c62d24;
+}
 .fault-search input {
   height: 40px;
   min-height: 40px;
@@ -2678,22 +2686,22 @@ details[open] > summary {
 }
 .fault-manager-header {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) 150px 32px;
+  grid-template-columns: var(--fault-manager-columns);
   align-items: center;
   gap: 10px;
   min-height: 34px;
-  padding: 6px 11px 6px 37px;
+  padding: 6px 11px;
   border-bottom: 1px solid #ecefed;
   color: #8a9390;
   font-size: 10px;
   font-weight: 650;
 }
-.fault-manager-header span:nth-child(2) {
-  text-align: right;
+.fault-manager-status {
+  text-align: center;
 }
 .fault-manager-row {
   display: grid;
-  grid-template-columns: auto minmax(150px, 1fr) 150px 32px;
+  grid-template-columns: var(--fault-manager-columns);
   gap: 10px;
   align-items: center;
   min-height: 52px;
@@ -2756,6 +2764,7 @@ details[open] > summary {
   flex-direction: row;
   align-items: center;
   gap: 8px;
+  justify-self: center;
   white-space: nowrap;
 }
 .fault-enabled-switch input {
@@ -2824,13 +2833,11 @@ details[open] > summary {
     order: -1;
   }
   .fault-manager {
+    --fault-manager-columns: 16px minmax(120px, 1fr) minmax(104px, auto) 32px;
     min-width: 0;
   }
   .fault-manager-toolbar {
     grid-template-columns: 1fr;
-  }
-  .fault-manager-row {
-    grid-template-columns: auto minmax(120px, 1fr) auto 32px;
   }
 }
 @media (max-width: 600px) {

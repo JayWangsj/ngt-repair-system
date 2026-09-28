@@ -82,6 +82,7 @@ export function SelectDropdown({
   onClose,
   onQueryChange,
   customDisabled = false,
+  customValue = "",
   middleControl,
   clearable = false,
   loading = false,
@@ -105,6 +106,7 @@ export function SelectDropdown({
   onClose?: () => void;
   onQueryChange?: (query: string) => void;
   customDisabled?: boolean;
+  customValue?: string;
   middleControl?: ReactNode;
   clearable?: boolean;
   loading?: boolean;
@@ -142,8 +144,15 @@ export function SelectDropdown({
     .filter((group) => group.options.length);
   const visible = filtered.flatMap((group) => group.options);
   const trimmedQuery = query.trim();
+  const createValue = trimmedQuery || customValue.trim();
+  const createNeedle = createValue.toLocaleLowerCase();
+  const createMatches = all.some((option) =>
+    [option.label, option.secondary, option.keywords]
+      .filter(Boolean)
+      .some((text) => text!.toLocaleLowerCase().includes(createNeedle)),
+  );
   const canCreate =
-    !!trimmedQuery && !loading && !visible.length && !customDisabled;
+    !!createValue && !loading && !createMatches && !customDisabled;
 
   const close = useCallback(
     ({
@@ -185,24 +194,33 @@ export function SelectDropdown({
     setActive((current) => (current + delta + visible.length) % visible.length);
   }
   function keys(event: KeyboardEvent) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      event.stopPropagation();
+    }
     if (event.key === "Escape") {
       event.preventDefault();
       close({ focus: true });
     } else if (event.key === "ArrowDown") move(event, 1);
     else if (event.key === "ArrowUp") move(event, -1);
     else if (event.key === "Enter" && visible[active]) {
-      event.preventDefault();
       choose(visible[active]);
     } else if (
       event.key === "Enter" &&
       searchable &&
-      query.trim() &&
-      onCustom
+      trimmedQuery &&
+      onCommit
     ) {
-      event.preventDefault();
-      const next = query.trim();
+      close();
+    } else if (
+      event.key === "Enter" &&
+      searchable &&
+      trimmedQuery &&
+      onCustom &&
+      canCreate
+    ) {
       close({ commit: false });
-      onCustom(next);
+      onCustom(trimmedQuery);
     }
   }
   useEffect(() => {
@@ -350,9 +368,8 @@ export function SelectDropdown({
               disabled={disabled || !canCreate}
               onClick={(event) => {
                 event.stopPropagation();
-                const next = query.trim();
                 close({ commit: false });
-                onCustom(next);
+                onCustom(createValue);
               }}
             >
               <Plus size={14} aria-hidden="true" />

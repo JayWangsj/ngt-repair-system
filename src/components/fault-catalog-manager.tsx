@@ -296,8 +296,10 @@ export function FaultCatalogManager({
             </div>
             <div className="fault-manager-list" role="table">
               <div className="fault-manager-header" role="row">
+                <span aria-hidden="true" />
                 <span>{it.faultName}</span>
-                <span>{it.statusLabel}</span>
+                <span className="fault-manager-status">{it.statusLabel}</span>
+                <span aria-hidden="true" />
               </div>
               {visible.map((item) => (
                 <div

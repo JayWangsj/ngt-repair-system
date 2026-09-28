@@ -569,14 +569,30 @@ export function ItemsEditor({
     onChange(
       items.map((item, i) => (i === index ? { ...item, ...patch } : item)),
     );
+  const resetItem = (index: number, project = "") =>
+    update(index, {
+      project,
+      final: "",
+      adjustmentReason: "",
+      discount: "0",
+      discountVisible: false,
+      saveRule: false,
+      requiredProductId: "",
+      requiredQuantity: 1,
+      requiredProductRemoved: false,
+    });
   return (
     <div className="items-editor">
       {items.map((item, index) => {
         const projects = deviceProjects(rules, device);
         const match = matchRule(rules, device, item.project);
         const projectQuery = projectQueries[index] ?? "";
+        const customDraft = !!item.project.trim() && !match && !item.saveRule;
         const priceEnabled = !!(item.project.trim() || projectQuery.trim());
-        const itemComplete = !!item.project.trim() && validAmount(item.final);
+        const itemComplete =
+          !!item.project.trim() &&
+          validAmount(item.final) &&
+          (!!match || !!item.saveRule);
         const selectedProduct = availableProducts.find(
           (product) => product.id === item.requiredProductId,
         );
@@ -599,6 +615,7 @@ export function ItemsEditor({
               }
               customLabel={it.afterSales.addCustomProject}
               customDisabled={!validAmount(item.final)}
+              customValue={customDraft ? item.project : ""}
               clearable
               middleControl={
                 <input
@@ -615,6 +632,18 @@ export function ItemsEditor({
                   onChange={(event) =>
                     update(index, { final: event.target.value })
                   }
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter") return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (
+                      !match &&
+                      !item.saveRule &&
+                      item.project.trim() &&
+                      validAmount(item.final)
+                    )
+                      update(index, { saveRule: true });
+                  }}
                 />
               }
               groups={[
@@ -642,8 +671,10 @@ export function ItemsEditor({
                 setProjectQueries((current) => ({ ...current, [index]: "" }));
                 update(index, {
                   project,
+                  adjustmentReason: "",
                   discount: "0",
-                  saveRule: false,
+                  discountVisible: false,
+                  saveRule: true,
                   requiredProductId: "",
                   requiredQuantity: 1,
                   requiredProductRemoved: false,
@@ -652,19 +683,31 @@ export function ItemsEditor({
                   priceInputs.current[index]?.focus(),
                 );
               }}
+              onCommit={(project) => {
+                setProjectQueries((current) => ({ ...current, [index]: "" }));
+                setEditingParts((current) => ({ ...current, [index]: false }));
+                resetItem(index, project);
+                requestAnimationFrame(() =>
+                  priceInputs.current[index]?.focus(),
+                );
+              }}
               onChange={(project) => {
                 const found = matchRule(rules, device, project);
                 setProjectQueries((current) => ({ ...current, [index]: "" }));
                 setEditingParts((current) => ({ ...current, [index]: false }));
-                update(index, {
-                  project,
-                  final: found?.rule.suggested ?? "",
-                  discount: "0",
-                  saveRule: false,
-                  requiredProductId: found?.rule.requiredProductId ?? "",
-                  requiredQuantity: found?.rule.requiredQuantity ?? 1,
-                  requiredProductRemoved: false,
-                });
+                if (!project) resetItem(index);
+                else
+                  update(index, {
+                    project,
+                    final: found?.rule.suggested ?? "",
+                    adjustmentReason: "",
+                    discount: "0",
+                    discountVisible: false,
+                    saveRule: false,
+                    requiredProductId: found?.rule.requiredProductId ?? "",
+                    requiredQuantity: found?.rule.requiredQuantity ?? 1,
+                    requiredProductRemoved: false,
+                  });
                 requestAnimationFrame(() => {
                   priceInputs.current[index]?.focus();
                   priceInputs.current[index]?.select();

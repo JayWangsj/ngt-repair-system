@@ -485,6 +485,76 @@ describe("PostgreSQL workflow", () => {
         .status,
     ).toBe("REPAIRING");
   });
+  it("saves a custom repair item's selected part as its default quote part", async () => {
+    const part = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Scheda madre iPhone 11",
+      category: "Ricambi",
+      usage: "REPAIR",
+      costPrice: "45",
+      salePrice: "0",
+      initialStock: 2,
+      minStock: 0,
+    });
+    await createOrder(
+      staff,
+      input({
+        phone: "3335551111",
+        deposit: "0",
+        items: [
+          {
+            project: "Sostituzione scheda madre",
+            final: "120",
+            adjustmentReason: "",
+            saveRule: true,
+            requiredProductId: part.id,
+            requiredQuantity: 1,
+          },
+        ],
+      }),
+    );
+
+    const savedRule = await db.priceRule.findFirstOrThrow({
+      where: { project: "sostituzione scheda madre" },
+    });
+    expect(savedRule.requiredProductId).toBe(part.id);
+    expect(savedRule.requiredQuantity).toBe(1);
+
+    const nextOrder = await createOrder(
+      staff,
+      input({
+        phone: "3335552222",
+        deposit: "0",
+        items: [
+          {
+            project: "Sostituzione scheda madre",
+            final: "120",
+            adjustmentReason: "",
+          },
+        ],
+      }),
+    );
+    const inheritedItem = await db.workOrderItem.findFirstOrThrow({
+      where: { orderId: nextOrder.id },
+    });
+    expect(inheritedItem.requiredProductId).toBe(part.id);
+
+    await replaceQuote(staff, nextOrder.id, {
+      items: [
+        {
+          project: "Sostituzione scheda madre",
+          final: "120",
+          requiredProductRemoved: true,
+        },
+      ],
+      orderDiscount: "0",
+      includeVat: false,
+    });
+    expect(
+      (await db.priceRule.findUniqueOrThrow({ where: { id: savedRule.id } }))
+        .requiredProductId,
+    ).toBe(part.id);
+  });
   it("allows repair without the removed quote confirmation field and preserves repricing history", async () => {
     const order = await createOrder(staff, input({ confirmed: false }));
     await confirmQuote(staff, order.id, "Confermato in negozio");

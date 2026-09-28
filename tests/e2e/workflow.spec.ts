@@ -1458,13 +1458,21 @@ test("changing a selected repair part focuses its current name and preserves it 
   await expect(summary).toContainText("Batteria Test");
 });
 
-test("creates a custom repair item directly from its search and price", async ({
+test("clears a repair item and creates a custom item with Enter without submitting the order", async ({
   page,
 }) => {
   await page.goto("/orders/new");
+  await chooseBusinessOption(page, "Cerca cliente", "Cliente Playwright");
   await openStep(page, 1);
-  await chooseBusinessOption(page, "Marca", "Apple");
-  await chooseBusinessOption(page, "Modello", "iPhone 13");
+  await chooseBusinessOption(
+    page,
+    "Dispositivo del cliente",
+    "Apple iPhone 13",
+  );
+  await page.getByLabel("Display rotto", { exact: true }).check();
+  await page
+    .getByLabel("Consegna prevista", { exact: true })
+    .fill("2099-12-31");
   await openStep(page, 2);
 
   const name = `Intervento diretto ${Date.now()}`;
@@ -1477,6 +1485,13 @@ test("creates a custom repair item directly from its search and price", async ({
     name: "Intervento personalizzato",
     exact: true,
   });
+  await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
+  await expect(price).toHaveValue("100");
+  await page.getByRole("button", { name: "Cancella selezione" }).click();
+  await expect(search).toHaveValue("");
+  await expect(price).toHaveValue("");
+  await expect(price).toBeDisabled();
+
   await search.fill(name);
   await expect(price).toBeEnabled();
   await expect(create).toBeDisabled();
@@ -1490,11 +1505,33 @@ test("creates a custom repair item directly from its search and price", async ({
 
   await expect(search).toHaveValue(name);
   await expect(price).toHaveValue("85");
+  await expect(create).toBeEnabled();
+  await price.press("Enter");
   await expect(create).toBeDisabled();
+  await expect(page.locator(".order-step-card").nth(2)).toHaveClass(
+    /is-completed/,
+  );
+  await expect(page).toHaveURL(/\/orders\/new$/);
   await expect(page.locator(".business-select-panel.is-entering")).toHaveCount(
     0,
   );
   await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await chooseBusinessOption(page, "Ricambio richiesto 1", "Batteria Test");
+  await save(page);
+  await page.goto("/prices");
+  await page.getByLabel("Cerca", { exact: true }).fill(name);
+  const rule = page.locator(".price-rule-row").filter({ hasText: name });
+  await expect(rule).toHaveCount(1);
+  await rule.hover();
+  await rule.getByRole("button", { name: "Modifica preventivo" }).click();
+  const editDialog = page.getByRole("dialog", { name: "Modifica preventivo" });
+  await expect(
+    editDialog.getByRole("combobox", {
+      name: "Ricambio richiesto",
+      exact: true,
+    }),
+  ).toHaveValue("Batteria Test");
 });
 
 test("customer list searches instantly, preserves navigation and supports compact editing", async ({
@@ -1860,6 +1897,14 @@ test("hides managed faults without changing historical records", async ({
   await expect(dialog.locator(".fault-manager-header")).not.toContainText(
     "Azioni",
   );
+  const sharedColumns = await dialog.evaluate(() => {
+    const header = document.querySelector(".fault-manager-header");
+    const row = document.querySelector(".fault-manager-row");
+    return [header, row].map(
+      (element) => getComputedStyle(element!).gridTemplateColumns,
+    );
+  });
+  expect(sharedColumns[0]).toBe(sharedColumns[1]);
   await expect(dialog.locator(".fault-drag-hint")).toBeVisible();
   const faultSearch = dialog.locator(".fault-search");
   const addFault = dialog.getByRole("button", {
@@ -1897,6 +1942,16 @@ test("hides managed faults without changing historical records", async ({
     }),
   );
   expect(Math.max(...centers) - Math.min(...centers)).toBeLessThanOrEqual(1);
+  const statusCenters = await dialog.evaluate(() => {
+    const header = document
+      .querySelector(".fault-manager-header .fault-manager-status")!
+      .getBoundingClientRect();
+    const status = document
+      .querySelector(".fault-manager-row .fault-enabled-switch")!
+      .getBoundingClientRect();
+    return [header.left + header.width / 2, status.left + status.width / 2];
+  });
+  expect(Math.abs(statusCenters[0] - statusCenters[1])).toBeLessThanOrEqual(1);
   await expect(row.locator(".fault-enabled-switch")).toHaveCSS("gap", "8px");
   await expect(row.locator(".fault-delete-button")).toHaveCSS("opacity", "0");
   await row.hover();
@@ -1922,6 +1977,24 @@ test("hides managed faults without changing historical records", async ({
   await expect(row.locator(".fault-enabled-switch input")).not.toBeChecked();
   const createdName = `Problema inline ${Date.now()}`;
   const searchInput = dialog.locator(".fault-search input");
+  await expect(dialog.locator(".fault-manager")).toHaveCSS(
+    "overflow-y",
+    "visible",
+  );
+  for (const state of ["default", "hover", "focus"] as const) {
+    if (state === "hover") await faultSearch.hover();
+    if (state === "focus") await searchInput.focus();
+    const borders = await faultSearch.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return [
+        style.borderTopWidth,
+        style.borderRightWidth,
+        style.borderBottomWidth,
+        style.borderLeftWidth,
+      ];
+    });
+    expect(borders).toEqual(["1px", "1px", "1px", "1px"]);
+  }
   await searchInput.fill(createdName);
   await expect(addFault).toBeEnabled();
   await addFault.click();

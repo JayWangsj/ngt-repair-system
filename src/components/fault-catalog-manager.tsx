@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GripVertical, Plus, Search, Trash2 } from "lucide-react";
+import { ChevronRight, GripVertical, Plus, Search, Trash2 } from "lucide-react";
 import {
   deleteFaultAction,
   reorderFaultsAction,
@@ -94,12 +94,15 @@ export function FaultCatalogManager({
         .sort((a, b) => a.sortOrder - b.sortOrder),
     [category, drafts],
   );
+  const deferredQuery = useDeferredValue(query);
+  const searching = deferredQuery !== query;
   const visible = scoped.filter((item) =>
     item.name
       .toLocaleLowerCase("it")
-      .includes(query.trim().toLocaleLowerCase("it")),
+      .includes(deferredQuery.trim().toLocaleLowerCase("it")),
   );
-  const canAdd = !!query.trim() && !pending && visible.length === 0;
+  const canAdd =
+    !!query.trim() && !searching && !pending && visible.length === 0;
 
   function publish(next: FaultCatalogItem[]) {
     setDrafts(next);
@@ -253,9 +256,14 @@ export function FaultCatalogManager({
 
   return (
     <>
-      <Button type="button" variant="ghost" onClick={openManager}>
-        {triggerLabel ?? it.manageFaults}
-      </Button>
+      <button
+        type="button"
+        className="fault-manager-trigger"
+        onClick={openManager}
+      >
+        <span>{triggerLabel ?? it.manageFaults}</span>
+        <ChevronRight size={14} aria-hidden="true" />
+      </button>
       {open && (
         <FormDialog
           title={it.manageFaults}

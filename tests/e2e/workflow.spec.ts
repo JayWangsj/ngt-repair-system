@@ -149,6 +149,9 @@ async function state(page: Page, next: string) {
   await page.getByRole("option", { name: label, exact: true }).click();
   await expect(
     page.locator(".detail-status .status-dropdown-trigger"),
+  ).toBeEnabled();
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
   ).toContainText(label);
 }
 test("new repair uses a single selected accordion step", async ({ page }) => {
@@ -464,6 +467,8 @@ test("repair list exposes month, status, due-date and payment controls", async (
     .getByRole("option", { name: "Ricambio mancante", exact: true })
     .click();
   await expect(status).toHaveClass(/status-parts_missing/);
+  await expect(row.locator(".badge")).toContainText("Ricambio mancante");
+  await row.click();
   await expect(
     row.getByLabel("Consegna prevista", { exact: true }),
   ).toBeEnabled();
@@ -526,7 +531,7 @@ test("repair list cancellation uses the shared confirmation and locks the row", 
   await expect(row.getByLabel("Incassato", { exact: true })).toHaveCount(0);
 });
 
-test("diagnostic order follows inspection, quote and customer approval flow", async ({
+test("diagnostic order saves faults, date and quote in one progressive flow", async ({
   page,
 }) => {
   await page.goto("/orders/new");
@@ -591,6 +596,7 @@ test("diagnostic order follows inspection, quote and customer approval flow", as
   await expect(listRow).toContainText("Problema da diagnosticare");
   await listRow.getByRole("link").first().click();
 
+  await quote.getByRole("button", { name: "Diagnosi e preventivo" }).click();
   await page
     .getByRole("button", {
       name: "Completa diagnosi e crea preventivo",
@@ -600,10 +606,17 @@ test("diagnostic order follows inspection, quote and customer approval flow", as
   const dialog = page.getByRole("dialog", {
     name: "Completa diagnosi e crea preventivo",
   });
+  const saveInspection = dialog.getByRole("button", {
+    name: "Salva",
+    exact: true,
+  });
+  await expect(saveInspection).toBeDisabled();
+  await dialog.getByLabel("Display rotto", { exact: true }).check();
   const result = "Display danneggiato, necessaria la sostituzione";
+  await dialog.getByLabel(/Descrizione aggiuntiva/).fill(result);
   await dialog
-    .getByLabel("Esito della diagnosi *", { exact: true })
-    .fill(result);
+    .getByLabel("Consegna prevista", { exact: true })
+    .fill("2099-12-31");
   await chooseBusinessOption(
     page,
     "Intervento 1",
@@ -613,25 +626,23 @@ test("diagnostic order follows inspection, quote and customer approval flow", as
   await expect(
     dialog.getByLabel("Prezzo originale (€) 1", { exact: true }),
   ).toHaveValue("100");
-  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(saveInspection).toBeEnabled();
+  await saveInspection.click();
   await expect(dialog).toHaveCount(0);
-  await expect(status).toContainText("Da confermare");
-  await expect(page.getByTestId("details-card")).toContainText(result);
+  await expect(status).toContainText("In riparazione");
+  const details = page.getByTestId("details-card");
+  await details.getByRole("button", { name: "Dettagli" }).click();
+  await expect(details).toContainText("Display rotto");
+  await expect(details).toContainText(result);
+  await quote.getByRole("button", { name: "Preventivo" }).click();
   await expect(quote).toContainText("Costo diagnosi (IVA esclusa)");
   await expect(quote).toContainText("sostituzione display");
   const history = page.getByTestId("history-card");
+  await history.getByRole("button", { name: "Cronologia" }).click();
   await expect(history).toContainText("Diagnosi avviata");
   await expect(history).toContainText("Diagnosi completata");
   await expect(history).toContainText("Preventivo creato");
-  await expect(history).toContainText("Stato aggiornato: Da confermare");
-
-  await page
-    .getByLabel("Come è stato confermato?", { exact: true })
-    .fill("Confermato al banco");
-  await page
-    .getByRole("button", { name: "Registra conferma", exact: true })
-    .click();
-  await expect(status).toContainText("In riparazione");
+  await expect(history).toContainText("Stato aggiornato: In riparazione");
 });
 
 test("sales history uses a monthly filter", async ({ page }) => {
@@ -698,8 +709,8 @@ test("creates automatic quote, receives payment and delivers", async ({
   ).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(
-    page.getByText("Accessori ricevuti", { exact: true }),
-  ).toHaveCount(0);
+    page.getByTestId("other-information-card").getByText("Accessori ricevuti"),
+  ).toBeHidden();
   await expect(page.locator(".status-operation-card")).toHaveCount(0);
   await expect(page.locator(".balance-card>strong")).toContainText("80,00");
   await state(page, "READY");
@@ -711,6 +722,10 @@ test("creates automatic quote, receives payment and delivers", async ({
   await expect(
     page.locator(".detail-status .status-dropdown-trigger"),
   ).toHaveText(/Consegnato/);
+  await page
+    .getByTestId("details-card")
+    .getByRole("button", { name: "Dettagli" })
+    .click();
   await page
     .getByRole("link", { name: "Cliente Playwright", exact: true })
     .click();
@@ -876,15 +891,41 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     .getByLabel("Incasso alla creazione (€)", { exact: true })
     .fill("75");
   await save(page);
+  await page.waitForLoadState("networkidle");
 
   const details = page.getByTestId("details-card");
   const products = page.getByTestId("products-card");
   const quote = page.getByTestId("quote-card");
   const warranty = page.getByTestId("warranty-card");
+  const history = page.getByTestId("history-card");
+  const otherInformation = page.getByTestId("other-information-card");
+  await expect(
+    details.getByRole("button", { name: "Dettagli" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    products.getByRole("button", { name: "Articoli aggiuntivi" }),
+  ).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    quote.getByRole("button", { name: "Preventivo" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    warranty.getByRole("button", { name: "Garanzia" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    history.getByRole("button", { name: "Cronologia" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    otherInformation.getByRole("button", { name: "Altre informazioni" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await details.getByRole("button", { name: "Dettagli" }).click();
+  await page.waitForTimeout(250);
   const productsTop = await products.evaluate(
     (element) => element.getBoundingClientRect().top,
   );
   const detailsEdit = details.getByRole("button", { name: "Modifica dati" });
+  await details
+    .getByRole("button", { name: "Dettagli" })
+    .evaluate((element) => (element as HTMLElement).blur());
   await page.mouse.move(0, 0);
   await expect(detailsEdit).toHaveCSS("opacity", "0");
   await details.hover();
@@ -916,15 +957,32 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   );
   expect(new Set(productBoxes.map(({ bottom }) => bottom)).size).toBe(1);
   expect(new Set(productBoxes.map(({ height }) => height)).size).toBe(1);
+  const addProduct = products.getByRole("button", {
+    name: "Aggiungi prodotto",
+    exact: true,
+  });
+  await expect(addProduct).toBeDisabled();
+  await products.getByRole("combobox", { name: "Prodotto" }).fill("Cavo");
+  await expect(addProduct).toBeDisabled();
+  await page.keyboard.press("Escape");
 
   await details.getByRole("button", { name: "Modifica dati" }).click();
   await expect(details).toHaveClass(/is-editing/);
-  await expect(
-    details.getByRole("button", { name: "Dettagli" }),
-  ).toBeDisabled();
+  await expect(details.getByRole("button", { name: "Dettagli" })).toBeEnabled();
   await details
     .getByLabel("Descrizione aggiuntiva")
     .fill("Fotocamera non funziona");
+  await details.getByRole("button", { name: "Dettagli" }).click();
+  await expect(details).not.toHaveClass(/is-editing/);
+  await expect(
+    details.getByRole("button", { name: "Dettagli" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await details.getByRole("button", { name: "Dettagli" }).click();
+  await expect(details).toContainText("Fotocamera non funziona");
+  await details.getByRole("button", { name: "Modifica dati" }).click();
+  await details
+    .getByLabel("Descrizione aggiuntiva")
+    .fill("Fotocamera non funziona ancora");
   await quote.hover();
   await quote.getByRole("button", { name: "Modifica dati" }).click();
   await expect(details).not.toHaveClass(/is-editing/);
@@ -932,13 +990,6 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await expect(quote).toHaveClass(/is-editing/);
   await quote.getByRole("button", { name: "Annulla" }).click();
 
-  await details.hover();
-  await details.getByRole("button", { name: "Modifica dati" }).click();
-  await details
-    .getByLabel("Descrizione aggiuntiva")
-    .fill("Fotocamera non funziona ancora");
-  await details.getByRole("button", { name: "Salva" }).click();
-  await expect(details).not.toHaveClass(/is-editing/);
   await expect(details).toContainText("Fotocamera non funziona ancora");
 
   await quote.getByRole("button", { name: "Preventivo" }).click();
@@ -1911,6 +1962,7 @@ test("hides managed faults without changing historical records", async ({
     name: "Aggiungi problema",
     exact: true,
   });
+  await expect(addFault).toBeDisabled();
   const aligned = await Promise.all([
     faultSearch.boundingBox(),
     addFault.boundingBox(),
@@ -1994,6 +2046,8 @@ test("hides managed faults without changing historical records", async ({
     };
   });
   expect(searchLayout).toEqual({ iconInside: true, inputInside: true });
+  await searchInput.fill("Display");
+  await expect(addFault).toBeDisabled();
   for (const state of ["default", "hover", "focus"] as const) {
     if (state === "hover") await faultSearch.hover();
     if (state === "focus") await searchInput.focus();

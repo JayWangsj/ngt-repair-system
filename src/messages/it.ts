@@ -52,8 +52,6 @@ export const it = {
     "Registra la conclusione tecnica senza sostituire quanto riferito inizialmente dal cliente.",
   inspectionAndQuote: "Diagnosi e preventivo",
   inspectionInProgress: "Dispositivo in diagnosi",
-  customerApprovalHelp:
-    "Registra la conferma del cliente per avviare la riparazione.",
   inspectionDetailHelp:
     "Il problema non è ancora confermato. Completa la diagnosi per inserire interventi e preventivo definitivo.",
   yes: "Sì",
@@ -158,7 +156,6 @@ export const it = {
   status: {
     RECEIVED: "Ricevuto",
     DIAGNOSING: "In diagnosi",
-    WAITING_APPROVAL: "Da confermare",
     REPAIRING: "In riparazione",
     PARTS_MISSING: "Ricambio mancante",
     READY: "Da ritirare",
@@ -411,8 +408,6 @@ export const it = {
   noMatch:
     "Nessun prezzo trovato: inserisci il prezzo. Verrà salvato nel listino.",
   saveRule: "Salva nel listino",
-  confirmed: "Preventivo confermato dal cliente",
-  confirmationNote: "Come è stato confermato?",
   confirm: "Registra conferma",
   notConfirmed: "Preventivo da confermare",
   quoteNotice:
@@ -513,6 +508,7 @@ export const it = {
   kind: "Tipo",
   operator: "Operatore",
   history: "Cronologia",
+  otherInformation: "Altre informazioni",
   audit: "Registro operazioni",
   updateStatus: "Aggiorna stato",
   nextStatus: "Nuovo stato",

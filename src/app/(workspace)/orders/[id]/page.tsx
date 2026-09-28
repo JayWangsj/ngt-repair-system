@@ -18,7 +18,6 @@ import { BackButton, Badge, PageHeader } from "@/components/common";
 import {
   EditOrderForm,
   EditQuoteForm,
-  ConfirmForm,
   PaymentForm,
   QuoteSummary,
   WarrantyForm,
@@ -199,7 +198,16 @@ export default async function Detail({
         at: audit.createdAt,
         title: it.actions.INSPECTION_COMPLETED,
         actor: audit.actorName,
-        detail: String(context.result ?? ""),
+        detail: [
+          Array.isArray(context.faults)
+            ? context.faults
+                .filter((fault) => typeof fault === "string")
+                .join(", ")
+            : context.result,
+          context.faultNote,
+        ]
+          .filter(Boolean)
+          .join(" · "),
       });
     if (audit.action === "QUOTE_CREATED")
       events.push({
@@ -349,6 +357,7 @@ export default async function Detail({
           <OrderDetailCard
             title={it.details}
             locked={originalLocked}
+            defaultExpanded={false}
             testId="details-card"
             edit={
               <EditOrderForm
@@ -396,7 +405,7 @@ export default async function Detail({
               <div>
                 <dt>{it.fault}</dt>
                 <dd>
-                  {order.inspectionMode && !order.inspectionResult
+                  {order.status === "DIAGNOSING"
                     ? it.inspectionPending
                     : faultLabel(order.fault, locale)}
                 </dd>
@@ -456,6 +465,7 @@ export default async function Detail({
               order.status === "DIAGNOSING" ? it.inspectionAndQuote : it.quote
             }
             locked={originalLocked || order.status === "DIAGNOSING"}
+            defaultExpanded={false}
             testId="quote-card"
             edit={
               order.status !== "DIAGNOSING" ? (
@@ -545,11 +555,31 @@ export default async function Detail({
                     cost: undefined,
                     updatedAt: undefined,
                   }))}
+                  faultOptions={faultOptions.map(({ _count, ...fault }) => ({
+                    ...fault,
+                    usageCount: _count.orders,
+                  }))}
+                  initialFaultIds={order.faults.flatMap((fault) =>
+                    fault.catalogId ? [fault.catalogId] : [],
+                  )}
+                  products={products.map((product) => ({
+                    id: product.id,
+                    name: product.name,
+                    category: product.category,
+                    stock: product.stockQuantity,
+                    reserved: reservedByProduct.get(product.id) ?? 0,
+                    available: Math.max(
+                      0,
+                      product.stockQuantity -
+                        (reservedByProduct.get(product.id) ?? 0),
+                    ),
+                  }))}
+                  productCategories={productCategories}
                 />
               </div>
             ) : (
               <>
-                {order.inspectionMode && (
+                {cents(order.inspectionFee) > 0 && (
                   <p className="inspection-fee-line">
                     <span>{it.inspectionFeeNet}</span>
                     <strong>{money(cents(order.inspectionFee))}</strong>
@@ -615,6 +645,7 @@ export default async function Detail({
           <OrderDetailCard
             title={it.warranty.title}
             locked={originalLocked}
+            defaultExpanded={false}
             testId="warranty-card"
             edit={
               <WarrantyForm
@@ -666,6 +697,7 @@ export default async function Detail({
           <OrderDetailCard
             title={it.history}
             locked
+            defaultExpanded={false}
             className="history-card"
             testId="history-card"
           >
@@ -681,6 +713,27 @@ export default async function Detail({
                 </li>
               ))}
             </ol>
+          </OrderDetailCard>
+
+          <OrderDetailCard
+            title={it.otherInformation}
+            defaultExpanded={false}
+            testId="other-information-card"
+          >
+            <dl className="detail-list">
+              <div>
+                <dt>{it.appearance}</dt>
+                <dd>{order.appearance || "—"}</dd>
+              </div>
+              <div>
+                <dt>{it.accessories}</dt>
+                <dd>{order.accessories || "—"}</dd>
+              </div>
+              <div>
+                <dt>{it.notes}</dt>
+                <dd>{order.notes || "—"}</dd>
+              </div>
+            </dl>
           </OrderDetailCard>
         </div>
 
@@ -724,14 +777,6 @@ export default async function Detail({
                 remaining={remaining}
                 customerName={order.customerName || order.device.customer.name}
               />
-            </section>
-          )}
-
-          {order.status === "WAITING_APPROVAL" && (
-            <section className="panel padded status-operation-card">
-              <h2>{it.confirm}</h2>
-              <p className="muted">{it.customerApprovalHelp}</p>
-              <ConfirmForm id={id} />
             </section>
           )}
 

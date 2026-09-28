@@ -14,6 +14,7 @@ import {
   normalizePhone,
   romeDay,
   settlement,
+  statuses,
   total,
   warrantyPeriod,
   warrantyProgress,
@@ -165,6 +166,7 @@ describe("quote matching", () => {
 });
 describe("status and permissions", () => {
   it("requires allowed transitions and terminal states remain closed", () => {
+    expect(statuses).not.toContain("WAITING_APPROVAL");
     expect(() => assertTransition("RECEIVED", "COMPLETED")).toThrow();
     expect(() => assertTransition("COMPLETED", "REPAIRING")).toThrow();
     expect(() => assertTransition("CANCELLED", "RECEIVED")).toThrow();

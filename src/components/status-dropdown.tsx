@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
+import { useRouter } from "next/navigation";
 import {
   useEffect,
   useId,
@@ -10,44 +11,42 @@ import {
   type KeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import type { OrderStatus } from "@/lib/domain";
+import { statusAction } from "@/app/actions";
+import { transitions, type OrderStatus } from "@/lib/domain";
+import { useMessages } from "./language";
+import { Field, FormDialog } from "./forms";
+import { WorkOrderCheckoutDialog } from "./work-order-products";
+import { Button } from "./ui/button";
 
 type Option = { value: OrderStatus; label: string };
 
-export function StatusDropdown({
+function StatusSelect({
   value,
   label,
   options,
-  disabled = false,
-  readonly = false,
+  disabled,
   onChange,
-  size = "sm",
 }: {
   value: OrderStatus;
   label: string;
   options: Option[];
-  disabled?: boolean;
-  readonly?: boolean;
+  disabled: boolean;
   onChange: (value: OrderStatus) => void;
-  size?: "sm";
 }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const menuId = useId();
-  const interactive = !disabled && !readonly && options.length > 0;
-
+  const interactive = !disabled && options.length > 0;
   function place() {
     const rect = trigger.current?.getBoundingClientRect();
     if (rect)
       setPosition({ top: rect.bottom + 5, left: rect.left, width: rect.width });
   }
-
   useLayoutEffect(() => {
     if (open) place();
   }, [open]);
-
   useEffect(() => {
     if (!open) return;
     function outside(event: PointerEvent) {
@@ -55,9 +54,7 @@ export function StatusDropdown({
       if (!trigger.current?.contains(target) && !menu.current?.contains(target))
         setOpen(false);
     }
-    function reposition() {
-      place();
-    }
+    const reposition = () => place();
     document.addEventListener("pointerdown", outside);
     window.addEventListener("resize", reposition);
     window.addEventListener("scroll", reposition, true);
@@ -67,7 +64,6 @@ export function StatusDropdown({
       window.removeEventListener("scroll", reposition, true);
     };
   }, [open]);
-
   function keyboard(event: KeyboardEvent<HTMLButtonElement>) {
     if (!interactive) return;
     if (["ArrowDown", "Enter", " "].includes(event.key)) {
@@ -78,10 +74,9 @@ export function StatusDropdown({
       );
     }
   }
-
   return (
     <span
-      className={`status-dropdown status-dropdown-${size} ${open ? "is-open" : ""}`}
+      className={`status-dropdown status-dropdown-sm ${open ? "is-open" : ""}`}
       data-prevent-card-autosave
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
@@ -144,5 +139,155 @@ export function StatusDropdown({
           document.body,
         )}
     </span>
+  );
+}
+
+export type StatusDropdownOrder = {
+  id: string;
+  status: OrderStatus;
+  customerName: string;
+  due: number;
+  paid: number;
+  balance: number;
+};
+
+export function StatusDropdown({
+  order,
+  active = true,
+  onSettled,
+}: {
+  order: StatusDropdownOrder;
+  active?: boolean;
+  onSettled?: () => void;
+}) {
+  const it = useMessages();
+  const router = useRouter();
+  const [pending, setPending] = useState(false);
+  const [currentStatus, setCurrentStatus] = useState(order.status);
+  const [error, setError] = useState("");
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const choices = transitions[currentStatus].filter(
+    (status) => !["REWORKING", "REFUNDED"].includes(status),
+  );
+  function settled(status: OrderStatus) {
+    setCurrentStatus(status);
+    setError("");
+    onSettled?.();
+    router.refresh();
+  }
+  if (!active)
+    return (
+      <span className={`badge status-${currentStatus.toLowerCase()}`}>
+        <span />
+        {it.status[currentStatus]}
+      </span>
+    );
+  return (
+    <div className="inline-order-control">
+      <StatusSelect
+        value={currentStatus}
+        label={it.status[currentStatus]}
+        options={choices.map((status) => ({
+          value: status,
+          label: it.status[status],
+        }))}
+        disabled={pending}
+        onChange={(next) => {
+          if (next === "COMPLETED") return setCheckoutOpen(true);
+          if (next === "CANCELLED") return setCancelOpen(true);
+          const previous = currentStatus;
+          setCurrentStatus(next);
+          void (async () => {
+            setPending(true);
+            try {
+              const result = await statusAction(order.id, {
+                status: next,
+                note: "",
+                pickedUpBy: "",
+              });
+              if (!result.ok) {
+                setCurrentStatus(previous);
+                return setError(result.error);
+              }
+              settled(next);
+            } catch {
+              setCurrentStatus(previous);
+              setError(it.connectionError);
+            } finally {
+              setPending(false);
+            }
+          })();
+        }}
+      />
+      {error && !cancelOpen && (
+        <small className="inline-control-error">{error}</small>
+      )}
+      <WorkOrderCheckoutDialog
+        open={checkoutOpen}
+        onClose={() => setCheckoutOpen(false)}
+        onSuccess={() => settled("COMPLETED")}
+        requireDelivery
+        orderId={order.id}
+        due={order.due}
+        paid={order.paid}
+        remaining={order.balance}
+        customerName={order.customerName}
+      />
+      {cancelOpen && (
+        <FormDialog
+          title={it.cancelOrder}
+          subtitle={it.cancelOrderWarning}
+          onClose={() => setCancelOpen(false)}
+        >
+          <form
+            className="dialog-form"
+            data-form-dialog-body
+            onSubmit={(event) => {
+              event.preventDefault();
+              void (async () => {
+                setPending(true);
+                try {
+                  const result = await statusAction(order.id, {
+                    status: "CANCELLED",
+                    note: cancelReason,
+                    pickedUpBy: "",
+                  });
+                  if (!result.ok) return setError(result.error);
+                  setCancelOpen(false);
+                  settled("CANCELLED");
+                } catch {
+                  setError(it.connectionError);
+                } finally {
+                  setPending(false);
+                }
+              })();
+            }}
+          >
+            <Field label={it.cancelReasonOptional}>
+              <textarea
+                value={cancelReason}
+                onChange={(event) => setCancelReason(event.target.value)}
+                maxLength={2000}
+              />
+            </Field>
+            {error && <p className="message error">{error}</p>}
+            <div className="dialog-actions">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCancelOpen(false)}
+              >
+                {it.cancel}
+              </Button>
+              <Button variant="danger" disabled={pending}>
+                {it.confirmCancelOrder}
+              </Button>
+            </div>
+          </form>
+        </FormDialog>
+      )}
+    </div>
   );
 }

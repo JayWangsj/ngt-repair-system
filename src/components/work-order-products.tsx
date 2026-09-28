@@ -48,6 +48,7 @@ export function WorkOrderProducts({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [selectedProduct, setSelectedProduct] = useState("");
+  const [quantity, setQuantity] = useState("1");
   const available = products.filter(
     (product) => product.usage !== "REPAIR" && product.stock > 0,
   );
@@ -65,6 +66,7 @@ export function WorkOrderProducts({
     setPending(false);
     if (!result.ok) return setError(result.error);
     setSelectedProduct("");
+    setQuantity("1");
     router.refresh();
   }
 
@@ -83,6 +85,7 @@ export function WorkOrderProducts({
       locked={closed}
       className="order-products"
       testId="products-card"
+      defaultExpanded
     >
       <p className="muted">{it.orderProducts.description}</p>
       {lines.length ? (
@@ -154,10 +157,19 @@ export function WorkOrderProducts({
               type="number"
               min="1"
               max="999"
-              defaultValue="1"
+              value={quantity}
+              onChange={(event) => setQuantity(event.target.value)}
             />
           </label>
-          <Button disabled={pending || !available.length || !selectedProduct}>
+          <Button
+            disabled={
+              pending ||
+              !available.some((product) => product.id === selectedProduct) ||
+              !/^\d+$/.test(quantity) ||
+              Number(quantity) < 1 ||
+              Number(quantity) > 999
+            }
+          >
             {it.orderProducts.add}
           </Button>
         </form>
@@ -174,6 +186,8 @@ export function WorkOrderCheckout({
   remaining,
   customerName,
   onClose,
+  onSuccess,
+  requireDelivery = false,
 }: {
   orderId: string;
   due: number;
@@ -181,6 +195,8 @@ export function WorkOrderCheckout({
   remaining: number;
   customerName: string;
   onClose?: () => void;
+  onSuccess?: () => void;
+  requireDelivery?: boolean;
 }) {
   const it = useMessages();
   const router = useRouter();
@@ -211,6 +227,8 @@ export function WorkOrderCheckout({
         return setError(it.orderProducts.checkoutAmountRange);
       if (remaining > 0 && submittedCents === 0)
         return setError(it.orderProducts.checkoutAmountRange);
+      if (requireDelivery && submittedCents !== remaining)
+        return setError(it.orderProducts.checkoutAmountRange);
     } catch {
       return setError(it.validationError);
     }
@@ -231,6 +249,7 @@ export function WorkOrderCheckout({
         setAmount(decimal(remaining - submittedCents));
       }
       onClose?.();
+      onSuccess?.();
       router.refresh();
     } catch {
       setError(it.connectionError);

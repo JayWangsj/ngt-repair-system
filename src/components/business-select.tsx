@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent,
+  type InputHTMLAttributes,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -502,4 +503,18 @@ export function SearchableCombobox(
   props: Omit<Parameters<typeof SelectDropdown>[0], "searchable">,
 ) {
   return <SelectDropdown {...props} searchable />;
+}
+
+export function DatePicker(props: InputHTMLAttributes<HTMLInputElement>) {
+  const { onClick, ...rest } = props;
+  return (
+    <input
+      {...rest}
+      type="date"
+      onClick={(event) => {
+        onClick?.(event);
+        event.currentTarget.showPicker?.();
+      }}
+    />
+  );
 }

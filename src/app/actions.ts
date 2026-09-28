@@ -79,10 +79,6 @@ export async function completeInspectionAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.completeInspection(actor, id, input));
 }
-export async function confirmAction(id: string, note: string) {
-  const actor = await requireActor();
-  return execute(() => service.confirmQuote(actor, id, note));
-}
 export async function paymentAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.addPayment(actor, id, input));

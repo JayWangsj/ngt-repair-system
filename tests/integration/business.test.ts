@@ -23,7 +23,6 @@ import {
   adjustInventory,
   updateProduct,
   deleteProducts,
-  confirmQuote,
   completeInspection,
   createOrder,
   createUser,
@@ -60,7 +59,6 @@ function input(patch: Record<string, unknown> = {}) {
     items: [{ project: "Display", final: "100", adjustmentReason: "" }],
     deposit: "20",
     method: "CASH",
-    confirmed: true,
     ...patch,
   };
 }
@@ -425,8 +423,15 @@ describe("PostgreSQL workflow", () => {
     await expect(
       changeStatus(staff, order.id, { status: "REPAIRING" }),
     ).rejects.toThrow("Cambio di stato");
+    const fault = await saveFault(owner, null, {
+      category: "PHONE",
+      name: "Display assembly damaged",
+      note: "",
+      hidden: false,
+    });
     await completeInspection(staff, order.id, {
-      inspectionResult: "Display assembly damaged",
+      standardFaultIds: [fault.id],
+      faultNote: "Vetro e pannello danneggiati",
       items: [{ project: "Display", final: "100", adjustmentReason: "" }],
       orderDiscount: "0",
       includeVat: false,
@@ -436,15 +441,12 @@ describe("PostgreSQL workflow", () => {
       where: { id: order.id },
       include: { items: true },
     });
-    expect(quoted.status).toBe("WAITING_APPROVAL");
+    expect(quoted.status).toBe("REPAIRING");
+    expect(quoted.inspectionMode).toBe(false);
     expect(quoted.inspectionFee.toString()).toBe("12.5");
-    expect(quoted.inspectionResult).toBe("Display assembly damaged");
+    expect(quoted.fault).toBe("Display assembly damaged");
+    expect(quoted.faultNote).toBe("Vetro e pannello danneggiati");
     expect(quoted.items).toHaveLength(1);
-    await confirmQuote(staff, order.id, "Confermato per telefono");
-    expect(
-      (await db.workOrder.findUniqueOrThrow({ where: { id: order.id } }))
-        .status,
-    ).toBe("REPAIRING");
   });
   it("uses optional quote parts to drive missing-parts status", async () => {
     const part = await createProduct(owner, {
@@ -555,10 +557,8 @@ describe("PostgreSQL workflow", () => {
         .requiredProductId,
     ).toBe(part.id);
   });
-  it("allows repair without the removed quote confirmation field and preserves repricing history", async () => {
-    const order = await createOrder(staff, input({ confirmed: false }));
-    await confirmQuote(staff, order.id, "Confermato in negozio");
-    await changeStatus(staff, order.id, { status: "REPAIRING" });
+  it("preserves repricing history without a quote-confirmation state", async () => {
+    const order = await createOrder(staff, input());
     await replaceQuote(staff, order.id, [
       { project: "Display", final: "90", adjustmentReason: "Sconto" },
     ]);

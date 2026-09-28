@@ -49,7 +49,6 @@ export const zh: typeof it = {
   inspectionResultHelp: "记录技术检测结论，不覆盖客户最初反馈。",
   inspectionAndQuote: "检测与报价",
   inspectionInProgress: "当前设备正在检测",
-  customerApprovalHelp: "记录客户确认后，维修单才会进入维修中。",
   inspectionDetailHelp:
     "设备故障尚未确认。检测完成后，可填写检测结果、维修项目和正式报价。",
   yes: "是",
@@ -125,7 +124,6 @@ export const zh: typeof it = {
   status: {
     RECEIVED: "已接单",
     DIAGNOSING: "检测中",
-    WAITING_APPROVAL: "待客户确认",
     REPAIRING: "维修中",
     PARTS_MISSING: "缺配件",
     READY: "待取机",
@@ -363,8 +361,6 @@ export const zh: typeof it = {
   remove: "移除",
   noMatch: "暂无报价，请填写原价，保存后加入报价表。",
   saveRule: "保存到报价表",
-  confirmed: "客户已确认报价",
-  confirmationNote: "确认方式",
   confirm: "登记报价确认",
   notConfirmed: "报价待确认",
   quoteNotice: "修改原报价会更新报价表；优惠仅记录在本维修单中。",
@@ -459,6 +455,7 @@ export const zh: typeof it = {
   kind: "类型",
   operator: "操作人",
   history: "维修进度记录",
+  otherInformation: "其他信息",
   audit: "操作记录",
   updateStatus: "更新状态",
   nextStatus: "新状态",

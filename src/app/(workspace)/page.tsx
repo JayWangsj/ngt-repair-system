@@ -140,18 +140,7 @@ export default async function Dashboard({
             color: "orange",
           },
         ]
-      : [
-          {
-            label: it.waiting,
-            value: active.filter((order) => order.status === "WAITING_APPROVAL")
-              .length,
-            count: active.filter((order) => order.status === "WAITING_APPROVAL")
-              .length,
-            type: "integer",
-            icon: Clock3,
-            color: "green",
-          },
-        ]),
+      : []),
   ];
   const fingerprint = JSON.stringify({
     today,

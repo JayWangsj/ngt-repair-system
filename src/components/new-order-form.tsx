@@ -26,11 +26,16 @@ import {
   settlement,
 } from "@/lib/domain";
 import { uniqueOptions } from "@/lib/options";
-import { SearchableCombobox, SimpleSelect } from "./business-select";
+import {
+  DatePicker,
+  SearchableCombobox,
+  SimpleSelect,
+} from "./business-select";
 import {
   Field,
   FormDialog,
   ItemsEditor,
+  quoteItemsValid,
   type CategoryView,
   type RuleView,
 } from "./forms";
@@ -245,18 +250,7 @@ export function NewOrderWizard({
   const validStep2 = validDevice && validFault && !!dueDate;
   const validQuote = inspectionMode
     ? safeCents(inspectionFee) > 0
-    : items.length > 0 &&
-      items.every(
-        (item) =>
-          item.project.trim() &&
-          validAmount(item.final) &&
-          (item.saveRule ||
-            !!matchRule(
-              rules,
-              { category, brand, series, model },
-              item.project,
-            )),
-      );
+    : quoteItemsValid(items, rules, { category, brand, series, model });
   const hasCompleteQuoteItem = items.some(
     (item) =>
       item.project.trim() &&
@@ -421,8 +415,6 @@ export function NewOrderWizard({
         faultNote,
         notes: "",
         dueDate,
-        confirmed: false,
-        confirmationNote: "",
         items: inspectionMode ? [] : items,
         diagnosticFee: inspectionFee,
         orderDiscount,
@@ -778,13 +770,11 @@ export function NewOrderWizard({
             {validDevice && validFault && (
               <div className="wizard-progressive-reveal compact-date-field">
                 <Field label={it.dueDate}>
-                  <input
+                  <DatePicker
                     name="dueDate"
-                    type="date"
                     min={romeDay()}
                     value={dueDate}
                     disabled={!validDevice || !validFault}
-                    onClick={(event) => event.currentTarget.showPicker?.()}
                     onChange={(event) => setDueDate(event.target.value)}
                   />
                 </Field>

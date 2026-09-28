@@ -51,6 +51,17 @@ export function OrderDetailCard({
     },
     [],
   );
+  async function toggleExpanded() {
+    if (!expanded) return setExpanded(true);
+    if (!editing) return setExpanded(false);
+    if (saving.current) return;
+    saving.current = true;
+    const saved = (await save.current?.()) ?? true;
+    saving.current = false;
+    if (!saved) return;
+    setEditing(false);
+    setExpanded(false);
+  }
   useEffect(() => {
     if (!editing) return;
     async function outside(event: MouseEvent) {
@@ -85,8 +96,7 @@ export function OrderDetailCard({
           type="button"
           className="order-card-toggle"
           aria-expanded={expanded}
-          disabled={editing}
-          onClick={() => setExpanded((value) => !value)}
+          onClick={() => void toggleExpanded()}
         >
           <h2>{title}</h2>
           {expanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}

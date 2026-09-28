@@ -56,8 +56,6 @@ import {
   matchRule,
   money,
   creatablePaymentMethods,
-  transitions,
-  type OrderStatus,
 } from "@/lib/domain";
 import { orderInput } from "@/lib/validation";
 import {
@@ -71,8 +69,6 @@ import {
   createOrderAction,
   lookupCustomerAction,
   paymentAction,
-  statusAction,
-  confirmAction,
   updateOrderAction,
   quoteAction,
   ruleAction,
@@ -209,6 +205,21 @@ function validAmount(value: string) {
   } catch {
     return false;
   }
+}
+export function quoteItemsValid(
+  items: ItemView[],
+  rules: RuleView[],
+  device: { category: string; brand: string; series: string; model: string },
+) {
+  return (
+    items.length > 0 &&
+    items.every(
+      (item) =>
+        item.project.trim() &&
+        validAmount(item.final) &&
+        (item.saveRule || !!matchRule(rules, device, item.project)),
+    )
+  );
 }
 function Message({ error, success }: { error?: string; success?: boolean }) {
   const it = useMessages();
@@ -996,8 +1007,6 @@ export function NewOrderForm({
         faults: [],
         notes: "",
         dueDate: "",
-        confirmed: false,
-        confirmationNote: "",
         items: [blankItem()],
         diagnosticFee: "10",
         deposit: "0",
@@ -1772,94 +1781,6 @@ export function PaymentForm({
           />
         </Field>
       </div>
-    </ActionForm>
-  );
-}
-export function StatusForm({
-  customerName,
-  id,
-  status,
-  remaining,
-  allowCompletion,
-}: {
-  id: string;
-  customerName: string;
-  status: OrderStatus;
-  remaining: number;
-  owner?: boolean;
-  allowCompletion?: boolean;
-}) {
-  const it = useMessages();
-  const choices = transitions[status].filter(
-    (choice) => allowCompletion !== false || choice !== "COMPLETED",
-  );
-  const [selected, setSelected] = useState(choices[0] ?? "");
-  if (!choices.length) return null;
-  return (
-    <ActionForm
-      submit={selected === "COMPLETED" ? it.delivery : it.updateStatus}
-      action={(data) =>
-        statusAction(id, {
-          status: selected,
-          note: str(data, "note"),
-          pickedUpBy: str(data, "pickedUpBy"),
-          override: data.get("override") === "on",
-        })
-      }
-    >
-      <Field label={it.nextStatus}>
-        <SimpleSelect
-          value={selected}
-          onChange={(value) => setSelected(value as OrderStatus)}
-          placeholder={it.selectOption}
-          ariaLabel={it.nextStatus}
-          options={choices.map((status) => ({
-            value: status,
-            label: it.status[status],
-          }))}
-        />
-      </Field>
-      {selected === "COMPLETED" && (
-        <>
-          <Field label={it.pickedUpBy}>
-            <input
-              name="pickedUpBy"
-              defaultValue={customerName}
-              required
-              maxLength={120}
-            />
-          </Field>
-          {remaining > 0 && (
-            <>
-              <p className="message warning">
-                {it.deliveryWarning} {money(remaining)}
-              </p>
-              {true && (
-                <label className="checkbox">
-                  <input name="override" type="checkbox" required />
-                  {it.override}
-                </label>
-              )}
-            </>
-          )}
-        </>
-      )}
-      <Field label={it.notes}>
-        <input name="note" maxLength={2000} />
-      </Field>
-    </ActionForm>
-  );
-}
-export function ConfirmForm({ id }: { id: string }) {
-  const it = useMessages();
-  return (
-    <ActionForm
-      submit={it.confirm}
-      action={(data) => confirmAction(id, str(data, "note"))}
-    >
-      <Field label={it.confirmationNote}>
-        <input name="note" required maxLength={2000} />
-      </Field>
     </ActionForm>
   );
 }

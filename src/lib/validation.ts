@@ -84,8 +84,6 @@ export const orderInput = z
     faultNote: z.string().trim().max(2000).default(""),
     notes: text,
     dueDate: dueDateInput,
-    confirmed: z.boolean().default(false),
-    confirmationNote: text,
     items: z.array(itemInput).max(30),
     diagnosticFee: amountInput.default("10"),
     deposit: amountInput.default("0"),
@@ -284,8 +282,9 @@ export const quoteInput = z.object({
 });
 
 export const inspectionQuoteInput = quoteInput.extend({
-  inspectionResult: z.string().trim().min(1).max(2000),
-  dueDate: dueDateInput,
+  standardFaultIds: z.array(z.string().min(1).max(100)).min(1).max(30),
+  faultNote: text,
+  dueDate: dueDateInput.refine(Boolean, "Data obbligatoria"),
 });
 
 export const faultCatalogInput = z.object({

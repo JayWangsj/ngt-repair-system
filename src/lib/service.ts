@@ -120,7 +120,6 @@ async function requiredPartLines(tx: Tx, items: SnapshotItem[]) {
 const reservationStatuses = [
   "RECEIVED",
   "DIAGNOSING",
-  "WAITING_APPROVAL",
   "REPAIRING",
   "PARTS_MISSING",
   "REWORKING",
@@ -504,8 +503,6 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
         accessories: data.accessories,
         dueDate: data.dueDate || null,
         notes: data.notes,
-        confirmedAt: data.confirmed ? new Date() : null,
-        confirmationNote: data.confirmed ? data.confirmationNote : "",
         status: initialStatus,
         items: { create: items },
         faults: diagnostic
@@ -569,7 +566,6 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
     await audit(tx, actor, order.id, "ORDER_CREATED", {
       requestId: data.requestId,
       total: decimal(quote.due),
-      confirmed: data.confirmed,
       initialStatus,
       inspectionMode: diagnostic,
     });
@@ -706,6 +702,15 @@ export async function completeInspection(
       throw new BusinessError("La scheda non è in diagnosi.");
     const items = await snapshots(tx, actor, order.device, data.items);
     const requiredParts = await requiredPartLines(tx, items);
+    const faults = await tx.faultOption.findMany({
+      where: {
+        id: { in: data.standardFaultIds },
+        category: order.device.category,
+        hidden: false,
+      },
+    });
+    if (faults.length !== data.standardFaultIds.length)
+      throw new BusinessError("Seleziona almeno un problema valido.");
     if (
       balance(items, order.payments, {
         ...data,
@@ -720,15 +725,29 @@ export async function completeInspection(
       where: { orderId: id, kind: "REPAIR_PART", consumedAt: null },
     });
     await tx.workOrderItem.deleteMany({ where: { orderId: id } });
+    await tx.workOrderFault.deleteMany({ where: { orderId: id } });
+    const nextStatus = (await newLinesNeedParts(tx, requiredParts, id))
+      ? "PARTS_MISSING"
+      : "REPAIRING";
     await tx.workOrder.update({
       where: { id },
       data: {
-        inspectionResult: data.inspectionResult,
+        inspectionResult: "",
+        inspectionMode: false,
+        faultNote: data.faultNote,
+        fault: faults.map((fault) => fault.name).join("; "),
+        faults: {
+          create: faults.map((fault) => ({
+            catalogId: fault.id,
+            nameSnapshot: fault.name,
+            custom: false,
+          })),
+        },
         items: { create: items },
         orderDiscount: decimal(cents(data.orderDiscount)),
         includeVat: data.includeVat,
         dueDate: data.dueDate || null,
-        status: "WAITING_APPROVAL",
+        status: nextStatus,
         products: requiredParts.length
           ? {
               create: requiredParts.map(({ product, quantity }) => ({
@@ -747,13 +766,14 @@ export async function completeInspection(
       data: {
         orderId: id,
         from: "DIAGNOSING",
-        to: "WAITING_APPROVAL",
+        to: nextStatus,
         actorId: actor.id,
         actorName: actor.name,
       },
     });
     await audit(tx, actor, id, "INSPECTION_COMPLETED", {
-      result: data.inspectionResult,
+      faults: faults.map((fault) => fault.name),
+      faultNote: data.faultNote,
     });
     await audit(tx, actor, id, "QUOTE_CREATED", {
       items: items.map((item) => ({
@@ -860,8 +880,6 @@ export async function replaceQuote(
     const nextStatus = (await newLinesNeedParts(tx, requiredParts, id))
       ? "PARTS_MISSING"
       : "REPAIRING";
-    const quoteStatus =
-      order.status === "WAITING_APPROVAL" ? "WAITING_APPROVAL" : nextStatus;
     await tx.workOrder.update({
       where: { id },
       data: {
@@ -870,7 +888,7 @@ export async function replaceQuote(
         includeVat: options.includeVat,
         confirmedAt: null,
         confirmationNote: "",
-        ...(order.status === "READY" ? {} : { status: quoteStatus }),
+        ...(order.status === "READY" ? {} : { status: nextStatus }),
         products: requiredParts.length
           ? {
               create: requiredParts.map(({ product, quantity }) => ({
@@ -885,12 +903,12 @@ export async function replaceQuote(
           : undefined,
       },
     });
-    if (order.status !== "READY" && order.status !== quoteStatus)
+    if (order.status !== "READY" && order.status !== nextStatus)
       await tx.statusHistory.create({
         data: {
           orderId: id,
           from: order.status,
-          to: quoteStatus,
+          to: nextStatus,
           actorId: actor.id,
           actorName: actor.name,
           note: "",
@@ -903,50 +921,6 @@ export async function replaceQuote(
       ...requiredParts.map((line) => line.product.id),
     ]))
       await refreshPartStatuses(tx, actor, productId);
-  });
-}
-export async function confirmQuote(
-  actorInput: Actor,
-  id: string,
-  raw: unknown,
-) {
-  const note = z.string().trim().min(1).max(2000).parse(raw);
-  return transact(async (tx) => {
-    const actor = await currentActor(tx, actorInput);
-    const order = await tx.workOrder.findUniqueOrThrow({
-      where: { id },
-      include: { products: { include: { product: true } } },
-    });
-    if (originalOrderLocked(order))
-      throw new BusinessError("La scheda è chiusa.");
-    const nextStatus = (await orderNeedsParts(tx, id))
-      ? "PARTS_MISSING"
-      : "REPAIRING";
-    await tx.workOrder.update({
-      where: { id },
-      data: {
-        confirmedAt: new Date(),
-        confirmationNote: note,
-        ...(order.status === "WAITING_APPROVAL" ? { status: nextStatus } : {}),
-      },
-    });
-    await audit(tx, actor, id, "QUOTE_CONFIRMED");
-    if (order.status === "WAITING_APPROVAL") {
-      await tx.statusHistory.create({
-        data: {
-          orderId: id,
-          from: "WAITING_APPROVAL",
-          to: nextStatus,
-          actorId: actor.id,
-          actorName: actor.name,
-          note,
-        },
-      });
-      await audit(tx, actor, id, "STATUS_CHANGED", {
-        from: "WAITING_APPROVAL",
-        to: nextStatus,
-      });
-    }
   });
 }
 export async function addPayment(actorInput: Actor, id: string, raw: unknown) {

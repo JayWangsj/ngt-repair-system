@@ -4,24 +4,16 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  setPaidTotalAction,
-  statusAction,
-  updateDueDateAction,
-} from "@/app/actions";
+import { setPaidTotalAction, updateDueDateAction } from "@/app/actions";
 import {
   dateOnly,
   decimal,
   money,
   romeDay,
-  transitions,
   type OrderStatus,
 } from "@/lib/domain";
 import { useMessages } from "./language";
 import { StatusDropdown } from "./status-dropdown";
-import { WorkOrderCheckoutDialog } from "./work-order-products";
-import { Field, FormDialog } from "./forms";
-import { Button } from "./ui/button";
 
 export type OrderListRow = {
   id: string;
@@ -39,126 +31,25 @@ export type OrderListRow = {
   balance: number;
 };
 
-function StaticStatus({ status }: { status: OrderStatus }) {
-  const it = useMessages();
-  return (
-    <span className={`badge status-${status.toLowerCase()}`}>
-      <span />
-      {it.status[status]}
-    </span>
-  );
-}
-
 function StatusControl({
   row,
   active,
+  onSettled,
 }: {
   row: Pick<
     OrderListRow,
     "id" | "status" | "customerName" | "due" | "paid" | "balance"
   >;
   active: boolean;
+  onSettled?: () => void;
 }) {
-  const it = useMessages();
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState("");
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelReason, setCancelReason] = useState("");
-  const choices = transitions[row.status].filter(
-    (status) => !["REWORKING", "REFUNDED"].includes(status),
-  );
-  if (!active) return <StaticStatus status={row.status} />;
   return (
-    <div className="inline-order-control">
-      <StatusDropdown
-        value={row.status}
-        label={it.status[row.status]}
-        options={choices.map((status) => ({
-          value: status,
-          label: it.status[status],
-        }))}
-        disabled={pending}
-        readonly={choices.length === 0}
-        onChange={(next) => {
-          if (next === "COMPLETED") {
-            setCheckoutOpen(true);
-            return;
-          }
-          if (next === "CANCELLED") {
-            setCancelOpen(true);
-            return;
-          }
-          startTransition(async () => {
-            const result = await statusAction(row.id, {
-              status: next,
-              note: "",
-              pickedUpBy: "",
-            });
-            if (!result.ok) return setError(result.error);
-            setError("");
-            router.refresh();
-          });
-        }}
-      />
-      {error && <small className="inline-control-error">{error}</small>}
-      <WorkOrderCheckoutDialog
-        open={checkoutOpen}
-        onClose={() => setCheckoutOpen(false)}
-        orderId={row.id}
-        due={row.due}
-        paid={row.paid}
-        remaining={row.balance}
-        customerName={row.customerName}
-      />
-      {cancelOpen && (
-        <FormDialog
-          title={it.cancelOrder}
-          subtitle={it.cancelOrderWarning}
-          onClose={() => setCancelOpen(false)}
-        >
-          <form
-            className="dialog-form"
-            data-form-dialog-body
-            onSubmit={(event) => {
-              event.preventDefault();
-              startTransition(async () => {
-                const result = await statusAction(row.id, {
-                  status: "CANCELLED",
-                  note: cancelReason,
-                  pickedUpBy: "",
-                });
-                if (!result.ok) return setError(result.error);
-                setCancelOpen(false);
-                setError("");
-                router.refresh();
-              });
-            }}
-          >
-            <Field label={it.cancelReasonOptional}>
-              <textarea
-                value={cancelReason}
-                onChange={(event) => setCancelReason(event.target.value)}
-                maxLength={2000}
-              />
-            </Field>
-            <div className="dialog-actions">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setCancelOpen(false)}
-              >
-                {it.cancel}
-              </Button>
-              <Button variant="danger" disabled={pending}>
-                {it.confirmCancelOrder}
-              </Button>
-            </div>
-          </form>
-        </FormDialog>
-      )}
-    </div>
+    <StatusDropdown
+      key={row.status}
+      order={row}
+      active={active}
+      onSettled={onSettled}
+    />
   );
 }
 
@@ -347,7 +238,11 @@ export function OrderListBody({
               </small>
             </td>
             <td className="order-inline-edit-cell">
-              <StatusControl row={row} active={active} />
+              <StatusControl
+                row={row}
+                active={active}
+                onSettled={() => setActiveId("")}
+              />
             </td>
             <td
               className={`order-inline-edit-cell${row.overdue ? " danger-text" : ""}`}

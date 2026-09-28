@@ -2385,6 +2385,27 @@ details[open] > summary {
   overflow: visible;
   visibility: visible;
 }
+.wizard-progressive-reveal,
+.quote-progressive-reveal {
+  animation: wizard-reveal 200ms var(--ease-ui) both;
+}
+@keyframes wizard-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.compact-date-field {
+  width: min(100%, 340px);
+}
+.compact-date-field input[type="date"] {
+  width: 100%;
+  cursor: pointer;
+}
 .selected-customer-summary {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -2615,12 +2636,18 @@ details[open] > summary {
   display: grid;
   gap: 20px;
 }
+.form-dialog > .fault-manager {
+  max-height: none;
+  overflow: visible;
+  padding: 4px 8px 2px 2px;
+}
 .catalog-toolbar.fault-manager-toolbar {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) auto;
   align-items: center;
   gap: 10px;
   margin: 0;
+  padding: 4px 2px;
 }
 .fault-manager-toolbar .button {
   height: 42px;
@@ -2651,7 +2678,7 @@ details[open] > summary {
 }
 .fault-manager-header {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) auto minmax(54px, auto);
+  grid-template-columns: minmax(150px, 1fr) 150px 32px;
   align-items: center;
   gap: 10px;
   min-height: 34px;
@@ -2661,13 +2688,12 @@ details[open] > summary {
   font-size: 10px;
   font-weight: 650;
 }
-.fault-manager-header span:nth-child(2),
-.fault-manager-header span:nth-child(3) {
+.fault-manager-header span:nth-child(2) {
   text-align: right;
 }
 .fault-manager-row {
   display: grid;
-  grid-template-columns: auto minmax(150px, 1fr) auto minmax(100px, auto);
+  grid-template-columns: auto minmax(150px, 1fr) 150px 32px;
   gap: 10px;
   align-items: center;
   min-height: 52px;
@@ -2686,11 +2712,43 @@ details[open] > summary {
 .fault-manager-row:last-child {
   border-bottom: 0;
 }
-.fault-row-actions {
-  display: flex;
-  justify-content: flex-end;
+.fault-name-button {
+  min-width: 0;
+  border: 0;
+  padding: 7px 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 650;
+  text-align: left;
+  cursor: text;
+}
+.fault-inline-name {
+  min-height: 36px;
+  height: 36px;
+}
+.fault-delete-button {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #a64642;
+  opacity: 0;
+  cursor: pointer;
+  transition:
+    opacity 180ms var(--ease-ui),
+    background 180ms var(--ease-ui);
+}
+.fault-manager-row:hover .fault-delete-button,
+.fault-delete-button:focus-visible {
+  opacity: 1;
+}
+.fault-delete-button:hover:not(:disabled) {
+  background: #fff0ee;
 }
 .fault-enabled-switch {
   margin: 0;
@@ -2772,13 +2830,7 @@ details[open] > summary {
     grid-template-columns: 1fr;
   }
   .fault-manager-row {
-    grid-template-columns: auto minmax(120px, 1fr) auto;
-  }
-  .fault-manager-row > span {
-    display: none;
-  }
-  .fault-row-actions {
-    grid-column: 1 / -1;
+    grid-template-columns: auto minmax(120px, 1fr) auto 32px;
   }
 }
 @media (max-width: 600px) {
@@ -3491,6 +3543,12 @@ details[open] > summary {
   max-height: calc(100dvh - 150px);
   overflow-y: auto;
   padding-right: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wizard-progressive-reveal,
+  .quote-progressive-reveal {
+    animation: none;
+  }
 }
 .price-tree-level {
   margin: 12px 0 12px 16px;

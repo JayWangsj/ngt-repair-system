@@ -67,6 +67,14 @@ function safeCents(value: string) {
   }
 }
 
+function validAmount(value: string) {
+  try {
+    return cents(value) >= 0;
+  } catch {
+    return false;
+  }
+}
+
 function StepCard({
   number,
   title,
@@ -141,7 +149,14 @@ export function NewOrderWizard({
   faultOptions: FaultCatalogItem[];
   devices: { category: string; brand: string; model: string }[];
   customers: CustomerOption[];
-  products: { id: string; name: string; category: string; stock: number }[];
+  products: {
+    id: string;
+    name: string;
+    category: string;
+    stock: number;
+    reserved: number;
+    available: number;
+  }[];
   productCategories: CategoryView[];
 }) {
   const it = useMessages();
@@ -187,7 +202,6 @@ export function NewOrderWizard({
   const [touched, setTouched] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const [step2LeftIncomplete, setStep2LeftIncomplete] = useState(false);
   const completed = useRef([false, false, false]);
 
   const catalog = faults
@@ -231,7 +245,10 @@ export function NewOrderWizard({
   const validQuote = inspectionMode
     ? safeCents(inspectionFee) > 0
     : items.length > 0 &&
-      items.every((item) => item.project.trim() && safeCents(item.final) >= 0);
+      items.every((item) => item.project.trim() && validAmount(item.final));
+  const hasCompleteQuoteItem = items.some(
+    (item) => item.project.trim() && validAmount(item.final),
+  );
   const requiredComplete = [validCustomer, validStep2, validQuote].filter(
     Boolean,
   ).length;
@@ -255,10 +272,7 @@ export function NewOrderWizard({
   );
 
   function toggleStep(index: number) {
-    if (selectedStep === 1 && index !== 1 && !validStep2)
-      setStep2LeftIncomplete(true);
     if (selectedStep === index && expandedStep === index) {
-      if (index === 1 && !validStep2) setStep2LeftIncomplete(true);
       setExpandedStep(null);
       setSelectedStep(null);
       return;
@@ -480,7 +494,11 @@ export function NewOrderWizard({
             selected={selectedStep === 0}
             expanded={expandedStep === 0}
             onToggle={() => toggleStep(0)}
-            summary={customer?.name}
+            summary={
+              customer?.name ??
+              (expandedStep !== 0 ? it.selectCustomerError : undefined)
+            }
+            summaryError={!validCustomer && expandedStep !== 0}
           >
             {!customer || choosingCustomer ? (
               <Field label={`${it.searchCustomer} *`}>
@@ -539,13 +557,13 @@ export function NewOrderWizard({
             expanded={expandedStep === 1}
             onToggle={() => toggleStep(1)}
             summary={
-              step2LeftIncomplete && !validStep2
+              expandedStep !== 1 && !validStep2
                 ? step2Missing
                 : validDevice
                   ? `${categories[category][locale === "zh" ? 1 : 0]} · ${brand} · ${model}${faultSummary ? ` · ${faultSummary}` : ""}`
                   : undefined
             }
-            summaryError={step2LeftIncomplete && !validStep2}
+            summaryError={expandedStep !== 1 && !validStep2}
           >
             {customer?.devices?.length ? (
               <Field label={it.chooseDevice}>
@@ -678,36 +696,40 @@ export function NewOrderWizard({
             {!validDevice && (
               <p className="device-dependency-hint">{it.completeDeviceFirst}</p>
             )}
-            <div
-              className={`inspection-choice ${inspectionMode ? "is-active" : ""}`}
-            >
-              <Search size={20} />
-              <div>
-                <strong>{it.inspectionPending}</strong>
-                <p>{it.inspectionHelp}</p>
+            {validDevice && (
+              <div className="wizard-progressive-reveal">
+                <div
+                  className={`inspection-choice ${inspectionMode ? "is-active" : ""}`}
+                >
+                  <Search size={20} />
+                  <div>
+                    <strong>{it.inspectionPending}</strong>
+                    <p>{it.inspectionHelp}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant={inspectionMode ? "outline" : "default"}
+                    disabled={!validDevice}
+                    onClick={() => {
+                      setInspectionMode((value) => !value);
+                    }}
+                  >
+                    {inspectionMode ? it.inspectionActive : it.setInspection}
+                  </Button>
+                </div>
+                <FaultSelector
+                  category={category}
+                  items={faults}
+                  selected={selectedFaults}
+                  disabled={!validDevice || inspectionMode}
+                  onItemsChange={setFaults}
+                  onChange={(ids) => {
+                    setSelectedFaults(ids);
+                    if (ids.length) leaveInspection();
+                  }}
+                />
               </div>
-              <Button
-                type="button"
-                variant={inspectionMode ? "outline" : "default"}
-                disabled={!validDevice}
-                onClick={() => {
-                  setInspectionMode((value) => !value);
-                }}
-              >
-                {inspectionMode ? it.inspectionActive : it.setInspection}
-              </Button>
-            </div>
-            <FaultSelector
-              category={category}
-              items={faults}
-              selected={selectedFaults}
-              disabled={!validDevice || inspectionMode}
-              onItemsChange={setFaults}
-              onChange={(ids) => {
-                setSelectedFaults(ids);
-                if (ids.length) leaveInspection();
-              }}
-            />
+            )}
             {customFaults.map((description, index) => (
               <div className="custom-fault-row" key={`${description}-${index}`}>
                 <span>{description}</span>
@@ -724,27 +746,36 @@ export function NewOrderWizard({
                 </button>
               </div>
             ))}
-            <Field label={it.faultNotes}>
-              <textarea
-                rows={3}
-                maxLength={2000}
-                value={faultNote}
-                onChange={(event) => setFaultNote(event.target.value)}
-              />
-            </Field>
+            {validDevice && validFault && !inspectionMode && (
+              <div className="wizard-progressive-reveal">
+                <Field label={it.faultNotes}>
+                  <textarea
+                    rows={3}
+                    maxLength={2000}
+                    value={faultNote}
+                    onChange={(event) => setFaultNote(event.target.value)}
+                  />
+                </Field>
+              </div>
+            )}
             {touched && !validFault && (
               <p className="field-error">{it.selectFaultError}</p>
             )}
-            <Field label={it.dueDate}>
-              <input
-                name="dueDate"
-                type="date"
-                min={romeDay()}
-                value={dueDate}
-                disabled={!validDevice || !validFault}
-                onChange={(event) => setDueDate(event.target.value)}
-              />
-            </Field>
+            {validDevice && validFault && (
+              <div className="wizard-progressive-reveal compact-date-field">
+                <Field label={it.dueDate}>
+                  <input
+                    name="dueDate"
+                    type="date"
+                    min={romeDay()}
+                    value={dueDate}
+                    disabled={!validDevice || !validFault}
+                    onClick={(event) => event.currentTarget.showPicker?.()}
+                    onChange={(event) => setDueDate(event.target.value)}
+                  />
+                </Field>
+              </div>
+            )}
           </StepCard>
 
           <StepCard
@@ -757,8 +788,13 @@ export function NewOrderWizard({
             summary={
               validQuote
                 ? `${inspectionMode ? it.inspectionFeeLabel : `${items.length} ${it.repairItems}`} · ${money(quote.due)}`
-                : undefined
+                : validStep2 && expandedStep !== 2
+                  ? inspectionMode
+                    ? it.inspectionFeeError
+                    : it.repairItemError
+                  : undefined
             }
+            summaryError={expandedStep !== 2 && validStep2 && !validQuote}
           >
             {inspectionMode ? (
               <>
@@ -786,6 +822,7 @@ export function NewOrderWizard({
                 discounts
                 products={products}
                 productCategories={productCategories}
+                progressive
               />
             )}
             {touched && !validQuote && (
@@ -793,56 +830,60 @@ export function NewOrderWizard({
                 {inspectionMode ? it.inspectionFeeError : it.repairItemError}
               </p>
             )}
-            {!inspectionMode && (
-              <Field label={it.orderDiscount}>
-                <input
-                  inputMode="decimal"
-                  value={orderDiscount}
-                  onChange={(event) => setOrderDiscount(event.target.value)}
-                />
-              </Field>
+            {!inspectionMode && hasCompleteQuoteItem && (
+              <div className="wizard-progressive-reveal">
+                <Field label={it.orderDiscount}>
+                  <input
+                    inputMode="decimal"
+                    value={orderDiscount}
+                    onChange={(event) => setOrderDiscount(event.target.value)}
+                  />
+                </Field>
+              </div>
             )}
-            <div className="price-breakdown">
-              <h3>{it.priceDetails}</h3>
-              {inspectionMode && (
+            {(inspectionMode || hasCompleteQuoteItem) && (
+              <div className="price-breakdown wizard-progressive-reveal">
+                <h3>{it.priceDetails}</h3>
+                {inspectionMode && (
+                  <div>
+                    <span>{it.inspectionFeeNet}</span>
+                    <strong>{money(quote.inspectionTotal)}</strong>
+                  </div>
+                )}{" "}
+                {!inspectionMode && (
+                  <>
+                    <div>
+                      <span>{it.repairSubtotal}</span>
+                      <strong>{money(quote.repairGross)}</strong>
+                    </div>
+                    <div>
+                      <span>{it.discountTotal}</span>
+                      <strong>{money(quote.discount)}</strong>
+                    </div>
+                    <div>
+                      <span>{it.netTotal}</span>
+                      <strong>{money(quote.net)}</strong>
+                    </div>
+                  </>
+                )}
                 <div>
-                  <span>{it.inspectionFeeNet}</span>
-                  <strong>{money(quote.inspectionTotal)}</strong>
+                  <span>{it.vatAmount}</span>
+                  <strong>{money(quote.vat)}</strong>
                 </div>
-              )}{" "}
-              {!inspectionMode && (
-                <>
-                  <div>
-                    <span>{it.repairSubtotal}</span>
-                    <strong>{money(quote.repairGross)}</strong>
-                  </div>
-                  <div>
-                    <span>{it.discountTotal}</span>
-                    <strong>{money(quote.discount)}</strong>
-                  </div>
-                  <div>
-                    <span>{it.netTotal}</span>
-                    <strong>{money(quote.net)}</strong>
-                  </div>
-                </>
-              )}
-              <div>
-                <span>{it.vatAmount}</span>
-                <strong>{money(quote.vat)}</strong>
+                <label className="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={includeVat}
+                    onChange={(event) => setIncludeVat(event.target.checked)}
+                  />
+                  {it.includeVat}
+                </label>
+                <div className="price-due">
+                  <span>{it.total}</span>
+                  <strong>{money(quote.due)}</strong>
+                </div>
               </div>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={includeVat}
-                  onChange={(event) => setIncludeVat(event.target.checked)}
-                />
-                {it.includeVat}
-              </label>
-              <div className="price-due">
-                <span>{it.total}</span>
-                <strong>{money(quote.due)}</strong>
-              </div>
-            </div>
+            )}
           </StepCard>
 
           <StepCard

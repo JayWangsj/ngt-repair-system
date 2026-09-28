@@ -1226,6 +1226,155 @@ describe("unified product inventory", () => {
 });
 
 describe("work order products and combined checkout", () => {
+  it("reserves repair stock in order and releases it after cancellation", async () => {
+    const part = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Batteria prenotata test",
+      category: "Ricambi",
+      usage: "REPAIR",
+      costPrice: "20",
+      salePrice: "0",
+      initialStock: 1,
+      minStock: 0,
+    });
+    await savePriceRule(owner, null, {
+      brand: "Apple",
+      model: "iPhone 13",
+      project: "Batteria reservation",
+      suggested: "60",
+      minutes: 30,
+      enabled: true,
+      requiredProductId: part.id,
+      requiredQuantity: 1,
+    });
+    const first = await createOrder(
+      staff,
+      input({
+        phone: "3331111111",
+        deposit: "0",
+        items: [
+          {
+            project: "Batteria reservation",
+            final: "60",
+            adjustmentReason: "",
+          },
+        ],
+      }),
+    );
+    const second = await createOrder(
+      staff,
+      input({
+        phone: "3332222222",
+        deposit: "0",
+        items: [
+          {
+            project: "Batteria reservation",
+            final: "60",
+            adjustmentReason: "",
+          },
+        ],
+      }),
+    );
+    expect(first.status).toBe("REPAIRING");
+    expect(second.status).toBe("PARTS_MISSING");
+    expect(
+      (await db.product.findUniqueOrThrow({ where: { id: part.id } }))
+        .stockQuantity,
+    ).toBe(1);
+    expect(
+      await db.workOrderProduct.aggregate({
+        where: { productId: part.id, consumedAt: null },
+        _sum: { quantity: true },
+      }),
+    ).toMatchObject({ _sum: { quantity: 2 } });
+
+    await changeStatus(staff, first.id, {
+      status: "CANCELLED",
+      note: "Cliente rinuncia",
+    });
+    expect(
+      (await db.workOrder.findUniqueOrThrow({ where: { id: second.id } }))
+        .status,
+    ).toBe("REPAIRING");
+
+    await changeStatus(staff, second.id, { status: "READY" });
+    expect(
+      (await db.product.findUniqueOrThrow({ where: { id: part.id } }))
+        .stockQuantity,
+    ).toBe(0);
+    expect(
+      await db.workOrderProduct.count({
+        where: { orderId: second.id, consumedAt: { not: null } },
+      }),
+    ).toBe(1);
+  });
+
+  it("releases a repair reservation when the quote removes the part", async () => {
+    const part = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Ricambio rimosso test",
+      category: "Ricambi",
+      usage: "REPAIR",
+      costPrice: "10",
+      salePrice: "0",
+      initialStock: 1,
+      minStock: 0,
+    });
+    await savePriceRule(owner, null, {
+      brand: "Apple",
+      model: "iPhone 13",
+      project: "Rimozione reservation",
+      suggested: "40",
+      minutes: 30,
+      enabled: true,
+      requiredProductId: part.id,
+      requiredQuantity: 1,
+    });
+    const first = await createOrder(
+      staff,
+      input({
+        phone: "3333333333",
+        deposit: "0",
+        items: [{ project: "Rimozione reservation", final: "40" }],
+      }),
+    );
+    const second = await createOrder(
+      staff,
+      input({
+        phone: "3334444444",
+        deposit: "0",
+        items: [{ project: "Rimozione reservation", final: "40" }],
+      }),
+    );
+    expect(second.status).toBe("PARTS_MISSING");
+
+    await replaceQuote(owner, first.id, {
+      items: [
+        {
+          project: "Rimozione reservation",
+          final: "40",
+          requiredProductRemoved: true,
+        },
+      ],
+      orderDiscount: "0",
+      includeVat: false,
+    });
+
+    expect(
+      await db.workOrderProduct.count({
+        where: { orderId: first.id, kind: "REPAIR_PART", consumedAt: null },
+      }),
+    ).toBe(0);
+    expect(
+      (await db.workOrder.findUniqueOrThrow({ where: { id: second.id } }))
+        .status,
+    ).toBe("REPAIRING");
+    expect(
+      (await db.product.findUniqueOrThrow({ where: { id: part.id } }))
+        .stockQuantity,
+    ).toBe(1);
+  });
+
   it("records a partial checkout payment and delivers only after the balance is cleared", async () => {
     const order = await createOrder(staff, input({ deposit: "20" }));
     await changeStatus(staff, order.id, { status: "REPAIRING" });

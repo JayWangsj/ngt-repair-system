@@ -262,6 +262,8 @@ export type CreatedProduct = {
   name: string;
   category: string;
   stock: number;
+  reserved?: number;
+  available?: number;
 };
 
 const presetInventoryCategories = [
@@ -485,15 +487,24 @@ export function ItemsEditor({
   products = [],
   productCategories = [],
   discounts = false,
+  progressive = false,
 }: {
   discounts?: boolean;
   items: ItemView[];
   onChange: (items: ItemView[]) => void;
   rules: RuleView[];
-  products?: { id: string; name: string; category: string; stock: number }[];
+  products?: {
+    id: string;
+    name: string;
+    category: string;
+    stock: number;
+    reserved?: number;
+    available?: number;
+  }[];
   productCategories?: CategoryView[];
   device: { category: string; brand: string; series: string; model: string };
   owner?: boolean;
+  progressive?: boolean;
 }) {
   const it = useMessages();
   const [createdProducts, setCreatedProducts] = useState<CreatedProduct[]>([]);
@@ -511,6 +522,7 @@ export function ItemsEditor({
     {},
   );
   const [editingParts, setEditingParts] = useState<Record<number, boolean>>({});
+  const priceInputs = useRef<Record<number, HTMLInputElement | null>>({});
   const deviceKey = [
     device.category,
     device.brand,
@@ -564,12 +576,14 @@ export function ItemsEditor({
         const match = matchRule(rules, device, item.project);
         const projectQuery = projectQueries[index] ?? "";
         const priceEnabled = !!(item.project.trim() || projectQuery.trim());
+        const itemComplete = !!item.project.trim() && validAmount(item.final);
         const selectedProduct = availableProducts.find(
           (product) => product.id === item.requiredProductId,
         );
         const partShortage =
           !!selectedProduct &&
-          Number(item.requiredQuantity ?? 1) > selectedProduct.stock;
+          Number(item.requiredQuantity ?? 1) >
+            (selectedProduct.available ?? selectedProduct.stock);
         return (
           <div className="quote-item" key={index}>
             <SearchableCombobox
@@ -588,6 +602,9 @@ export function ItemsEditor({
               clearable
               middleControl={
                 <input
+                  ref={(element) => {
+                    priceInputs.current[index] = element;
+                  }}
                   className="quote-price-input"
                   aria-label={`${it.final} ${index + 1}`}
                   placeholder={it.final}
@@ -631,6 +648,9 @@ export function ItemsEditor({
                   requiredQuantity: 1,
                   requiredProductRemoved: false,
                 });
+                requestAnimationFrame(() =>
+                  priceInputs.current[index]?.focus(),
+                );
               }}
               onChange={(project) => {
                 const found = matchRule(rules, device, project);
@@ -645,183 +665,212 @@ export function ItemsEditor({
                   requiredQuantity: found?.rule.requiredQuantity ?? 1,
                   requiredProductRemoved: false,
                 });
+                requestAnimationFrame(() => {
+                  priceInputs.current[index]?.focus();
+                  priceInputs.current[index]?.select();
+                });
               }}
             />
-            <p className="quote-hint">
-              {match ? (
-                <>
-                  {it.suggested}:{" "}
-                  <strong>{money(cents(match.rule.suggested))}</strong> ·{" "}
-                  {it.levels[match.level as keyof typeof it.levels]}
-                </>
-              ) : (
-                it.noMatch
-              )}
-            </p>
-            <div className="quote-required-part">
-              <strong className="quote-required-part-label">
-                {it.requiredPart} ({it.optional})
-              </strong>
-              {selectedProduct && !editingParts[index] ? (
-                <div className="selected-part-summary">
-                  <div>
-                    <strong>{selectedProduct.name}</strong>
-                    <small>
-                      {selectedProduct.category} · {it.inventory.currentStock}{" "}
-                      {selectedProduct.stock} ·{" "}
-                      <span
-                        className={`part-stock ${selectedProduct.stock > 0 ? "is-available" : "is-empty"}`}
-                      >
-                        ●{" "}
-                        {selectedProduct.stock > 0
-                          ? it.partInStock
-                          : it.partOutOfStock}
-                      </span>
-                    </small>
-                  </div>
-                  <span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() =>
-                        setEditingParts((current) => ({
-                          ...current,
-                          [index]: true,
-                        }))
-                      }
-                    >
-                      {it.change}
-                    </Button>
-                    <button
-                      type="button"
-                      className="selected-part-remove"
-                      aria-label={`${it.remove} ${selectedProduct.name}`}
-                      onClick={() =>
-                        update(index, {
-                          requiredProductId: "",
-                          requiredQuantity: 1,
-                          requiredProductRemoved: true,
-                        })
-                      }
-                    >
-                      <X size={15} />
-                    </button>
-                  </span>
-                </div>
-              ) : (
-                <SearchableCombobox
-                  value={item.requiredProductId ?? ""}
-                  onChange={(requiredProductId) => {
-                    update(index, {
-                      requiredProductId,
-                      requiredQuantity: 1,
-                      requiredProductRemoved: !requiredProductId,
-                    });
-                    setEditingParts((current) => ({
-                      ...current,
-                      [index]: false,
-                    }));
-                  }}
-                  ariaLabel={`${it.requiredPart} ${index + 1}`}
-                  placeholder={it.searchInventoryPart}
-                  searchPlaceholder={it.searchInventoryPart}
-                  emptyText={it.noMatches}
-                  autoFocusQuery={
-                    editingParts[index] ? selectedProduct?.name : undefined
-                  }
-                  onClose={() =>
-                    setEditingParts((current) => ({
-                      ...current,
-                      [index]: false,
-                    }))
-                  }
-                  customLabel={it.newPart}
-                  onCustom={(query) => setCreatingPart({ index, query })}
-                  clearable
-                  groups={[
-                    {
-                      options: availableProducts.map((product) => ({
-                        value: product.id,
-                        label: product.name,
-                        secondary: product.category,
-                        keywords: product.category,
-                        trailing: (
+            {(!progressive || item.project.trim()) && (
+              <p className="quote-hint">
+                {match ? (
+                  <>
+                    {it.suggested}:{" "}
+                    <strong>{money(cents(match.rule.suggested))}</strong> ·{" "}
+                    {it.levels[match.level as keyof typeof it.levels]}
+                  </>
+                ) : (
+                  it.noMatch
+                )}
+              </p>
+            )}
+            {(!progressive || itemComplete) && (
+              <div className="quote-progressive-reveal">
+                <div className="quote-required-part">
+                  <strong className="quote-required-part-label">
+                    {it.requiredPart} ({it.optional})
+                  </strong>
+                  {selectedProduct && !editingParts[index] ? (
+                    <div className="selected-part-summary">
+                      <div>
+                        <strong>{selectedProduct.name}</strong>
+                        <small>
+                          {selectedProduct.category} · {it.actualStock}{" "}
+                          {selectedProduct.stock} · {it.reservedStock}{" "}
+                          {selectedProduct.reserved ?? 0} · {it.availableStock}{" "}
+                          {selectedProduct.available ?? selectedProduct.stock} ·{" "}
                           <span
-                            className={`part-stock ${product.stock > 0 ? "is-available" : "is-empty"}`}
+                            className={`part-stock ${(selectedProduct.available ?? selectedProduct.stock) > 0 ? "is-available" : "is-empty"}`}
                           >
-                            {it.inventory.currentStock} {product.stock} · ●{" "}
-                            {product.stock > 0
+                            ●{" "}
+                            {(selectedProduct.available ??
+                              selectedProduct.stock) > 0
                               ? it.partInStock
                               : it.partOutOfStock}
                           </span>
-                        ),
-                      })),
-                    },
-                  ]}
-                />
-              )}
-            </div>
-            {partShortage && (
-              <p className="message warning">{it.requiredPartOutOfStock}</p>
+                        </small>
+                      </div>
+                      <span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() =>
+                            setEditingParts((current) => ({
+                              ...current,
+                              [index]: true,
+                            }))
+                          }
+                        >
+                          {it.change}
+                        </Button>
+                        <button
+                          type="button"
+                          className="selected-part-remove"
+                          aria-label={`${it.remove} ${selectedProduct.name}`}
+                          onClick={() =>
+                            update(index, {
+                              requiredProductId: "",
+                              requiredQuantity: 1,
+                              requiredProductRemoved: true,
+                            })
+                          }
+                        >
+                          <X size={15} />
+                        </button>
+                      </span>
+                    </div>
+                  ) : (
+                    <SearchableCombobox
+                      value={item.requiredProductId ?? ""}
+                      onChange={(requiredProductId) => {
+                        update(index, {
+                          requiredProductId,
+                          requiredQuantity: 1,
+                          requiredProductRemoved: !requiredProductId,
+                        });
+                        setEditingParts((current) => ({
+                          ...current,
+                          [index]: false,
+                        }));
+                      }}
+                      ariaLabel={`${it.requiredPart} ${index + 1}`}
+                      placeholder={it.searchInventoryPart}
+                      searchPlaceholder={it.searchInventoryPart}
+                      emptyText={it.noMatches}
+                      autoFocusQuery={
+                        editingParts[index] ? selectedProduct?.name : undefined
+                      }
+                      onClose={() =>
+                        setEditingParts((current) => ({
+                          ...current,
+                          [index]: false,
+                        }))
+                      }
+                      customLabel={it.newPart}
+                      onCustom={(query) => setCreatingPart({ index, query })}
+                      clearable
+                      groups={[
+                        {
+                          options: availableProducts.map((product) => ({
+                            value: product.id,
+                            label: product.name,
+                            secondary: product.category,
+                            keywords: product.category,
+                            trailing: (
+                              <span
+                                className={`part-stock ${(product.available ?? product.stock) > 0 ? "is-available" : "is-empty"}`}
+                              >
+                                {it.actualStock} {product.stock} ·{" "}
+                                {it.reservedStock} {product.reserved ?? 0} ·{" "}
+                                {it.availableStock}{" "}
+                                {product.available ?? product.stock} · ●{" "}
+                                {(product.available ?? product.stock) > 0
+                                  ? it.partInStock
+                                  : it.partOutOfStock}
+                              </span>
+                            ),
+                          })),
+                        },
+                      ]}
+                    />
+                  )}
+                </div>
+                {partShortage && (
+                  <p className="message warning">{it.requiredPartOutOfStock}</p>
+                )}
+                {discounts &&
+                  (item.discountVisible ||
+                    numeric(item.discount ?? "0") > 0) && (
+                    <Field label={`${it.itemDiscount} ${index + 1}`}>
+                      <input
+                        inputMode="decimal"
+                        required
+                        value={item.discount ?? "0"}
+                        onChange={(e) =>
+                          update(index, { discount: e.target.value })
+                        }
+                      />
+                    </Field>
+                  )}
+                <div className="item-actions">
+                  {discounts && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        update(index, {
+                          discountVisible: !(
+                            item.discountVisible ||
+                            numeric(item.discount ?? "0") > 0
+                          ),
+                          discount: "0",
+                        })
+                      }
+                    >
+                      {item.discountVisible || numeric(item.discount ?? "0") > 0
+                        ? it.cancelDiscount
+                        : it.addItemDiscount}
+                    </Button>
+                  )}
+                  {items.length > 1 && (
+                    <RecordIcon
+                      kind="delete"
+                      label={it.remove + " " + it.project + " " + (index + 1)}
+                      onClick={() =>
+                        onChange(items.filter((_, i) => i !== index))
+                      }
+                    />
+                  )}
+                </div>
+              </div>
             )}
-            {discounts &&
-              (item.discountVisible || numeric(item.discount ?? "0") > 0) && (
-                <Field label={`${it.itemDiscount} ${index + 1}`}>
-                  <input
-                    inputMode="decimal"
-                    required
-                    value={item.discount ?? "0"}
-                    onChange={(e) =>
-                      update(index, { discount: e.target.value })
-                    }
-                  />
-                </Field>
-              )}
-            <div className="item-actions">
-              {discounts && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    update(index, {
-                      discountVisible: !(
-                        item.discountVisible ||
-                        numeric(item.discount ?? "0") > 0
-                      ),
-                      discount: "0",
-                    })
-                  }
-                >
-                  {item.discountVisible || numeric(item.discount ?? "0") > 0
-                    ? it.cancelDiscount
-                    : it.addItemDiscount}
-                </Button>
-              )}
-              {items.length > 1 && (
-                <RecordIcon
-                  kind="delete"
-                  label={it.remove + " " + it.project + " " + (index + 1)}
-                  onClick={() => onChange(items.filter((_, i) => i !== index))}
-                />
-              )}
-            </div>
           </div>
         );
       })}
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => onChange([...items, blankItem()])}
-      >
-        <Plus size={16} />
-        {it.addItem}
-      </Button>
-      <div className="quote-total">
-        <span>{it.originalTotal}</span>
-        <strong>
-          {money(items.reduce((sum, item) => sum + numeric(item.final), 0))}
-        </strong>
-      </div>
+      {(!progressive ||
+        items.every(
+          (item) => item.project.trim() && validAmount(item.final),
+        )) && (
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => onChange([...items, blankItem()])}
+        >
+          <Plus size={16} />
+          {it.addItem}
+        </Button>
+      )}
+      {(!progressive ||
+        items.some(
+          (item) => item.project.trim() && validAmount(item.final),
+        )) && (
+        <div className="quote-total quote-progressive-reveal">
+          <span>{it.originalTotal}</span>
+          <strong>
+            {money(items.reduce((sum, item) => sum + numeric(item.final), 0))}
+          </strong>
+        </div>
+      )}
       {creatingPart && (
         <FormDialog title={it.newPart} onClose={() => setCreatingPart(null)}>
           <ProductForm
@@ -2369,7 +2418,14 @@ export function EditQuoteForm({
   initialVat?: boolean;
   inspectionFee?: string;
   rules: RuleView[];
-  products?: { id: string; name: string; category: string; stock: number }[];
+  products?: {
+    id: string;
+    name: string;
+    category: string;
+    stock: number;
+    reserved?: number;
+    available?: number;
+  }[];
   productCategories?: CategoryView[];
   device: { category: string; brand: string; series: string; model: string };
   owner: boolean;

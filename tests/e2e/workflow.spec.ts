@@ -168,7 +168,9 @@ test("new repair uses a single selected accordion step", async ({ page }) => {
       }),
     );
   await expect(page.locator(".order-wizard")).toHaveCSS("row-gap", "22px");
-  expect((await cardGaps()).every((gap) => gap > 0)).toBe(true);
+  await expect
+    .poll(async () => (await cardGaps()).every((gap) => gap > 0))
+    .toBe(true);
   await cards.nth(3).locator(".order-step-heading").click();
   await expect(cards.nth(3)).toHaveClass(/is-selected/);
   await expect(cards.nth(0)).not.toHaveClass(/is-selected/);
@@ -201,9 +203,9 @@ test("device step gates faults and advances only after faults and due date", asy
   await expect(
     page.getByText("Completa prima tipo, marca e modello"),
   ).toBeVisible();
-  await expect(inspection).toBeDisabled();
-  await expect(display).toBeDisabled();
-  await expect(dueDate).toBeDisabled();
+  await expect(inspection).toHaveCount(0);
+  await expect(display).toHaveCount(0);
+  await expect(dueDate).toHaveCount(0);
 
   await chooseBusinessOption(page, "Marca", "Apple");
   await card.locator(".order-step-heading").click();
@@ -214,7 +216,7 @@ test("device step gates faults and advances only after faults and due date", asy
   await chooseBusinessOption(page, "Modello", "iPhone 13");
   await expect(display).toBeEnabled();
   await expect(inspection).toBeEnabled();
-  await expect(dueDate).toBeDisabled();
+  await expect(dueDate).toHaveCount(0);
 
   await display.check();
   await power.check();
@@ -473,7 +475,7 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await expect(row).toContainText("30,00 €");
   await expect(row).toContainText("30/11/2099");
 });
-test("repair list delivery choice opens the shared checkout dialog", async ({
+test("repair list delivery uses the shared checkout and refreshes the row", async ({
   page,
 }) => {
   await fillOrder(page);
@@ -492,9 +494,36 @@ test("repair list delivery choice opens the shared checkout dialog", async ({
   await expect(dialog.getByLabel("Importo (€)", { exact: true })).toHaveValue(
     "100.00",
   );
-  await dialog.getByRole("button", { name: "Annulla", exact: true }).click();
+  await dialog.getByRole("button", { name: /Incassa e consegna/ }).click();
   await expect(dialog).toHaveCount(0);
-  await expect(row).toContainText("Da ritirare");
+  await expect(row.locator(".badge")).toContainText("Consegnato");
+  await expect(row).toContainText("Consegnato");
+  await expect(row).toContainText("0,00 €");
+});
+
+test("repair list cancellation uses the shared confirmation and locks the row", async ({
+  page,
+}) => {
+  await fillOrder(page);
+  await save(page);
+  const orderPath = new URL(page.url()).pathname;
+  await page.goto("/orders");
+  const row = page.locator(`tbody tr:has(a[href="${orderPath}"])`);
+  await row.click();
+  await row.locator(".status-dropdown-trigger").click();
+  await page
+    .locator(".status-dropdown-menu")
+    .getByRole("option", { name: "Annullato", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Annulla scheda" });
+  await dialog
+    .getByLabel("Motivo dell'annullamento (facoltativo)")
+    .fill("Cliente rinuncia");
+  await dialog.getByRole("button", { name: "Conferma annullamento" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(row).toContainText("Annullato");
+  await expect(row).toContainText("0,00 €");
+  await expect(row.getByLabel("Incassato", { exact: true })).toHaveCount(0);
 });
 
 test("diagnostic order follows inspection, quote and customer approval flow", async ({
@@ -1357,6 +1386,7 @@ test("creates a repair part from the quote and selects it immediately", async ({
   await chooseBusinessOption(page, "Marca", "Apple");
   await chooseBusinessOption(page, "Modello", "iPhone 13");
   await openStep(page, 2);
+  await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
 
   const partSearch = page.getByRole("combobox", {
     name: "Ricambio richiesto 1",
@@ -1450,9 +1480,13 @@ test("creates a custom repair item directly from its search and price", async ({
   await search.fill(name);
   await expect(price).toBeEnabled();
   await expect(create).toBeDisabled();
+  await search.press("Enter");
+  await expect(search).toHaveValue(name);
+  await expect(price).toBeFocused();
+  await expect(page.locator(".order-step-card").nth(2)).not.toHaveClass(
+    /is-completed/,
+  );
   await price.fill("85");
-  await expect(create).toBeEnabled();
-  await create.click();
 
   await expect(search).toHaveValue(name);
   await expect(price).toHaveValue("85");
@@ -1807,6 +1841,11 @@ test("hides managed faults without changing historical records", async ({
 }) => {
   await page.goto("/orders/new");
   await openStep(page, 1);
+  await expect(
+    page.getByRole("button", { name: "Gestisci problemi", exact: true }),
+  ).toHaveCount(0);
+  await chooseBusinessOption(page, "Marca", "Apple");
+  await chooseBusinessOption(page, "Modello", "iPhone 13");
   await page
     .getByRole("button", { name: "Gestisci problemi", exact: true })
     .click();
@@ -1818,7 +1857,9 @@ test("hides managed faults without changing historical records", async ({
     "Nome problema",
   );
   await expect(dialog.locator(".fault-manager-header")).toContainText("Stato");
-  await expect(dialog.locator(".fault-manager-header")).toContainText("Azioni");
+  await expect(dialog.locator(".fault-manager-header")).not.toContainText(
+    "Azioni",
+  );
   await expect(dialog.locator(".fault-drag-hint")).toBeVisible();
   const faultSearch = dialog.locator(".fault-search");
   const addFault = dialog.getByRole("button", {
@@ -1847,9 +1888,9 @@ test("hides managed faults without changing historical records", async ({
   const centers = await row.evaluate((element) =>
     [
       element.querySelector(".fault-drag-handle"),
-      element.querySelector("strong"),
+      element.querySelector(".fault-name-button"),
       element.querySelector(".fault-enabled-switch"),
-      element.querySelector(".fault-row-actions"),
+      element.querySelector(".fault-delete-button"),
     ].map((node) => {
       const box = node!.getBoundingClientRect();
       return box.top + box.height / 2;
@@ -1857,8 +1898,20 @@ test("hides managed faults without changing historical records", async ({
   );
   expect(Math.max(...centers) - Math.min(...centers)).toBeLessThanOrEqual(1);
   await expect(row.locator(".fault-enabled-switch")).toHaveCSS("gap", "8px");
+  await expect(row.locator(".fault-delete-button")).toHaveCSS("opacity", "0");
+  await row.hover();
+  await expect(row.locator(".fault-delete-button")).toHaveCSS("opacity", "1");
+
+  await row.locator(".fault-name-button").dblclick();
+  const inlineName = dialog.locator(".fault-inline-name");
+  await inlineName.fill("Display rotto test");
+  await inlineName.press("Escape");
+  await expect(row.locator(".fault-name-button")).toHaveText("Display rotto");
+
   await row.locator(".fault-enabled-switch input").uncheck();
-  await dialog.getByRole("button", { name: "Annulla", exact: true }).click();
+  const closeManager = dialog.locator(".dialog-actions button");
+  await expect(closeManager).toBeEnabled();
+  await closeManager.click();
   await page
     .getByRole("button", { name: "Gestisci problemi", exact: true })
     .click();
@@ -1866,17 +1919,35 @@ test("hides managed faults without changing historical records", async ({
     .getByRole("dialog", { name: "Gestisci problemi" })
     .locator(".fault-manager-row")
     .filter({ hasText: "Display rotto" });
-  await expect(row.locator(".fault-enabled-switch input")).toBeChecked();
-  await row.locator(".fault-enabled-switch input").uncheck();
-  await dialog
-    .getByRole("button", { name: "Salva modifiche", exact: true })
-    .click();
+  await expect(row.locator(".fault-enabled-switch input")).not.toBeChecked();
+  const createdName = `Problema inline ${Date.now()}`;
+  const searchInput = dialog.locator(".fault-search input");
+  await searchInput.fill(createdName);
+  await expect(addFault).toBeEnabled();
+  await addFault.click();
+  await expect(searchInput).toHaveValue("");
+  const createdRow = dialog.locator(".fault-manager-row").filter({
+    hasText: createdName,
+  });
+  await expect(createdRow).toBeVisible();
+  await createdRow.locator(".fault-name-button").dblclick();
+  const createdInlineName = dialog.locator(".fault-inline-name");
+  await createdInlineName.fill(`${createdName} modificato`);
+  await createdInlineName.press("Enter");
+  await expect(
+    dialog.locator(".fault-manager-row").filter({
+      hasText: `${createdName} modificato`,
+    }),
+  ).toBeVisible();
+  await dialog.locator(".dialog-actions button").click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByLabel("Display rotto", { exact: true })).toHaveCount(
     0,
   );
   await page.reload();
   await openStep(page, 1);
+  await chooseBusinessOption(page, "Marca", "Apple");
+  await chooseBusinessOption(page, "Modello", "iPhone 13");
   await expect(page.getByLabel("Display rotto", { exact: true })).toHaveCount(
     0,
   );

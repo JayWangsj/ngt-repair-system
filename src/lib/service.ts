@@ -117,10 +117,71 @@ async function requiredPartLines(tx: Tx, items: SnapshotItem[]) {
   return [...quantities.values()];
 }
 
-function partsMissing(
-  lines: { quantity: number; product: { stockQuantity: number } }[],
+const reservationStatuses = [
+  "RECEIVED",
+  "DIAGNOSING",
+  "WAITING_APPROVAL",
+  "REPAIRING",
+  "PARTS_MISSING",
+  "REWORKING",
+] as const;
+
+async function newLinesNeedParts(
+  tx: Tx,
+  lines: { quantity: number; product: { id: string; stockQuantity: number } }[],
+  excludeOrderId?: string,
 ) {
-  return lines.some((line) => line.product.stockQuantity < line.quantity);
+  if (!lines.length) return false;
+  const reservations = await tx.workOrderProduct.findMany({
+    where: {
+      productId: { in: lines.map((line) => line.product.id) },
+      kind: "REPAIR_PART",
+      consumedAt: null,
+      ...(excludeOrderId ? { orderId: { not: excludeOrderId } } : {}),
+      order: { status: { in: [...reservationStatuses] } },
+    },
+    select: { productId: true, quantity: true },
+  });
+  const reserved = new Map<string, number>();
+  for (const line of reservations)
+    reserved.set(
+      line.productId,
+      (reserved.get(line.productId) ?? 0) + line.quantity,
+    );
+  return lines.some(
+    (line) =>
+      line.quantity >
+      Math.max(
+        0,
+        line.product.stockQuantity - (reserved.get(line.product.id) ?? 0),
+      ),
+  );
+}
+
+async function orderNeedsParts(tx: Tx, orderId: string) {
+  const target = await tx.workOrderProduct.findMany({
+    where: { orderId, kind: "REPAIR_PART", consumedAt: null },
+    select: { productId: true },
+  });
+  if (!target.length) return false;
+  const lines = await tx.workOrderProduct.findMany({
+    where: {
+      productId: { in: target.map((line) => line.productId) },
+      kind: "REPAIR_PART",
+      consumedAt: null,
+      order: { status: { in: [...reservationStatuses] } },
+    },
+    include: { product: true },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  const allocated = new Map<string, number>();
+  for (const line of lines) {
+    const total = (allocated.get(line.productId) ?? 0) + line.quantity;
+    allocated.set(line.productId, total);
+    if (line.orderId === orderId && total > line.product.stockQuantity)
+      return true;
+  }
+  return false;
 }
 
 async function refreshPartStatuses(tx: Tx, actor: Actor, productId: string) {
@@ -132,11 +193,7 @@ async function refreshPartStatuses(tx: Tx, actor: Actor, productId: string) {
     include: { products: { include: { product: true } } },
   });
   for (const order of orders) {
-    const next = partsMissing(
-      order.products.filter(
-        (line) => line.kind === "REPAIR_PART" && !line.consumedAt,
-      ),
-    )
+    const next = (await orderNeedsParts(tx, order.id))
       ? "PARTS_MISSING"
       : "REPAIRING";
     if (next === order.status) continue;
@@ -371,9 +428,7 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
     const requiredParts = await requiredPartLines(tx, items);
     const initialStatus = diagnostic
       ? "DIAGNOSING"
-      : requiredParts.some(
-            ({ product, quantity }) => product.stockQuantity < quantity,
-          )
+      : (await newLinesNeedParts(tx, requiredParts))
         ? "PARTS_MISSING"
         : "REPAIRING";
     const quote = settlement(items, {
@@ -702,6 +757,13 @@ export async function completeInspection(
         final: item.final,
       })),
     });
+    for (const productId of new Set([
+      ...order.products
+        .filter((line) => line.kind === "REPAIR_PART" && !line.consumedAt)
+        .map((line) => line.productId),
+      ...requiredParts.map((line) => line.product.id),
+    ]))
+      await refreshPartStatuses(tx, actor, productId);
   });
 }
 export async function updateDueDate(
@@ -791,9 +853,7 @@ export async function replaceQuote(
       where: { orderId: id, kind: "REPAIR_PART", consumedAt: null },
     });
     const requiredParts = await requiredPartLines(tx, items);
-    const nextStatus = requiredParts.some(
-      ({ product, quantity }) => product.stockQuantity < quantity,
-    )
+    const nextStatus = (await newLinesNeedParts(tx, requiredParts, id))
       ? "PARTS_MISSING"
       : "REPAIRING";
     const quoteStatus =
@@ -832,6 +892,13 @@ export async function replaceQuote(
           note: "",
         },
       });
+    for (const productId of new Set([
+      ...order.products
+        .filter((line) => line.kind === "REPAIR_PART" && !line.consumedAt)
+        .map((line) => line.productId),
+      ...requiredParts.map((line) => line.product.id),
+    ]))
+      await refreshPartStatuses(tx, actor, productId);
   });
 }
 export async function confirmQuote(
@@ -848,7 +915,7 @@ export async function confirmQuote(
     });
     if (originalOrderLocked(order))
       throw new BusinessError("La scheda è chiusa.");
-    const nextStatus = partsMissing(order.products)
+    const nextStatus = (await orderNeedsParts(tx, id))
       ? "PARTS_MISSING"
       : "REPAIRING";
     await tx.workOrder.update({
@@ -1082,7 +1149,7 @@ export async function changeStatus(
       throw new BusinessError("Usa l'operazione post-vendita dedicata.");
     assertTransition(order.status, data.status);
 
-    if (data.status === "REPAIRING" && partsMissing(order.products))
+    if (data.status === "REPAIRING" && (await orderNeedsParts(tx, id)))
       throw new BusinessError(
         "Ricambi insufficienti: rifornisci il magazzino prima di avviare la riparazione.",
       );
@@ -1110,6 +1177,13 @@ export async function changeStatus(
           : {}),
       },
     });
+    if (data.status === "CANCELLED")
+      for (const productId of new Set(
+        order.products
+          .filter((line) => line.kind === "REPAIR_PART" && !line.consumedAt)
+          .map((line) => line.productId),
+      ))
+        await refreshPartStatuses(tx, actor, productId);
     await tx.statusHistory.create({
       data: {
         orderId: id,
@@ -1302,6 +1376,8 @@ async function consumeWorkOrderProducts(
       data: { consumedAt },
     });
   }
+  for (const productId of new Set(lines.map((line) => line.productId)))
+    await refreshPartStatuses(tx, actor, productId);
 }
 
 export async function createProduct(actorInput: Actor, raw: unknown) {
@@ -1549,6 +1625,8 @@ export async function addWorkOrderProduct(
       kind: data.kind,
       quantity: data.quantity,
     });
+    if (data.kind === "REPAIR_PART")
+      await refreshPartStatuses(tx, actor, product.id);
     return line;
   });
 }
@@ -1573,6 +1651,8 @@ export async function removeWorkOrderProduct(
       lineId,
       productId: line.productId,
     });
+    if (line.kind === "REPAIR_PART")
+      await refreshPartStatuses(tx, actor, line.productId);
   });
 }
 

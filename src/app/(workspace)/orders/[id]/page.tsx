@@ -80,41 +80,61 @@ export default async function Detail({
     }),
   ]);
   if (!order) notFound();
-  const [rules, products, customers, faultOptions, productCategories] =
-    await Promise.all([
-      db.priceRule.findMany({ where: { enabled: true } }),
-      db.product.findMany({
-        where: { enabled: true },
-        orderBy: [{ favorite: "desc" }, { name: "asc" }],
-      }),
-      db.customer.findMany({
-        where: { deletedAt: null },
-        select: {
-          id: true,
-          name: true,
-          phone: true,
-          phones: { select: { phone: true } },
+  const [
+    rules,
+    products,
+    customers,
+    faultOptions,
+    productCategories,
+    reservations,
+  ] = await Promise.all([
+    db.priceRule.findMany({ where: { enabled: true } }),
+    db.product.findMany({
+      where: { enabled: true },
+      orderBy: [{ favorite: "desc" }, { name: "asc" }],
+    }),
+    db.customer.findMany({
+      where: { deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        phones: { select: { phone: true } },
+      },
+      orderBy: { name: "asc" },
+    }),
+    db.faultOption.findMany({
+      select: {
+        id: true,
+        category: true,
+        name: true,
+        note: true,
+        hidden: true,
+        sortOrder: true,
+        _count: { select: { orders: true } },
+      },
+      orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
+    }),
+    db.inventoryCategory.findMany({
+      where: { deletedAt: null },
+      select: { id: true, name: true, repairOnly: true },
+      orderBy: { name: "asc" },
+    }),
+    db.workOrderProduct.groupBy({
+      by: ["productId"],
+      where: {
+        kind: "REPAIR_PART",
+        consumedAt: null,
+        order: {
+          status: { notIn: ["COMPLETED", "REFUNDED", "CANCELLED"] },
         },
-        orderBy: { name: "asc" },
-      }),
-      db.faultOption.findMany({
-        select: {
-          id: true,
-          category: true,
-          name: true,
-          note: true,
-          hidden: true,
-          sortOrder: true,
-          _count: { select: { orders: true } },
-        },
-        orderBy: [{ category: "asc" }, { sortOrder: "asc" }],
-      }),
-      db.inventoryCategory.findMany({
-        where: { deletedAt: null },
-        select: { id: true, name: true, repairOnly: true },
-        orderBy: { name: "asc" },
-      }),
-    ]);
+      },
+      _sum: { quantity: true },
+    }),
+  ]);
+  const reservedByProduct = new Map(
+    reservations.map((entry) => [entry.productId, entry._sum.quantity ?? 0]),
+  );
   const totals = settlement(order.items, order);
   const remaining = balance(order.items, order.payments, order);
   const receivedTotal = order.payments.reduce(
@@ -471,6 +491,12 @@ export default async function Detail({
                     name: product.name,
                     category: product.category,
                     stock: product.stockQuantity,
+                    reserved: reservedByProduct.get(product.id) ?? 0,
+                    available: Math.max(
+                      0,
+                      product.stockQuantity -
+                        (reservedByProduct.get(product.id) ?? 0),
+                    ),
                   }))}
                   productCategories={productCategories}
                 />

@@ -200,7 +200,9 @@ export function SelectDropdown({
       onCustom
     ) {
       event.preventDefault();
-      onCustom(query.trim());
+      const next = query.trim();
+      close({ commit: false });
+      onCustom(next);
     }
   }
   useEffect(() => {

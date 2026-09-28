@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { GripVertical, Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { GripVertical, Plus, Search, Trash2 } from "lucide-react";
 import {
   deleteFaultAction,
   reorderFaultsAction,
@@ -10,7 +10,7 @@ import {
 } from "@/app/actions";
 import { categories, type Category } from "@/lib/catalog";
 import { useLanguage, useMessages } from "./language";
-import { Field, FormDialog } from "./forms";
+import { FormDialog } from "./forms";
 import { Button } from "./ui/button";
 
 export type FaultCatalogItem = {
@@ -23,11 +23,13 @@ export type FaultCatalogItem = {
   usageCount: number;
 };
 
-type Draft = FaultCatalogItem & { created?: boolean };
+function normalized(value: string) {
+  return value.trim().toLocaleLowerCase("it");
+}
 
 function similarity(a: string, b: string) {
-  const left = a.trim().toLocaleLowerCase("it");
-  const right = b.trim().toLocaleLowerCase("it");
+  const left = normalized(a);
+  const right = normalized(b);
   if (!left || !right) return 0;
   const table = Array.from({ length: left.length + 1 }, (_, i) =>
     Array.from({ length: right.length + 1 }, (_, j) => (i ? (j ? 0 : i) : j)),
@@ -49,9 +51,7 @@ export function findSimilarFault(
   items: Pick<FaultCatalogItem, "id" | "name">[],
 ) {
   const exact = items.find(
-    (item) =>
-      item.name.trim().toLocaleLowerCase("it") ===
-      name.trim().toLocaleLowerCase("it"),
+    (item) => normalized(item.name) === normalized(name),
   );
   if (exact) return { kind: "exact" as const, item: exact };
   const similar = items
@@ -76,14 +76,17 @@ export function FaultCatalogManager({
   const it = useMessages();
   const { locale } = useLanguage();
   const router = useRouter();
-  const [open, setOpen] = useState(false);
   const category = initialCategory;
-  const [drafts, setDrafts] = useState<Draft[]>(items);
+  const [open, setOpen] = useState(false);
+  const [drafts, setDrafts] = useState(items);
   const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState<Draft | null>(null);
+  const [editingId, setEditingId] = useState("");
+  const [editingName, setEditingName] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
   const [dragId, setDragId] = useState("");
+  const savingName = useRef(false);
+  const cancellingName = useRef(false);
   const scoped = useMemo(
     () =>
       drafts
@@ -92,98 +95,160 @@ export function FaultCatalogManager({
     [category, drafts],
   );
   const visible = scoped.filter((item) =>
-    `${item.name} ${item.note}`
+    item.name
       .toLocaleLowerCase("it")
-      .includes(query.toLocaleLowerCase("it")),
+      .includes(query.trim().toLocaleLowerCase("it")),
   );
+  const canAdd = !!query.trim() && !pending && visible.length === 0;
+
+  function publish(next: FaultCatalogItem[]) {
+    setDrafts(next);
+    onChanged?.(next);
+    router.refresh();
+  }
 
   function openManager() {
     setDrafts(items);
     setQuery("");
-    setEditing(null);
+    setEditingId("");
     setError("");
     setOpen(true);
   }
 
   function closeManager() {
-    setDrafts(items);
-    setQuery("");
-    setEditing(null);
+    setEditingId("");
     setError("");
     setOpen(false);
   }
 
-  function move(id: string, delta: number) {
-    const index = scoped.findIndex((item) => item.id === id);
-    const target = index + delta;
-    if (index < 0 || target < 0 || target >= scoped.length) return;
-    const reordered = [...scoped];
-    [reordered[index], reordered[target]] = [
-      reordered[target],
-      reordered[index],
-    ];
-    setDrafts((current) => [
-      ...current.filter((item) => item.category !== category),
-      ...reordered.map((item, sortOrder) => ({ ...item, sortOrder })),
-    ]);
-  }
-
-  async function saveAll() {
+  async function createFault() {
+    const name = query.trim();
+    if (!name || !canAdd) return;
+    if (scoped.some((item) => normalized(item.name) === normalized(name))) {
+      setError(it.faultAlreadyExists);
+      return;
+    }
     setPending(true);
     setError("");
-    try {
-      const saved: FaultCatalogItem[] = [];
-      for (const draft of drafts) {
-        let next: FaultCatalogItem = draft;
-        const original = items.find((item) => item.id === draft.id);
-        if (
-          draft.created ||
-          !original ||
-          draft.name !== original.name ||
-          draft.note !== original.note ||
-          draft.hidden !== original.hidden
-        ) {
-          const result = await saveFaultAction(
-            draft.created ? null : draft.id,
-            {
-              category: draft.category,
-              name: draft.name,
-              note: draft.note,
-              hidden: draft.hidden,
-            },
-          );
-          if (!result.ok) throw new Error(result.error);
-          if (draft.created && result.id) {
-            next = {
-              id: result.id,
-              category: draft.category,
-              name: draft.name,
-              note: draft.note,
-              hidden: draft.hidden,
-              sortOrder: draft.sortOrder,
-              usageCount: draft.usageCount,
-            };
-          }
-        }
-        saved.push(next);
-      }
-      const ids = saved
-        .filter((item) => item.category === category)
-        .sort((a, b) => a.sortOrder - b.sortOrder)
-        .map((item) => item.id);
-      if (ids.length) {
-        const result = await reorderFaultsAction(category, ids);
-        if (!result.ok) throw new Error(result.error);
-      }
-      setDrafts(saved);
-      onChanged?.(saved);
-      setOpen(false);
-      router.refresh();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : it.connectionError);
-    } finally {
-      setPending(false);
+    const result = await saveFaultAction(null, {
+      category,
+      name,
+      note: "",
+      hidden: false,
+    });
+    setPending(false);
+    if (!result.ok || !result.id)
+      return setError(result.ok ? it.connectionError : result.error);
+    const next = [
+      ...drafts,
+      {
+        id: result.id,
+        category,
+        name,
+        note: "",
+        hidden: false,
+        sortOrder: scoped.length,
+        usageCount: 0,
+      },
+    ];
+    setQuery("");
+    publish(next);
+  }
+
+  async function saveName(item: FaultCatalogItem) {
+    if (cancellingName.current) {
+      cancellingName.current = false;
+      return;
     }
+    if (savingName.current) return;
+    const name = editingName.trim();
+    if (!name) return setError(it.validationError);
+    if (
+      scoped.some(
+        (candidate) =>
+          candidate.id !== item.id &&
+          normalized(candidate.name) === normalized(name),
+      )
+    )
+      return setError(it.faultAlreadyExists);
+    if (name === item.name) return setEditingId("");
+    savingName.current = true;
+    setPending(true);
+    setError("");
+    const result = await saveFaultAction(item.id, { ...item, name });
+    savingName.current = false;
+    setPending(false);
+    if (!result.ok) return setError(result.error);
+    setEditingId("");
+    publish(
+      drafts.map((candidate) =>
+        candidate.id === item.id ? { ...candidate, name } : candidate,
+      ),
+    );
+  }
+
+  async function toggle(item: FaultCatalogItem) {
+    const previous = drafts;
+    const next = drafts.map((candidate) =>
+      candidate.id === item.id
+        ? { ...candidate, hidden: !candidate.hidden }
+        : candidate,
+    );
+    setDrafts(next);
+    setPending(true);
+    setError("");
+    const result = await saveFaultAction(item.id, {
+      ...item,
+      hidden: !item.hidden,
+    });
+    setPending(false);
+    if (!result.ok) {
+      setDrafts(previous);
+      setError(result.error);
+      return;
+    }
+    onChanged?.(next);
+    router.refresh();
+  }
+
+  async function remove(item: FaultCatalogItem) {
+    if (!window.confirm(it.permanentFaultDeleteConfirm)) return;
+    setPending(true);
+    setError("");
+    const result = await deleteFaultAction(item.id);
+    setPending(false);
+    if (!result.ok) return setError(result.error);
+    publish(drafts.filter((candidate) => candidate.id !== item.id));
+  }
+
+  async function move(id: string, targetId: string) {
+    const from = scoped.findIndex((item) => item.id === id);
+    const to = scoped.findIndex((item) => item.id === targetId);
+    if (from < 0 || to < 0 || from === to) return;
+    const reordered = [...scoped];
+    const [moved] = reordered.splice(from, 1);
+    reordered.splice(to, 0, moved);
+    const previous = drafts;
+    const ordered = reordered.map((item, sortOrder) => ({
+      ...item,
+      sortOrder,
+    }));
+    const next = [
+      ...drafts.filter((item) => item.category !== category),
+      ...ordered,
+    ];
+    setDrafts(next);
+    const result = await reorderFaultsAction(
+      category,
+      ordered.map((item) => item.id),
+    );
+    if (!result.ok) {
+      setDrafts(previous);
+      setError(result.error);
+      return;
+    }
+    onChanged?.(next);
+    router.refresh();
   }
 
   return (
@@ -201,219 +266,129 @@ export function FaultCatalogManager({
           )}
           onClose={closeManager}
         >
-          {editing ? (
-            <form
-              className="dialog-form"
-              data-form-dialog-body
-              onSubmit={(event) => {
-                event.preventDefault();
-                const duplicate = drafts.find(
-                  (item) =>
-                    item.id !== editing.id &&
-                    item.category === editing.category &&
-                    item.name.trim().toLocaleLowerCase("it") ===
-                      editing.name.trim().toLocaleLowerCase("it"),
-                );
-                if (duplicate) return setError(it.faultAlreadyExists);
-                setDrafts((current) =>
-                  current.some((item) => item.id === editing.id)
-                    ? current.map((item) =>
-                        item.id === editing.id ? editing : item,
-                      )
-                    : [...current, editing],
-                );
-                setEditing(null);
-                setError("");
-              }}
-            >
-              <Field label={it.faultName}>
+          <div className="fault-manager" data-form-dialog-body>
+            <div className="catalog-toolbar fault-manager-toolbar">
+              <label className="fault-search">
+                <Search size={15} />
                 <input
-                  required
-                  maxLength={120}
-                  value={editing.name}
-                  onChange={(event) =>
-                    setEditing({ ...editing, name: event.target.value })
-                  }
+                  value={query}
+                  placeholder={it.faultSearch}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setError("");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      void createFault();
+                    }
+                  }}
                 />
-              </Field>
-              <Field label={it.faultCatalogNote}>
-                <textarea
-                  rows={3}
-                  maxLength={2000}
-                  value={editing.note}
-                  onChange={(event) =>
-                    setEditing({ ...editing, note: event.target.value })
-                  }
-                />
-              </Field>
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  checked={!editing.hidden}
-                  onChange={(event) =>
-                    setEditing({ ...editing, hidden: !event.target.checked })
-                  }
-                />
-                {it.showInNewOrder}
               </label>
-              {(() => {
-                const match = findSimilarFault(
-                  editing.name,
-                  drafts.filter(
-                    (item) =>
-                      item.id !== editing.id &&
-                      item.category === editing.category,
-                  ),
-                );
-                return match?.kind === "similar" ? (
-                  <p className="message warning">
-                    {it.similarFault}: {match.item.name}
-                  </p>
-                ) : null;
-              })()}
-              {error && <p className="message error">{error}</p>}
-              <div className="dialog-actions">
-                {editing.usageCount === 0 && !editing.created && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={async () => {
-                      if (!window.confirm(it.permanentFaultDeleteConfirm))
-                        return;
-                      const result = await deleteFaultAction(editing.id);
-                      if (!result.ok) return setError(result.error);
-                      setDrafts((current) =>
-                        current.filter(
-                          (candidate) => candidate.id !== editing.id,
-                        ),
-                      );
-                      setEditing(null);
-                    }}
-                  >
-                    <Trash2 size={15} /> {it.remove}
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setEditing(null)}
-                >
-                  {it.cancel}
-                </Button>
-                <Button>{editing.created ? it.addFault : it.save}</Button>
-              </div>
-            </form>
-          ) : (
-            <div className="fault-manager" data-form-dialog-body>
-              <div className="catalog-toolbar fault-manager-toolbar">
-                <label className="fault-search">
-                  <Search size={15} />
-                  <input
-                    value={query}
-                    placeholder={it.faultSearch}
-                    onChange={(e) => setQuery(e.target.value)}
-                  />
-                </label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    setEditing({
-                      id: `new-${crypto.randomUUID()}`,
-                      category,
-                      name: "",
-                      note: "",
-                      hidden: false,
-                      sortOrder: scoped.length,
-                      usageCount: 0,
-                      created: true,
-                    })
-                  }
-                >
-                  <Plus size={16} /> {it.addFault}
-                </Button>
-              </div>
-              <div className="fault-manager-list" role="table">
-                <div className="fault-manager-header" role="row">
-                  <span>{it.faultName}</span>
-                  <span>{it.statusLabel}</span>
-                  <span>{it.operation}</span>
-                </div>
-                {visible.map((item) => (
-                  <div
-                    className="fault-manager-row"
-                    key={item.id}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={() => {
-                      const from = scoped.findIndex(
-                        (candidate) => candidate.id === dragId,
-                      );
-                      const to = scoped.findIndex(
-                        (candidate) => candidate.id === item.id,
-                      );
-                      if (from >= 0 && to >= 0) move(dragId, to - from);
-                      setDragId("");
-                    }}
-                  >
-                    <span
-                      className="fault-drag-handle"
-                      draggable
-                      onDragStart={() => setDragId(item.id)}
-                    >
-                      <GripVertical size={16} aria-hidden="true" />
-                    </span>
-                    <strong>{item.name}</strong>
-                    <label className="fault-enabled-switch">
-                      <input
-                        type="checkbox"
-                        checked={!item.hidden}
-                        onChange={() =>
-                          setDrafts((current) =>
-                            current.map((candidate) =>
-                              candidate.id === item.id
-                                ? { ...candidate, hidden: !candidate.hidden }
-                                : candidate,
-                            ),
-                          )
-                        }
-                      />
-                      <span>
-                        {item.hidden ? it.disabledState : it.enabledState}
-                      </span>
-                    </label>
-                    <div className="fault-row-actions">
-                      <button
-                        type="button"
-                        aria-label={`${it.edit} ${item.name}`}
-                        onClick={() => setEditing(item)}
-                      >
-                        <Pencil size={15} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <p className="fault-drag-hint">{it.faultDragHint}</p>
-              {error && <p className="message error">{error}</p>}
-              <div className="dialog-actions">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={pending}
-                  onClick={closeManager}
-                >
-                  {it.cancel}
-                </Button>
-                <Button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => void saveAll()}
-                >
-                  {pending ? it.saving : it.saveChanges}
-                </Button>
-              </div>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!canAdd}
+                onClick={() => void createFault()}
+              >
+                <Plus size={16} /> {it.addFault}
+              </Button>
             </div>
-          )}
+            <div className="fault-manager-list" role="table">
+              <div className="fault-manager-header" role="row">
+                <span>{it.faultName}</span>
+                <span>{it.statusLabel}</span>
+              </div>
+              {visible.map((item) => (
+                <div
+                  className="fault-manager-row"
+                  key={item.id}
+                  onDragOver={(event) => event.preventDefault()}
+                  onDrop={() => {
+                    void move(dragId, item.id);
+                    setDragId("");
+                  }}
+                >
+                  <span
+                    className="fault-drag-handle"
+                    draggable
+                    onDragStart={() => setDragId(item.id)}
+                  >
+                    <GripVertical size={16} aria-hidden="true" />
+                  </span>
+                  {editingId === item.id ? (
+                    <input
+                      className="fault-inline-name"
+                      autoFocus
+                      maxLength={120}
+                      value={editingName}
+                      onChange={(event) => setEditingName(event.target.value)}
+                      onBlur={() => void saveName(item)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void saveName(item);
+                        }
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          cancellingName.current = true;
+                          setEditingName(item.name);
+                          setEditingId("");
+                          setError("");
+                        }
+                      }}
+                    />
+                  ) : (
+                    <button
+                      type="button"
+                      className="fault-name-button"
+                      onDoubleClick={() => {
+                        cancellingName.current = false;
+                        setEditingId(item.id);
+                        setEditingName(item.name);
+                        setError("");
+                      }}
+                    >
+                      {item.name}
+                    </button>
+                  )}
+                  <label className="fault-enabled-switch">
+                    <input
+                      type="checkbox"
+                      checked={!item.hidden}
+                      disabled={pending}
+                      onChange={() => void toggle(item)}
+                    />
+                    <span>
+                      {item.hidden ? it.disabledState : it.enabledState}
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    className="fault-delete-button"
+                    aria-label={`${it.remove} ${item.name}`}
+                    disabled={pending}
+                    onClick={() => void remove(item)}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <p className="fault-drag-hint">{it.faultDragHint}</p>
+            {error && <p className="message error">{error}</p>}
+            <div className="dialog-actions">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending}
+                onClick={closeManager}
+              >
+                {it.close}
+              </Button>
+            </div>
+          </div>
         </FormDialog>
       )}
     </>

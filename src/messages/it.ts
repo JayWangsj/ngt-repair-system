@@ -332,6 +332,8 @@ export const it = {
   saved: "Operazione completata.",
   noPriceResults: "Nessun preventivo trovato.",
   noMatches: "Nessun risultato corrispondente.",
+  noMatchesCreateHint:
+    "Nessun risultato. Usa «+{action}» a destra per crearne uno.",
   cancel: "Annulla",
   close: "Chiudi",
   search: "Cerca",

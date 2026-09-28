@@ -8,7 +8,13 @@ import {
   checkoutWorkOrderAction,
   removeWorkOrderProductAction,
 } from "@/app/actions";
-import { cents, creatablePaymentMethods, decimal, money } from "@/lib/domain";
+import {
+  cents,
+  creatablePaymentMethods,
+  decimal,
+  money,
+  type StatusMutationSnapshot,
+} from "@/lib/domain";
 import { useMessages } from "./language";
 import { Button } from "./ui/button";
 import { OrderDetailCard } from "./order-detail-ui";
@@ -195,7 +201,7 @@ export function WorkOrderCheckout({
   remaining: number;
   customerName: string;
   onClose?: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (order: StatusMutationSnapshot) => void;
   requireDelivery?: boolean;
 }) {
   const it = useMessages();
@@ -243,13 +249,14 @@ export function WorkOrderCheckout({
         override: data.get("override") === "on",
       });
       if (!result.ok) return setError(result.error);
+      if (!result.data) return setError(it.connectionError);
       const delivered = submittedCents === remaining;
       if (!delivered) {
         setRequestId(crypto.randomUUID());
         setAmount(decimal(remaining - submittedCents));
       }
       onClose?.();
-      onSuccess?.();
+      onSuccess?.(result.data);
       router.refresh();
     } catch {
       setError(it.connectionError);

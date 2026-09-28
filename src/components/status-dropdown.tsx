@@ -12,7 +12,11 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { statusAction } from "@/app/actions";
-import { transitions, type OrderStatus } from "@/lib/domain";
+import {
+  transitions,
+  type OrderStatus,
+  type StatusMutationSnapshot,
+} from "@/lib/domain";
 import { useMessages } from "./language";
 import { Field, FormDialog } from "./forms";
 import { WorkOrderCheckoutDialog } from "./work-order-products";
@@ -158,37 +162,38 @@ export function StatusDropdown({
 }: {
   order: StatusDropdownOrder;
   active?: boolean;
-  onSettled?: () => void;
+  onSettled?: (order: StatusDropdownOrder) => void;
 }) {
   const it = useMessages();
   const router = useRouter();
   const [pending, setPending] = useState(false);
-  const [currentStatus, setCurrentStatus] = useState(order.status);
+  const [currentOrder, setCurrentOrder] = useState(order);
   const [error, setError] = useState("");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
-  const choices = transitions[currentStatus].filter(
+  const choices = transitions[currentOrder.status].filter(
     (status) => !["REWORKING", "REFUNDED"].includes(status),
   );
-  function settled(status: OrderStatus) {
-    setCurrentStatus(status);
+  function settled(snapshot: StatusMutationSnapshot) {
+    const nextOrder = { ...currentOrder, ...snapshot };
+    setCurrentOrder(nextOrder);
     setError("");
-    onSettled?.();
+    onSettled?.(nextOrder);
     router.refresh();
   }
   if (!active)
     return (
-      <span className={`badge status-${currentStatus.toLowerCase()}`}>
+      <span className={`badge status-${currentOrder.status.toLowerCase()}`}>
         <span />
-        {it.status[currentStatus]}
+        {it.status[currentOrder.status]}
       </span>
     );
   return (
     <div className="inline-order-control">
       <StatusSelect
-        value={currentStatus}
-        label={it.status[currentStatus]}
+        value={currentOrder.status}
+        label={it.status[currentOrder.status]}
         options={choices.map((status) => ({
           value: status,
           label: it.status[status],
@@ -197,8 +202,6 @@ export function StatusDropdown({
         onChange={(next) => {
           if (next === "COMPLETED") return setCheckoutOpen(true);
           if (next === "CANCELLED") return setCancelOpen(true);
-          const previous = currentStatus;
-          setCurrentStatus(next);
           void (async () => {
             setPending(true);
             try {
@@ -207,13 +210,10 @@ export function StatusDropdown({
                 note: "",
                 pickedUpBy: "",
               });
-              if (!result.ok) {
-                setCurrentStatus(previous);
-                return setError(result.error);
-              }
-              settled(next);
+              if (!result.ok) return setError(result.error);
+              if (!result.data) return setError(it.connectionError);
+              settled(result.data);
             } catch {
-              setCurrentStatus(previous);
               setError(it.connectionError);
             } finally {
               setPending(false);
@@ -227,13 +227,13 @@ export function StatusDropdown({
       <WorkOrderCheckoutDialog
         open={checkoutOpen}
         onClose={() => setCheckoutOpen(false)}
-        onSuccess={() => settled("COMPLETED")}
+        onSuccess={settled}
         requireDelivery
         orderId={order.id}
-        due={order.due}
-        paid={order.paid}
-        remaining={order.balance}
-        customerName={order.customerName}
+        due={currentOrder.due}
+        paid={currentOrder.paid}
+        remaining={currentOrder.balance}
+        customerName={currentOrder.customerName}
       />
       {cancelOpen && (
         <FormDialog
@@ -255,8 +255,9 @@ export function StatusDropdown({
                     pickedUpBy: "",
                   });
                   if (!result.ok) return setError(result.error);
+                  if (!result.data) return setError(it.connectionError);
                   setCancelOpen(false);
-                  settled("CANCELLED");
+                  settled(result.data);
                 } catch {
                   setError(it.connectionError);
                 } finally {

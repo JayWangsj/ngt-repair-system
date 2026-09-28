@@ -1122,7 +1122,7 @@ export async function changeStatus(
         payments: true,
       },
     });
-    if (order.status === data.status) return;
+    if (order.status === data.status) return order;
     if (["REWORKING", "REFUNDED"].includes(data.status))
       throw new BusinessError("Usa l'operazione post-vendita dedicata.");
     assertTransition(order.status, data.status);
@@ -1198,6 +1198,10 @@ export async function changeStatus(
         balance: decimal(balance(order.items, order.payments, order)),
       },
     );
+    return tx.workOrder.findUniqueOrThrow({
+      where: { id },
+      include: { items: true, products: true, payments: true },
+    });
   });
 }
 export async function savePriceRule(
@@ -1652,7 +1656,10 @@ export async function checkoutWorkOrder(
     if (previousCheckout) {
       if (previousCheckout.entityId !== orderId)
         throw new BusinessError("Richiesta di pagamento già utilizzata.");
-      return tx.workOrder.findUniqueOrThrow({ where: { id: orderId } });
+      return tx.workOrder.findUniqueOrThrow({
+        where: { id: orderId },
+        include: { items: true, products: true, payments: true },
+      });
     }
     const existing = await tx.payment.findUnique({
       where: { requestId: data.requestId },
@@ -1660,7 +1667,10 @@ export async function checkoutWorkOrder(
     if (existing) {
       if (existing.orderId !== orderId || cents(existing.amount) !== amount)
         throw new BusinessError("Richiesta di pagamento già utilizzata.");
-      return tx.workOrder.findUniqueOrThrow({ where: { id: orderId } });
+      return tx.workOrder.findUniqueOrThrow({
+        where: { id: orderId },
+        include: { items: true, products: true, payments: true },
+      });
     }
     const order = await tx.workOrder.findUniqueOrThrow({
       where: { id: orderId },
@@ -1738,7 +1748,10 @@ export async function checkoutWorkOrder(
       });
     }
     if (remaining - amount > 0)
-      return tx.workOrder.findUniqueOrThrow({ where: { id: orderId } });
+      return tx.workOrder.findUniqueOrThrow({
+        where: { id: orderId },
+        include: { items: true, products: true, payments: true },
+      });
     assertDelivery(remaining - amount);
     const deliveredAt = data.pickedUpAt
       ? new Date(data.pickedUpAt)
@@ -1773,7 +1786,10 @@ export async function checkoutWorkOrder(
       deliveredAt: deliveredAt.toISOString(),
       pickedUpBy: data.pickedUpBy,
     });
-    return tx.workOrder.findUniqueOrThrow({ where: { id: orderId } });
+    return tx.workOrder.findUniqueOrThrow({
+      where: { id: orderId },
+      include: { items: true, products: true, payments: true },
+    });
   });
 }
 

@@ -3325,13 +3325,28 @@ details[open] > summary {
 .fault-manager-trigger:focus-visible svg {
   transform: translateX(4px);
 }
-.fault-manager-toolbar .button:disabled,
+.fault-manager-toolbar .button:disabled {
+  border-color: #d8dddb;
+  background: #eef0ef;
+  box-shadow: none;
+  color: #9ca3a0;
+  cursor: not-allowed;
+  opacity: 1;
+  transition: none;
+  transform: none;
+}
+.fault-manager-toolbar .button:disabled:hover,
+.fault-manager-toolbar .button:disabled:active {
+  border-color: #d8dddb;
+  background: #eef0ef;
+  box-shadow: none;
+  color: #9ca3a0;
+  transform: none;
+}
 .order-product-form .button:disabled {
   cursor: not-allowed;
   transform: none;
 }
-.fault-manager-toolbar .button:disabled:hover,
-.fault-manager-toolbar .button:disabled:active,
 .order-product-form .button:disabled:hover,
 .order-product-form .button:disabled:active {
   transform: none;

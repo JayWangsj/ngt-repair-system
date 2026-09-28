@@ -327,17 +327,14 @@ export function SelectDropdown({
                 onPointerDown={(event) => event.preventDefault()}
                 onClick={(event) => {
                   event.stopPropagation();
-                  if (open) {
-                    setQuery("");
-                    setActive(0);
-                    setOpen(false);
-                    setPresent(false);
-                    onQueryChange?.("");
-                  } else {
-                    setInternalValue("");
-                    onChange?.("");
-                  }
-                  if (open) search.current?.focus();
+                  setQuery("");
+                  setInternalValue("");
+                  setActive(0);
+                  setOpen(false);
+                  setPresent(false);
+                  onQueryChange?.("");
+                  onChange?.("");
+                  requestAnimationFrame(() => search.current?.focus());
                 }}
               >
                 <X size={14} aria-hidden="true" />
@@ -479,7 +476,11 @@ export function SelectDropdown({
                 ))}
               {!loading && !visible.length && (
                 <div className="business-select-empty">
-                  <strong>{emptyText}</strong>
+                  <strong>
+                    {onCustom && customLabel
+                      ? it.noMatchesCreateHint.replace("{action}", customLabel)
+                      : emptyText}
+                  </strong>
                 </div>
               )}
             </div>

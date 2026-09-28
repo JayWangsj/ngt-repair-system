@@ -179,6 +179,9 @@ export function NewOrderWizard({
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [newCustomerPending, setNewCustomerPending] = useState(false);
+  const newCustomerNameInput = useRef<HTMLInputElement>(null);
+  const newCustomerPhoneInput = useRef<HTMLInputElement>(null);
+  const newCustomerFocus = useRef<"name" | "phone">("phone");
   const [duplicateCustomer, setDuplicateCustomer] =
     useState<CustomerDetail>(null);
   const [deviceId, setDeviceId] = useState("");
@@ -297,6 +300,18 @@ export function NewOrderWizard({
     setModel("");
     setImei("");
   }
+  function clearCustomerSelection() {
+    setCustomerId("");
+    setCustomer(null);
+    setCustomerQuery("");
+    setChoosingCustomer(true);
+    setNewCustomerName("");
+    setNewCustomerPhone("");
+    setDuplicateCustomer(null);
+    clearDevice();
+    setSelectedStep(0);
+    setExpandedStep(0);
+  }
   function matchCustomerDevice(
     nextCategory: Category,
     nextBrand: string,
@@ -333,9 +348,7 @@ export function NewOrderWizard({
   async function selectCustomer(id: string) {
     const selected = customers.find((candidate) => candidate.id === id);
     if (!selected) {
-      setCustomer(null);
-      clearDevice();
-      return;
+      return clearCustomerSelection();
     }
     const detail = await lookupCustomerAction(selected.phone);
     if (!detail) return;
@@ -352,6 +365,7 @@ export function NewOrderWizard({
     setCustomerQuery(value);
     setNewCustomerName(looksLikePhone ? "" : value);
     setNewCustomerPhone(looksLikePhone ? value : "");
+    newCustomerFocus.current = looksLikePhone ? "name" : "phone";
     setDuplicateCustomer(null);
     setNewCustomer(true);
   }
@@ -376,6 +390,7 @@ export function NewOrderWizard({
       if (!created) return setError(it.connectionError);
       setCustomerId(created.id);
       setCustomer(created);
+      setChoosingCustomer(false);
       setCustomerQuery("");
       setNewCustomer(false);
       clearDevice();
@@ -438,6 +453,18 @@ export function NewOrderWizard({
     validQuote ? "completed" : validStep2 ? "in-progress" : "not-started",
     safeCents(deposit) > 0 ? "completed" : "not-started",
   ] as const;
+  useEffect(() => {
+    if (!newCustomer) return;
+    const frame = requestAnimationFrame(() => {
+      const input =
+        newCustomerFocus.current === "name"
+          ? newCustomerNameInput.current
+          : newCustomerPhoneInput.current;
+      input?.focus();
+      input?.select();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [newCustomer]);
   useEffect(() => {
     const values = [validCustomer, validStep2, validQuote];
     const completedIndex = values.findIndex(
@@ -511,6 +538,7 @@ export function NewOrderWizard({
                 <SearchableCombobox
                   value={customerId || customerQuery}
                   onChange={(id) => void selectCustomer(id)}
+                  onQueryChange={setCustomerQuery}
                   ariaLabel={it.searchCustomer}
                   placeholder={it.customerSearchPlaceholder}
                   searchPlaceholder={it.customerSearchPlaceholder}
@@ -518,6 +546,7 @@ export function NewOrderWizard({
                   autoFocusQuery={choosingCustomer ? customer?.name : undefined}
                   customLabel={it.addCustomer}
                   onCustom={openCustomerDialog}
+                  clearable
                   groups={[
                     {
                       options: customers.map((entry) => ({
@@ -543,7 +572,7 @@ export function NewOrderWizard({
                   type="button"
                   variant="ghost"
                   onClick={() => {
-                    setChoosingCustomer(true);
+                    clearCustomerSelection();
                   }}
                 >
                   <X size={15} /> {it.reselect}
@@ -1017,6 +1046,7 @@ export function NewOrderWizard({
           >
             <Field label={`${it.name} *`}>
               <input
+                ref={newCustomerNameInput}
                 required
                 maxLength={120}
                 value={newCustomerName}
@@ -1025,6 +1055,7 @@ export function NewOrderWizard({
             </Field>
             <Field label={`${it.phone} *`}>
               <input
+                ref={newCustomerPhoneInput}
                 required
                 type="tel"
                 maxLength={30}

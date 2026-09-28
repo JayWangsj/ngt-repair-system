@@ -10,6 +10,13 @@ export const statuses = [
   "CANCELLED",
 ] as const;
 export type OrderStatus = (typeof statuses)[number];
+export type StatusMutationSnapshot = {
+  status: OrderStatus;
+  due: number;
+  paid: number;
+  balance: number;
+  pickedUpAt: string | null;
+};
 export type Actor = { id: string; name: string; role: "OWNER" | "STAFF" };
 export class BusinessError extends Error {}
 export function cents(value: string | { toString(): string }): number {

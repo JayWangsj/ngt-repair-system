@@ -466,7 +466,8 @@ test("repair list exposes month, status, due-date and payment controls", async (
     .locator(".status-dropdown-menu")
     .getByRole("option", { name: "Ricambio mancante", exact: true })
     .click();
-  await expect(status).toHaveClass(/status-parts_missing/);
+  await expect(row.locator(".badge")).toContainText("Ricambio mancante");
+  await page.reload();
   await expect(row.locator(".badge")).toContainText("Ricambio mancante");
   await row.click();
   await expect(
@@ -504,6 +505,9 @@ test("repair list delivery uses the shared checkout and refreshes the row", asyn
   await expect(row.locator(".badge")).toContainText("Consegnato");
   await expect(row).toContainText("Consegnato");
   await expect(row).toContainText("0,00 €");
+  await page.reload();
+  await expect(row.locator(".badge")).toContainText("Consegnato");
+  await expect(row).toContainText("0,00 €");
 });
 
 test("repair list cancellation uses the shared confirmation and locks the row", async ({
@@ -529,6 +533,25 @@ test("repair list cancellation uses the shared confirmation and locks the row", 
   await expect(row).toContainText("Annullato");
   await expect(row).toContainText("0,00 €");
   await expect(row.getByLabel("Incassato", { exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(row.locator(".badge")).toContainText("Annullato");
+  await expect(row).toContainText("0,00 €");
+});
+
+test("repair detail cancellation persists after a reload", async ({ page }) => {
+  await fillOrder(page);
+  await save(page);
+  await page.locator(".detail-status .status-dropdown-trigger").click();
+  await page.getByRole("option", { name: "Annullato", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Annulla scheda" });
+  await dialog.getByRole("button", { name: "Conferma annullamento" }).click();
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toContainText("Annullato");
+  await page.reload();
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toContainText("Annullato");
 });
 
 test("diagnostic order saves faults, date and quote in one progressive flow", async ({
@@ -857,6 +880,11 @@ test("partial checkout records payment and delivers only after the balance is cl
   await expect(
     page.locator(".detail-status .status-dropdown-trigger"),
   ).toHaveText(/Consegnato/);
+  await page.reload();
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toHaveText(/Consegnato/);
+  await expect(page.locator(".balance-card>strong")).toContainText("0,00");
 });
 test("zero balance delivery uses the lightweight confirmation dialog", async ({
   page,
@@ -1266,7 +1294,9 @@ test("searchable combobox keeps search, create and chevron as independent contro
 
   await customer.fill("cliente-in-trovabile");
   const panel = page.locator(".business-select-panel.is-entering");
-  await expect(panel).toContainText("Nessun cliente corrispondente");
+  await expect(panel).toContainText(
+    "Nessun risultato. Usa «+Nuovo cliente» a destra per crearne uno.",
+  );
   await expect(panel.getByRole("button")).toHaveCount(0);
   await expect(createCustomer).toBeEnabled();
   await createCustomer.click();
@@ -1274,7 +1304,33 @@ test("searchable combobox keeps search, create and chevron as independent contro
   await expect(dialog.getByLabel(/Nome e cognome/)).toHaveValue(
     "cliente-in-trovabile",
   );
+  await expect(dialog.getByLabel(/Telefono/)).toBeFocused();
   await dialog.getByRole("button", { name: "Chiudi", exact: true }).click();
+  await expect(customer).toHaveValue("cliente-in-trovabile");
+  await customerControl
+    .getByRole("button", { name: "Cancella selezione", exact: true })
+    .click();
+  await expect(customer).toHaveValue("");
+
+  await customer.fill("3391234567");
+  await createCustomer.click();
+  await expect(dialog.getByLabel(/Telefono/)).toHaveValue("3391234567");
+  await expect(dialog.getByLabel(/Nome e cognome/)).toBeFocused();
+  await dialog.getByRole("button", { name: "Chiudi", exact: true }).click();
+  await customerControl
+    .getByRole("button", { name: "Cancella selezione", exact: true })
+    .click();
+
+  await chooseBusinessOption(page, "Cerca cliente", "Cliente Playwright");
+  await page.getByRole("button", { name: "Cambia", exact: true }).click();
+  await expect(customer).toHaveValue("");
+  await expect(page.locator(".order-step-heading").first()).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(page.locator(".order-step-state").first()).toContainText(
+    "In corso",
+  );
 
   await openStep(page, 1);
   const brand = page.getByRole("combobox", { name: "Marca", exact: true });
@@ -1417,7 +1473,9 @@ test("native quote choices populate prices, clear on model changes and discounts
   await projectControl.locator(".business-combobox-chevron").click();
   await expect(
     page.locator(".business-select-panel.is-entering"),
-  ).toContainText("Nessun intervento disponibile per questo dispositivo");
+  ).toContainText(
+    "Nessun risultato. Usa «+Intervento personalizzato» a destra per crearne uno.",
+  );
   await page.keyboard.press("Escape");
   await expect(
     page.getByText("Altri dettagli (facoltativi)", { exact: true }),
@@ -1963,6 +2021,14 @@ test("hides managed faults without changing historical records", async ({
     exact: true,
   });
   await expect(addFault).toBeDisabled();
+  await expect(addFault).toHaveCSS("background-color", "rgb(238, 240, 239)");
+  await expect(addFault).toHaveCSS("border-color", "rgb(216, 221, 219)");
+  await expect(addFault).toHaveCSS("color", "rgb(156, 163, 160)");
+  await expect(addFault).toHaveCSS("cursor", "not-allowed");
+  await expect(addFault).toHaveCSS("opacity", "1");
+  await expect(addFault).toHaveCSS("transform", "none");
+  await addFault.hover();
+  await expect(addFault).toHaveCSS("transform", "none");
   const aligned = await Promise.all([
     faultSearch.boundingBox(),
     addFault.boundingBox(),

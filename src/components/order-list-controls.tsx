@@ -13,7 +13,7 @@ import {
   type OrderStatus,
 } from "@/lib/domain";
 import { useMessages } from "./language";
-import { StatusDropdown } from "./status-dropdown";
+import { StatusDropdown, type StatusDropdownOrder } from "./status-dropdown";
 
 export type OrderListRow = {
   id: string;
@@ -41,11 +41,11 @@ function StatusControl({
     "id" | "status" | "customerName" | "due" | "paid" | "balance"
   >;
   active: boolean;
-  onSettled?: () => void;
+  onSettled?: (order: StatusDropdownOrder) => void;
 }) {
   return (
     <StatusDropdown
-      key={row.status}
+      key={`${row.status}:${row.due}:${row.paid}:${row.balance}`}
       order={row}
       active={active}
       onSettled={onSettled}
@@ -188,6 +188,9 @@ export function OrderListBody({
   compact?: boolean;
 }) {
   const [activeId, setActiveId] = useState("");
+  const [settledRows, setSettledRows] = useState<
+    Record<string, { before: StatusDropdownOrder; after: StatusDropdownOrder }>
+  >({});
   const body = useRef<HTMLTableSectionElement>(null);
   useEffect(() => {
     function outside(event: PointerEvent) {
@@ -199,7 +202,17 @@ export function OrderListBody({
   }, []);
   return (
     <tbody className="order-list-body" ref={body}>
-      {rows.map((row) => {
+      {rows.map((sourceRow) => {
+        const settled = settledRows[sourceRow.id];
+        const sourceIsUnchanged =
+          settled &&
+          settled.before.status === sourceRow.status &&
+          settled.before.due === sourceRow.due &&
+          settled.before.paid === sourceRow.paid &&
+          settled.before.balance === sourceRow.balance;
+        const row = sourceIsUnchanged
+          ? { ...sourceRow, ...settled.after }
+          : sourceRow;
         const active = row.id === activeId;
         return (
           <tr
@@ -241,7 +254,13 @@ export function OrderListBody({
               <StatusControl
                 row={row}
                 active={active}
-                onSettled={() => setActiveId("")}
+                onSettled={(settled) => {
+                  setSettledRows((current) => ({
+                    ...current,
+                    [row.id]: { before: sourceRow, after: settled },
+                  }));
+                  setActiveId("");
+                }}
               />
             </td>
             <td

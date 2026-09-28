@@ -1,21 +1,38 @@
 "use server";
 import { requireActor } from "@/lib/session";
 import * as service from "@/lib/service";
-import { BusinessError } from "@/lib/domain";
+import {
+  balance,
+  BusinessError,
+  settlement,
+  type StatusMutationSnapshot,
+} from "@/lib/domain";
+import type {
+  Payment,
+  WorkOrder,
+  WorkOrderItem,
+  WorkOrderProduct,
+} from "@prisma/client";
 import { ZodError } from "zod";
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { phoneInput } from "@/lib/validation";
 import { clearBusinessData } from "@/lib/data-transfer";
-type Result = { ok: true; id?: string } | { ok: false; error: string };
-async function execute(
-  work: () => Promise<{ id?: string } | void>,
-): Promise<Result> {
+type Result<Data = undefined> =
+  { ok: true; id?: string; data?: Data } | { ok: false; error: string };
+async function execute<Work extends { id?: string } | void, Data = undefined>(
+  work: () => Promise<Work>,
+  select?: (result: Work) => Data,
+): Promise<Result<Data>> {
   try {
     const result = await work();
     revalidatePath("/", "layout");
-    return { ok: true, id: result?.id };
+    return {
+      ok: true,
+      id: result?.id,
+      ...(select ? { data: select(result) } : {}),
+    };
   } catch (error) {
     if (error instanceof BusinessError)
       return { ok: false, error: error.message };
@@ -58,6 +75,25 @@ async function execute(
       error: "Operazione non riuscita. Aggiorna la pagina e riprova.",
     };
   }
+}
+type StatusOrderRecord = WorkOrder & {
+  items: WorkOrderItem[];
+  products: WorkOrderProduct[];
+  payments: Payment[];
+};
+function statusMutationSnapshot(
+  order: StatusOrderRecord,
+): StatusMutationSnapshot {
+  const closed = ["REFUNDED", "CANCELLED"].includes(order.status);
+  const due = closed ? 0 : settlement(order.items, order).due;
+  const remaining = balance(order.items, order.payments, order);
+  return {
+    status: order.status,
+    due,
+    paid: closed ? 0 : due - remaining,
+    balance: remaining,
+    pickedUpAt: order.pickedUpAt?.toISOString() ?? null,
+  };
 }
 export async function createOrderAction(input: unknown) {
   const actor = await requireActor();
@@ -125,11 +161,17 @@ export async function removeWorkOrderProductAction(id: string, lineId: string) {
 }
 export async function checkoutWorkOrderAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.checkoutWorkOrder(actor, id, input));
+  return execute(
+    () => service.checkoutWorkOrder(actor, id, input),
+    statusMutationSnapshot,
+  );
 }
 export async function statusAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.changeStatus(actor, id, input));
+  return execute(
+    () => service.changeStatus(actor, id, input),
+    statusMutationSnapshot,
+  );
 }
 export async function warrantyAction(id: string, input: unknown) {
   const actor = await requireActor();

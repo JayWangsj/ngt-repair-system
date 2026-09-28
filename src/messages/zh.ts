@@ -287,6 +287,7 @@ export const zh: typeof it = {
   saved: "操作成功。",
   noPriceResults: "没有找到报价。",
   noMatches: "没有找到匹配内容。",
+  noMatchesCreateHint: "没有匹配的内容，可点击右侧「+{action}」创建。",
   cancel: "取消",
   close: "关闭",
   search: "搜索",

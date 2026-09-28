@@ -1981,6 +1981,19 @@ test("hides managed faults without changing historical records", async ({
     "overflow-y",
     "visible",
   );
+  await expect(faultSearch).toHaveCSS("flex-direction", "row");
+  const searchLayout = await faultSearch.evaluate((element) => {
+    const wrapper = element.getBoundingClientRect();
+    const icon = element.querySelector("svg")!.getBoundingClientRect();
+    const input = element.querySelector("input")!.getBoundingClientRect();
+    return {
+      iconInside:
+        icon.top >= wrapper.top + 1 && icon.bottom <= wrapper.bottom - 1,
+      inputInside:
+        input.top >= wrapper.top + 1 && input.bottom <= wrapper.bottom - 1,
+    };
+  });
+  expect(searchLayout).toEqual({ iconInside: true, inputInside: true });
   for (const state of ["default", "hover", "focus"] as const) {
     if (state === "hover") await faultSearch.hover();
     if (state === "focus") await searchInput.focus();

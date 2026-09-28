@@ -2656,6 +2656,7 @@ details[open] > summary {
 }
 .fault-search {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 7px;
   border: 1px solid var(--line);

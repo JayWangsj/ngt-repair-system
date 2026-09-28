@@ -2,23 +2,8 @@ $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $stateDirectory = Join-Path $projectRoot ".local"
-$environmentFile = Join-Path $stateDirectory "test.env"
 New-Item -ItemType Directory -Path $stateDirectory -Force | Out-Null
 Set-Location -LiteralPath $projectRoot
-
-if (-not (Test-Path -LiteralPath $environmentFile)) {
-  throw "Missing .local/test.env."
-}
-
-Get-Content -LiteralPath $environmentFile | ForEach-Object {
-  if ($_ -match '^([^=]+)=(.*)$') {
-    [Environment]::SetEnvironmentVariable($matches[1], $matches[2].Trim('"'), "Process")
-  }
-}
-$env:PORT = "3236"
-$env:HOSTNAME = "127.0.0.1"
-$env:AUTH_URL = "http://127.0.0.1:3236"
-$env:AUTH_TRUST_HOST = "true"
 
 $bundledNode = Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe"
 if (Test-Path -LiteralPath $bundledNode) {
@@ -51,7 +36,20 @@ function Start-NgtProcess([string]$Name, [string]$Script, [int]$Port) {
 
 while ($true) {
   try {
-    Start-NgtProcess -Name "database" -Script "scripts/windows-db.mjs" -Port 55432
+    Start-NgtProcess -Name "test-database" -Script "scripts/windows-test-db.mjs" -Port 55433
+    $environmentFile = Join-Path $stateDirectory "test.env"
+    if (-not (Test-Path -LiteralPath $environmentFile)) {
+      throw "Missing .local/test.env."
+    }
+    Get-Content -LiteralPath $environmentFile | ForEach-Object {
+      if ($_ -match '^([^=]+)=(.*)$') {
+        [Environment]::SetEnvironmentVariable($matches[1], $matches[2].Trim('"'), "Process")
+      }
+    }
+    $env:PORT = "3236"
+    $env:HOSTNAME = "127.0.0.1"
+    $env:AUTH_URL = "http://127.0.0.1:3236"
+    $env:AUTH_TRUST_HOST = "true"
     Start-NgtProcess -Name "preview" -Script "scripts/start.mjs" -Port 3236
   } catch {
     Add-Content -LiteralPath (Join-Path $stateDirectory "preview-supervisor.error.log") `

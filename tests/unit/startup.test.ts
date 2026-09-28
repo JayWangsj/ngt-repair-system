@@ -42,12 +42,18 @@ describe("Windows persistent startup", () => {
       "scripts/uninstall-windows-preview-startup.ps1",
       "utf8",
     );
+    const testDatabase = await readFile("scripts/windows-test-db.mjs", "utf8");
     expect(service).toContain('"test.env"');
     expect(service).toContain('$env:PORT = "3236"');
-    expect(service).toContain('"scripts/windows-db.mjs" -Port 55432');
+    expect(service).toContain('"scripts/windows-test-db.mjs" -Port 55433');
     expect(service).toContain('"scripts/start.mjs" -Port 3236');
+    expect(testDatabase).toContain('"CREATE DATABASE ngt_test"');
+    expect(testDatabase).toContain('"55433"');
+    expect(testDatabase).not.toContain('CREATE DATABASE ngt"');
     expect(installer).toContain('$taskName = "NGT Test Preview"');
-    expect(installer).toContain('New-ScheduledTaskAction -Execute "wscript.exe"');
+    expect(installer).toContain(
+      'New-ScheduledTaskAction -Execute "wscript.exe"',
+    );
     expect(installer).toContain("//B //Nologo");
     expect(installer).toContain("New-ScheduledTaskTrigger -AtLogOn");
     expect(launcher).toContain("shell.Run command, 0, False");

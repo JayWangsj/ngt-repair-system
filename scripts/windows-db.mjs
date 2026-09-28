@@ -112,13 +112,10 @@ for (let attempt = 0; attempt < 100; attempt++) {
   const client = new Client({ connectionString: `${connection}postgres` });
   try {
     await client.connect();
-    for (const name of ["ngt", "ngt_test"]) {
-      const found = await client.query(
-        "SELECT 1 FROM pg_database WHERE datname=$1",
-        [name],
-      );
-      if (!found.rowCount) await client.query(`CREATE DATABASE ${name}`);
-    }
+    const found = await client.query(
+      "SELECT 1 FROM pg_database WHERE datname = 'ngt'",
+    );
+    if (!found.rowCount) await client.query("CREATE DATABASE ngt");
     await client.end();
     ready = true;
     break;
@@ -138,11 +135,8 @@ try {
 } catch (e) {
   if (e.code !== "EEXIST") throw e;
 }
-await writeFile(join(workspace, "test.env"), env("ngt_test"));
 await writeFile(join(workspace, "database-location.txt"), cache);
-console.log(
-  "PostgreSQL ready on 127.0.0.1:55432. Local environment and separate test database configured.",
-);
+console.log("Business PostgreSQL ready on 127.0.0.1:55432.");
 async function stop() {
   await run("pg_ctl.exe", ["-D", dataDir, "-m", "fast", "stop"]);
   process.exit(0);

@@ -9,7 +9,7 @@
 - 删除客户后可复用电话号码重新添加；新旧客户独立，历史订单及联系记录保留。
 
 - 单人免登录工作台；旧登录／员工页面跳回首页，历史账号及操作记录保留，新操作使用内部 NGT 记录。
-- 首页状态看板、待取机、逾期、待确认和未结款；工单搜索和筛选。
+- 首页状态看板、待取机、逾期和未结款；工单搜索和筛选。
 - 电话检索/创建客户，客户多设备、隐私同意时间与版本、客户历史工单。
 - 同页开单；设备类型、品牌、型号联动选择，常见故障多选及新增故障保存复用。
 - 多项目报价：精确型号 → 品牌系列 → 通用项目；正常原价自动更新报价表，折后价不覆盖历史报价。
@@ -34,7 +34,7 @@ pnpm install --frozen-lockfile
 node scripts/windows-db.mjs  # Windows；Linux/macOS 使用 node scripts/local-db.mjs
 ```
 
-数据库仅监听 `127.0.0.1:55432`。脚本自动生成随机数据库密码、`.env` 与独立测试配置 `.local/test.env`，不会覆盖已有 `.env`。Windows 运行文件及开发数据位于临时目录下的专属缓存，以规避 PostgreSQL 的中文路径限制；具体路径记录在 `.local/database-location.txt`。这是开发环境，不应作为生产持久存储。
+业务数据库仅监听 `127.0.0.1:55432`。脚本自动生成随机数据库密码与 `.env`，不会覆盖已有 `.env`。Windows 运行文件及开发数据位于临时目录下的专属缓存，以规避 PostgreSQL 的中文路径限制；具体路径记录在 `.local/database-location.txt`。这是开发环境，不应作为生产持久存储。
 
 ```powershell
 # 终端 2
@@ -63,6 +63,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-windows-startup.ps1
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-windows-startup.ps1
 ```
+
+桌面测试预览使用独立的 `127.0.0.1:55433/ngt_test`，不会与业务数据库共用 PostgreSQL 集群。安装 `scripts/install-windows-preview-startup.ps1` 后可通过 `http://127.0.0.1:3236/orders` 访问；测试连接配置保存在 `.local/test.env`。
 
 ## Docker Compose
 

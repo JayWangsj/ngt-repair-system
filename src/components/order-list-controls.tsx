@@ -194,6 +194,8 @@ export function OrderListBody({
   const body = useRef<HTMLTableSectionElement>(null);
   useEffect(() => {
     function outside(event: PointerEvent) {
+      if ((event.target as Element).closest?.("[data-prevent-card-autosave]"))
+        return;
       if (!body.current?.contains(event.target as Node))
         requestAnimationFrame(() => setActiveId(""));
     }

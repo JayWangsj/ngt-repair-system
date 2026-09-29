@@ -500,11 +500,18 @@ test("repair list delivery uses the shared checkout and refreshes the row", asyn
   await expect(dialog.getByLabel("Importo (€)", { exact: true })).toHaveValue(
     "100.00",
   );
-  await dialog.getByRole("button", { name: /Incassa e consegna/ }).click();
+  await dialog
+    .getByRole("button", { name: /Incassa e consegna/ })
+    .click({ delay: 150 });
   await expect(dialog).toHaveCount(0);
+  await expect(row).not.toHaveClass(/order-row-active/);
   await expect(row.locator(".badge")).toContainText("Consegnato");
   await expect(row).toContainText("Consegnato");
   await expect(row).toContainText("0,00 €");
+  await row.locator("td").nth(2).click();
+  await expect(
+    page.getByRole("dialog", { name: "Incassa e consegna" }),
+  ).toHaveCount(0);
   await page.reload();
   await expect(row.locator(".badge")).toContainText("Consegnato");
   await expect(row).toContainText("0,00 €");
@@ -528,11 +535,18 @@ test("repair list cancellation uses the shared confirmation and locks the row", 
   await dialog
     .getByLabel("Motivo dell'annullamento (facoltativo)")
     .fill("Cliente rinuncia");
-  await dialog.getByRole("button", { name: "Conferma annullamento" }).click();
+  await dialog
+    .getByRole("button", { name: "Conferma annullamento" })
+    .click({ delay: 150 });
   await expect(dialog).toHaveCount(0);
+  await expect(row).not.toHaveClass(/order-row-active/);
   await expect(row).toContainText("Annullato");
   await expect(row).toContainText("0,00 €");
   await expect(row.getByLabel("Incassato", { exact: true })).toHaveCount(0);
+  await row.locator("td").nth(2).click();
+  await expect(
+    page.getByRole("dialog", { name: "Annulla scheda" }),
+  ).toHaveCount(0);
   await page.reload();
   await expect(row.locator(".badge")).toContainText("Annullato");
   await expect(row).toContainText("0,00 €");

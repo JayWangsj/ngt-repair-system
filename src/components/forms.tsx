@@ -230,9 +230,8 @@ export function quoteItemsValid(
     items.every(
       (item) =>
         item.project.trim() &&
-        (matchRule(rules, device, item.project)
-          ? validAmount(item.final)
-          : item.saveRule && validPositiveAmount(item.final)),
+        validPositiveAmount(item.final) &&
+        (!!matchRule(rules, device, item.project) || item.saveRule),
     )
   );
 }
@@ -663,9 +662,7 @@ export function ItemsEditor({
           !searchProjects.some((project) =>
             normalizedProject(project).includes(normalizedQuery),
           );
-        const itemPriceValid = match
-          ? validAmount(item.final)
-          : validPositiveAmount(item.final);
+        const itemPriceValid = validPositiveAmount(item.final);
         const itemSelected =
           !!item.project.trim() && (!!match || !!item.saveRule);
         const itemComplete = itemSelected && itemPriceValid;
@@ -719,30 +716,37 @@ export function ItemsEditor({
                 <div className="selection-summary-value">
                   <small>{it.currentQuote}</small>
                   {editingPrices[index] ? (
-                    <input
-                      autoFocus
-                      className="quote-summary-price"
-                      aria-label={`${it.final} ${index + 1}`}
-                      inputMode="decimal"
-                      value={item.final}
-                      aria-invalid={!itemPriceValid}
-                      onChange={(event) =>
-                        update(index, { final: event.target.value })
-                      }
-                      onBlur={() => {
-                        if (itemPriceValid)
-                          setEditingPrices((current) => ({
-                            ...current,
-                            [index]: false,
-                          }));
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter") return;
-                        event.preventDefault();
-                        event.stopPropagation();
-                        if (itemPriceValid) event.currentTarget.blur();
-                      }}
-                    />
+                    <div className="quote-summary-price-field">
+                      <input
+                        autoFocus
+                        className="quote-summary-price"
+                        aria-label={`${it.final} ${index + 1}`}
+                        inputMode="decimal"
+                        value={item.final}
+                        aria-invalid={!itemPriceValid}
+                        onChange={(event) =>
+                          update(index, { final: event.target.value })
+                        }
+                        onBlur={() => {
+                          if (itemPriceValid)
+                            setEditingPrices((current) => ({
+                              ...current,
+                              [index]: false,
+                            }));
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter") return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          if (itemPriceValid) event.currentTarget.blur();
+                        }}
+                      />
+                      {!itemPriceValid && (
+                        <small className="field-error">
+                          {it.positiveAmountError}
+                        </small>
+                      )}
+                    </div>
                   ) : (
                     <button
                       type="button"
@@ -812,27 +816,37 @@ export function ItemsEditor({
                   }))
                 }
                 middleControl={
-                  <input
-                    ref={(element) => {
-                      priceInputs.current[index] = element;
-                    }}
-                    className="quote-price-input"
-                    aria-label={`${it.final} ${index + 1}`}
-                    placeholder={it.final}
-                    inputMode="decimal"
-                    required
-                    disabled={!noProjectMatches}
-                    value={item.final}
-                    onChange={(event) =>
-                      update(index, { final: event.target.value })
-                    }
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter") return;
-                      event.preventDefault();
-                      event.stopPropagation();
-                      createTemporaryProject(projectQuery);
-                    }}
-                  />
+                  <div className="quote-price-field">
+                    <input
+                      ref={(element) => {
+                        priceInputs.current[index] = element;
+                      }}
+                      className="quote-price-input"
+                      aria-label={`${it.final} ${index + 1}`}
+                      placeholder={it.final}
+                      inputMode="decimal"
+                      required
+                      disabled={!noProjectMatches}
+                      value={item.final}
+                      aria-invalid={
+                        noProjectMatches && !validPositiveAmount(item.final)
+                      }
+                      onChange={(event) =>
+                        update(index, { final: event.target.value })
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        createTemporaryProject(projectQuery);
+                      }}
+                    />
+                    {noProjectMatches && !validPositiveAmount(item.final) && (
+                      <small className="field-error">
+                        {it.positiveAmountError}
+                      </small>
+                    )}
+                  </div>
                 }
                 groups={[
                   {
@@ -909,16 +923,6 @@ export function ItemsEditor({
                   });
                 }}
               />
-            )}
-            {noProjectMatches &&
-              item.final &&
-              !validPositiveAmount(item.final) && (
-                <p className="field-error">{it.positiveAmountError}</p>
-              )}
-            {!itemPriceValid && item.final && !noProjectMatches && (
-              <p className="field-error">
-                {match ? it.invalidAmount : it.positiveAmountError}
-              </p>
             )}
             {(!progressive || itemComplete) && (
               <div className="quote-progressive-reveal">

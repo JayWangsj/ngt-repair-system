@@ -1059,10 +1059,24 @@ textarea {
   font-weight: 650;
   outline: none;
 }
+.quote-summary-price-field,
+.quote-price-field {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+.quote-summary-price-field .field-error,
+.quote-price-field .field-error {
+  margin: 0;
+  line-height: 1.25;
+}
+.quote-item:has(> .record-icon-delete) {
+  padding-bottom: 60px;
+}
 .quote-item > .record-icon-delete {
   position: absolute;
   right: 10px;
-  bottom: 2px;
+  bottom: 10px;
 }
 .quote-item label {
   margin-bottom: 10px;
@@ -5291,6 +5305,18 @@ summary.record-icon::-webkit-details-marker {
     inset -1px 0 rgb(228 182 0 / 18%),
     inset 0 1px rgb(228 182 0 / 18%),
     inset 0 -1px rgb(228 182 0 / 18%);
+}
+@keyframes order-row-status-highlight {
+  0%,
+  61.5% {
+    background-color: #fff3b8;
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+.order-list-body > tr.order-row-status-highlight {
+  animation: order-row-status-highlight 1300ms ease-out both;
 }
 .order-inline-edit-cell > * {
   transform: scale(1);

@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { useEffect, useRef, useState, useTransition } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter } from "next/navigation";
 import { setPaidTotalAction, updateDueDateAction } from "@/app/actions";
 import { dateOnly, decimal, money, type OrderStatus } from "@/lib/domain";
@@ -201,7 +207,12 @@ export function OrderListBody({
   const [settledRows, setSettledRows] = useState<
     Record<string, { before: StatusDropdownOrder; after: StatusDropdownOrder }>
   >({});
+  const [highlightedId, setHighlightedId] = useState("");
   const body = useRef<HTMLTableSectionElement>(null);
+  const pendingStatusAnimation = useRef("");
+  const previousRowPositions = useRef(new Map<string, DOMRect>());
+  const highlightStartTimer = useRef<number | null>(null);
+  const highlightTimer = useRef<number | null>(null);
   useEffect(() => {
     function outside(event: PointerEvent) {
       if ((event.target as Element).closest?.("[data-prevent-card-autosave]"))
@@ -212,6 +223,60 @@ export function OrderListBody({
     document.addEventListener("pointerdown", outside);
     return () => document.removeEventListener("pointerdown", outside);
   }, []);
+  useEffect(
+    () => () => {
+      if (highlightStartTimer.current)
+        window.clearTimeout(highlightStartTimer.current);
+      if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+    },
+    [],
+  );
+  useLayoutEffect(() => {
+    const changedId = pendingStatusAnimation.current;
+    if (!changedId || !body.current) return;
+    const elements = Array.from(
+      body.current.querySelectorAll<HTMLTableRowElement>("tr[data-order-id]"),
+    );
+    const target = elements.find(
+      (element) => element.dataset.orderId === changedId,
+    );
+    pendingStatusAnimation.current = "";
+    if (!target) return;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    let moved = false;
+    if (!reduceMotion)
+      elements.forEach((element) => {
+        const previous = previousRowPositions.current.get(
+          element.dataset.orderId ?? "",
+        );
+        if (!previous) return;
+        const delta = previous.top - element.getBoundingClientRect().top;
+        if (Math.abs(delta) < 1) return;
+        moved = true;
+        element.animate(
+          [
+            { transform: `translateY(${delta}px)` },
+            { transform: "translateY(0)" },
+          ],
+          { duration: 360, easing: "ease-out" },
+        );
+      });
+    if (highlightStartTimer.current)
+      window.clearTimeout(highlightStartTimer.current);
+    highlightStartTimer.current = window.setTimeout(
+      () => {
+        setHighlightedId(changedId);
+        if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+        highlightTimer.current = window.setTimeout(
+          () => setHighlightedId(""),
+          1300,
+        );
+      },
+      moved ? 360 : 0,
+    );
+  }, [rows]);
   return (
     <tbody className="order-list-body" ref={body}>
       {rows.map((sourceRow) => {
@@ -229,7 +294,8 @@ export function OrderListBody({
         return (
           <tr
             key={row.id}
-            className={active ? "order-row-active" : ""}
+            data-order-id={row.id}
+            className={`${active ? "order-row-active" : ""} ${highlightedId === row.id ? "order-row-status-highlight" : ""}`.trim()}
             onClick={() => setActiveId(row.id)}
           >
             <td>
@@ -267,6 +333,17 @@ export function OrderListBody({
                 row={row}
                 active={active}
                 onSettled={(settled) => {
+                  previousRowPositions.current = new Map(
+                    Array.from(
+                      body.current?.querySelectorAll<HTMLTableRowElement>(
+                        "tr[data-order-id]",
+                      ) ?? [],
+                    ).map((element) => [
+                      element.dataset.orderId ?? "",
+                      element.getBoundingClientRect(),
+                    ]),
+                  );
+                  pendingStatusAnimation.current = row.id;
                   setSettledRows((current) => ({
                     ...current,
                     [row.id]: { before: sourceRow, after: settled },

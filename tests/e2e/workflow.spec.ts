@@ -479,6 +479,67 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await expect(row).toContainText("30,00 €");
   await expect(row).toContainText("30/11/2099");
 });
+test("repair list animates a row reordered by a local status change", async ({
+  page,
+}) => {
+  await fillOrder(page, { manual: true });
+  await save(page);
+  const olderOrderPath = new URL(page.url()).pathname;
+  await page.waitForTimeout(50);
+  await fillOrder(page, { manual: true });
+  await save(page);
+  const newerOrderPath = new URL(page.url()).pathname;
+  await page.goto("/orders");
+
+  const olderRow = page.locator(`tbody tr:has(a[href="${olderOrderPath}"])`);
+  const initialOrder = await page
+    .locator(".order-code-link")
+    .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
+  expect(initialOrder.indexOf(olderOrderPath)).toBeGreaterThan(
+    initialOrder.indexOf(newerOrderPath),
+  );
+  const scrollBefore = await page.evaluate(() => window.scrollY);
+
+  await olderRow.click();
+  await olderRow.locator(".status-dropdown-trigger").click();
+  await page
+    .locator(".status-dropdown-menu")
+    .getByRole("option", { name: "Annullato", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Annulla scheda" });
+  await dialog
+    .getByRole("button", { name: "Conferma annullamento" })
+    .click({ delay: 150 });
+
+  await expect(page.locator("tbody tr").first()).toContainText(
+    await olderRow.locator(".order-code-link").innerText(),
+  );
+  await expect
+    .poll(() =>
+      page
+        .locator("tbody tr")
+        .evaluateAll((rows) =>
+          rows.some((row) =>
+            row
+              .getAnimations()
+              .some(
+                (animation) => animation.effect?.getTiming().duration === 360,
+              ),
+          ),
+        ),
+    )
+    .toBe(true);
+  await expect(olderRow).toHaveClass(/order-row-status-highlight/, {
+    timeout: 1000,
+  });
+  await expect(olderRow).not.toHaveClass(/order-row-status-highlight/, {
+    timeout: 2000,
+  });
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+
+  await page.reload();
+  await expect(olderRow).not.toHaveClass(/order-row-status-highlight/);
+});
 test("repair list delivery uses the shared checkout and refreshes the row", async ({
   page,
 }) => {
@@ -1539,6 +1600,12 @@ test("native quote choices populate prices, clear on model changes and discounts
     exact: true,
   });
   await expect(inlinePrice).toHaveValue("100");
+  await inlinePrice.fill("0");
+  await inlinePrice.press("Enter");
+  await expect(inlinePrice).toBeVisible();
+  await expect(
+    inlinePrice.locator("xpath=..//*[@class='field-error']"),
+  ).toHaveText("Il prezzo deve essere maggiore di 0.");
   await inlinePrice.fill("105");
   await inlinePrice.press("Enter");
   await expect(projectSummary).toContainText("105,00 €");
@@ -1574,6 +1641,16 @@ test("native quote choices populate prices, clear on model changes and discounts
   await expect(
     page.getByText("Il prezzo deve essere maggiore di 0."),
   ).toBeVisible();
+  const priceError = projectPrice.locator("xpath=..//*[@class='field-error']");
+  await expect(priceError).toHaveText("Il prezzo deve essere maggiore di 0.");
+  expect(
+    await priceError.evaluate(
+      (error, input) =>
+        error.getBoundingClientRect().top -
+        (input as Element).getBoundingClientRect().bottom,
+      await projectPrice.elementHandle(),
+    ),
+  ).toBeGreaterThanOrEqual(0);
   await projectPrice.fill("99");
   await expect(createProject).toBeEnabled();
   await expect(page.getByText(/Prezzo inserito/)).toHaveCount(0);
@@ -1829,7 +1906,18 @@ test("clears a repair item and creates a custom item with Enter without submitti
   const newItem = page.locator(".quote-item").nth(1);
   await newItem.hover();
   const removeItem = newItem.locator(".record-icon-delete");
-  await expect(removeItem).toHaveCSS("bottom", "2px");
+  await expect(removeItem).toHaveCSS("bottom", "10px");
+  expect(
+    await removeItem.evaluate((button) => {
+      const control = button.parentElement?.querySelector(
+        ".business-combobox-control",
+      );
+      return control
+        ? button.getBoundingClientRect().top -
+            control.getBoundingClientRect().bottom
+        : -1;
+    }),
+  ).toBeGreaterThanOrEqual(6);
   await removeItem.click();
 
   await chooseBusinessOption(page, "Ricambio richiesto 1", "Batteria Test");

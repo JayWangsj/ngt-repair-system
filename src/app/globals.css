@@ -4455,6 +4455,22 @@ details[open] > summary {
   border-radius: 9px;
   background: #fbfcfb;
 }
+.project-warranty-list > section {
+  gap: 16px;
+  padding: 18px;
+}
+.active-rework-summary {
+  display: grid;
+  gap: 12px;
+  padding-top: 4px;
+}
+.active-rework-summary > p,
+.active-rework-summary > strong {
+  margin: 0;
+}
+.rework-part-summary {
+  width: 100%;
+}
 .rework-project-list > section.is-disabled {
   color: var(--muted);
   background: #f4f5f5;
@@ -4568,6 +4584,7 @@ details[open] > summary {
 }
 .after-sales-notes {
   position: relative;
+  margin-top: 18px;
 }
 .after-sales-notes textarea {
   resize: vertical;

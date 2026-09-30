@@ -441,6 +441,7 @@ export const zh: typeof it = {
     warrantyTreatmentHint: "该返修在保修范围内，默认不收取费用。",
     paidTreatment: "有偿返修",
     paidTreatmentHint: "不在保修范围或需收取费用。",
+    noPart: "无",
     notes: "返修备注（可选）",
     notesPlaceholder: "补充说明（如故障现象、处理要求等）",
     fee: "返修费用（€）",

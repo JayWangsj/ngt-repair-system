@@ -1031,6 +1031,7 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   page,
 }) => {
   await fillOrder(page, { manual: true });
+  await chooseBusinessOption(page, "Ricambio richiesto 1", "Batteria Test");
   await openPayment(page);
   await page
     .getByLabel("Incasso alla creazione (€)", { exact: true })
@@ -1217,6 +1218,27 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await expect(
     dialog.getByRole("radio", { name: /Riparazione in garanzia/ }),
   ).toBeChecked();
+  const dialogPartSummary = dialog.locator(".selected-part-summary");
+  await expect(dialogPartSummary).toContainText("Batteria Test");
+  await expect(dialogPartSummary).toContainText("Disponibile");
+  expect(
+    await dialog.locator(".after-sales-notes").evaluate((notes) => {
+      const list = notes.closest("form")?.querySelector(".rework-project-list");
+      return list
+        ? notes.getBoundingClientRect().top -
+            list.getBoundingClientRect().bottom
+        : 0;
+    }),
+  ).toBeGreaterThanOrEqual(18);
+  await dialogPartSummary.locator(".summary-action").click();
+  const dialogPartSearch = dialog.getByRole("combobox", {
+    name: /Ricambio richiesto/,
+  });
+  await expect(dialogPartSearch).toBeFocused();
+  await dialogPartSearch.fill("");
+  await expect(dialog.locator(".selected-part-summary")).toContainText(
+    "Nessuno",
+  );
   await expect(dialog.getByLabel("Costo aggiuntivo (€)")).toHaveCount(0);
   await expect(
     dialog.getByRole("button", { name: "Chiudi", exact: true }),
@@ -1245,6 +1267,11 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     .click();
   dialog = page.getByRole("dialog");
   await dialog.getByRole("radio", { name: /Riparazione a pagamento/ }).check();
+  await dialog.locator(".selected-part-summary .summary-action").click();
+  await dialog.getByRole("combobox", { name: /Ricambio richiesto/ }).fill("");
+  await expect(dialog.locator(".selected-part-summary")).toContainText(
+    "Nessuno",
+  );
   await dialog
     .getByLabel("Note post-vendita (facoltative)")
     .fill("Difetto ricomparso");
@@ -1270,6 +1297,32 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await expect(page.getByTestId("history-card")).toContainText(
     "Note post-vendita (facoltative): Difetto ricomparso",
   );
+  if (
+    (await warranty
+      .locator(".order-card-heading")
+      .getAttribute("aria-expanded")) !== "true"
+  )
+    await warranty.locator(".order-card-heading").click();
+  await expect(warranty.locator(".project-warranty-list > section")).toHaveCSS(
+    "padding",
+    "18px",
+  );
+  await expect(warranty.locator(".active-rework-summary")).toHaveCSS(
+    "row-gap",
+    "12px",
+  );
+  const detailPartSummary = warranty.locator(
+    ".active-rework-summary .selected-part-summary",
+  );
+  await expect(detailPartSummary).toContainText("Nessuno");
+  await detailPartSummary.locator(".summary-action").click();
+  const detailPartSearch = warranty.getByRole("combobox", {
+    name: "Ricambio richiesto",
+    exact: true,
+  });
+  await expect(detailPartSearch).toBeFocused();
+  await detailPartSearch.press("Escape");
+  await expect(detailPartSummary).toContainText("Nessuno");
   await expect(
     details.getByRole("button", { name: "Modifica dati" }),
   ).toHaveCount(0);

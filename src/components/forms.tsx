@@ -2316,6 +2316,54 @@ export function WarrantyProgressPanel({
   );
 }
 
+function ReworkPartSummary({
+  product,
+  disabled = false,
+  onChange,
+}: {
+  product?: CreatedProduct;
+  disabled?: boolean;
+  onChange: () => void;
+}) {
+  const it = useMessages();
+  const available = product?.available ?? product?.stock ?? 0;
+  return (
+    <div className="selection-summary selected-part-summary rework-part-summary">
+      <span className="selection-summary-icon is-part">
+        <Package size={18} aria-hidden="true" />
+      </span>
+      <div className="selection-summary-copy">
+        <strong>{product?.name ?? it.afterSales.noPart}</strong>
+        <small>
+          {product ? (
+            <>
+              {product.category} · {it.actualStock} {product.stock} ·{" "}
+              {it.reservedStock} {product.reserved ?? 0} · {it.availableStock}{" "}
+              {available} ·{" "}
+              <span
+                className={`part-stock ${available > 0 ? "is-available" : "is-empty"}`}
+              >
+                ● {available > 0 ? it.partInStock : it.partOutOfStock}
+              </span>
+            </>
+          ) : (
+            it.noRequiredPart
+          )}
+        </small>
+      </div>
+      <button
+        type="button"
+        className="summary-action"
+        disabled={disabled}
+        onClick={onChange}
+      >
+        <span>{it.change}</span>
+        <ChevronRight size={15} aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
 export function ReworkPartEditor({
   orderId,
   itemId,
@@ -2330,45 +2378,59 @@ export function ReworkPartEditor({
   const it = useMessages();
   const router = useRouter();
   const [selected, setSelected] = useState(value);
+  const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const selectedProduct = products.find((product) => product.id === selected);
   return (
     <div className="rework-part-editor">
-      <SearchableCombobox
-        value={selected}
-        disabled={pending}
-        onChange={(productId) => {
-          setSelected(productId);
-          startTransition(async () => {
-            const result = await updateReworkPartAction(orderId, itemId, {
-              productId,
-              quantity: 1,
+      {editing ? (
+        <SearchableCombobox
+          value={selected}
+          disabled={pending}
+          autoFocusQuery={selectedProduct?.name ?? ""}
+          onClose={() => setEditing(false)}
+          onChange={(productId) => {
+            setSelected(productId);
+            startTransition(async () => {
+              const result = await updateReworkPartAction(orderId, itemId, {
+                productId,
+                quantity: 1,
+              });
+              if (!result.ok) {
+                setSelected(value);
+                setEditing(true);
+                setError(result.error);
+                return;
+              }
+              setEditing(false);
+              setError("");
+              router.refresh();
             });
-            if (!result.ok) {
-              setSelected(value);
-              setError(result.error);
-              return;
-            }
-            setError("");
-            router.refresh();
-          });
-        }}
-        ariaLabel={it.requiredPart}
-        placeholder={it.noRequiredPart}
-        searchPlaceholder={it.searchInventoryPart}
-        emptyText={it.noMatches}
-        clearable
-        groups={[
-          {
-            options: products.map((product) => ({
-              value: product.id,
-              label: product.name,
-              secondary: product.category,
-              trailing: `${it.actualStock} ${product.stock} · ${it.reservedStock} ${product.reserved ?? 0} · ${it.availableStock} ${product.available ?? product.stock}`,
-            })),
-          },
-        ]}
-      />
+          }}
+          ariaLabel={it.requiredPart}
+          placeholder={it.noRequiredPart}
+          searchPlaceholder={it.searchInventoryPart}
+          emptyText={it.noMatches}
+          clearable
+          groups={[
+            {
+              options: products.map((product) => ({
+                value: product.id,
+                label: product.name,
+                secondary: product.category,
+                trailing: `${it.actualStock} ${product.stock} · ${it.reservedStock} ${product.reserved ?? 0} · ${it.availableStock} ${product.available ?? product.stock}`,
+              })),
+            },
+          ]}
+        />
+      ) : (
+        <ReworkPartSummary
+          product={selectedProduct}
+          disabled={pending}
+          onChange={() => setEditing(true)}
+        />
+      )}
       {error && <p className="field-error">{error}</p>}
     </div>
   );
@@ -2415,6 +2477,12 @@ export function AfterSalesForm({
       ]),
     ),
   );
+  const [editingParts, setEditingParts] = useState<Record<string, boolean>>(
+    () =>
+      Object.fromEntries(
+        available.map((project) => [project.id, !project.requiredProductId]),
+      ),
+  );
   const [notes, setNotes] = useState("");
   return (
     <ActionForm
@@ -2447,6 +2515,9 @@ export function AfterSalesForm({
         {originalProjects.map((project) => {
           const checked = selected.includes(project.id);
           const value = itemValues[project.id];
+          const selectedProduct = products.find(
+            (product) => product.id === value?.requiredProductId,
+          );
           return (
             <section
               className={project.reworked ? "is-disabled" : ""}
@@ -2523,31 +2594,59 @@ export function AfterSalesForm({
                       />
                     </Field>
                   )}
-                  <Field label={it.requiredPart}>
-                    <SearchableCombobox
-                      value={value.requiredProductId}
-                      onChange={(requiredProductId) =>
-                        setItemValues((current) => ({
-                          ...current,
-                          [project.id]: { ...value, requiredProductId },
-                        }))
-                      }
-                      ariaLabel={`${it.requiredPart} ${project.name}`}
-                      placeholder={it.noRequiredPart}
-                      searchPlaceholder={it.searchInventoryPart}
-                      emptyText={it.noMatches}
-                      clearable
-                      groups={[
-                        {
-                          options: products.map((product) => ({
-                            value: product.id,
-                            label: product.name,
-                            secondary: product.category,
-                            trailing: `${it.actualStock} ${product.stock} · ${it.availableStock} ${product.available ?? product.stock}`,
-                          })),
-                        },
-                      ]}
-                    />
+                  <Field
+                    label={it.requiredPart}
+                    className="after-sales-part-field"
+                  >
+                    {editingParts[project.id] ? (
+                      <SearchableCombobox
+                        value={value.requiredProductId}
+                        autoFocusQuery={
+                          selectedProduct ? selectedProduct.name : undefined
+                        }
+                        onClose={() =>
+                          setEditingParts((current) => ({
+                            ...current,
+                            [project.id]: false,
+                          }))
+                        }
+                        onChange={(requiredProductId) => {
+                          setItemValues((current) => ({
+                            ...current,
+                            [project.id]: { ...value, requiredProductId },
+                          }));
+                          setEditingParts((current) => ({
+                            ...current,
+                            [project.id]: false,
+                          }));
+                        }}
+                        ariaLabel={`${it.requiredPart} ${project.name}`}
+                        placeholder={it.noRequiredPart}
+                        searchPlaceholder={it.searchInventoryPart}
+                        emptyText={it.noMatches}
+                        clearable
+                        groups={[
+                          {
+                            options: products.map((product) => ({
+                              value: product.id,
+                              label: product.name,
+                              secondary: product.category,
+                              trailing: `${it.actualStock} ${product.stock} · ${it.availableStock} ${product.available ?? product.stock}`,
+                            })),
+                          },
+                        ]}
+                      />
+                    ) : (
+                      <ReworkPartSummary
+                        product={selectedProduct}
+                        onChange={() =>
+                          setEditingParts((current) => ({
+                            ...current,
+                            [project.id]: true,
+                          }))
+                        }
+                      />
+                    )}
                   </Field>
                 </>
               )}

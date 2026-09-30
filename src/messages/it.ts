@@ -496,6 +496,7 @@ export const it = {
       "La lavorazione rientra nella garanzia e non aggiunge costi.",
     paidTreatment: "Riparazione a pagamento",
     paidTreatmentHint: "Fuori garanzia o con un costo aggiuntivo.",
+    noPart: "Nessuno",
     notes: "Note post-vendita (facoltative)",
     notesPlaceholder:
       "Dettagli aggiuntivi, ad esempio sintomi o indicazioni di lavorazione",

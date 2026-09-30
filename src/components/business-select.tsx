@@ -82,11 +82,14 @@ export function SelectDropdown({
   customLabel,
   onCustom,
   onCommit,
+  onNoMatchEnter,
   onClose,
   onQueryChange,
   customDisabled = false,
   customValue = "",
   middleControl,
+  creationControls = "always",
+  preserveQueryOnClose = false,
   clearable = false,
   loading = false,
   autoFocusQuery,
@@ -107,11 +110,14 @@ export function SelectDropdown({
   customLabel?: string;
   onCustom?: (query: string) => void;
   onCommit?: (query: string) => void;
+  onNoMatchEnter?: (query: string) => void;
   onClose?: () => void;
   onQueryChange?: (query: string) => void;
   customDisabled?: boolean;
   customValue?: string;
   middleControl?: ReactNode;
+  creationControls?: "always" | "no-match";
+  preserveQueryOnClose?: boolean;
   clearable?: boolean;
   loading?: boolean;
   autoFocusQuery?: string;
@@ -157,6 +163,9 @@ export function SelectDropdown({
   );
   const canCreate =
     !!createValue && !loading && !createMatches && !customDisabled;
+  const showCreationControls =
+    creationControls === "always" ||
+    (!!trimmedQuery && !loading && visible.length === 0);
 
   const close = useCallback(
     ({
@@ -165,7 +174,7 @@ export function SelectDropdown({
     }: { focus?: boolean; commit?: boolean } = {}) => {
       if (commit && searchable && query.trim()) onCommit?.(query.trim());
       setOpen(false);
-      setQuery("");
+      if (!preserveQueryOnClose) setQuery("");
       setActive(0);
       onClose?.();
       if (closingTimer.current) window.clearTimeout(closingTimer.current);
@@ -175,7 +184,7 @@ export function SelectDropdown({
           searchable ? search.current?.focus() : simpleTrigger.current?.focus(),
         );
     },
-    [onClose, onCommit, query, searchable],
+    [onClose, onCommit, preserveQueryOnClose, query, searchable],
   );
   function openDropdown() {
     const element = trigger.current;
@@ -186,6 +195,8 @@ export function SelectDropdown({
     setOpen(true);
   }
   function choose(option: SelectOption) {
+    setQuery("");
+    onQueryChange?.("");
     setInternalValue(option.value);
     onChange?.(option.value);
     close({ commit: false });
@@ -222,6 +233,14 @@ export function SelectDropdown({
     else if (event.key === "ArrowUp") move(event, -1);
     else if (event.key === "Enter" && visible[active]) {
       choose(visible[active]);
+    } else if (
+      event.key === "Enter" &&
+      searchable &&
+      trimmedQuery &&
+      !visible.length &&
+      onNoMatchEnter
+    ) {
+      onNoMatchEnter(trimmedQuery);
     } else if (
       event.key === "Enter" &&
       searchable &&
@@ -271,6 +290,7 @@ export function SelectDropdown({
       if (closingTimer.current) window.clearTimeout(closingTimer.current);
       setPortalTarget(element.closest("dialog") ?? document.body);
       setQuery(autoFocusQuery);
+      onQueryChange?.(autoFocusQuery);
       setActive(0);
       setPresent(true);
       setOpen(true);
@@ -280,7 +300,7 @@ export function SelectDropdown({
       });
     });
     return () => cancelAnimationFrame(frame);
-  }, [autoFocusQuery, disabled, searchable, trigger]);
+  }, [autoFocusQuery, disabled, onQueryChange, searchable, trigger]);
   useEffect(
     () => () => {
       if (closingTimer.current) window.clearTimeout(closingTimer.current);
@@ -304,7 +324,7 @@ export function SelectDropdown({
       {name && <input type="hidden" name={name} value={currentValue} />}
       {searchable ? (
         <div
-          className={`business-combobox-control ${onCustom && customLabel ? "has-create" : ""} ${middleControl ? "has-middle" : ""}`}
+          className={`business-combobox-control ${showCreationControls && onCustom && customLabel ? "has-create" : ""} ${showCreationControls && middleControl ? "has-middle" : ""}`}
         >
           <div className="business-combobox-input">
             <Search size={15} aria-hidden="true" />
@@ -375,8 +395,8 @@ export function SelectDropdown({
           >
             <ChevronDown size={15} aria-hidden="true" />
           </button>
-          {middleControl}
-          {onCustom && customLabel && (
+          {showCreationControls && middleControl}
+          {showCreationControls && onCustom && customLabel && (
             <button
               type="button"
               className="business-select-create"
@@ -384,6 +404,8 @@ export function SelectDropdown({
               disabled={disabled || !canCreate}
               onClick={(event) => {
                 event.stopPropagation();
+                setQuery("");
+                onQueryChange?.("");
                 close({ commit: false });
                 onCustom(createValue);
               }}

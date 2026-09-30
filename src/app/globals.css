@@ -1415,6 +1415,7 @@ textarea {
   color: #934d47;
 }
 .order-detail-card {
+  --detail-card-padding: 24px;
   transform: translateY(0) scale(1);
   transform-origin: center;
   transition:
@@ -1442,6 +1443,9 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  margin: calc(var(--detail-card-padding) * -1)
+    calc(var(--detail-card-padding) * -1) 0;
+  padding: var(--detail-card-padding);
   cursor: pointer;
 }
 .order-card-toggle {
@@ -2010,6 +2014,9 @@ details[open] > summary {
   .padded {
     padding: 20px;
   }
+  .order-detail-card {
+    --detail-card-padding: 20px;
+  }
   .detail-list > div {
     grid-template-columns: 120px 1fr;
     gap: 10px;
@@ -2552,6 +2559,133 @@ details[open] > summary {
   grid-column: 1 / -1;
   color: var(--muted);
 }
+.selection-summary {
+  display: grid;
+  min-height: 72px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 14px;
+  border: 1px solid #e2e5e3;
+  border-radius: 10px;
+  background: #fff;
+}
+.selection-summary.selected-customer-summary,
+.selection-summary.selected-part-summary {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+.selection-summary-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #f5f6f5;
+  color: #4e5753;
+}
+.selection-summary-icon.is-project {
+  background: #fff4bd;
+  color: #806000;
+}
+.selection-summary-copy,
+.selected-customer-summary > .selection-summary-copy,
+.selected-part-summary > .selection-summary-copy {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 1fr;
+  gap: 3px;
+}
+.selection-summary-copy strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.selection-summary-copy small {
+  grid-column: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+.selection-summary-value {
+  display: grid;
+  justify-items: start;
+  gap: 2px;
+}
+.selection-summary-value > small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.summary-price-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+}
+.summary-price-button svg {
+  color: #947000;
+}
+.summary-price-button:hover,
+.summary-price-button:focus-visible {
+  color: #806000;
+}
+.selection-summary .quote-summary-price {
+  width: 92px;
+  min-height: 34px;
+  padding: 5px 8px;
+  border: 1px solid #e3c853;
+  border-radius: 7px;
+  background: #fffdf5;
+}
+.summary-action {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 0;
+  border: 0;
+  background: transparent;
+  color: #806000;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: color 170ms ease-out;
+}
+.summary-action span::after {
+  content: "";
+  position: absolute;
+  right: 17px;
+  bottom: 3px;
+  left: 0;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 170ms ease-out;
+}
+.selection-summary .summary-action span {
+  color: inherit;
+  font-size: inherit;
+}
+.summary-action svg {
+  transition: transform 170ms ease-out;
+}
+.summary-action:hover,
+.summary-action:focus-visible {
+  color: #a06f00;
+}
+.summary-action:hover span::after,
+.summary-action:focus-visible span::after {
+  transform: scaleX(1);
+}
+.summary-action:hover svg,
+.summary-action:focus-visible svg {
+  transform: translateX(4px);
+}
 .fault-chip-grid {
   display: flex;
   flex-wrap: wrap;
@@ -3002,6 +3136,19 @@ details[open] > summary {
   }
   .selected-customer-summary {
     grid-template-columns: auto 1fr;
+  }
+  .selection-summary.selected-project-summary,
+  .selection-summary.selected-part-summary,
+  .selection-summary.selected-customer-summary {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+  }
+  .selection-summary.selected-project-summary .selection-summary-value {
+    grid-column: 2;
+  }
+  .selection-summary.selected-project-summary .summary-action {
+    grid-column: 3;
+    grid-row: 1 / span 2;
   }
   .selected-customer-summary .button {
     grid-column: 1 / -1;
@@ -3917,6 +4064,10 @@ details[open] > summary {
 }
 .repair-project-combobox .business-select-create {
   max-width: none;
+  border-color: #d6aa14;
+  background: #fff0a8;
+  color: #493800;
+  font-weight: 650;
 }
 .quote-price-input {
   width: 100%;
@@ -3964,6 +4115,11 @@ details[open] > summary {
   border-color: #c99e10;
   background: #fff9e9;
   box-shadow: 0 4px 10px rgb(116 91 11 / 10%);
+}
+.repair-project-combobox .business-select-create:hover:not(:disabled) {
+  border-color: #b98d00;
+  background: #ffe578;
+  box-shadow: 0 5px 12px rgb(116 91 11 / 14%);
 }
 .business-select-create:active:not(:disabled) {
   transform: scale(0.98);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, GripVertical, Plus, Search, Trash2 } from "lucide-react";
 import {
@@ -80,6 +80,7 @@ export function FaultCatalogManager({
   const [open, setOpen] = useState(false);
   const [drafts, setDrafts] = useState(items);
   const [query, setQuery] = useState("");
+  const [settledQuery, setSettledQuery] = useState("");
   const [editingId, setEditingId] = useState("");
   const [editingName, setEditingName] = useState("");
   const [error, setError] = useState("");
@@ -87,6 +88,7 @@ export function FaultCatalogManager({
   const [dragId, setDragId] = useState("");
   const savingName = useRef(false);
   const cancellingName = useRef(false);
+  const searchRequest = useRef(0);
   const scoped = useMemo(
     () =>
       drafts
@@ -94,15 +96,32 @@ export function FaultCatalogManager({
         .sort((a, b) => a.sortOrder - b.sortOrder),
     [category, drafts],
   );
-  const deferredQuery = useDeferredValue(query);
-  const searching = deferredQuery !== query;
   const visible = scoped.filter((item) =>
     item.name
       .toLocaleLowerCase("it")
-      .includes(deferredQuery.trim().toLocaleLowerCase("it")),
+      .includes(settledQuery.trim().toLocaleLowerCase("it")),
   );
-  const canAdd =
-    !!query.trim() && !searching && !pending && visible.length === 0;
+  const [stableCanAdd, setStableCanAdd] = useState(false);
+  const canAdd = stableCanAdd && !pending;
+
+  function search(next: string) {
+    setQuery(next);
+    const request = ++searchRequest.current;
+    if (!next.trim()) {
+      setSettledQuery("");
+      setStableCanAdd(false);
+      return;
+    }
+    window.setTimeout(() => {
+      if (request !== searchRequest.current) return;
+      setSettledQuery(next);
+      setStableCanAdd(
+        !scoped.some((item) =>
+          normalized(item.name).includes(normalized(next)),
+        ),
+      );
+    }, 80);
+  }
 
   function publish(next: FaultCatalogItem[]) {
     setDrafts(next);
@@ -113,12 +132,16 @@ export function FaultCatalogManager({
   function openManager() {
     setDrafts(items);
     setQuery("");
+    setSettledQuery("");
+    searchRequest.current += 1;
+    setStableCanAdd(false);
     setEditingId("");
     setError("");
     setOpen(true);
   }
 
   function closeManager() {
+    searchRequest.current += 1;
     setEditingId("");
     setError("");
     setOpen(false);
@@ -126,11 +149,13 @@ export function FaultCatalogManager({
 
   async function createFault() {
     const name = query.trim();
-    if (!name || !canAdd) return;
+    if (!name || pending) return;
     if (scoped.some((item) => normalized(item.name) === normalized(name))) {
       setError(it.faultAlreadyExists);
       return;
     }
+    if (scoped.some((item) => normalized(item.name).includes(normalized(name))))
+      return;
     setPending(true);
     setError("");
     const result = await saveFaultAction(null, {
@@ -155,6 +180,9 @@ export function FaultCatalogManager({
       },
     ];
     setQuery("");
+    setSettledQuery("");
+    setStableCanAdd(false);
+    searchRequest.current += 1;
     publish(next);
   }
 
@@ -282,7 +310,7 @@ export function FaultCatalogManager({
                   value={query}
                   placeholder={it.faultSearch}
                   onChange={(event) => {
-                    setQuery(event.target.value);
+                    search(event.target.value);
                     setError("");
                   }}
                   onKeyDown={(event) => {

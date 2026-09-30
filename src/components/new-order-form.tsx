@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Search, Trash2, UserRound, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Search,
+  Trash2,
+  UserRound,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   createOrderAction,
@@ -605,21 +613,24 @@ export function NewOrderWizard({
                 />
               </Field>
             ) : (
-              <div className="selected-customer-summary">
-                <UserRound size={19} />
-                <div>
+              <div className="selection-summary selected-customer-summary">
+                <span className="selection-summary-icon is-customer">
+                  <UserRound size={19} aria-hidden="true" />
+                </span>
+                <div className="selection-summary-copy">
                   <strong>{customer.name}</strong>
                   <small>{customer.phone}</small>
                 </div>
-                <Button
+                <button
                   type="button"
-                  variant="ghost"
+                  className="summary-action"
                   onClick={() => {
                     clearCustomerSelection();
                   }}
                 >
-                  <X size={15} /> {it.reselect}
-                </Button>
+                  <span>{it.reselect}</span>
+                  <ChevronRight size={15} aria-hidden="true" />
+                </button>
               </div>
             )}
             {touched && !validCustomer && (

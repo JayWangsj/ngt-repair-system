@@ -27,7 +27,17 @@ import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Trash2, Check, ShieldCheck, X } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Check,
+  ShieldCheck,
+  X,
+  ChevronRight,
+  Package,
+  Pencil,
+  Wrench,
+} from "lucide-react";
 import { Button } from "./ui/button";
 import { FormAutoSaveContext, FormCloseContext } from "./ui/form-close-context";
 import { useMessages, useLanguage } from "./language";
@@ -200,6 +210,16 @@ function validAmount(value: string) {
     return false;
   }
 }
+function validPositiveAmount(value: string) {
+  try {
+    return cents(value) > 0;
+  } catch {
+    return false;
+  }
+}
+function normalizedProject(value: string) {
+  return value.trim().toLocaleLowerCase("it");
+}
 export function quoteItemsValid(
   items: ItemView[],
   rules: RuleView[],
@@ -210,8 +230,9 @@ export function quoteItemsValid(
     items.every(
       (item) =>
         item.project.trim() &&
-        validAmount(item.final) &&
-        (item.saveRule || !!matchRule(rules, device, item.project)),
+        (matchRule(rules, device, item.project)
+          ? validAmount(item.final)
+          : item.saveRule && validPositiveAmount(item.final)),
     )
   );
 }
@@ -535,6 +556,12 @@ export function ItemsEditor({
   const [editingProjects, setEditingProjects] = useState<
     Record<number, boolean>
   >({});
+  const [editingPrices, setEditingPrices] = useState<Record<number, boolean>>(
+    {},
+  );
+  const [temporaryProjects, setTemporaryProjects] = useState<
+    Record<number, ItemView[]>
+  >({});
   const priceInputs = useRef<Record<number, HTMLInputElement | null>>({});
   const deviceKey = [
     device.category,
@@ -548,6 +575,8 @@ export function ItemsEditor({
     previousDevice.current = deviceKey;
     setProjectQueries({});
     setEditingParts({});
+    setEditingPrices({});
+    setTemporaryProjects({});
     const projects = deviceProjects(rules, device);
     onChange(
       items.map((item) => {
@@ -578,10 +607,33 @@ export function ItemsEditor({
       }),
     );
   }, [deviceKey, device, items, rules, onChange]);
-  const update = (index: number, patch: Partial<ItemView>) =>
-    onChange(
-      items.map((item, i) => (i === index ? { ...item, ...patch } : item)),
+  const update = (index: number, patch: Partial<ItemView>) => {
+    const next = items.map((item, i) =>
+      i === index ? { ...item, ...patch } : item,
     );
+    const changed = next[index];
+    if (
+      changed?.project.trim() &&
+      changed.saveRule &&
+      !matchRule(rules, device, changed.project)
+    )
+      setTemporaryProjects((current) => {
+        const drafts = current[index] ?? [];
+        const position = drafts.findIndex(
+          (draft) =>
+            normalizedProject(draft.project) ===
+            normalizedProject(changed.project),
+        );
+        return {
+          ...current,
+          [index]:
+            position < 0
+              ? [...drafts, changed]
+              : drafts.map((draft, i) => (i === position ? changed : draft)),
+        };
+      });
+    onChange(next);
+  };
   const resetItem = (index: number, project = "") =>
     update(index, {
       project,
@@ -600,12 +652,23 @@ export function ItemsEditor({
         const projects = deviceProjects(rules, device);
         const match = matchRule(rules, device, item.project);
         const projectQuery = projectQueries[index] ?? "";
-        const customDraft = !!item.project.trim() && !match && !item.saveRule;
-        const priceEnabled = !!(item.project.trim() || projectQuery.trim());
-        const itemComplete =
-          !!item.project.trim() &&
-          validAmount(item.final) &&
-          (!!match || !!item.saveRule);
+        const drafts = temporaryProjects[index] ?? [];
+        const normalizedQuery = normalizedProject(projectQuery);
+        const searchProjects = [
+          ...projects,
+          ...drafts.map((draft) => draft.project),
+        ];
+        const noProjectMatches =
+          !!normalizedQuery &&
+          !searchProjects.some((project) =>
+            normalizedProject(project).includes(normalizedQuery),
+          );
+        const itemPriceValid = match
+          ? validAmount(item.final)
+          : validPositiveAmount(item.final);
+        const itemSelected =
+          !!item.project.trim() && (!!match || !!item.saveRule);
+        const itemComplete = itemSelected && itemPriceValid;
         const selectedProduct = availableProducts.find(
           (product) => product.id === item.requiredProductId,
         );
@@ -615,48 +678,76 @@ export function ItemsEditor({
             (selectedProduct.available ?? selectedProduct.stock);
         return (
           <div className="quote-item" key={index}>
-            {itemComplete && !editingProjects[index] ? (
-              <div className="selected-project-summary">
-                <div>
+            {itemSelected && !editingProjects[index] ? (
+              <div className="selection-summary selected-project-summary">
+                <span className="selection-summary-icon is-project">
+                  <Wrench size={18} aria-hidden="true" />
+                </span>
+                <div className="selection-summary-copy">
                   <strong>{item.project}</strong>
                   <small>
                     {match
                       ? `${it.priceListProject} · ${device.brand} ${device.model}`
-                      : it.afterSales.customProject}
+                      : it.afterSales.temporaryProject}
                   </small>
-                  {match && (
-                    <small>
-                      {it.priceListPrice}: {money(cents(match.rule.suggested))}
-                    </small>
-                  )}
                 </div>
-                <div className="selected-project-actions">
-                  <label>
-                    <span>{it.currentQuote}</span>
+                <div className="selection-summary-value">
+                  <small>{it.currentQuote}</small>
+                  {editingPrices[index] ? (
                     <input
+                      autoFocus
                       className="quote-summary-price"
                       aria-label={`${it.final} ${index + 1}`}
                       inputMode="decimal"
                       value={item.final}
-                      aria-invalid={!validAmount(item.final)}
+                      aria-invalid={!itemPriceValid}
                       onChange={(event) =>
                         update(index, { final: event.target.value })
                       }
+                      onBlur={() => {
+                        if (itemPriceValid)
+                          setEditingPrices((current) => ({
+                            ...current,
+                            [index]: false,
+                          }));
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (itemPriceValid) event.currentTarget.blur();
+                      }}
                     />
-                  </label>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() =>
-                      setEditingProjects((current) => ({
-                        ...current,
-                        [index]: true,
-                      }))
-                    }
-                  >
-                    {it.change}
-                  </Button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="summary-price-button"
+                      aria-label={`${it.edit} ${it.currentQuote}`}
+                      onClick={() =>
+                        setEditingPrices((current) => ({
+                          ...current,
+                          [index]: true,
+                        }))
+                      }
+                    >
+                      <strong>{money(cents(item.final))}</strong>
+                      <Pencil size={14} aria-hidden="true" />
+                    </button>
+                  )}
                 </div>
+                <button
+                  type="button"
+                  className="summary-action"
+                  onClick={() =>
+                    setEditingProjects((current) => ({
+                      ...current,
+                      [index]: true,
+                    }))
+                  }
+                >
+                  <span>{it.change}</span>
+                  <ChevronRight size={15} aria-hidden="true" />
+                </button>
               </div>
             ) : (
               <SearchableCombobox
@@ -671,7 +762,7 @@ export function ItemsEditor({
                     : it.afterSales.noDeviceProjects
                 }
                 emptyCreateText={
-                  validAmount(item.final)
+                  validPositiveAmount(item.final)
                     ? it.noMatchesCreateHint.replace(
                         "{action}",
                         it.afterSales.addCustomProject,
@@ -682,8 +773,9 @@ export function ItemsEditor({
                       )
                 }
                 customLabel={it.afterSales.addCustomProject}
-                customDisabled={!validAmount(item.final)}
-                customValue={customDraft ? item.project : ""}
+                customDisabled={!validPositiveAmount(item.final)}
+                creationControls="no-match"
+                preserveQueryOnClose
                 clearable
                 autoFocusQuery={
                   editingProjects[index] ? item.project : undefined
@@ -704,7 +796,7 @@ export function ItemsEditor({
                     placeholder={it.final}
                     inputMode="decimal"
                     required
-                    disabled={!priceEnabled}
+                    disabled={!noProjectMatches}
                     value={item.final}
                     onChange={(event) =>
                       update(index, { final: event.target.value })
@@ -713,13 +805,6 @@ export function ItemsEditor({
                       if (event.key !== "Enter") return;
                       event.preventDefault();
                       event.stopPropagation();
-                      if (
-                        !match &&
-                        !item.saveRule &&
-                        item.project.trim() &&
-                        validAmount(item.final)
-                      )
-                        update(index, { saveRule: true });
                     }}
                   />
                 }
@@ -737,6 +822,13 @@ export function ItemsEditor({
                       };
                     }),
                   },
+                  {
+                    options: drafts.map((draft) => ({
+                      value: draft.project,
+                      label: draft.project,
+                      secondary: it.afterSales.temporaryProject,
+                    })),
+                  },
                 ]}
                 onQueryChange={(query) => {
                   setProjectQueries((current) => ({
@@ -745,6 +837,13 @@ export function ItemsEditor({
                   }));
                 }}
                 onCustom={(project) => {
+                  if (!validPositiveAmount(item.final)) return;
+                  const duplicate = searchProjects.find(
+                    (candidate) =>
+                      normalizedProject(candidate) ===
+                      normalizedProject(project),
+                  );
+                  if (duplicate) return;
                   setProjectQueries((current) => ({ ...current, [index]: "" }));
                   update(index, {
                     project,
@@ -756,29 +855,30 @@ export function ItemsEditor({
                     requiredQuantity: 1,
                     requiredProductRemoved: false,
                   });
-                  requestAnimationFrame(() =>
-                    priceInputs.current[index]?.focus(),
-                  );
                 }}
-                onCommit={(project) => {
-                  setProjectQueries((current) => ({ ...current, [index]: "" }));
-                  setEditingParts((current) => ({
+                onNoMatchEnter={(project) => {
+                  setProjectQueries((current) => ({
                     ...current,
-                    [index]: false,
+                    [index]: project,
                   }));
-                  resetItem(index, project);
                   requestAnimationFrame(() =>
                     priceInputs.current[index]?.focus(),
                   );
                 }}
                 onChange={(project) => {
                   const found = matchRule(rules, device, project);
+                  const draft = drafts.find(
+                    (candidate) =>
+                      normalizedProject(candidate.project) ===
+                      normalizedProject(project),
+                  );
                   setProjectQueries((current) => ({ ...current, [index]: "" }));
                   setEditingParts((current) => ({
                     ...current,
                     [index]: false,
                   }));
                   if (!project) resetItem(index);
+                  else if (draft) update(index, draft);
                   else
                     update(index, {
                       project,
@@ -803,11 +903,26 @@ export function ItemsEditor({
                 }}
               />
             )}
-            {!validAmount(item.final) && item.final && (
-              <p className="field-error">{it.invalidAmount}</p>
+            {noProjectMatches && (
+              <p className="quote-hint" aria-live="polite">
+                {validPositiveAmount(item.final)
+                  ? it.customPriceReadyHint.replace(
+                      "{action}",
+                      it.afterSales.addCustomProject,
+                    )
+                  : item.final
+                    ? it.positiveAmountError
+                    : it.customPriceRequiredHint}
+              </p>
+            )}
+            {!itemPriceValid && item.final && !noProjectMatches && (
+              <p className="field-error">
+                {match ? it.invalidAmount : it.positiveAmountError}
+              </p>
             )}
             {(!progressive || item.project.trim()) &&
-              (!itemComplete || editingProjects[index]) && (
+              (!itemComplete || editingProjects[index]) &&
+              !noProjectMatches && (
                 <p className="quote-hint">
                   {match ? (
                     <>
@@ -827,8 +942,11 @@ export function ItemsEditor({
                     {it.requiredPart} ({it.optional})
                   </strong>
                   {selectedProduct && !editingParts[index] ? (
-                    <div className="selected-part-summary">
-                      <div>
+                    <div className="selection-summary selected-part-summary">
+                      <span className="selection-summary-icon is-part">
+                        <Package size={18} aria-hidden="true" />
+                      </span>
+                      <div className="selection-summary-copy">
                         <strong>{selectedProduct.name}</strong>
                         <small>
                           {selectedProduct.category} · {it.actualStock}{" "}
@@ -846,20 +964,19 @@ export function ItemsEditor({
                           </span>
                         </small>
                       </div>
-                      <span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          onClick={() =>
-                            setEditingParts((current) => ({
-                              ...current,
-                              [index]: true,
-                            }))
-                          }
-                        >
-                          {it.change}
-                        </Button>
-                      </span>
+                      <button
+                        type="button"
+                        className="summary-action"
+                        onClick={() =>
+                          setEditingParts((current) => ({
+                            ...current,
+                            [index]: true,
+                          }))
+                        }
+                      >
+                        <span>{it.change}</span>
+                        <ChevronRight size={15} aria-hidden="true" />
+                      </button>
                     </div>
                   ) : (
                     <SearchableCombobox
@@ -2050,7 +2167,15 @@ export function WarrantyForm({
   return (
     <ActionForm
       submit={it.save}
-      action={() => warrantyAction(id, { items: values })}
+      action={(data) =>
+        warrantyAction(id, {
+          items: items.map((item) => ({
+            id: item.id,
+            days: Number(data.get(`warranty-days-${item.id}`)),
+            notes: String(data.get(`warranty-notes-${item.id}`) ?? ""),
+          })),
+        })
+      }
     >
       <div className="project-warranty-editor">
         {values.map((item, index) => (
@@ -2058,6 +2183,7 @@ export function WarrantyForm({
             <strong>{item.project}</strong>
             <Field label={it.warranty.duration}>
               <SimpleSelect
+                name={`warranty-days-${item.id}`}
                 value={String(item.days)}
                 onChange={(days) =>
                   setValues((current) =>
@@ -2078,6 +2204,7 @@ export function WarrantyForm({
             </Field>
             <Field label={it.warranty.notes}>
               <textarea
+                name={`warranty-notes-${item.id}`}
                 value={item.notes}
                 maxLength={2000}
                 onChange={(event) =>

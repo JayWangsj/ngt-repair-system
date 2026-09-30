@@ -1111,6 +1111,19 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await warranty.getByRole("button", { name: "Salva" }).click();
   await expect(warranty).not.toHaveClass(/is-editing/);
   await expect(warranty).toContainText("90 giorni");
+  await page.reload();
+  await expect(warranty.locator(".order-card-heading")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await warranty.click({ position: { x: 12, y: 12 } });
+  await expect(warranty.locator(".order-card-heading")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(warranty.locator(".warranty-progress-panel")).toContainText(
+    "90 giorni",
+  );
 
   await state(page, "READY");
   await page.getByLabel("Nome di chi ritira", { exact: true }).fill("Cliente");
@@ -1496,8 +1509,8 @@ test("native quote choices populate prices, clear on model changes and discounts
     name: "Intervento personalizzato",
     exact: true,
   });
-  await expect(projectPrice).toBeDisabled();
-  await expect(createProject).toBeDisabled();
+  await expect(projectPrice).toHaveCount(0);
+  await expect(createProject).toHaveCount(0);
   const projectControl = projectSearch.locator(
     "xpath=ancestor::*[contains(@class, 'business-combobox-control')]",
   );
@@ -1510,13 +1523,23 @@ test("native quote choices populate prices, clear on model changes and discounts
   ).toBeVisible();
   await projectControl.locator(".business-combobox-chevron").click();
   await projectSearch.fill("sostituzione");
-  await expect(projectPrice).toBeEnabled();
-  await expect(createProject).toBeDisabled();
+  await expect(projectPrice).toHaveCount(0);
+  await expect(createProject).toHaveCount(0);
   await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
+  const projectSummary = page.locator(".selected-project-summary");
+  await expect(projectSummary).toContainText("sostituzione display");
+  await expect(projectSummary).toContainText("100,00 €");
   await expect(
     page.getByLabel("Prezzo originale (€) 1", { exact: true }),
-  ).toHaveValue("100");
-  await expect(projectPrice).toBeEnabled();
+  ).toHaveCount(0);
+  await projectSummary.locator(".summary-price-button").click();
+  const inlinePrice = page.getByLabel("Prezzo originale (€) 1", {
+    exact: true,
+  });
+  await expect(inlinePrice).toHaveValue("100");
+  await inlinePrice.fill("105");
+  await inlinePrice.press("Enter");
+  await expect(projectSummary).toContainText("105,00 €");
   await expect(
     page.getByLabel("Sconto intervento (€) 1", { exact: true }),
   ).toHaveCount(0);
@@ -1533,7 +1556,60 @@ test("native quote choices populate prices, clear on model changes and discounts
   await expect(
     page.getByLabel("Sconto intervento (€) 1", { exact: true }),
   ).toHaveCount(0);
-  await expect(page.locator(".price-breakdown")).toContainText("100,00");
+  await expect(page.locator(".price-breakdown")).toContainText("105,00");
+  await projectSummary.getByRole("button", { name: "Cambia" }).click();
+  const customName = `Intervento temporaneo ${Date.now()}`;
+  await page
+    .getByRole("combobox", { name: "Intervento 1", exact: true })
+    .fill(customName);
+  await expect(projectPrice).toBeVisible();
+  await page
+    .getByRole("combobox", { name: "Intervento 1", exact: true })
+    .press("Enter");
+  await expect(projectPrice).toBeFocused();
+  await projectPrice.fill("0");
+  await expect(createProject).toBeDisabled();
+  await expect(
+    page.getByText("Il prezzo deve essere maggiore di 0."),
+  ).toBeVisible();
+  await projectPrice.fill("99");
+  await expect(createProject).toBeEnabled();
+  await expect(page.getByText(/Prezzo inserito/)).toBeVisible();
+  await createProject.click();
+  await expect(projectSummary).toContainText(customName);
+  await expect(projectSummary).toContainText(
+    "Intervento personalizzato temporaneo",
+  );
+  await expect(projectSummary).toContainText("99,00 €");
+  await projectSummary.locator(".summary-price-button").click();
+  const customInlinePrice = page.getByLabel("Prezzo originale (€) 1", {
+    exact: true,
+  });
+  await customInlinePrice.fill("+");
+  await customInlinePrice.press("Enter");
+  await expect(projectSummary).toBeVisible();
+  await expect(customInlinePrice).toBeVisible();
+  await expect(
+    page.getByText("Il prezzo deve essere maggiore di 0."),
+  ).toBeVisible();
+  await customInlinePrice.fill("99");
+  await customInlinePrice.press("Enter");
+  await expect(projectSummary).toContainText("99,00 €");
+  const catalogPage = await page.context().newPage();
+  await catalogPage.goto("/prices");
+  await catalogPage.getByLabel("Cerca", { exact: true }).fill(customName);
+  await expect(catalogPage.locator(".price-rule-row")).toHaveCount(0);
+  await catalogPage.close();
+  await projectSummary.getByRole("button", { name: "Cambia" }).click();
+  const temporaryOption = page
+    .getByRole("option")
+    .filter({ hasText: customName });
+  await expect(temporaryOption).toContainText(
+    "Intervento personalizzato temporaneo",
+  );
+  await expect(temporaryOption).toHaveAttribute("aria-selected", "true");
+  await temporaryOption.click();
+  await expect(projectSummary).toContainText("99,00 €");
   await openStep(page, 1);
   await enterBusinessValue(page, "Modello", "Unknown model");
   await openStep(page, 2);
@@ -1542,14 +1618,8 @@ test("native quote choices populate prices, clear on model changes and discounts
   ).toHaveValue("");
   await expect(
     page.getByLabel("Prezzo originale (€) 1", { exact: true }),
-  ).toHaveValue("");
-  await projectControl.locator(".business-combobox-chevron").click();
-  await expect(
-    page.locator(".business-select-panel.is-entering"),
-  ).toContainText(
-    "Nessun risultato. Inserisci il prezzo, poi usa «+Intervento personalizzato» a destra.",
-  );
-  await page.keyboard.press("Escape");
+  ).toHaveCount(0);
+  await expect(createProject).toHaveCount(0);
   await expect(
     page.getByText("Altri dettagli (facoltativi)", { exact: true }),
   ).toHaveCount(0);
@@ -2212,19 +2282,47 @@ test("hides managed faults without changing historical records", async ({
   }
   await searchInput.fill(createdName);
   await expect(addFault).toBeEnabled();
+  await addFault.evaluate((button) => {
+    const states: boolean[] = [];
+    const observer = new MutationObserver(() => {
+      states.push((button as HTMLButtonElement).disabled);
+    });
+    observer.observe(button, {
+      attributes: true,
+      attributeFilter: ["disabled"],
+    });
+    Object.assign(window, {
+      __faultButtonStates: states,
+      __faultButtonObserver: observer,
+    });
+  });
+  await searchInput.press("End");
+  await searchInput.type(" xyz", { delay: 30 });
+  await expect(addFault).toBeEnabled();
+  expect(
+    await page.evaluate(() => {
+      const target = window as typeof window & {
+        __faultButtonStates?: boolean[];
+        __faultButtonObserver?: MutationObserver;
+      };
+      target.__faultButtonObserver?.disconnect();
+      return target.__faultButtonStates ?? [];
+    }),
+  ).not.toContain(true);
+  const finalCreatedName = `${createdName} xyz`;
   await addFault.click();
   await expect(searchInput).toHaveValue("");
   const createdRow = dialog.locator(".fault-manager-row").filter({
-    hasText: createdName,
+    hasText: finalCreatedName,
   });
   await expect(createdRow).toBeVisible();
   await createdRow.locator(".fault-name-button").dblclick();
   const createdInlineName = dialog.locator(".fault-inline-name");
-  await createdInlineName.fill(`${createdName} modificato`);
+  await createdInlineName.fill(`${finalCreatedName} modificato`);
   await createdInlineName.press("Enter");
   await expect(
     dialog.locator(".fault-manager-row").filter({
-      hasText: `${createdName} modificato`,
+      hasText: `${finalCreatedName} modificato`,
     }),
   ).toBeVisible();
   await dialog.locator(".dialog-actions button").click();

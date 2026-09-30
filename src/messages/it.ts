@@ -346,6 +346,11 @@ export const it = {
   noMatchesPriceHint:
     "Nessun risultato. Inserisci il prezzo, poi usa «+{action}» a destra.",
   invalidAmount: "Inserisci un importo valido",
+  positiveAmountError: "Il prezzo deve essere maggiore di 0.",
+  customPriceRequiredHint:
+    "Nessun intervento corrispondente. Inserisci prima il prezzo.",
+  customPriceReadyHint:
+    "Prezzo inserito. Usa «+{action}» a destra per creare l'intervento.",
   cancel: "Annulla",
   close: "Chiudi",
   search: "Cerca",
@@ -480,6 +485,7 @@ export const it = {
     originalProject: "Intervento originale",
     catalogProject: "Listino interventi",
     customProject: "Intervento personalizzato",
+    temporaryProject: "Intervento personalizzato temporaneo",
     addCustomProject: "Intervento personalizzato",
     projectName: "Nome intervento",
     nonOriginalHint:

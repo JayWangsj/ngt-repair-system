@@ -299,6 +299,9 @@ export const zh: typeof it = {
   noMatchesPriceHint:
     "没有匹配的内容，输入报价后，可点击右侧「+{action}」创建。",
   invalidAmount: "请输入有效金额",
+  positiveAmountError: "报价必须大于0。",
+  customPriceRequiredHint: "没有匹配的维修项目，请先填写报价。",
+  customPriceReadyHint: "报价已填写，请点击右侧「+{action}」创建。",
   cancel: "取消",
   close: "关闭",
   search: "搜索",
@@ -429,6 +432,7 @@ export const zh: typeof it = {
     originalProject: "原维修项目",
     catalogProject: "系统维修项目库",
     customProject: "自定义维修项目",
+    temporaryProject: "临时自定义项目",
     addCustomProject: "自定义维修项目",
     projectName: "项目名称",
     nonOriginalHint: "该项目不在原维修报价中，默认不作为原维修保修项目。",

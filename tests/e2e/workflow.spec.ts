@@ -462,23 +462,11 @@ test("repair list exposes month, status, due-date and payment controls", async (
   expect(
     await row.evaluate((element) => element.getBoundingClientRect().height),
   ).toBe(rowHeight);
-  await page
-    .locator(".status-dropdown-menu")
-    .getByRole("option", { name: "Ricambio mancante", exact: true })
-    .click();
-  await expect(row.locator(".badge")).toContainText("Ricambio mancante");
-  await page.reload();
-  await expect(row.locator(".badge")).toContainText("Ricambio mancante");
-  await row.click();
-  await row.locator(".status-dropdown-trigger").click();
-  await expect(
-    page.locator(".status-dropdown-menu [role='option']"),
-  ).toHaveCount(1);
   await expect(
     page
       .locator(".status-dropdown-menu")
-      .getByRole("option", { name: "Annullato", exact: true }),
-  ).toBeVisible();
+      .getByRole("option", { name: "Ricambio mancante", exact: true }),
+  ).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(
     row.getByLabel("Consegna prevista", { exact: true }),
@@ -1203,9 +1191,13 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await dialog
     .getByRole("button", { name: "Apri riparazione post-vendita", exact: true })
     .click();
-  await expect(
-    page.locator(".detail-status .status-dropdown-trigger"),
-  ).toHaveText(/In riparazione post-vendita/);
+  const reworkStatus = page.locator(".detail-status .status-dropdown-trigger");
+  await expect(reworkStatus).toHaveText(/In riparazione post-vendita/);
+  await expect(reworkStatus).toHaveCSS("color", "rgb(190, 24, 93)");
+  await expect(reworkStatus).toHaveCSS(
+    "background-color",
+    "rgb(252, 231, 243)",
+  );
   await expect(page.locator(".balance-card>strong")).toContainText("50,00");
   await expect(page.getByTestId("history-card")).toContainText(
     "Riparazione post-vendita aperta",
@@ -1584,7 +1576,7 @@ test("native quote choices populate prices, clear on model changes and discounts
   ).toBeVisible();
   await projectPrice.fill("99");
   await expect(createProject).toBeEnabled();
-  await expect(page.getByText(/Prezzo inserito/)).toBeVisible();
+  await expect(page.getByText(/Prezzo inserito/)).toHaveCount(0);
   await createProject.click();
   await expect(projectSummary).toContainText(customName);
   await expect(projectSummary).toContainText(
@@ -1703,6 +1695,27 @@ test("changing a selected repair part focuses its current name and preserves it 
   await chooseBusinessOption(page, "Ricambio richiesto 1", "Batteria Test");
   const summary = page.locator(".selected-part-summary");
   await expect(summary).toContainText("Batteria Test");
+  const projectSummary = page.locator(".selected-project-summary");
+  expect(
+    await projectSummary.or(summary).evaluateAll((elements) => {
+      const [project, part] = elements;
+      return Math.abs(
+        project.getBoundingClientRect().width -
+          part.getBoundingClientRect().width,
+      );
+    }),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    await summary.evaluate((part) => {
+      const label = part.parentElement?.querySelector(
+        ".quote-required-part-label",
+      );
+      return label
+        ? part.getBoundingClientRect().top -
+            label.getBoundingClientRect().bottom
+        : 0;
+    }),
+  ).toBeGreaterThanOrEqual(12);
   expect(
     await summary.locator(".selection-summary-icon").evaluate((icon) => {
       const iconBox = icon.getBoundingClientRect();

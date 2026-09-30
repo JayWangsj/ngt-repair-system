@@ -339,9 +339,9 @@ small {
   --status-bg-hover: #e4f2e8;
 }
 .status-reworking {
-  --status-color: #236c72;
-  --status-bg: #edf7f7;
-  --status-bg-hover: #deeeee;
+  --status-color: #be185d;
+  --status-bg: #fce7f3;
+  --status-bg-hover: #fbcfe8;
 }
 .status-refunded {
   --status-color: #6f7a80;
@@ -677,8 +677,8 @@ td small {
   color: #216b3d;
 }
 .status-select.status-reworking {
-  background: #fff0b5;
-  color: #795b00;
+  background: #fce7f3;
+  color: #be185d;
 }
 .status-select.status-refunded {
   background: #f9e4e2;
@@ -1072,8 +1072,8 @@ textarea {
 }
 .quote-required-part {
   display: grid;
-  gap: 8px;
-  max-width: 620px;
+  width: 100%;
+  gap: 12px;
 }
 .quote-required-part ~ label,
 .quote-required-part ~ .item-actions {
@@ -1366,9 +1366,9 @@ textarea {
 }
 .status-dropdown-trigger.status-reworking,
 .status-dropdown-option.status-reworking {
-  --status-color: #236c72;
-  --status-bg: #edf7f7;
-  --status-bg-hover: #deeeee;
+  --status-color: #be185d;
+  --status-bg: #fce7f3;
+  --status-bg-hover: #fbcfe8;
 }
 .status-dropdown-trigger.status-refunded,
 .status-dropdown-option.status-refunded,

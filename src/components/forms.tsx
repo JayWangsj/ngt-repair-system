@@ -910,18 +910,11 @@ export function ItemsEditor({
                 }}
               />
             )}
-            {noProjectMatches && (
-              <p className="quote-hint" aria-live="polite">
-                {validPositiveAmount(item.final)
-                  ? it.customPriceReadyHint.replace(
-                      "{action}",
-                      it.afterSales.addCustomProject,
-                    )
-                  : item.final
-                    ? it.positiveAmountError
-                    : it.customPriceRequiredHint}
-              </p>
-            )}
+            {noProjectMatches &&
+              item.final &&
+              !validPositiveAmount(item.final) && (
+                <p className="field-error">{it.positiveAmountError}</p>
+              )}
             {!itemPriceValid && item.final && !noProjectMatches && (
               <p className="field-error">
                 {match ? it.invalidAmount : it.positiveAmountError}

@@ -985,6 +985,9 @@ describe("PostgreSQL workflow", () => {
   it("rejects invalid state changes without a history entry", async () => {
     const order = await createOrder(staff, input());
     await expect(
+      changeStatus(staff, order.id, { status: "PARTS_MISSING" }),
+    ).rejects.toThrow("Cambio di stato");
+    await expect(
       changeStatus(staff, order.id, {
         status: "COMPLETED",
         pickedUpBy: "Cliente",

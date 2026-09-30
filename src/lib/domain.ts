@@ -128,9 +128,9 @@ export function balance(
   );
 }
 export const transitions: Record<OrderStatus, OrderStatus[]> = {
-  RECEIVED: ["DIAGNOSING", "REPAIRING", "PARTS_MISSING", "CANCELLED"],
+  RECEIVED: ["DIAGNOSING", "REPAIRING", "CANCELLED"],
   DIAGNOSING: ["CANCELLED"],
-  REPAIRING: ["PARTS_MISSING", "READY", "CANCELLED"],
+  REPAIRING: ["READY", "CANCELLED"],
   PARTS_MISSING: ["CANCELLED"],
   READY: ["REPAIRING", "COMPLETED"],
   COMPLETED: [],

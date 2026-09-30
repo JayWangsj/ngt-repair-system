@@ -1074,6 +1074,7 @@ textarea {
   display: grid;
   width: 100%;
   gap: 12px;
+  margin-top: 18px;
 }
 .quote-required-part ~ label,
 .quote-required-part ~ .item-actions {

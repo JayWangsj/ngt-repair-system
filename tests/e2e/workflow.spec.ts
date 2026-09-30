@@ -1577,6 +1577,9 @@ test("native quote choices populate prices, clear on model changes and discounts
   await projectPrice.fill("99");
   await expect(createProject).toBeEnabled();
   await expect(page.getByText(/Prezzo inserito/)).toHaveCount(0);
+  await expect(
+    page.locator(".quote-item").first().locator(":scope > .quote-hint"),
+  ).toHaveCount(0);
   await createProject.click();
   await expect(projectSummary).toContainText(customName);
   await expect(projectSummary).toContainText(
@@ -1716,6 +1719,17 @@ test("changing a selected repair part focuses its current name and preserves it 
         : 0;
     }),
   ).toBeGreaterThanOrEqual(12);
+  expect(
+    await page.locator(".quote-required-part-label").evaluate((label) => {
+      const project = label
+        .closest(".quote-item")
+        ?.querySelector(".selected-project-summary");
+      return project
+        ? label.getBoundingClientRect().top -
+            project.getBoundingClientRect().bottom
+        : 0;
+    }),
+  ).toBeGreaterThanOrEqual(18);
   expect(
     await summary.locator(".selection-summary-icon").evaluate((icon) => {
       const iconBox = icon.getBoundingClientRect();

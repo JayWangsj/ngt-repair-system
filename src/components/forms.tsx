@@ -920,21 +920,6 @@ export function ItemsEditor({
                 {match ? it.invalidAmount : it.positiveAmountError}
               </p>
             )}
-            {(!progressive || item.project.trim()) &&
-              (!itemComplete || editingProjects[index]) &&
-              !noProjectMatches && (
-                <p className="quote-hint">
-                  {match ? (
-                    <>
-                      {it.suggested}:{" "}
-                      <strong>{money(cents(match.rule.suggested))}</strong> ·{" "}
-                      {it.levels[match.level as keyof typeof it.levels]}
-                    </>
-                  ) : (
-                    it.noMatch
-                  )}
-                </p>
-              )}
             {(!progressive || itemComplete) && (
               <div className="quote-progressive-reveal">
                 <div className="quote-required-part">

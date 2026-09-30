@@ -1,5 +1,13 @@
 import { requireActor } from "@/lib/session";
-import { beforeAll, afterAll, beforeEach, describe, it, expect } from "vitest";
+import {
+  beforeAll,
+  afterAll,
+  beforeEach,
+  afterEach,
+  describe,
+  it,
+  expect,
+} from "vitest";
 import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import {
@@ -34,6 +42,7 @@ import {
   updateOrder,
   updateDueDate,
   updateWarranty,
+  updateBusinessClock,
   openAfterSales,
   refundOrder,
   deleteInventoryCategory,
@@ -67,6 +76,7 @@ function input(patch: Record<string, unknown> = {}) {
 beforeAll(async () => {
   if (!new URL(process.env.DATABASE_URL || "").pathname.endsWith("_test"))
     throw new Error("Integration tests require an isolated *_test database.");
+  await db.businessClock.deleteMany();
   await db.auditLog.deleteMany();
   await db.paymentAllocation.deleteMany();
   await db.payment.deleteMany();
@@ -104,6 +114,7 @@ beforeAll(async () => {
   });
 });
 beforeEach(async () => {
+  await db.businessClock.deleteMany();
   await db.auditLog.deleteMany();
   await db.paymentAllocation.deleteMany();
   await db.payment.deleteMany();
@@ -133,6 +144,7 @@ beforeEach(async () => {
     enabled: true,
   });
 });
+afterEach(() => db.businessClock.deleteMany());
 afterAll(() => db.$disconnect());
 describe("PostgreSQL workflow", () => {
   it("registers, quotes, receives balance, delivers and audits every change", async () => {
@@ -527,6 +539,20 @@ describe("PostgreSQL workflow", () => {
       method: "CASH",
     });
     expect(sale.code).toMatch(/^V-\d{8}001$/);
+  });
+  it("uses the manually configured business date for codes and due dates", async () => {
+    await updateBusinessClock(owner, {
+      mode: "MANUAL",
+      manualDate: "2030-05-06",
+    });
+    await expect(
+      createOrder(staff, input({ dueDate: "2030-05-05", deposit: "0" })),
+    ).rejects.toThrow("precedere oggi");
+    const order = await createOrder(
+      staff,
+      input({ dueDate: "2030-05-06", deposit: "0" }),
+    );
+    expect(order.code).toBe("R-20300506001");
   });
   it("creates diagnostic orders without repair items and uses the editable fee", async () => {
     const order = await createOrder(

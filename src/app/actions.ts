@@ -99,6 +99,10 @@ export async function createOrderAction(input: unknown) {
   const actor = await requireActor();
   return execute(() => service.createOrder(actor, input));
 }
+export async function updateBusinessClockAction(input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.updateBusinessClock(actor, input));
+}
 export async function updateOrderAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.updateOrder(actor, id, input));

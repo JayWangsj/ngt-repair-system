@@ -12,6 +12,7 @@ import { getMessages } from "@/lib/i18n-server";
 import { balance, isOverdue, settlement, type OrderStatus } from "@/lib/domain";
 import { Button } from "./ui/button";
 import { OrderListBody } from "./order-list-controls";
+import { getBusinessDay } from "@/lib/business-date";
 export function BackButton({ href, label }: { href: string; label: string }) {
   return (
     <Link className="button button-outline back-link" href={href}>
@@ -88,6 +89,7 @@ export async function OrderTable({
   compact?: boolean;
 }) {
   const it = await getMessages();
+  const today = await getBusinessDay();
   if (!orders.length)
     return compact ? <p className="compact-empty">{it.empty}</p> : <Empty />;
   return (
@@ -123,7 +125,7 @@ export async function OrderTable({
                 : order.items.map((item) => item.project).join(", "),
               status: order.status,
               dueDate: order.dueDate ?? "",
-              overdue: isOverdue(order),
+              overdue: isOverdue(order, today),
               due,
               paid: ["REFUNDED", "CANCELLED"].includes(order.status)
                 ? 0

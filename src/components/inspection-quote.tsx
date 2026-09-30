@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { completeInspectionAction } from "@/app/actions";
-import { romeDay, settlement } from "@/lib/domain";
+import { settlement } from "@/lib/domain";
+import { useBusinessDay } from "./business-date";
 import {
   Field,
   FormDialog,
@@ -46,6 +47,7 @@ export function CompleteInspectionButton({
   }[];
   productCategories: CategoryView[];
 }) {
+  const today = useBusinessDay();
   const it = useMessages();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -130,7 +132,7 @@ export function CompleteInspectionButton({
                 <div className="compact-date-field">
                   <Field label={it.dueDate}>
                     <DatePicker
-                      min={romeDay()}
+                      min={today}
                       value={dueDate}
                       onChange={(event) => setDueDate(event.target.value)}
                     />

@@ -4,6 +4,7 @@ import { PageHeader, OrderTable } from "@/components/common";
 import { SimpleSelect } from "@/components/business-select";
 import { balance, isOverdue, romeDay, statuses } from "@/lib/domain";
 import { requireActor } from "@/lib/session";
+import { getBusinessDay } from "@/lib/business-date";
 export default async function Orders({
   searchParams,
 }: {
@@ -17,6 +18,7 @@ export default async function Orders({
   const it = await getMessages();
   await requireActor();
   const query = await searchParams;
+  const today = await getBusinessDay();
   const q = query.q?.trim() ?? "";
   const month = /^\d{4}-\d{2}$/.test(query.month ?? "")
     ? query.month!
@@ -50,7 +52,7 @@ export default async function Orders({
       (!query.status || o.status === query.status) &&
       romeDay(o.createdAt).startsWith(month) &&
       (query.attention === "overdue"
-        ? isOverdue(o)
+        ? isOverdue(o, today)
         : query.attention === "unpaid"
           ? o.status !== "CANCELLED" && balance(o.items, o.payments, o) > 0
           : true),

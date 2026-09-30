@@ -824,6 +824,55 @@ test("language switching from settings persists across business pages", async ({
     page.getByRole("heading", { name: "Nuova riparazione", exact: true }),
   ).toBeVisible();
 });
+test("settings applies a manual business date and can return to system time", async ({
+  page,
+}) => {
+  await page.goto("/settings");
+  const dateSettings = page.locator(".business-date-settings");
+  await chooseBusinessOption(
+    page,
+    "Modalità data",
+    "Imposta manualmente",
+    dateSettings,
+  );
+  await dateSettings
+    .getByLabel("Imposta manualmente", { exact: true })
+    .fill("2031-04-12");
+  await dateSettings
+    .getByRole("button", { name: "Salva", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "Data corrente aggiornata.",
+  );
+  await expect(dateSettings).toContainText("12/04/2031");
+
+  await page.goto("/orders/new");
+  await chooseBusinessOption(page, "Cerca cliente", "Cliente Playwright");
+  await chooseBusinessOption(
+    page,
+    "Dispositivo del cliente",
+    "Apple iPhone 13",
+  );
+  await page.getByLabel("Display rotto", { exact: true }).check();
+  await expect(
+    page.getByLabel("Consegna prevista", { exact: true }),
+  ).toHaveAttribute("min", "2031-04-12");
+
+  await page.goto("/settings");
+  const resetSettings = page.locator(".business-date-settings");
+  await chooseBusinessOption(
+    page,
+    "Modalità data",
+    "Segui la data di sistema",
+    resetSettings,
+  );
+  await resetSettings
+    .getByRole("button", { name: "Salva", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "Data corrente aggiornata.",
+  );
+});
 test("manual quote saves automatically and rejects overpayment", async ({
   page,
 }) => {

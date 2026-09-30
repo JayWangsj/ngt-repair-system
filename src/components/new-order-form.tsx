@@ -23,9 +23,9 @@ import {
   creatablePaymentMethods,
   matchRule,
   money,
-  romeDay,
   settlement,
 } from "@/lib/domain";
+import { useBusinessDay } from "./business-date";
 import { uniqueOptions } from "@/lib/options";
 import { translateError } from "@/lib/i18n";
 import {
@@ -176,6 +176,7 @@ export function NewOrderWizard({
 }) {
   const it = useMessages();
   const { locale } = useLanguage();
+  const today = useBusinessDay();
   const router = useRouter();
   const [requestId] = useState(() => crypto.randomUUID());
   const [selectedStep, setSelectedStep] = useState<number | null>(0);
@@ -873,7 +874,7 @@ export function NewOrderWizard({
                 <Field label={it.dueDate}>
                   <DatePicker
                     name="dueDate"
-                    min={romeDay()}
+                    min={today}
                     value={dueDate}
                     disabled={!validDevice || !validFault}
                     onChange={(event) => setDueDate(event.target.value)}

@@ -1,10 +1,12 @@
 "use client";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Download, Upload, Trash2 } from "lucide-react";
-import { clearDataAction } from "@/app/actions";
+import { CalendarDays, Download, Upload, Trash2 } from "lucide-react";
+import { clearDataAction, updateBusinessClockAction } from "@/app/actions";
 import { LanguageSwitch, useMessages } from "./language";
 import { Button } from "./ui/button";
+import { DatePicker, SimpleSelect } from "./business-select";
+import { Field } from "./forms";
 import {
   FaultCatalogManager,
   type FaultCatalogItem,
@@ -12,8 +14,12 @@ import {
 
 export function SettingsTools({
   faultOptions,
+  clock,
+  today,
 }: {
   faultOptions: FaultCatalogItem[];
+  clock: { mode: "SYSTEM" | "MANUAL"; manualDate: string };
+  today: string;
 }) {
   const it = useMessages();
   const router = useRouter();
@@ -21,6 +27,23 @@ export function SettingsTools({
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [clockPending, setClockPending] = useState(false);
+  const [dateMode, setDateMode] = useState(clock.mode);
+  const [manualDate, setManualDate] = useState(clock.manualDate || today);
+
+  async function saveClock() {
+    setClockPending(true);
+    setMessage("");
+    setError("");
+    const result = await updateBusinessClockAction({
+      mode: dateMode,
+      manualDate,
+    });
+    setClockPending(false);
+    if (!result.ok) return setError(result.error);
+    setMessage(it.businessDateSaved);
+    router.refresh();
+  }
 
   async function exportFile() {
     setPending(true);
@@ -130,6 +153,48 @@ export function SettingsTools({
       <section className="panel padded settings-card">
         <h2>{it.language}</h2>
         <LanguageSwitch />
+      </section>
+      <section className="panel padded settings-card business-date-settings">
+        <div className="settings-card-title">
+          <CalendarDays size={19} aria-hidden="true" />
+          <h2>{it.businessDate}</h2>
+        </div>
+        <p>{it.businessDateHelp}</p>
+        <div className="settings-date-form">
+          <Field label={it.dateMode}>
+            <SimpleSelect
+              value={dateMode}
+              onChange={(value) =>
+                setDateMode(value === "MANUAL" ? "MANUAL" : "SYSTEM")
+              }
+              ariaLabel={it.dateMode}
+              placeholder={it.systemDate}
+              options={[
+                { value: "SYSTEM", label: it.systemDate },
+                { value: "MANUAL", label: it.manualDate },
+              ]}
+            />
+          </Field>
+          {dateMode === "MANUAL" && (
+            <Field label={it.manualDate}>
+              <DatePicker
+                value={manualDate}
+                onChange={(event) => setManualDate(event.target.value)}
+              />
+            </Field>
+          )}
+          <div className="business-date-current">
+            <span>{it.currentBusinessDate}</span>
+            <strong>{today.split("-").reverse().join("/")}</strong>
+          </div>
+          <Button
+            type="button"
+            disabled={clockPending || (dateMode === "MANUAL" && !manualDate)}
+            onClick={() => void saveClock()}
+          >
+            {clockPending ? it.saving : it.save}
+          </Button>
+        </div>
       </section>
       <section className="panel padded settings-card">
         <h2>{it.faultCatalog}</h2>

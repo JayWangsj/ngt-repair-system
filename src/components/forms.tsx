@@ -41,7 +41,8 @@ import {
   normalizeBrand,
   normalizeModel,
 } from "@/lib/catalog";
-import { isDiagnosticFault, romeDay, settlement } from "@/lib/domain";
+import { isDiagnosticFault, settlement } from "@/lib/domain";
+import { useBusinessDay } from "./business-date";
 import {
   cents,
   decimal,
@@ -1044,6 +1045,7 @@ export function NewOrderForm({
   }[];
 }) {
   const it = useMessages();
+  const today = useBusinessDay();
   const { locale } = useLanguage();
   const router = useRouter();
   const [error, setError] = useState("");
@@ -1527,7 +1529,7 @@ export function NewOrderForm({
           <textarea {...register("fault")} maxLength={2000} rows={2} />
         </Field>
         <Field label={it.dueDate}>
-          <input {...register("dueDate")} type="date" min={romeDay()} />
+          <input {...register("dueDate")} type="date" min={today} />
         </Field>
       </Section>
       <Section number="03" title={it.quoteSection}>
@@ -1888,6 +1890,7 @@ export function EditOrderForm({
   };
 }) {
   const it = useMessages();
+  const today = useBusinessDay();
   const [customerId, setCustomerId] = useState(values.customerId);
   const [localCustomers, setLocalCustomers] = useState(customers);
   const [addingCustomer, setAddingCustomer] = useState(false);
@@ -1963,7 +1966,7 @@ export function EditOrderForm({
           <input
             type="date"
             name="dueDate"
-            min={romeDay()}
+            min={today}
             defaultValue={values.dueDate ?? ""}
           />
         </Field>
@@ -2267,6 +2270,7 @@ export function AfterSalesForm({
   onSuccess?: () => void;
 }) {
   const it = useMessages();
+  const today = useBusinessDay();
   const available = originalProjects.filter((project) => !project.reworked);
   const [selected, setSelected] = useState<string[]>(
     available.length === 1 ? [available[0].id] : [],
@@ -2448,7 +2452,7 @@ export function AfterSalesForm({
       </Field>
       <div className="after-sales-grid">
         <Field label={it.afterSales.dueDate}>
-          <DatePicker name="dueDate" min={romeDay()} />
+          <DatePicker name="dueDate" min={today} />
         </Field>
       </div>
     </ActionForm>

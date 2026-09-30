@@ -24,6 +24,7 @@ import { getLocale, getMessages } from "@/lib/i18n-server";
 import { Badge, PageHeader } from "@/components/common";
 import { requireActor } from "@/lib/session";
 import { DashboardMotion } from "@/components/dashboard-motion";
+import { getBusinessDay } from "@/lib/business-date";
 
 export default async function Dashboard({
   searchParams,
@@ -33,6 +34,7 @@ export default async function Dashboard({
   const it = await getMessages();
   const locale = await getLocale();
   const actor = await requireActor();
+  const businessToday = await getBusinessDay();
   const [orders, payments, products, sales, saleItems] = await Promise.all([
     db.workOrder.findMany({
       include: {
@@ -59,7 +61,7 @@ export default async function Dashboard({
   const active = orders.filter(
     (order) => !["COMPLETED", "CANCELLED"].includes(order.status),
   );
-  const overdue = active.filter((order) => isOverdue(order));
+  const overdue = active.filter((order) => isOverdue(order, businessToday));
   const lowStock = products.filter(
     (product) =>
       product.stockQuantity > 0 && product.stockQuantity <= product.minStock,

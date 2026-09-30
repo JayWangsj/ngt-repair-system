@@ -5,6 +5,7 @@ const db = new PrismaClient();
 async function main() {
   if (!new URL(process.env.DATABASE_URL || "").pathname.endsWith("_test"))
     throw new Error("This script only accepts *_test databases.");
+  await db.businessClock.deleteMany();
   await db.auditLog.deleteMany();
   await db.paymentAllocation.deleteMany();
   await db.payment.deleteMany();

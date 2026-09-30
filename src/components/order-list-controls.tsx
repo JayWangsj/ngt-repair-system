@@ -5,13 +5,8 @@ import { ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setPaidTotalAction, updateDueDateAction } from "@/app/actions";
-import {
-  dateOnly,
-  decimal,
-  money,
-  romeDay,
-  type OrderStatus,
-} from "@/lib/domain";
+import { dateOnly, decimal, money, type OrderStatus } from "@/lib/domain";
+import { useBusinessDay } from "./business-date";
 import { useMessages } from "./language";
 import { StatusDropdown, type StatusDropdownOrder } from "./status-dropdown";
 
@@ -96,6 +91,7 @@ function DueDateControl({
   active: boolean;
 }) {
   const it = useMessages();
+  const today = useBusinessDay();
   const router = useRouter();
   const [value, setValue] = useState(row.dueDate);
   const [pending, startTransition] = useTransition();
@@ -123,7 +119,7 @@ function DueDateControl({
         className="order-due-input"
         aria-label={it.dueDate}
         type="date"
-        min={romeDay()}
+        min={today}
         value={value}
         disabled={pending}
         onChange={(event) => setValue(event.target.value)}

@@ -38,12 +38,14 @@ import {
   statusInput,
   warrantyInput,
   afterSalesInput,
+  businessClockInput,
   refundInput,
   userInput,
 } from "./validation";
 import { z } from "zod";
 import { hash } from "bcryptjs";
 import { normalizeBrand, normalizeModel } from "./catalog";
+import { getBusinessDay } from "./business-date";
 
 type Tx = Prisma.TransactionClient;
 const lockedOrderStatuses = ["COMPLETED", "REWORKING", "REFUNDED", "CANCELLED"];
@@ -70,12 +72,8 @@ export const orderInclude = {
     orderBy: { createdAt: "asc" as const },
   },
 };
-async function nextDailyCode(
-  tx: Tx,
-  kind: "order" | "sale",
-  date = new Date(),
-) {
-  const prefix = `${kind === "order" ? "R" : "V"}-${romeDay(date).replaceAll("-", "")}`;
+async function nextDailyCode(tx: Tx, kind: "order" | "sale", day: string) {
+  const prefix = `${kind === "order" ? "R" : "V"}-${day.replaceAll("-", "")}`;
   const latest =
     kind === "order"
       ? await tx.workOrder.findFirst({
@@ -91,6 +89,35 @@ async function nextDailyCode(
   const sequence = latest ? Number(latest.code.slice(-3)) + 1 : 1;
   if (sequence > 999) throw new BusinessError("Limite giornaliero raggiunto.");
   return `${prefix}${String(sequence).padStart(3, "0")}`;
+}
+
+async function assertDueDate(tx: Tx, value: string) {
+  if (value && value < (await getBusinessDay(tx)))
+    throw new BusinessError("La consegna non può precedere oggi.");
+}
+
+export async function updateBusinessClock(actorInput: Actor, raw: unknown) {
+  const data = businessClockInput.parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const clock = await tx.businessClock.upsert({
+      where: { id: "default" },
+      create: {
+        id: "default",
+        mode: data.mode,
+        manualDate: data.mode === "MANUAL" ? data.manualDate : null,
+      },
+      update: {
+        mode: data.mode,
+        manualDate: data.mode === "MANUAL" ? data.manualDate : null,
+      },
+    });
+    await audit(tx, actor, clock.id, "BUSINESS_CLOCK_UPDATED", {
+      mode: clock.mode,
+      manualDate: clock.manualDate,
+    });
+    return clock;
+  });
 }
 
 type SnapshotItem = Awaited<ReturnType<typeof snapshots>>[number];
@@ -363,6 +390,7 @@ async function snapshots(
 export async function createOrder(actorInput: Actor, raw: unknown) {
   const data = orderInput.parse(raw);
   return transact(async (tx) => {
+    await assertDueDate(tx, data.dueDate);
     const actor = await currentActor(tx, actorInput);
     const previous = await tx.auditLog.findFirst({
       where: {
@@ -498,7 +526,7 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
           .join("; ");
     const order = await tx.workOrder.create({
       data: {
-        code: await nextDailyCode(tx, "order"),
+        code: await nextDailyCode(tx, "order", await getBusinessDay(tx)),
         deviceId: device.id,
         customerName: customer.name,
         fault: faultSnapshot,
@@ -593,6 +621,7 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
 export async function updateOrder(actorInput: Actor, id: string, raw: unknown) {
   const data = editInput.parse(raw);
   return transact(async (tx) => {
+    await assertDueDate(tx, data.dueDate);
     const actor = await currentActor(tx, actorInput);
     const order = await tx.workOrder.findUniqueOrThrow({
       where: { id },
@@ -701,6 +730,7 @@ export async function completeInspection(
 ) {
   const data = inspectionQuoteInput.parse(raw);
   return transact(async (tx) => {
+    await assertDueDate(tx, data.dueDate);
     const actor = await currentActor(tx, actorInput);
     const order = await tx.workOrder.findUniqueOrThrow({
       where: { id },
@@ -805,6 +835,7 @@ export async function updateDueDate(
 ) {
   const dueDate = dueDateInput.parse(raw);
   return transact(async (tx) => {
+    await assertDueDate(tx, dueDate);
     const actor = await currentActor(tx, actorInput);
     const order = await tx.workOrder.findUniqueOrThrow({ where: { id } });
     if (originalOrderLocked(order))
@@ -1975,7 +2006,9 @@ export async function openAfterSales(
 ) {
   const data = afterSalesInput.parse(raw);
   return transact(async (tx) => {
+    await assertDueDate(tx, data.dueDate);
     const actor = await currentActor(tx, actorInput);
+    const today = await getBusinessDay(tx);
     const order = await tx.workOrder.findUniqueOrThrow({
       where: { id },
       include: { items: { include: { reworkItem: true } } },
@@ -2008,7 +2041,7 @@ export async function openAfterSales(
           create: selected.map(({ input, item, fee }) => ({
             originalItemId: item.id,
             warrantyState:
-              item.warrantyExpiresAt && item.warrantyExpiresAt >= new Date()
+              item.warrantyExpiresAt && romeDay(item.warrantyExpiresAt) >= today
                 ? "ACTIVE"
                 : item.warrantyDays > 0
                   ? "EXPIRED"
@@ -2293,7 +2326,7 @@ export async function createRetailSale(actorInput: Actor, raw: unknown) {
     const itemCount = lines.reduce((sum, line) => sum + line.quantity, 0);
     const sale = await tx.retailSale.create({
       data: {
-        code: await nextDailyCode(tx, "sale"),
+        code: await nextDailyCode(tx, "sale", await getBusinessDay(tx)),
         requestId: data.requestId,
         subtotal: decimal(subtotal),
         discount: decimal(discount),

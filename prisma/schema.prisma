@@ -374,6 +374,13 @@ model DeviceCatalogDeletion {
   @@unique([category, kind, brand, value])
 }
 
+model BusinessClock {
+  id         String   @id @default("default")
+  mode       String   @default("SYSTEM")
+  manualDate String?
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+}
+
 model RetailSale {
   id        String           @id @default(cuid())
   number    Int              @unique @default(autoincrement())

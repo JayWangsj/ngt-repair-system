@@ -35,6 +35,7 @@ import {
 } from "@/components/order-detail-ui";
 import { DetailStatusControl } from "@/components/order-list-controls";
 import { CompleteInspectionButton } from "@/components/inspection-quote";
+import { getBusinessDay } from "@/lib/business-date";
 
 type TimelineEvent = {
   id: string;
@@ -58,6 +59,7 @@ export default async function Detail({
   const it = await getMessages();
   const locale = await getLocale();
   const actor = await requireActor();
+  const today = await getBusinessDay();
   const { id } = await params;
   const [order, audits] = await Promise.all([
     db.workOrder.findUnique({ where: { id }, include: orderInclude }),
@@ -156,7 +158,7 @@ export default async function Detail({
   const itemWarranties = new Map(
     order.items.map((item) => [
       item.id,
-      warrantyProgress(item.warrantyStart, item.warrantyDays),
+      warrantyProgress(item.warrantyStart, item.warrantyDays, today),
     ]),
   );
 

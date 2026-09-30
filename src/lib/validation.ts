@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isDiagnosticFault, normalizePhone, romeDay, statuses } from "./domain";
+import { isDiagnosticFault, normalizePhone, statuses } from "./domain";
 const short = z.string().trim().min(1, "Campo obbligatorio").max(120);
 const text = z.string().trim().max(2000).default("");
 export const amountInput = z
@@ -29,11 +29,26 @@ export const dueDateInput = z
         new Date(value).toISOString().slice(0, 10) === value),
     "Data non valida",
   )
-  .refine(
-    (value) => !value || value >= romeDay(),
-    "La consegna non può precedere oggi.",
-  )
   .default("");
+
+export const businessClockInput = z
+  .object({
+    mode: z.enum(["SYSTEM", "MANUAL"]),
+    manualDate: z.string().trim().default(""),
+  })
+  .superRefine((value, ctx) => {
+    if (value.mode !== "MANUAL") return;
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(value.manualDate) ||
+      Number.isNaN(Date.parse(value.manualDate)) ||
+      new Date(value.manualDate).toISOString().slice(0, 10) !== value.manualDate
+    )
+      ctx.addIssue({
+        code: "custom",
+        path: ["manualDate"],
+        message: "Data non valida",
+      });
+  });
 export const itemInput = z.object({
   project: short,
   final: amountInput,

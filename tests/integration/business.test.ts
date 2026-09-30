@@ -150,8 +150,6 @@ describe("PostgreSQL workflow", () => {
   it("registers, quotes, receives balance, delivers and audits every change", async () => {
     const created = await createOrder(staff, input());
     await updateDueDate(staff, created.id, "2099-12-31");
-    await changeStatus(staff, created.id, { status: "PARTS_MISSING" });
-    await changeStatus(staff, created.id, { status: "REPAIRING" });
     await changeStatus(staff, created.id, { status: "READY" });
     await addPayment(staff, created.id, {
       requestId: randomUUID(),
@@ -169,7 +167,7 @@ describe("PostgreSQL workflow", () => {
     });
     expect(order.status).toBe("COMPLETED");
     expect(order.pickedUpAt).not.toBeNull();
-    expect(order.history).toHaveLength(5);
+    expect(order.history).toHaveLength(3);
     expect(order.dueDate).toBe("2099-12-31");
     expect(order.payments).toHaveLength(2);
     expect(balance(order.items, order.payments)).toBe(0);
@@ -406,6 +404,9 @@ describe("PostgreSQL workflow", () => {
     expect(
       await db.reworkSession.count({ where: { orderId: created.id } }),
     ).toBe(1);
+    await expect(
+      changeStatus(staff, created.id, { status: "REWORKING" }),
+    ).rejects.toThrow("post-vendita");
     await adjustInventory(staff, part.id, {
       requestId: randomUUID(),
       quantity: 1,
@@ -417,6 +418,9 @@ describe("PostgreSQL workflow", () => {
         .status,
     ).toBe("REWORKING");
     await changeStatus(staff, created.id, { status: "READY" });
+    await expect(
+      changeStatus(staff, created.id, { status: "REPAIRING" }),
+    ).rejects.toThrow("Cambio di stato");
     await changeStatus(staff, created.id, { status: "REWORKING" });
     expect(
       await db.reworkSession.count({ where: { orderId: created.id } }),
@@ -629,7 +633,7 @@ describe("PostgreSQL workflow", () => {
     expect(order.status).toBe("PARTS_MISSING");
     await expect(
       changeStatus(staff, order.id, { status: "REPAIRING" }),
-    ).rejects.toThrow("Ricambi insufficienti");
+    ).rejects.toThrow("Cambio di stato");
     await adjustInventory(owner, part.id, {
       requestId: randomUUID(),
       quantity: 1,

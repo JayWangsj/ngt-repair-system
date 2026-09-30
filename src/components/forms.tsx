@@ -676,6 +676,31 @@ export function ItemsEditor({
           !!selectedProduct &&
           Number(item.requiredQuantity ?? 1) >
             (selectedProduct.available ?? selectedProduct.stock);
+        const createTemporaryProject = (project: string) => {
+          const value = project.trim();
+          if (!noProjectMatches || !value || !validPositiveAmount(item.final))
+            return;
+          const duplicate = searchProjects.find(
+            (candidate) =>
+              normalizedProject(candidate) === normalizedProject(value),
+          );
+          if (duplicate) return;
+          setProjectQueries((current) => ({ ...current, [index]: "" }));
+          setEditingProjects((current) => ({
+            ...current,
+            [index]: false,
+          }));
+          update(index, {
+            project: value,
+            adjustmentReason: "",
+            discount: "0",
+            discountVisible: false,
+            saveRule: true,
+            requiredProductId: "",
+            requiredQuantity: 1,
+            requiredProductRemoved: false,
+          });
+        };
         return (
           <div className="quote-item" key={index}>
             {itemSelected && !editingProjects[index] ? (
@@ -805,6 +830,7 @@ export function ItemsEditor({
                       if (event.key !== "Enter") return;
                       event.preventDefault();
                       event.stopPropagation();
+                      createTemporaryProject(projectQuery);
                     }}
                   />
                 }
@@ -836,26 +862,7 @@ export function ItemsEditor({
                     [index]: query,
                   }));
                 }}
-                onCustom={(project) => {
-                  if (!validPositiveAmount(item.final)) return;
-                  const duplicate = searchProjects.find(
-                    (candidate) =>
-                      normalizedProject(candidate) ===
-                      normalizedProject(project),
-                  );
-                  if (duplicate) return;
-                  setProjectQueries((current) => ({ ...current, [index]: "" }));
-                  update(index, {
-                    project,
-                    adjustmentReason: "",
-                    discount: "0",
-                    discountVisible: false,
-                    saveRule: true,
-                    requiredProductId: "",
-                    requiredQuantity: 1,
-                    requiredProductRemoved: false,
-                  });
-                }}
+                onCustom={createTemporaryProject}
                 onNoMatchEnter={(project) => {
                   setProjectQueries((current) => ({
                     ...current,

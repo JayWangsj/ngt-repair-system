@@ -3,6 +3,7 @@ import {
   assertDelivery,
   assertOwner,
   assertTransition,
+  allowedTransitions,
   allocatePayment,
   balance,
   cents,
@@ -172,7 +173,19 @@ describe("status and permissions", () => {
     expect(() => assertTransition("CANCELLED", "RECEIVED")).toThrow();
     expect(() => assertTransition("REPAIRING", "READY")).not.toThrow();
     expect(() => assertTransition("REPAIRING", "PARTS_MISSING")).not.toThrow();
-    expect(() => assertTransition("PARTS_MISSING", "REPAIRING")).not.toThrow();
+    expect(() => assertTransition("PARTS_MISSING", "REPAIRING")).toThrow();
+    expect(allowedTransitions("PARTS_MISSING", false)).toEqual(["CANCELLED"]);
+    expect(allowedTransitions("PARTS_MISSING", true)).toEqual(["CANCELLED"]);
+    expect(allowedTransitions("READY", false)).toEqual([
+      "REPAIRING",
+      "COMPLETED",
+    ]);
+    expect(allowedTransitions("READY", true)).toEqual([
+      "REWORKING",
+      "COMPLETED",
+    ]);
+    expect(() => assertTransition("READY", "REWORKING", true)).not.toThrow();
+    expect(() => assertTransition("READY", "REPAIRING", true)).toThrow();
     expect(() => assertTransition("DIAGNOSING", "REPAIRING")).toThrow();
     expect(() => assertTransition("DIAGNOSING", "READY")).toThrow();
     expect(() => assertTransition("DIAGNOSING", "COMPLETED")).toThrow();

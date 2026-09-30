@@ -470,6 +470,16 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await page.reload();
   await expect(row.locator(".badge")).toContainText("Ricambio mancante");
   await row.click();
+  await row.locator(".status-dropdown-trigger").click();
+  await expect(
+    page.locator(".status-dropdown-menu [role='option']"),
+  ).toHaveCount(1);
+  await expect(
+    page
+      .locator(".status-dropdown-menu")
+      .getByRole("option", { name: "Annullato", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(
     row.getByLabel("Consegna prevista", { exact: true }),
   ).toBeEnabled();
@@ -1693,6 +1703,15 @@ test("changing a selected repair part focuses its current name and preserves it 
   await chooseBusinessOption(page, "Ricambio richiesto 1", "Batteria Test");
   const summary = page.locator(".selected-part-summary");
   await expect(summary).toContainText("Batteria Test");
+  expect(
+    await summary.locator(".selection-summary-icon").evaluate((icon) => {
+      const iconBox = icon.getBoundingClientRect();
+      const svgBox = icon.querySelector("svg")!.getBoundingClientRect();
+      return Math.abs(
+        iconBox.left + iconBox.width / 2 - (svgBox.left + svgBox.width / 2),
+      );
+    }),
+  ).toBeLessThanOrEqual(1);
   await summary.getByRole("button", { name: "Cambia", exact: true }).click();
   const search = page.getByRole("combobox", {
     name: "Ricambio richiesto 1",
@@ -1741,16 +1760,15 @@ test("clears a repair item and creates a custom item with Enter without submitti
     exact: true,
   });
   await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
-  await expect(price).toHaveValue("100");
-  await page
-    .locator(".selected-project-summary")
+  const projectSummary = page.locator(".selected-project-summary");
+  await expect(projectSummary).toContainText("100,00 €");
+  await projectSummary
     .getByRole("button", { name: "Cambia", exact: true })
     .click();
   await search.press("Control+A");
   await search.press("Backspace");
   await expect(search).toHaveValue("");
-  await expect(price).toHaveValue("");
-  await expect(price).toBeDisabled();
+  await expect(price).toHaveCount(0);
 
   await search.fill(name);
   await expect(price).toBeEnabled();
@@ -1777,6 +1795,15 @@ test("clears a repair item and creates a custom item with Enter without submitti
     0,
   );
   await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await page
+    .getByRole("button", { name: "Aggiungi intervento", exact: true })
+    .click();
+  const newItem = page.locator(".quote-item").nth(1);
+  await newItem.hover();
+  const removeItem = newItem.locator(".record-icon-delete");
+  await expect(removeItem).toHaveCSS("bottom", "2px");
+  await removeItem.click();
 
   await chooseBusinessOption(page, "Ricambio richiesto 1", "Batteria Test");
   await save(page);

@@ -1062,7 +1062,7 @@ textarea {
 .quote-item > .record-icon-delete {
   position: absolute;
   right: 10px;
-  bottom: 9px;
+  bottom: 2px;
 }
 .quote-item label {
   margin-bottom: 10px;
@@ -1123,6 +1123,10 @@ textarea {
   display: flex;
   align-items: center;
   gap: 4px;
+}
+.selected-part-summary > .selection-summary-icon {
+  display: grid;
+  place-items: center;
 }
 .selected-part-summary .button {
   min-height: 32px;

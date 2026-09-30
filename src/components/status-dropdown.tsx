@@ -13,7 +13,7 @@ import {
 import { createPortal } from "react-dom";
 import { statusAction } from "@/app/actions";
 import {
-  transitions,
+  allowedTransitions,
   type OrderStatus,
   type StatusMutationSnapshot,
 } from "@/lib/domain";
@@ -173,14 +173,10 @@ export function StatusDropdown({
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
-  const choices = [
-    ...transitions[currentOrder.status].filter(
-      (status) => status !== "REFUNDED",
-    ),
-    ...(currentOrder.status === "READY" && currentOrder.afterSalesOpen
-      ? (["REWORKING"] as OrderStatus[])
-      : []),
-  ];
+  const choices = allowedTransitions(
+    currentOrder.status,
+    currentOrder.afterSalesOpen,
+  ).filter((status) => status !== "REFUNDED");
   function settled(snapshot: StatusMutationSnapshot) {
     const nextOrder = { ...currentOrder, ...snapshot };
     setCurrentOrder(nextOrder);

@@ -131,15 +131,26 @@ export const transitions: Record<OrderStatus, OrderStatus[]> = {
   RECEIVED: ["DIAGNOSING", "REPAIRING", "PARTS_MISSING", "CANCELLED"],
   DIAGNOSING: ["CANCELLED"],
   REPAIRING: ["PARTS_MISSING", "READY", "CANCELLED"],
-  PARTS_MISSING: ["DIAGNOSING", "REPAIRING", "READY", "CANCELLED"],
-  READY: ["REPAIRING", "COMPLETED", "CANCELLED"],
+  PARTS_MISSING: ["CANCELLED"],
+  READY: ["REPAIRING", "COMPLETED"],
   COMPLETED: [],
   REWORKING: ["READY", "CANCELLED"],
   REFUNDED: [],
   CANCELLED: [],
 };
-export function assertTransition(from: OrderStatus, to: OrderStatus) {
-  if (!transitions[from].includes(to))
+export function allowedTransitions(
+  from: OrderStatus,
+  afterSalesOpen = false,
+): OrderStatus[] {
+  if (from === "READY" && afterSalesOpen) return ["REWORKING", "COMPLETED"];
+  return transitions[from];
+}
+export function assertTransition(
+  from: OrderStatus,
+  to: OrderStatus,
+  afterSalesOpen = false,
+) {
+  if (!allowedTransitions(from, afterSalesOpen).includes(to))
     throw new BusinessError("Cambio di stato non consentito.");
 }
 export function assertOwner(actor: Actor) {

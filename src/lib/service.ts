@@ -1177,7 +1177,7 @@ export async function changeStatus(
       order.afterSalesOpen;
     if (data.status === "REWORKING" && !resumeRework)
       throw new BusinessError("Usa l'operazione post-vendita dedicata.");
-    if (!resumeRework) assertTransition(order.status, data.status);
+    assertTransition(order.status, data.status, order.afterSalesOpen);
 
     if (data.status === "REPAIRING" && (await orderNeedsParts(tx, id)))
       throw new BusinessError(

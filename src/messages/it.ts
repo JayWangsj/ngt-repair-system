@@ -302,6 +302,7 @@ export const it = {
     STATUS_CHANGED: "Stato aggiornato",
     ORDER_DELIVERED: "Dispositivo consegnato",
     AFTER_SALES_OPENED: "Riparazione post-vendita aperta",
+    AFTER_SALES_PART_CHANGED: "Ricambio post-vendita modificato",
     REFUND_ISSUED: "Rimborso registrato",
     INSPECTION_STARTED: "Diagnosi avviata",
     INSPECTION_COMPLETED: "Diagnosi completata",
@@ -334,6 +335,9 @@ export const it = {
   noMatches: "Nessun risultato corrispondente.",
   noMatchesCreateHint:
     "Nessun risultato. Usa «+{action}» a destra per crearne uno.",
+  noMatchesPriceHint:
+    "Nessun risultato. Inserisci il prezzo, poi usa «+{action}» a destra.",
+  invalidAmount: "Inserisci un importo valido",
   cancel: "Annulla",
   close: "Chiudi",
   search: "Cerca",
@@ -358,6 +362,9 @@ export const it = {
   customer: "Cliente",
   device: "Dispositivo",
   project: "Intervento",
+  priceListProject: "Voce del listino",
+  priceListPrice: "Prezzo di listino",
+  currentQuote: "Preventivo attuale",
   total: "Totale",
   paid: "Incassato",
   balance: "Da pagare",
@@ -370,6 +377,7 @@ export const it = {
   partInStock: "Disponibile",
   partOutOfStock: "Non disponibile",
   newPart: "Nuovo ricambio",
+  newRepairPart: "Nuovo ricambio per riparazione",
   noRequiredPart: "Nessun ricambio richiesto",
   requiredPartOutOfStock:
     "Il ricambio selezionato non è sufficiente: dopo la creazione la scheda passerà automaticamente a «Ricambio mancante».",
@@ -499,6 +507,7 @@ export const it = {
     remainingDays: "{count} giorni rimanenti",
     used: "utilizzato",
     remaining: "rimanente",
+    alreadyReworked: "Questo intervento ha già utilizzato il post-vendita.",
   },
   customerSection: "Cliente e contatto",
   deviceSection: "Dispositivo e problema",

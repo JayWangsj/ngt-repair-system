@@ -147,6 +147,11 @@ export async function deleteInventoryCategoryAction(id: string) {
   const actor = await requireActor();
   return execute(() => service.deleteInventoryCategory(actor, id));
 }
+
+export async function deleteDeviceCatalogOptionAction(input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.deleteDeviceCatalogOption(actor, input));
+}
 export async function createRetailSaleAction(input: unknown) {
   const actor = await requireActor();
   return execute(() => service.createRetailSale(actor, input));
@@ -180,6 +185,14 @@ export async function warrantyAction(id: string, input: unknown) {
 export async function afterSalesAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.openAfterSales(actor, id, input));
+}
+export async function updateReworkPartAction(
+  id: string,
+  itemId: string,
+  input: unknown,
+) {
+  const actor = await requireActor();
+  return execute(() => service.updateReworkPart(actor, id, itemId, input));
 }
 export async function refundAction(id: string, input: unknown) {
   const actor = await requireActor();

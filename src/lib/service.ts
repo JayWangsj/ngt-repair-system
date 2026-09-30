@@ -55,7 +55,7 @@ function originalOrderLocked(order: {
 }
 export const orderInclude = {
   device: { include: { customer: true } },
-  items: { include: { requiredProduct: true } },
+  items: { include: { requiredProduct: true, reworkItem: true } },
   faults: { include: { catalog: true } },
   products: true,
   payments: {
@@ -63,6 +63,12 @@ export const orderInclude = {
     include: { allocations: true },
   },
   history: { orderBy: { createdAt: "asc" as const } },
+  reworks: {
+    include: {
+      items: { include: { originalItem: true, requiredProduct: true } },
+    },
+    orderBy: { createdAt: "asc" as const },
+  },
 };
 async function nextDailyCode(
   tx: Tx,
@@ -194,7 +200,9 @@ async function refreshPartStatuses(tx: Tx, actor: Actor, productId: string) {
   for (const order of orders) {
     const next = (await orderNeedsParts(tx, order.id))
       ? "PARTS_MISSING"
-      : "REPAIRING";
+      : order.afterSalesOpen
+        ? "REWORKING"
+        : "REPAIRING";
     if (next === order.status) continue;
     await tx.workOrder.update({
       where: { id: order.id },
@@ -979,12 +987,19 @@ export async function addPayment(actorInput: Actor, id: string, raw: unknown) {
       Math.max(0, retailDue - retailPaid),
     );
     const kind = order.afterSalesOpen ? "AFTER_SALES" : data.kind;
+    const rework = order.afterSalesOpen
+      ? await tx.reworkSession.findFirst({
+          where: { orderId: id, open: true },
+          orderBy: { createdAt: "desc" },
+        })
+      : null;
     const payment = await tx.payment.create({
       data: {
         ...data,
         kind,
         amount: decimal(amount),
         orderId: id,
+        reworkSessionId: rework?.id ?? null,
         actorId: actor.id,
         actorName: actor.name,
         allocations: {
@@ -1123,13 +1138,23 @@ export async function changeStatus(
       },
     });
     if (order.status === data.status) return order;
-    if (["REWORKING", "REFUNDED"].includes(data.status))
+    if (data.status === "REFUNDED")
       throw new BusinessError("Usa l'operazione post-vendita dedicata.");
-    assertTransition(order.status, data.status);
+    const resumeRework =
+      order.status === "READY" &&
+      data.status === "REWORKING" &&
+      order.afterSalesOpen;
+    if (data.status === "REWORKING" && !resumeRework)
+      throw new BusinessError("Usa l'operazione post-vendita dedicata.");
+    if (!resumeRework) assertTransition(order.status, data.status);
 
     if (data.status === "REPAIRING" && (await orderNeedsParts(tx, id)))
       throw new BusinessError(
         "Ricambi insufficienti: rifornisci il magazzino prima di avviare la riparazione.",
+      );
+    if (data.status === "READY" && (await orderNeedsParts(tx, id)))
+      throw new BusinessError(
+        "Ricambi insufficienti: rifornisci il magazzino prima di completare la riparazione.",
       );
 
     if (data.status === "COMPLETED") {
@@ -1155,6 +1180,23 @@ export async function changeStatus(
           : {}),
       },
     });
+    if (data.status === "COMPLETED" && !order.pickedUpAt) {
+      const start = new Date();
+      for (const item of order.items)
+        if (item.warrantyDays > 0) {
+          const expires = new Date(start);
+          expires.setUTCDate(expires.getUTCDate() + item.warrantyDays);
+          await tx.workOrderItem.update({
+            where: { id: item.id },
+            data: { warrantyStart: start, warrantyExpiresAt: expires },
+          });
+        }
+    }
+    if (data.status === "COMPLETED" && order.afterSalesOpen)
+      await tx.reworkSession.updateMany({
+        where: { orderId: id, open: true },
+        data: { open: false },
+      });
     if (data.status === "CANCELLED")
       for (const productId of new Set(
         order.products
@@ -1433,11 +1475,77 @@ export async function saveInventoryCategory(actorInput: Actor, raw: unknown) {
 export async function deleteInventoryCategory(actorInput: Actor, id: string) {
   return transact(async (tx) => {
     const actor = await currentActor(tx, actorInput);
-    const category = await tx.inventoryCategory.update({
+    const category = await tx.inventoryCategory.findUniqueOrThrow({
+      where: { id },
+    });
+    if (category.name.toLocaleLowerCase("it") === "ricambi")
+      throw new BusinessError("La categoria Ricambi è protetta.");
+    const used = await tx.product.count({
+      where: {
+        category: { equals: category.name, mode: "insensitive" },
+        enabled: true,
+      },
+    });
+    if (used > 0)
+      throw new BusinessError(
+        "Questa categoria è già utilizzata da prodotti e non può essere eliminata.",
+      );
+    await tx.inventoryCategory.update({
       where: { id },
       data: { deletedAt: new Date() },
     });
     await audit(tx, actor, category.id, "INVENTORY_CATEGORY_DELETED");
+  });
+}
+
+export async function deleteDeviceCatalogOption(
+  actorInput: Actor,
+  raw: unknown,
+) {
+  const data = z
+    .object({
+      category: z.string().min(1).max(30),
+      kind: z.enum(["BRAND", "MODEL"]),
+      brand: z.string().trim().max(120).default(""),
+      value: z.string().trim().min(1).max(120),
+    })
+    .parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const deviceReference = await tx.device.count({
+      where: {
+        category: data.category,
+        ...(data.kind === "BRAND"
+          ? { brand: { equals: data.value, mode: "insensitive" } }
+          : {
+              brand: { equals: data.brand, mode: "insensitive" },
+              model: { equals: data.value, mode: "insensitive" },
+            }),
+      },
+    });
+    const ruleReference = await tx.priceRule.count({
+      where: {
+        category: data.category,
+        ...(data.kind === "BRAND"
+          ? { brand: { equals: data.value, mode: "insensitive" } }
+          : {
+              brand: { equals: data.brand, mode: "insensitive" },
+              model: { equals: data.value, mode: "insensitive" },
+            }),
+      },
+    });
+    if (deviceReference + ruleReference > 0)
+      throw new BusinessError(
+        data.kind === "BRAND"
+          ? "Il marchio è associato a dati aziendali e non può essere eliminato."
+          : "Il modello è associato a dati aziendali e non può essere eliminato.",
+      );
+    const record = await tx.deviceCatalogDeletion.upsert({
+      where: { category_kind_brand_value: data },
+      create: data,
+      update: {},
+    });
+    await audit(tx, actor, record.id, "DEVICE_CATALOG_OPTION_DELETED", data);
   });
 }
 
@@ -1566,10 +1674,11 @@ export async function addWorkOrderProduct(
     if (!product) throw new BusinessError("Prodotto non disponibile.");
     const existing = await tx.workOrderProduct.findUnique({
       where: {
-        orderId_productId_kind: {
+        orderId_productId_kind_contextKey: {
           orderId,
           productId: product.id,
           kind: data.kind,
+          contextKey: "ORIGINAL",
         },
       },
     });
@@ -1577,10 +1686,11 @@ export async function addWorkOrderProduct(
       throw new BusinessError("Il movimento di magazzino è già registrato.");
     const line = await tx.workOrderProduct.upsert({
       where: {
-        orderId_productId_kind: {
+        orderId_productId_kind_contextKey: {
           orderId,
           productId: product.id,
           kind: data.kind,
+          contextKey: "ORIGINAL",
         },
       },
       create: {
@@ -1589,6 +1699,7 @@ export async function addWorkOrderProduct(
         productName: product.name,
         category: product.category,
         kind: data.kind,
+        contextKey: "ORIGINAL",
         unitPrice:
           data.kind === "RETAIL_ADDON" ? product.salePrice : decimal(0),
         quantity: data.quantity,
@@ -1688,6 +1799,12 @@ export async function checkoutWorkOrder(
     if (amount > remaining)
       throw new BusinessError("L'importo supera il saldo da pagare.");
     if (amount > 0) {
+      const rework = order.afterSalesOpen
+        ? await tx.reworkSession.findFirst({
+            where: { orderId, open: true },
+            orderBy: { createdAt: "desc" },
+          })
+        : null;
       const repairDue = settlement(order.items, {
         orderDiscount: order.orderDiscount,
         includeVat: order.includeVat,
@@ -1713,6 +1830,7 @@ export async function checkoutWorkOrder(
         data: {
           requestId: data.requestId,
           orderId,
+          reworkSessionId: rework?.id ?? null,
           amount: decimal(amount),
           method: data.method,
           kind: order.afterSalesOpen ? "AFTER_SALES" : "BALANCE",
@@ -1767,6 +1885,21 @@ export async function checkoutWorkOrder(
         afterSalesDueDate: null,
       },
     });
+    if (!order.pickedUpAt)
+      for (const item of order.items)
+        if (item.warrantyDays > 0) {
+          const expires = new Date(deliveredAt);
+          expires.setUTCDate(expires.getUTCDate() + item.warrantyDays);
+          await tx.workOrderItem.update({
+            where: { id: item.id },
+            data: { warrantyStart: deliveredAt, warrantyExpiresAt: expires },
+          });
+        }
+    if (order.afterSalesOpen)
+      await tx.reworkSession.updateMany({
+        where: { orderId, open: true },
+        data: { open: false },
+      });
     await tx.statusHistory.create({
       data: {
         orderId,
@@ -1801,16 +1934,35 @@ export async function updateWarranty(
   const data = warrantyInput.parse(raw);
   return transact(async (tx) => {
     const actor = await currentActor(tx, actorInput);
-    const order = await tx.workOrder.findUniqueOrThrow({ where: { id } });
+    const order = await tx.workOrder.findUniqueOrThrow({
+      where: { id },
+      include: { items: true },
+    });
     if (originalOrderLocked(order))
       throw new BusinessError("La scheda è chiusa.");
+    if (
+      data.items.some(
+        (item) => !order.items.some((current) => current.id === item.id),
+      )
+    )
+      throw new BusinessError("Intervento non valido.");
+    for (const item of data.items) {
+      const start = order.pickedUpAt;
+      const expires = start && item.days > 0 ? new Date(start) : null;
+      if (expires) expires.setUTCDate(expires.getUTCDate() + item.days);
+      await tx.workOrderItem.update({
+        where: { id: item.id },
+        data: {
+          warrantyDays: item.days,
+          warrantyNotes: item.notes,
+          warrantyStart: item.days > 0 ? start : null,
+          warrantyExpiresAt: expires,
+        },
+      });
+    }
     await tx.workOrder.update({
       where: { id },
-      data: {
-        warrantyDays: data.days,
-        warrantyScope: data.scope,
-        warrantyNotes: data.notes,
-      },
+      data: { updatedAt: new Date() },
     });
     await audit(tx, actor, id, "WARRANTY_UPDATED", data);
   });
@@ -1822,18 +1974,85 @@ export async function openAfterSales(
   raw: unknown,
 ) {
   const data = afterSalesInput.parse(raw);
-  const fee = data.treatment === "WARRANTY" ? 0 : cents(data.fee);
   return transact(async (tx) => {
     const actor = await currentActor(tx, actorInput);
-    const order = await tx.workOrder.findUniqueOrThrow({ where: { id } });
+    const order = await tx.workOrder.findUniqueOrThrow({
+      where: { id },
+      include: { items: { include: { reworkItem: true } } },
+    });
     if (order.status !== "COMPLETED")
       throw new BusinessError(
         "Il post-vendita richiede una scheda consegnata.",
       );
+    const selected = data.items.map((input) => {
+      const item = order.items.find(
+        (candidate) => candidate.id === input.originalItemId,
+      );
+      if (!item) throw new BusinessError("Intervento non valido.");
+      if (item.reworkItem)
+        throw new BusinessError(
+          "Questo intervento ha già una riparazione post-vendita.",
+        );
+      return {
+        input,
+        item,
+        fee: input.treatment === "WARRANTY" ? 0 : cents(input.fee),
+      };
+    });
+    const session = await tx.reworkSession.create({
+      data: {
+        orderId: id,
+        dueDate: data.dueDate || null,
+        notes: data.notes,
+        items: {
+          create: selected.map(({ input, item, fee }) => ({
+            originalItemId: item.id,
+            warrantyState:
+              item.warrantyExpiresAt && item.warrantyExpiresAt >= new Date()
+                ? "ACTIVE"
+                : item.warrantyDays > 0
+                  ? "EXPIRED"
+                  : "NONE",
+            treatment: input.treatment,
+            fee: decimal(fee),
+            requiredProductId: input.requiredProductId || null,
+            requiredQuantity: input.requiredQuantity,
+          })),
+        },
+      },
+      include: { items: true },
+    });
+    for (const reworkItem of session.items) {
+      if (!reworkItem.requiredProductId) continue;
+      const product = await tx.product.findFirst({
+        where: {
+          id: reworkItem.requiredProductId,
+          enabled: true,
+          usage: { in: ["REPAIR", "BOTH"] },
+        },
+      });
+      if (!product) throw new BusinessError("Ricambio non disponibile.");
+      await tx.workOrderProduct.create({
+        data: {
+          orderId: id,
+          productId: product.id,
+          productName: product.name,
+          category: product.category,
+          kind: "REPAIR_PART",
+          contextKey: `REWORK:${reworkItem.id}`,
+          unitPrice: decimal(0),
+          quantity: reworkItem.requiredQuantity,
+        },
+      });
+    }
+    const fee = selected.reduce((sum, item) => sum + item.fee, 0);
+    await tx.workOrder.update({ where: { id }, data: { status: "REWORKING" } });
+    const missing = await orderNeedsParts(tx, id);
+    const nextStatus = missing ? "PARTS_MISSING" : "REWORKING";
     await tx.workOrder.update({
       where: { id },
       data: {
-        status: "REWORKING",
+        status: nextStatus,
         afterSalesFee: { increment: decimal(fee) },
         afterSalesDueDate: data.dueDate || null,
         afterSalesOpen: true,
@@ -1843,22 +2062,112 @@ export async function openAfterSales(
       data: {
         orderId: id,
         from: "COMPLETED",
-        to: "REWORKING",
+        to: nextStatus,
         actorId: actor.id,
         actorName: actor.name,
-        note: data.reason,
+        note: selected.map(({ item }) => item.project).join(", "),
       },
     });
     await audit(tx, actor, id, "AFTER_SALES_OPENED", {
-      reason: data.reason,
-      project: data.reason,
-      projectId: data.projectId || null,
-      projectSource: data.projectSource,
-      treatment: data.treatment,
+      sessionId: session.id,
+      projects: selected.map(({ input, item, fee }) => ({
+        originalItemId: item.id,
+        project: item.project,
+        treatment: input.treatment,
+        fee: decimal(fee),
+        requiredProductId: input.requiredProductId || null,
+      })),
       notes: data.notes,
       fee: decimal(fee),
       dueDate: data.dueDate || null,
     });
+  });
+}
+
+export async function updateReworkPart(
+  actorInput: Actor,
+  orderId: string,
+  reworkItemId: string,
+  raw: unknown,
+) {
+  const data = z
+    .object({
+      productId: z.string().max(100).default(""),
+      quantity: z.coerce.number().int().min(1).max(999).default(1),
+    })
+    .parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const order = await tx.workOrder.findUniqueOrThrow({
+      where: { id: orderId },
+    });
+    if (
+      !order.afterSalesOpen ||
+      !["REWORKING", "PARTS_MISSING"].includes(order.status)
+    )
+      throw new BusinessError(
+        "La riparazione post-vendita non è modificabile.",
+      );
+    const item = await tx.reworkItem.findFirstOrThrow({
+      where: { id: reworkItemId, session: { orderId, open: true } },
+    });
+    const contextKey = `REWORK:${item.id}`;
+    const oldLine = await tx.workOrderProduct.findFirst({
+      where: { orderId, contextKey },
+    });
+    if (oldLine?.consumedAt)
+      throw new BusinessError("Il ricambio è già stato utilizzato.");
+    if (oldLine)
+      await tx.workOrderProduct.delete({ where: { id: oldLine.id } });
+    let product = null;
+    if (data.productId) {
+      product = await tx.product.findFirst({
+        where: {
+          id: data.productId,
+          enabled: true,
+          usage: { in: ["REPAIR", "BOTH"] },
+        },
+      });
+      if (!product) throw new BusinessError("Ricambio non disponibile.");
+      await tx.workOrderProduct.create({
+        data: {
+          orderId,
+          productId: product.id,
+          productName: product.name,
+          category: product.category,
+          kind: "REPAIR_PART",
+          contextKey,
+          unitPrice: decimal(0),
+          quantity: data.quantity,
+        },
+      });
+    }
+    await tx.reworkItem.update({
+      where: { id: item.id },
+      data: {
+        requiredProductId: product?.id ?? null,
+        requiredQuantity: data.quantity,
+      },
+    });
+    const nextStatus = (await orderNeedsParts(tx, orderId))
+      ? "PARTS_MISSING"
+      : "REWORKING";
+    await tx.workOrder.update({
+      where: { id: orderId },
+      data: { status: nextStatus },
+    });
+    await audit(tx, actor, orderId, "AFTER_SALES_PART_CHANGED", {
+      reworkItemId,
+      beforeProductId: item.requiredProductId,
+      productId: product?.id ?? null,
+      productName: product?.name ?? null,
+      quantity: data.quantity,
+      status: nextStatus,
+    });
+    for (const productId of new Set(
+      [oldLine?.productId, product?.id].filter(Boolean) as string[],
+    ))
+      await refreshPartStatuses(tx, actor, productId);
   });
 }
 

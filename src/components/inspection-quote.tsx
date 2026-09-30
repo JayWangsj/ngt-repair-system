@@ -158,7 +158,13 @@ export function CompleteInspectionButton({
                         inputMode="decimal"
                         value={discount}
                         onChange={(event) => setDiscount(event.target.value)}
+                        aria-invalid={!priceValid}
                       />
+                      {!priceValid && discount && (
+                        <small className="field-error">
+                          {it.invalidAmount}
+                        </small>
+                      )}
                     </Field>
                     <label className="checkbox">
                       <input

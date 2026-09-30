@@ -188,6 +188,8 @@ export function warrantyProgress(
     progress,
     remainingPercent,
     remainingDays,
+    elapsedDays: Math.min(totalDays, Math.max(0, Math.floor(elapsedDays))),
+    totalDays,
     state: !period.active
       ? ("EXPIRED" as const)
       : remainingPercent <= 20

@@ -153,6 +153,7 @@ export type StatusDropdownOrder = {
   due: number;
   paid: number;
   balance: number;
+  afterSalesOpen?: boolean;
 };
 
 export function StatusDropdown({
@@ -172,9 +173,14 @@ export function StatusDropdown({
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
-  const choices = transitions[currentOrder.status].filter(
-    (status) => !["REWORKING", "REFUNDED"].includes(status),
-  );
+  const choices = [
+    ...transitions[currentOrder.status].filter(
+      (status) => status !== "REFUNDED",
+    ),
+    ...(currentOrder.status === "READY" && currentOrder.afterSalesOpen
+      ? (["REWORKING"] as OrderStatus[])
+      : []),
+  ];
   function settled(snapshot: StatusMutationSnapshot) {
     const nextOrder = { ...currentOrder, ...snapshot };
     setCurrentOrder(nextOrder);

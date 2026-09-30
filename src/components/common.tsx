@@ -129,6 +129,7 @@ export async function OrderTable({
                 ? 0
                 : due - remaining,
               balance: remaining,
+              afterSalesOpen: order.afterSalesOpen,
             };
           })}
         />

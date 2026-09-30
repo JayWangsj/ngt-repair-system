@@ -28,7 +28,7 @@ export default async function Orders({
       products: true,
       payments: true,
     },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
     where: q
       ? {
           OR: [

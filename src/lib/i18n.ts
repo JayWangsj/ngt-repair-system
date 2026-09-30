@@ -44,6 +44,12 @@ const errors: Record<string, string> = {
     "已有收款，取消前需处理退款；当前版本不支持退款。",
   "Importo non valido (massimo 2 decimali).": "金额无效，最多两位小数。",
   "Importo non valido.": "金额无效。",
+  "Questa categoria è già utilizzata da prodotti e non può essere eliminata.":
+    "该分类已有商品使用，无法删除。",
+  "Il marchio è associato a dati aziendali e non può essere eliminato.":
+    "该品牌已有业务数据关联，无法删除。",
+  "Il modello è associato a dati aziendali e non può essere eliminato.":
+    "该型号已有业务数据关联，无法删除。",
   "Numero di telefono non valido.": "电话号码无效。",
   "Record già presente. Controlla i dati e riprova.":
     "记录已存在，请核对后重试。",

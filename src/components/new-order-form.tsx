@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Search, UserRound, X } from "lucide-react";
+import { Check, ChevronDown, Search, Trash2, UserRound, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   createOrderAction,
   customerAction,
+  deleteDeviceCatalogOptionAction,
   lookupCustomerAction,
 } from "@/app/actions";
 import {
@@ -26,6 +27,7 @@ import {
   settlement,
 } from "@/lib/domain";
 import { uniqueOptions } from "@/lib/options";
+import { translateError } from "@/lib/i18n";
 import {
   DatePicker,
   SearchableCombobox,
@@ -147,6 +149,7 @@ export function NewOrderWizard({
   rules,
   faultOptions,
   devices,
+  catalogDeletions,
   customers,
   products,
   productCategories,
@@ -154,6 +157,12 @@ export function NewOrderWizard({
   rules: RuleView[];
   faultOptions: FaultCatalogItem[];
   devices: { category: string; brand: string; model: string }[];
+  catalogDeletions: {
+    category: string;
+    kind: string;
+    brand: string;
+    value: string;
+  }[];
   customers: CustomerOption[];
   products: {
     id: string;
@@ -211,6 +220,7 @@ export function NewOrderWizard({
   const [touched, setTouched] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [hiddenCatalog, setHiddenCatalog] = useState(catalogDeletions);
   const completed = useRef([false, false, false]);
 
   const catalog = faults
@@ -225,6 +235,14 @@ export function NewOrderWizard({
         .filter((rule) => rule.category === category)
         .map((rule) => rule.brand),
     ].filter(Boolean),
+  ).filter(
+    (value) =>
+      !hiddenCatalog.some(
+        (entry) =>
+          entry.category === category &&
+          entry.kind === "BRAND" &&
+          entry.value.toLocaleLowerCase("it") === value.toLocaleLowerCase("it"),
+      ),
   );
   const modelOptions = uniqueOptions(
     [
@@ -245,7 +263,28 @@ export function NewOrderWizard({
         )
         .map((rule) => rule.model),
     ].filter(Boolean),
+  ).filter(
+    (value) =>
+      !hiddenCatalog.some(
+        (entry) =>
+          entry.category === category &&
+          entry.kind === "MODEL" &&
+          entry.brand.toLocaleLowerCase("it") ===
+            brand.toLocaleLowerCase("it") &&
+          entry.value.toLocaleLowerCase("it") === value.toLocaleLowerCase("it"),
+      ),
   );
+  async function deleteCatalogOption(kind: "BRAND" | "MODEL", value: string) {
+    const input = {
+      category,
+      kind,
+      brand: kind === "MODEL" ? brand : "",
+      value,
+    };
+    const result = await deleteDeviceCatalogOptionAction(input);
+    if (!result.ok) return setError(result.error);
+    setHiddenCatalog((current) => [...current, input]);
+  }
   const validCustomer = !!customerId && !!customer;
   const validDevice = !!category && !!brand.trim() && !!model.trim();
   const validFault =
@@ -271,13 +310,16 @@ export function NewOrderWizard({
         inspectionMode
           ? []
           : items.map((item) => ({
-              final: item.final || "0",
-              discount: item.discount || "0",
+              final: validAmount(item.final) ? item.final : "0",
+              discount: validAmount(item.discount || "0")
+                ? item.discount || "0"
+                : "0",
             })),
         {
-          orderDiscount: orderDiscount || "0",
+          orderDiscount: validAmount(orderDiscount) ? orderDiscount : "0",
           includeVat,
-          inspectionFee: inspectionMode ? inspectionFee || "0" : "0",
+          inspectionFee:
+            inspectionMode && validAmount(inspectionFee) ? inspectionFee : "0",
         },
       ),
     [includeVat, inspectionFee, inspectionMode, items, orderDiscount],
@@ -682,6 +724,21 @@ export function NewOrderWizard({
                       options: brandOptions.map((value) => ({
                         value,
                         label: value,
+                        ariaLabel: value,
+                        trailing: (
+                          <button
+                            type="button"
+                            className="option-delete"
+                            aria-label={`${it.remove} ${value}`}
+                            onPointerDown={(event) => event.preventDefault()}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void deleteCatalogOption("BRAND", value);
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        ),
                       })),
                     },
                   ]}
@@ -717,6 +774,21 @@ export function NewOrderWizard({
                       options: modelOptions.map((value) => ({
                         value,
                         label: value,
+                        ariaLabel: value,
+                        trailing: (
+                          <button
+                            type="button"
+                            className="option-delete"
+                            aria-label={`${it.remove} ${value}`}
+                            onPointerDown={(event) => event.preventDefault()}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void deleteCatalogOption("MODEL", value);
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        ),
                       })),
                     },
                   ]}
@@ -843,7 +915,11 @@ export function NewOrderWizard({
                     inputMode="decimal"
                     value={inspectionFee}
                     onChange={(event) => setInspectionFee(event.target.value)}
+                    aria-invalid={!validAmount(inspectionFee)}
                   />
+                  {!validAmount(inspectionFee) && inspectionFee && (
+                    <small className="field-error">{it.invalidAmount}</small>
+                  )}
                 </Field>
               </>
             ) : (
@@ -870,7 +946,11 @@ export function NewOrderWizard({
                     inputMode="decimal"
                     value={orderDiscount}
                     onChange={(event) => setOrderDiscount(event.target.value)}
+                    aria-invalid={!validAmount(orderDiscount)}
                   />
+                  {!validAmount(orderDiscount) && orderDiscount && (
+                    <small className="field-error">{it.invalidAmount}</small>
+                  )}
                 </Field>
               </div>
             )}
@@ -936,7 +1016,11 @@ export function NewOrderWizard({
                   inputMode="decimal"
                   value={deposit}
                   onChange={(event) => setDeposit(event.target.value)}
+                  aria-invalid={!validAmount(deposit)}
                 />
+                {!validAmount(deposit) && deposit && (
+                  <small className="field-error">{it.invalidAmount}</small>
+                )}
               </Field>
               <Field label={it.paymentMethod}>
                 <SimpleSelect
@@ -954,7 +1038,7 @@ export function NewOrderWizard({
           </StepCard>
           {error && (
             <p className="message error" role="alert">
-              {error}
+              {translateError(error, locale)}
             </p>
           )}
           <div className="sticky-order-actions">
@@ -1086,7 +1170,9 @@ export function NewOrderWizard({
                 </Button>
               </div>
             )}
-            {error && <p className="message error">{error}</p>}
+            {error && (
+              <p className="message error">{translateError(error, locale)}</p>
+            )}
             <div className="dialog-actions">
               <Button
                 type="button"

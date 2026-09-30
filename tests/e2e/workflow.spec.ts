@@ -668,14 +668,14 @@ test("diagnostic order saves faults, date and quote in one progressive flow", as
   await expect(dialog).toHaveCount(0);
   await expect(status).toContainText("In riparazione");
   const details = page.getByTestId("details-card");
-  await details.getByRole("button", { name: "Dettagli" }).click();
+  await details.locator(".order-card-heading").click();
   await expect(details).toContainText("Display rotto");
   await expect(details).toContainText(result);
-  await quote.getByRole("button", { name: "Preventivo" }).click();
+  await quote.locator(".order-card-heading").click();
   await expect(quote).toContainText("Costo diagnosi (IVA esclusa)");
   await expect(quote).toContainText("sostituzione display");
   const history = page.getByTestId("history-card");
-  await history.getByRole("button", { name: "Cronologia" }).click();
+  await history.locator(".order-card-heading").click();
   await expect(history).toContainText("Diagnosi avviata");
   await expect(history).toContainText("Diagnosi completata");
   await expect(history).toContainText("Preventivo creato");
@@ -745,9 +745,7 @@ test("creates automatic quote, receives payment and delivers", async ({
     page.getByRole("option", { name: /Cover esaurita Test/ }),
   ).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await expect(
-    page.getByTestId("other-information-card").getByText("Accessori ricevuti"),
-  ).toBeHidden();
+  await expect(page.getByTestId("other-information-card")).toHaveCount(0);
   await expect(page.locator(".status-operation-card")).toHaveCount(0);
   await expect(page.locator(".balance-card>strong")).toContainText("80,00");
   await state(page, "READY");
@@ -759,10 +757,7 @@ test("creates automatic quote, receives payment and delivers", async ({
   await expect(
     page.locator(".detail-status .status-dropdown-trigger"),
   ).toHaveText(/Consegnato/);
-  await page
-    .getByTestId("details-card")
-    .getByRole("button", { name: "Dettagli" })
-    .click();
+  await page.getByTestId("details-card").locator(".order-card-heading").click();
   await page
     .getByRole("link", { name: "Cliente Playwright", exact: true })
     .click();
@@ -940,33 +935,35 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   const quote = page.getByTestId("quote-card");
   const warranty = page.getByTestId("warranty-card");
   const history = page.getByTestId("history-card");
-  const otherInformation = page.getByTestId("other-information-card");
-  await expect(
-    details.getByRole("button", { name: "Dettagli" }),
-  ).toHaveAttribute("aria-expanded", "false");
-  await expect(
-    products.getByRole("button", { name: "Articoli aggiuntivi" }),
-  ).toHaveAttribute("aria-expanded", "true");
-  await expect(
-    quote.getByRole("button", { name: "Preventivo" }),
-  ).toHaveAttribute("aria-expanded", "false");
-  await expect(
-    warranty.getByRole("button", { name: "Garanzia" }),
-  ).toHaveAttribute("aria-expanded", "false");
-  await expect(
-    history.getByRole("button", { name: "Cronologia" }),
-  ).toHaveAttribute("aria-expanded", "false");
-  await expect(
-    otherInformation.getByRole("button", { name: "Altre informazioni" }),
-  ).toHaveAttribute("aria-expanded", "false");
-  await details.getByRole("button", { name: "Dettagli" }).click();
+  await expect(details.locator(".order-card-heading")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expect(products.locator(".order-card-heading")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(quote.locator(".order-card-heading")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expect(warranty.locator(".order-card-heading")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expect(history.locator(".order-card-heading")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expect(page.getByTestId("other-information-card")).toHaveCount(0);
+  await details.locator(".order-card-heading").click();
   await page.waitForTimeout(250);
   const productsTop = await products.evaluate(
     (element) => element.getBoundingClientRect().top,
   );
   const detailsEdit = details.getByRole("button", { name: "Modifica dati" });
   await details
-    .getByRole("button", { name: "Dettagli" })
+    .locator(".order-card-heading")
     .evaluate((element) => (element as HTMLElement).blur());
   await page.mouse.move(0, 0);
   await expect(detailsEdit).toHaveCSS("opacity", "0");
@@ -1010,16 +1007,17 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
 
   await details.getByRole("button", { name: "Modifica dati" }).click();
   await expect(details).toHaveClass(/is-editing/);
-  await expect(details.getByRole("button", { name: "Dettagli" })).toBeEnabled();
+  await expect(details.locator(".order-card-heading")).toBeEnabled();
   await details
     .getByLabel("Descrizione aggiuntiva")
     .fill("Fotocamera non funziona");
-  await details.getByRole("button", { name: "Dettagli" }).click();
+  await details.locator(".order-card-heading").click();
   await expect(details).not.toHaveClass(/is-editing/);
-  await expect(
-    details.getByRole("button", { name: "Dettagli" }),
-  ).toHaveAttribute("aria-expanded", "false");
-  await details.getByRole("button", { name: "Dettagli" }).click();
+  await expect(details.locator(".order-card-heading")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await details.locator(".order-card-heading").click();
   await expect(details).toContainText("Fotocamera non funziona");
   await details.getByRole("button", { name: "Modifica dati" }).click();
   await details
@@ -1034,9 +1032,9 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
 
   await expect(details).toContainText("Fotocamera non funziona ancora");
 
-  await quote.getByRole("button", { name: "Preventivo" }).click();
+  await quote.locator(".order-card-heading").click();
   await expect(quote.locator(".quote-summary")).toBeHidden();
-  await quote.getByRole("button", { name: "Preventivo" }).click();
+  await quote.locator(".order-card-heading").click();
   await expect(quote.locator(".quote-summary")).toBeVisible();
   await quote.getByRole("button", { name: "Modifica dati" }).click();
   await expect(
@@ -1045,8 +1043,22 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await quote.getByRole("button", { name: "Annulla" }).click();
   await warranty.hover();
   await warranty.getByRole("button", { name: "Modifica dati" }).click();
-  await chooseBusinessOption(page, "Durata garanzia", "90 giorni", warranty);
-  await warranty.getByLabel("Copertura").fill("Solo il componente sostituito");
+  const warrantyProject = await warranty
+    .locator(".project-warranty-editor section strong")
+    .textContent();
+  const duration = warranty.getByRole("button", {
+    name: `Durata garanzia ${warrantyProject}`,
+    exact: true,
+  });
+  await duration.click();
+  await page
+    .locator(".business-select-panel.is-entering")
+    .getByRole("option", { name: "90 giorni", exact: true })
+    .click();
+  await expect(duration).toContainText("90 giorni");
+  await warranty
+    .getByLabel("Note garanzia")
+    .fill("Solo il componente sostituito");
   await warranty.getByRole("button", { name: "Salva" }).click();
   await expect(warranty).not.toHaveClass(/is-editing/);
   await expect(warranty).toContainText("90 giorni");
@@ -1079,14 +1091,12 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     "ancora in garanzia",
   );
   await expect(
-    dialog.getByRole("combobox", { name: "Intervento", exact: true }),
-  ).toHaveValue(/^Fotocamera/);
+    dialog.getByRole("checkbox", { name: /Fotocamera/ }),
+  ).toBeChecked();
   await expect(
     dialog.getByRole("radio", { name: /Riparazione in garanzia/ }),
   ).toBeChecked();
-  await expect(dialog.getByLabel("Costo aggiuntivo (€)")).toHaveAttribute(
-    "readonly",
-  );
+  await expect(dialog.getByLabel("Costo aggiuntivo (€)")).toHaveCount(0);
   await expect(
     dialog.getByRole("button", { name: "Chiudi", exact: true }),
   ).toBeVisible();
@@ -1488,7 +1498,7 @@ test("native quote choices populate prices, clear on model changes and discounts
   await expect(
     page.locator(".business-select-panel.is-entering"),
   ).toContainText(
-    "Nessun risultato. Usa «+Intervento personalizzato» a destra per crearne uno.",
+    "Nessun risultato. Inserisci il prezzo, poi usa «+Intervento personalizzato» a destra.",
   );
   await page.keyboard.press("Escape");
   await expect(
@@ -1521,14 +1531,17 @@ test("creates a repair part from the quote and selects it immediately", async ({
   await partSearch.fill(productName);
   await expect(newPart).toBeEnabled();
   await newPart.click();
-  const dialog = page.getByRole("dialog", { name: "Nuovo ricambio" });
+  const dialog = page.getByRole("dialog", {
+    name: "Nuovo ricambio per riparazione",
+  });
   await expect(dialog.getByLabel("Prodotto", { exact: true })).toHaveValue(
     productName,
   );
-  await chooseBusinessOption(page, "Categoria", "Ricambi", dialog);
-  await expect(
-    dialog.getByRole("button", { name: "Utilizzo", exact: true }),
-  ).toContainText("Riparazione");
+  await expect(dialog.getByRole("button", { name: "Categoria" })).toHaveCount(
+    0,
+  );
+  await expect(dialog.getByRole("button", { name: "Utilizzo" })).toHaveCount(0);
+  await expect(dialog.getByLabel("Costo", { exact: true })).toBeFocused();
   await dialog.getByLabel("Costo", { exact: true }).fill("12");
   await dialog.getByLabel("Scorta iniziale", { exact: true }).fill("0");
   await dialog.getByLabel("Scorta minima", { exact: true }).fill("1");
@@ -1610,7 +1623,12 @@ test("clears a repair item and creates a custom item with Enter without submitti
   });
   await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
   await expect(price).toHaveValue("100");
-  await page.getByRole("button", { name: "Cancella selezione" }).click();
+  await page
+    .locator(".selected-project-summary")
+    .getByRole("button", { name: "Cambia", exact: true })
+    .click();
+  await search.press("Control+A");
+  await search.press("Backspace");
   await expect(search).toHaveValue("");
   await expect(price).toHaveValue("");
   await expect(price).toBeDisabled();
@@ -1630,7 +1648,8 @@ test("clears a repair item and creates a custom item with Enter without submitti
   await expect(price).toHaveValue("85");
   await expect(create).toBeEnabled();
   await price.press("Enter");
-  await expect(create).toBeDisabled();
+  await expect(create).toHaveCount(0);
+  await expect(page.locator(".selected-project-summary")).toContainText(name);
   await expect(page.locator(".order-step-card").nth(2)).toHaveClass(
     /is-completed/,
   );
@@ -2035,9 +2054,9 @@ test("hides managed faults without changing historical records", async ({
     exact: true,
   });
   await expect(addFault).toBeDisabled();
-  await expect(addFault).toHaveCSS("background-color", "rgb(238, 240, 239)");
-  await expect(addFault).toHaveCSS("border-color", "rgb(216, 221, 219)");
-  await expect(addFault).toHaveCSS("color", "rgb(156, 163, 160)");
+  await expect(addFault).toHaveCSS("background-color", "rgb(241, 243, 242)");
+  await expect(addFault).toHaveCSS("border-color", "rgb(225, 229, 227)");
+  await expect(addFault).toHaveCSS("color", "rgb(154, 162, 159)");
   await expect(addFault).toHaveCSS("cursor", "not-allowed");
   await expect(addFault).toHaveCSS("opacity", "1");
   await expect(addFault).toHaveCSS("transform", "none");
@@ -2316,7 +2335,7 @@ test("settings exports data and re-import skips existing records", async ({
   const backup = await exported.json();
   expect(backup).toMatchObject({
     format: "ngt-repair-data",
-    version: 6,
+    version: 7,
   });
   const imported = await page.request.post("/api/data/import", {
     data: backup,

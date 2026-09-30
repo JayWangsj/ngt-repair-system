@@ -65,6 +65,11 @@ enum WorkOrderProductKind {
   RETAIL_ADDON
 }
 
+enum ReworkTreatment {
+  WARRANTY
+  PAID
+}
+
 model User {
   id                 String              @id @default(cuid())
   email              String              @unique
@@ -159,6 +164,7 @@ model WorkOrder {
   products          WorkOrderProduct[]
   payments          Payment[]
   history           StatusHistory[]
+  reworks           ReworkSession[]
 
   @@index([status, dueDate])
   @@index([deviceId])
@@ -202,6 +208,11 @@ model WorkOrderItem {
   requiredProductId String?
   requiredQuantity  Int        @default(1)
   requiredProduct   Product?   @relation("RequiredWorkOrderProduct", fields: [requiredProductId], references: [id])
+  warrantyStart     DateTime?   @db.Timestamptz(3)
+  warrantyDays      Int        @default(0)
+  warrantyExpiresAt DateTime?   @db.Timestamptz(3)
+  warrantyNotes     String     @default("")
+  reworkItem        ReworkItem?
 
   @@index([orderId])
   @@index([requiredProductId])
@@ -222,10 +233,46 @@ model Payment {
   actor       User                @relation(fields: [actorId], references: [id])
   actorName   String
   allocations PaymentAllocation[]
+  reworkSessionId String?
+  reworkSession ReworkSession? @relation(fields: [reworkSessionId], references: [id])
 
   @@index([orderId])
   @@index([saleId])
   @@index([receivedAt])
+  @@index([reworkSessionId])
+}
+
+model ReworkSession {
+  id         String       @id @default(cuid())
+  orderId    String
+  order      WorkOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  receivedAt DateTime     @default(now()) @db.Timestamptz(3)
+  dueDate    String?
+  notes      String       @default("")
+  open       Boolean      @default(true)
+  createdAt  DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime     @updatedAt @db.Timestamptz(3)
+  items      ReworkItem[]
+  payments   Payment[]
+
+  @@index([orderId, createdAt])
+}
+
+model ReworkItem {
+  id                String          @id @default(cuid())
+  sessionId         String
+  session           ReworkSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  originalItemId    String          @unique
+  originalItem      WorkOrderItem   @relation(fields: [originalItemId], references: [id], onDelete: Restrict)
+  warrantyState     String
+  treatment         ReworkTreatment
+  fee               Decimal         @default(0) @db.Decimal(12, 2)
+  requiredProductId String?
+  requiredProduct   Product?        @relation(fields: [requiredProductId], references: [id], onDelete: Restrict)
+  requiredQuantity  Int             @default(1)
+
+  @@index([sessionId])
+  @@index([requiredProductId])
 }
 
 model StatusHistory {
@@ -301,6 +348,7 @@ model Product {
   workOrderProducts WorkOrderProduct[]
   requiredByRules   PriceRule[]         @relation("RequiredRepairProduct")
   requiredByItems   WorkOrderItem[]     @relation("RequiredWorkOrderProduct")
+  reworkItems       ReworkItem[]
 
   @@index([name])
   @@index([category, usage, enabled])
@@ -313,6 +361,17 @@ model InventoryCategory {
   repairOnly Boolean   @default(false)
   deletedAt  DateTime? @db.Timestamptz(3)
   createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+}
+
+model DeviceCatalogDeletion {
+  id        String   @id @default(cuid())
+  category  String
+  kind      String
+  brand     String   @default("")
+  value     String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([category, kind, brand, value])
 }
 
 model RetailSale {
@@ -370,13 +429,14 @@ model WorkOrderProduct {
   productName String
   category    String
   kind        WorkOrderProductKind
+  contextKey  String               @default("ORIGINAL")
   unitPrice   Decimal              @db.Decimal(12, 2)
   discount    Decimal              @default(0) @db.Decimal(12, 2)
   quantity    Int
   consumedAt  DateTime?            @db.Timestamptz(3)
   createdAt   DateTime             @default(now()) @db.Timestamptz(3)
 
-  @@unique([orderId, productId, kind])
+  @@unique([orderId, productId, kind, contextKey])
   @@index([orderId])
   @@index([productId])
 }

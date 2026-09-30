@@ -36,6 +36,8 @@ import {
   updateWarranty,
   openAfterSales,
   refundOrder,
+  deleteInventoryCategory,
+  deleteDeviceCatalogOption,
 } from "@/lib/service";
 import { balance, type Actor } from "@/lib/domain";
 import {
@@ -72,6 +74,8 @@ beforeAll(async () => {
   await db.retailSale.deleteMany();
   await db.inventoryMovement.deleteMany();
   await db.workOrderProduct.deleteMany();
+  await db.reworkItem.deleteMany();
+  await db.reworkSession.deleteMany();
   await db.product.deleteMany();
   await db.inventoryCategory.deleteMany();
   await db.statusHistory.deleteMany();
@@ -107,8 +111,11 @@ beforeEach(async () => {
   await db.retailSale.deleteMany();
   await db.inventoryMovement.deleteMany();
   await db.workOrderProduct.deleteMany();
+  await db.reworkItem.deleteMany();
+  await db.reworkSession.deleteMany();
   await db.product.deleteMany();
   await db.inventoryCategory.deleteMany();
+  await db.deviceCatalogDeletion.deleteMany();
   await db.statusHistory.deleteMany();
   await db.workOrderItem.deleteMany();
   await db.workOrder.deleteMany();
@@ -228,10 +235,13 @@ describe("PostgreSQL workflow", () => {
   });
   it("locks delivered history and adds paid or free post-sale repairs independently", async () => {
     const created = await createOrder(staff, input({ deposit: "100" }));
+    const originalItem = await db.workOrderItem.findFirstOrThrow({
+      where: { orderId: created.id },
+    });
     await updateWarranty(staff, created.id, {
-      days: 90,
-      scope: "Solo display sostituito",
-      notes: "Esclusi liquidi e urti",
+      items: [
+        { id: originalItem.id, days: 90, notes: "Esclusi liquidi e urti" },
+      ],
     });
     await changeStatus(staff, created.id, { status: "REPAIRING" });
     await changeStatus(staff, created.id, { status: "READY" });
@@ -244,21 +254,23 @@ describe("PostgreSQL workflow", () => {
     });
     await expect(
       updateWarranty(staff, created.id, {
-        days: 365,
-        scope: "Mutata",
-        notes: "",
+        items: [{ id: originalItem.id, days: 365, notes: "" }],
       }),
     ).rejects.toThrow("chiusa");
     await expect(
       changeStatus(staff, created.id, { status: "REWORKING" }),
     ).rejects.toThrow("post-vendita");
     await openAfterSales(staff, created.id, {
-      reason: "Sostituzione display",
-      projectId: "original-display",
-      projectSource: "original",
-      treatment: "PAID",
+      items: [
+        {
+          originalItemId: originalItem.id,
+          treatment: "PAID",
+          fee: "50",
+          requiredProductId: "",
+          requiredQuantity: 1,
+        },
+      ],
       notes: "Controllare il connettore",
-      fee: "50",
       dueDate: "2099-12-31",
     });
     let order = await db.workOrder.findUniqueOrThrow({
@@ -269,18 +281,22 @@ describe("PostgreSQL workflow", () => {
       status: "REWORKING",
       afterSalesOpen: true,
       afterSalesDueDate: "2099-12-31",
-      warrantyDays: 90,
     });
+    expect(order.items[0].warrantyDays).toBe(90);
     expect(order.afterSalesFee.toString()).toBe("50");
     const openedAudit = await db.auditLog.findFirstOrThrow({
       where: { entityId: created.id, action: "AFTER_SALES_OPENED" },
       orderBy: { createdAt: "desc" },
     });
     expect(openedAudit.context).toMatchObject({
-      project: "Sostituzione display",
-      projectId: "original-display",
-      projectSource: "original",
-      treatment: "PAID",
+      projects: [
+        {
+          originalItemId: originalItem.id,
+          project: "Display",
+          treatment: "PAID",
+          fee: "50.00",
+        },
+      ],
       notes: "Controllare il connettore",
       fee: "50.00",
     });
@@ -305,26 +321,94 @@ describe("PostgreSQL workflow", () => {
     );
     expect(order.pickedUpBy).toBe("Cliente");
     expect(order.payments.at(-1)?.kind).toBe("AFTER_SALES");
-    await openAfterSales(staff, created.id, {
-      reason: "Verifica gratuita",
-      projectSource: "custom",
-      treatment: "WARRANTY",
-      notes: "",
-      fee: "99",
-      dueDate: "",
-    });
+    await expect(
+      openAfterSales(staff, created.id, {
+        items: [
+          {
+            originalItemId: originalItem.id,
+            treatment: "WARRANTY",
+            fee: "0",
+            requiredProductId: "",
+            requiredQuantity: 1,
+          },
+        ],
+        notes: "",
+        dueDate: "",
+      }),
+    ).rejects.toThrow("già una riparazione");
     order = await db.workOrder.findUniqueOrThrow({
       where: { id: created.id },
       include: orderInclude,
     });
-    expect(order.status).toBe("REWORKING");
+    expect(order.status).toBe("COMPLETED");
     expect(order.afterSalesFee.toString()).toBe("50");
     expect(balance(order.items, order.payments, order)).toBe(0);
     expect(
       await db.auditLog.count({
         where: { entityId: created.id, action: "AFTER_SALES_OPENED" },
       }),
-    ).toBe(2);
+    ).toBe(1);
+  });
+  it("shares one rework flow, restores rework status after parts arrive and keeps one chance per item", async () => {
+    const part = await createProduct(staff, {
+      requestId: randomUUID(),
+      name: "Display rework",
+      category: "Ricambi",
+      usage: "REPAIR",
+      costPrice: "20",
+      salePrice: "0",
+      initialStock: 0,
+      minStock: 0,
+      favorite: false,
+      enabled: true,
+    });
+    const created = await createOrder(staff, input({ deposit: "100" }));
+    const item = await db.workOrderItem.findFirstOrThrow({
+      where: { orderId: created.id },
+    });
+    await updateWarranty(staff, created.id, {
+      items: [{ id: item.id, days: 30, notes: "" }],
+    });
+    await changeStatus(staff, created.id, { status: "READY" });
+    await changeStatus(staff, created.id, {
+      status: "COMPLETED",
+      pickedUpBy: "Cliente",
+    });
+    await openAfterSales(staff, created.id, {
+      items: [
+        {
+          originalItemId: item.id,
+          treatment: "WARRANTY",
+          fee: "0",
+          requiredProductId: part.id,
+          requiredQuantity: 1,
+        },
+      ],
+      notes: "",
+      dueDate: "2099-12-31",
+    });
+    expect(
+      (await db.workOrder.findUniqueOrThrow({ where: { id: created.id } }))
+        .status,
+    ).toBe("PARTS_MISSING");
+    expect(
+      await db.reworkSession.count({ where: { orderId: created.id } }),
+    ).toBe(1);
+    await adjustInventory(staff, part.id, {
+      requestId: randomUUID(),
+      quantity: 1,
+      type: "STOCK_IN",
+      note: "",
+    });
+    expect(
+      (await db.workOrder.findUniqueOrThrow({ where: { id: created.id } }))
+        .status,
+    ).toBe("REWORKING");
+    await changeStatus(staff, created.id, { status: "READY" });
+    await changeStatus(staff, created.id, { status: "REWORKING" });
+    expect(
+      await db.reworkSession.count({ where: { orderId: created.id } }),
+    ).toBe(1);
   });
   it("refunds the full received amount without deleting original payments", async () => {
     const created = await createOrder(staff, input({ deposit: "100" }));
@@ -362,9 +446,16 @@ describe("PostgreSQL workflow", () => {
     expect(balance(order.items, order.payments, order)).toBe(0);
     await expect(
       openAfterSales(staff, created.id, {
-        reason: "Non consentito",
+        items: [
+          {
+            originalItemId: "missing",
+            treatment: "PAID",
+            fee: "0",
+            requiredProductId: "",
+            requiredQuantity: 1,
+          },
+        ],
         notes: "",
-        fee: "0",
         dueDate: "",
       }),
     ).rejects.toThrow("consegnata");
@@ -372,6 +463,43 @@ describe("PostgreSQL workflow", () => {
       await db.auditLog.count({
         where: { entityId: created.id, action: "REFUND_ISSUED" },
       }),
+    ).toBe(1);
+  });
+  it("protects used inventory and device catalog values while allowing unused deletion", async () => {
+    await createProduct(staff, {
+      requestId: randomUUID(),
+      name: "Ricambio usato",
+      category: "Ricambi",
+      usage: "REPAIR",
+      costPrice: "1",
+      salePrice: "0",
+      initialStock: 0,
+      minStock: 0,
+      favorite: false,
+      enabled: true,
+    });
+    const ricambi = await db.inventoryCategory.findUniqueOrThrow({
+      where: { name: "Ricambi" },
+    });
+    await expect(deleteInventoryCategory(owner, ricambi.id)).rejects.toThrow(
+      "protetta",
+    );
+    await expect(
+      deleteDeviceCatalogOption(owner, {
+        category: "PHONE",
+        kind: "BRAND",
+        value: "Apple",
+        brand: "",
+      }),
+    ).rejects.toThrow("associato");
+    await deleteDeviceCatalogOption(owner, {
+      category: "PHONE",
+      kind: "BRAND",
+      value: "Nothing",
+      brand: "",
+    });
+    expect(
+      await db.deviceCatalogDeletion.count({ where: { value: "Nothing" } }),
     ).toBe(1);
   });
   it("assigns stable daily repair and retail codes", async () => {
@@ -1730,7 +1858,7 @@ describe("versioned data backup and merge import", () => {
     const backup = await exportBusinessData();
     expect(backup).toMatchObject({
       format: "ngt-repair-data",
-      version: 6,
+      version: 7,
     });
     expect(backup.data.orders).toHaveLength(1);
     expect(backup.data.payments.map((payment) => payment.kind).sort()).toEqual([

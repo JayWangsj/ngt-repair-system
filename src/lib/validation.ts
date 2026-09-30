@@ -211,17 +211,34 @@ export const statusInput = z.object({
   override: z.boolean().default(false),
 });
 export const warrantyInput = z.object({
-  days: z.coerce.number().int().min(0).max(3650),
-  scope: text,
-  notes: text,
+  items: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(100),
+        days: z.coerce
+          .number()
+          .int()
+          .refine((value) => [0, 7, 30, 60, 90, 180, 365].includes(value)),
+        notes: text,
+      }),
+    )
+    .min(1)
+    .max(30),
 });
 export const afterSalesInput = z.object({
-  reason: short,
-  projectId: z.string().trim().max(120).default(""),
-  projectSource: z.enum(["original", "catalog", "custom"]).default("custom"),
-  treatment: z.enum(["WARRANTY", "PAID"]).default("PAID"),
+  items: z
+    .array(
+      z.object({
+        originalItemId: z.string().min(1).max(100),
+        treatment: z.enum(["WARRANTY", "PAID"]),
+        fee: amountInput.default("0"),
+        requiredProductId: z.string().max(100).default(""),
+        requiredQuantity: z.coerce.number().int().min(1).max(999).default(1),
+      }),
+    )
+    .min(1)
+    .max(30),
   notes: text,
-  fee: amountInput.default("0"),
   dueDate: dueDateInput,
 });
 export const refundInput = z.object({

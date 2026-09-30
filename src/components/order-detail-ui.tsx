@@ -16,7 +16,6 @@ import {
   FormDialog,
   RefundForm,
   type AfterSalesProject,
-  type AfterSalesWarranty,
 } from "./forms";
 import { useMessages } from "./language";
 
@@ -91,16 +90,23 @@ export function OrderDetailCard({
       className={`panel padded order-detail-card ${editable ? "is-editable" : ""} ${editing ? "is-editing" : ""} ${locked ? "is-locked" : ""} ${className}`}
       data-testid={testId}
     >
-      <div className="order-card-heading">
-        <button
-          type="button"
-          className="order-card-toggle"
-          aria-expanded={expanded}
-          onClick={() => void toggleExpanded()}
-        >
+      <div
+        className="order-card-heading"
+        role="button"
+        tabIndex={0}
+        aria-label={title}
+        aria-expanded={expanded}
+        onClick={() => void toggleExpanded()}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          void toggleExpanded();
+        }}
+      >
+        <div className="order-card-toggle">
           <h2>{title}</h2>
           {expanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
-        </button>
+        </div>
         <div className="order-card-actions">
           {editing && <small>{it.editing}</small>}
           {editable && !editing && (
@@ -109,7 +115,8 @@ export function OrderDetailCard({
               className="order-card-edit"
               aria-label={it.edit}
               title={it.edit}
-              onClick={() => {
+              onClick={(event) => {
+                event.stopPropagation();
                 setExpanded(true);
                 setEditing(true);
               }}
@@ -162,15 +169,13 @@ export function CustomerDetailLink({
 export function AfterSalesActions({
   orderId,
   received,
-  warranty,
   originalProjects,
-  catalogProjects,
+  products,
 }: {
   orderId: string;
   received: number;
-  warranty: AfterSalesWarranty;
   originalProjects: AfterSalesProject[];
-  catalogProjects: AfterSalesProject[];
+  products: import("./forms").CreatedProduct[];
 }) {
   const it = useMessages();
   const [dialog, setDialog] = useState<"rework" | "refund" | null>(null);
@@ -197,9 +202,8 @@ export function AfterSalesActions({
         >
           <AfterSalesForm
             id={orderId}
-            warranty={warranty}
             originalProjects={originalProjects}
-            catalogProjects={catalogProjects}
+            products={products}
             onSuccess={() => setDialog(null)}
           />
         </FormDialog>

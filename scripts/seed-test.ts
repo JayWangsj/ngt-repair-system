@@ -8,6 +8,8 @@ async function main() {
   await db.auditLog.deleteMany();
   await db.paymentAllocation.deleteMany();
   await db.payment.deleteMany();
+  await db.reworkItem.deleteMany();
+  await db.reworkSession.deleteMany();
   await db.retailSaleItem.deleteMany();
   await db.retailSale.deleteMany();
   await db.inventoryMovement.deleteMany();
@@ -21,6 +23,7 @@ async function main() {
   await db.device.deleteMany();
   await db.customer.deleteMany();
   await db.priceRule.deleteMany();
+  await db.deviceCatalogDeletion.deleteMany();
   await db.faultOption.deleteMany();
   await db.user.deleteMany();
   const customer = await db.customer.create({

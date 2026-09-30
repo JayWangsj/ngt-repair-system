@@ -18,6 +18,7 @@ import { useMessages } from "./language";
 export type SelectOption = {
   value: string;
   label: string;
+  ariaLabel?: string;
   secondary?: string;
   trailing?: ReactNode;
   icon?: ReactNode;
@@ -77,6 +78,7 @@ export function SelectDropdown({
   searchable = false,
   searchPlaceholder = "",
   emptyText = "",
+  emptyCreateText,
   customLabel,
   onCustom,
   onCommit,
@@ -101,6 +103,7 @@ export function SelectDropdown({
   searchable?: boolean;
   searchPlaceholder?: string;
   emptyText?: string;
+  emptyCreateText?: string;
   customLabel?: string;
   onCustom?: (query: string) => void;
   onCommit?: (query: string) => void;
@@ -195,6 +198,19 @@ export function SelectDropdown({
     setActive((current) => (current + delta + visible.length) % visible.length);
   }
   function keys(event: KeyboardEvent) {
+    if (
+      searchable &&
+      !open &&
+      currentValue &&
+      (event.key === "Backspace" || event.key === "Delete")
+    ) {
+      event.preventDefault();
+      setInternalValue("");
+      setQuery("");
+      onQueryChange?.("");
+      onChange?.("");
+      return;
+    }
     if (event.key === "Enter") {
       event.preventDefault();
       event.stopPropagation();
@@ -313,8 +329,10 @@ export function SelectDropdown({
                 if (next.trim()) {
                   if (!open) openDropdown();
                 } else {
+                  setInternalValue("");
                   setOpen(false);
                   setPresent(false);
+                  onChange?.("");
                 }
               }}
               onKeyDown={keys}
@@ -442,10 +460,10 @@ export function SelectDropdown({
                       const index = visible.indexOf(option);
                       const checked = option.value === currentValue;
                       return (
-                        <button
+                        <div
                           id={optionId(index)}
-                          type="button"
                           role="option"
+                          aria-label={option.ariaLabel}
                           aria-selected={checked}
                           className={`business-select-option ${checked ? "is-selected" : ""} ${index === active ? "is-active" : ""}`}
                           key={option.value}
@@ -469,7 +487,7 @@ export function SelectDropdown({
                             </span>
                           )}
                           {checked && <Check size={15} aria-hidden="true" />}
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
@@ -478,7 +496,8 @@ export function SelectDropdown({
                 <div className="business-select-empty">
                   <strong>
                     {onCustom && customLabel
-                      ? it.noMatchesCreateHint.replace("{action}", customLabel)
+                      ? (emptyCreateText ??
+                        it.noMatchesCreateHint.replace("{action}", customLabel))
                       : emptyText}
                   </strong>
                 </div>

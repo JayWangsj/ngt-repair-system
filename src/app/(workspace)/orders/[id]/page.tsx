@@ -11,7 +11,6 @@ import {
   money,
   orderCode,
   settlement,
-  warrantyPeriod,
   warrantyProgress,
 } from "@/lib/domain";
 import { BackButton, Badge, PageHeader } from "@/components/common";
@@ -21,6 +20,8 @@ import {
   PaymentForm,
   QuoteSummary,
   WarrantyForm,
+  WarrantyProgressPanel,
+  ReworkPartEditor,
 } from "@/components/forms";
 import { getLocale, getMessages } from "@/lib/i18n-server";
 import {
@@ -70,6 +71,7 @@ export default async function Detail({
             "INSPECTION_COMPLETED",
             "QUOTE_CREATED",
             "AFTER_SALES_OPENED",
+            "AFTER_SALES_PART_CHANGED",
             "REFUND_ISSUED",
             "STATUS_CHANGED",
           ],
@@ -151,28 +153,12 @@ export default async function Detail({
   const originalLocked =
     order.afterSalesOpen ||
     ["COMPLETED", "REWORKING", "REFUNDED", "CANCELLED"].includes(order.status);
-  const warrantyDays =
-    order.warrantyDays ||
-    ({ 1: 30, 3: 90, 6: 180, 12: 365 }[order.warrantyMonths] ??
-      order.warrantyMonths * 30);
-  const warranty = warrantyPeriod(order.pickedUpAt, warrantyDays);
-  const reworkWarranty = warrantyProgress(order.pickedUpAt, warrantyDays);
-  const originalProjectNames = new Set(
-    order.items.map((item) => item.project.trim().toLocaleLowerCase()),
+  const itemWarranties = new Map(
+    order.items.map((item) => [
+      item.id,
+      warrantyProgress(item.warrantyStart, item.warrantyDays),
+    ]),
   );
-  const catalogProjects = [
-    ...new Map(
-      rules
-        .filter(
-          (rule) =>
-            !originalProjectNames.has(rule.project.trim().toLocaleLowerCase()),
-        )
-        .map((rule) => [rule.project.trim().toLocaleLowerCase(), rule]),
-    ).values(),
-  ];
-  const duration = warrantyDays
-    ? `${warrantyDays} ${it.warranty.days}`
-    : it.warranty.none;
 
   const events: TimelineEvent[] = [];
   for (const audit of audits) {
@@ -217,12 +203,27 @@ export default async function Detail({
         actor: audit.actorName,
       });
     if (audit.action === "AFTER_SALES_OPENED") {
+      const projects = Array.isArray(context.projects)
+        ? context.projects
+            .map((entry) => {
+              if (!entry || typeof entry !== "object") return null;
+              const project = entry as Record<string, unknown>;
+              const treatment =
+                project.treatment === "WARRANTY"
+                  ? it.afterSales.warrantyTreatment
+                  : it.afterSales.paidTreatment;
+              return `${String(project.project ?? "")} · ${treatment} · ${money(cents(String(project.fee ?? "0")))}`;
+            })
+            .filter(Boolean)
+            .join("; ")
+        : "";
       const treatment =
         context.treatment === "WARRANTY"
           ? it.afterSales.warrantyTreatment
           : it.afterSales.paidTreatment;
       const detail = [
-        `${String(context.project ?? context.reason)} · ${treatment} · ${money(cents(String(context.fee ?? "0")))}`,
+        projects ||
+          `${String(context.project ?? context.reason)} · ${treatment} · ${money(cents(String(context.fee ?? "0")))}`,
         context.notes ? `${it.afterSales.notes}: ${context.notes}` : null,
       ]
         .filter(Boolean)
@@ -235,6 +236,16 @@ export default async function Detail({
         detail,
       });
     }
+    if (audit.action === "AFTER_SALES_PART_CHANGED")
+      events.push({
+        id: audit.id,
+        at: audit.createdAt,
+        title: it.actions.AFTER_SALES_PART_CHANGED,
+        actor: audit.actorName,
+        detail: context.productName
+          ? `${context.productName} × ${context.quantity}`
+          : it.noRequiredPart,
+      });
     if (audit.action === "REFUND_ISSUED") {
       const originalMethods = Array.isArray(context.originalMethods)
         ? context.originalMethods
@@ -335,6 +346,7 @@ export default async function Detail({
           due={currentDue}
           paid={received}
           balance={remaining}
+          afterSalesOpen={order.afterSalesOpen}
         />
         <span>
           {it.created}: {dateTime(order.createdAt)}
@@ -650,48 +662,60 @@ export default async function Detail({
             edit={
               <WarrantyForm
                 id={id}
-                values={{
-                  days: warrantyDays,
-                  scope: order.warrantyScope,
-                  notes: order.warrantyNotes,
-                }}
+                items={order.items.map((item) => ({
+                  id: item.id,
+                  project: item.project,
+                  days: item.warrantyDays,
+                  notes: item.warrantyNotes,
+                }))}
               />
             }
           >
-            <dl className="detail-list warranty-details">
-              {order.pickedUpAt && warrantyDays > 0 && (
-                <div>
-                  <dt>{it.warranty.status}</dt>
-                  <dd>
-                    {warranty?.active
-                      ? it.warranty.active
-                      : it.warranty.expired}
-                  </dd>
-                </div>
-              )}
-              <div>
-                <dt>{it.warranty.duration}</dt>
-                <dd>{duration}</dd>
-              </div>
-              <div>
-                <dt>{it.warranty.period}</dt>
-                <dd>
-                  {warranty
-                    ? `${warranty.start.replaceAll("-", "/")} → ${warranty.end.replaceAll("-", "/")}`
-                    : it.warranty.startsAfterDelivery}
-                </dd>
-              </div>
-              <div>
-                <dt>{it.warranty.scope}</dt>
-                <dd>{order.warrantyScope || "—"}</dd>
-              </div>
-              {order.warrantyNotes && (
-                <div>
-                  <dt>{it.warranty.notes}</dt>
-                  <dd>{order.warrantyNotes}</dd>
-                </div>
-              )}
-            </dl>
+            <div className="project-warranty-list">
+              {order.items.map((item) => {
+                const activeRework = order.reworks
+                  .find((session) => session.open)
+                  ?.items.find((entry) => entry.originalItemId === item.id);
+                return (
+                  <section key={item.id}>
+                    <strong>{item.project}</strong>
+                    <WarrantyProgressPanel
+                      warranty={itemWarranties.get(item.id) ?? null}
+                      days={item.warrantyDays}
+                    />
+                    {item.warrantyNotes && <p>{item.warrantyNotes}</p>}
+                    {activeRework && (
+                      <div className="active-rework-summary">
+                        <Badge status="REWORKING" />
+                        <p>
+                          {activeRework.treatment === "WARRANTY"
+                            ? it.afterSales.warrantyTreatment
+                            : `${it.afterSales.paidTreatment} · ${money(cents(activeRework.fee))}`}
+                        </p>
+                        <strong>{it.requiredPart}</strong>
+                        <ReworkPartEditor
+                          orderId={id}
+                          itemId={activeRework.id}
+                          value={activeRework.requiredProductId ?? ""}
+                          products={products.map((product) => ({
+                            id: product.id,
+                            name: product.name,
+                            category: product.category,
+                            stock: product.stockQuantity,
+                            reserved: reservedByProduct.get(product.id) ?? 0,
+                            available: Math.max(
+                              0,
+                              product.stockQuantity -
+                                (reservedByProduct.get(product.id) ?? 0),
+                            ),
+                          }))}
+                        />
+                      </div>
+                    )}
+                  </section>
+                );
+              })}
+            </div>
           </OrderDetailCard>
 
           <OrderDetailCard
@@ -713,27 +737,6 @@ export default async function Detail({
                 </li>
               ))}
             </ol>
-          </OrderDetailCard>
-
-          <OrderDetailCard
-            title={it.otherInformation}
-            defaultExpanded={false}
-            testId="other-information-card"
-          >
-            <dl className="detail-list">
-              <div>
-                <dt>{it.appearance}</dt>
-                <dd>{order.appearance || "—"}</dd>
-              </div>
-              <div>
-                <dt>{it.accessories}</dt>
-                <dd>{order.accessories || "—"}</dd>
-              </div>
-              <div>
-                <dt>{it.notes}</dt>
-                <dd>{order.notes || "—"}</dd>
-              </div>
-            </dl>
           </OrderDetailCard>
         </div>
 
@@ -820,21 +823,27 @@ export default async function Detail({
             <AfterSalesActions
               orderId={id}
               received={receivedTotal}
-              warranty={reworkWarranty}
               originalProjects={order.items.map((item) => ({
-                value: `original:${item.id}`,
-                id: item.ruleId ?? item.id,
+                id: item.id,
                 name: item.project,
-                source: "original",
                 price: money(cents(item.final)),
+                warranty: itemWarranties.get(item.id) ?? null,
+                warrantyDays: item.warrantyDays,
+                reworked: Boolean(item.reworkItem),
+                requiredProductId: item.requiredProductId ?? undefined,
+                requiredQuantity: item.requiredQuantity,
               }))}
-              catalogProjects={catalogProjects.map((rule) => ({
-                value: `catalog:${rule.id}`,
-                id: rule.id,
-                name: rule.project,
-                source: "catalog",
-                price: money(cents(rule.suggested)),
-                description: rule.notes,
+              products={products.map((product) => ({
+                id: product.id,
+                name: product.name,
+                category: product.category,
+                stock: product.stockQuantity,
+                reserved: reservedByProduct.get(product.id) ?? 0,
+                available: Math.max(
+                  0,
+                  product.stockQuantity -
+                    (reservedByProduct.get(product.id) ?? 0),
+                ),
               }))}
             />
           )}

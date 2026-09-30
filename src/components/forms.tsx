@@ -27,15 +27,7 @@ import { useRouter } from "next/navigation";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import {
-  Plus,
-  Trash2,
-  Check,
-  ShieldCheck,
-  Wrench,
-  Settings,
-  X,
-} from "lucide-react";
+import { Plus, Trash2, Check, ShieldCheck, X } from "lucide-react";
 import { Button } from "./ui/button";
 import { FormAutoSaveContext, FormCloseContext } from "./ui/form-close-context";
 import { useMessages, useLanguage } from "./language";
@@ -61,7 +53,7 @@ import { orderInput } from "@/lib/validation";
 import {
   SearchableCombobox,
   SimpleSelect,
-  type SelectGroup,
+  DatePicker,
 } from "./business-select";
 import { FaultSelector } from "./fault-selector";
 import type { FaultCatalogItem } from "./fault-catalog-manager";
@@ -81,6 +73,7 @@ import {
   deleteRulesAction,
   warrantyAction,
   afterSalesAction,
+  updateReworkPartAction,
   refundAction,
   createProductAction,
   deleteInventoryCategoryAction,
@@ -292,6 +285,7 @@ export function ProductForm({
   initialName = "",
   initialUsage,
   onCreated,
+  quickRepair = false,
 }: {
   categories: CategoryView[];
   onClose: () => void;
@@ -299,16 +293,24 @@ export function ProductForm({
   initialName?: string;
   initialUsage?: "RETAIL" | "REPAIR" | "BOTH";
   onCreated?: (product: CreatedProduct) => void;
+  quickRepair?: boolean;
 }) {
   const it = useMessages();
+  const { locale } = useLanguage();
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState(quickRepair ? "Ricambi" : "");
   const [usage, setUsage] = useState<"RETAIL" | "REPAIR" | "BOTH">(
-    initialUsage ?? "RETAIL",
+    quickRepair ? "REPAIR" : (initialUsage ?? "RETAIL"),
   );
   const [hiddenCategories, setHiddenCategories] = useState<string[]>([]);
+  const costInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!quickRepair || !initialName) return;
+    const frame = requestAnimationFrame(() => costInput.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [initialName, quickRepair]);
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     event.stopPropagation();
@@ -365,39 +367,31 @@ export function ProductForm({
             name="name"
             required
             maxLength={120}
-            autoFocus
+            autoFocus={!quickRepair}
             defaultValue={initialName}
           />
         </Field>
-        <div className="inventory-category-field">
+        {!quickRepair && (
           <EditableSelect
             label={it.inventory.category}
             value={category}
             onChange={setCategory}
             options={options}
             required
+            deletableValues={categories
+              .filter((item) => item.name.toLocaleLowerCase("it") !== "ricambi")
+              .map((item) => item.name)}
+            onDelete={async (name) => {
+              const selected = categories.find((item) => item.name === name);
+              if (!selected) return;
+              const result = await deleteInventoryCategoryAction(selected.id);
+              if (!result.ok) return setError(result.error);
+              setHiddenCategories((current) => [...current, selected.id]);
+              if (category === name) setCategory("");
+            }}
           />
-          {categories.some((item) => item.name === category) && (
-            <button
-              type="button"
-              className="icon-button"
-              aria-label={it.remove + " " + category}
-              onClick={async () => {
-                const selected = categories.find(
-                  (item) => item.name === category,
-                );
-                if (!selected) return;
-                const result = await deleteInventoryCategoryAction(selected.id);
-                if (!result.ok) return setError(result.error);
-                setHiddenCategories([...hiddenCategories, selected.id]);
-                setCategory("");
-              }}
-            >
-              <Trash2 size={16} />
-            </button>
-          )}
-        </div>
-        {mode === "inventory" && (
+        )}
+        {mode === "inventory" && !quickRepair && (
           <Field label={it.inventory.usage}>
             <SimpleSelect
               name="usage"
@@ -415,10 +409,12 @@ export function ProductForm({
         )}
         <Field label={it.inventory.costPrice}>
           <input
+            ref={costInput}
             name="costPrice"
             inputMode="decimal"
             defaultValue="0"
             required
+            autoFocus={quickRepair && Boolean(initialName)}
           />
         </Field>
         {(mode === "retail" || usage !== "REPAIR") && (
@@ -454,7 +450,9 @@ export function ProductForm({
         <input name="favorite" type="checkbox" />
         {it.inventory.favorite}
       </label>
-      {error && <p className="message error">{error}</p>}
+      {error && (
+        <p className="message error">{translateError(error, locale)}</p>
+      )}
       <div className="dialog-actions">
         <Button
           type="button"
@@ -533,6 +531,9 @@ export function ItemsEditor({
     {},
   );
   const [editingParts, setEditingParts] = useState<Record<number, boolean>>({});
+  const [editingProjects, setEditingProjects] = useState<
+    Record<number, boolean>
+  >({});
   const priceInputs = useRef<Record<number, HTMLInputElement | null>>({});
   const deviceKey = [
     device.category,
@@ -613,131 +614,211 @@ export function ItemsEditor({
             (selectedProduct.available ?? selectedProduct.stock);
         return (
           <div className="quote-item" key={index}>
-            <SearchableCombobox
-              className="repair-project-combobox"
-              value={item.project}
-              ariaLabel={`${it.project} ${index + 1}`}
-              placeholder={it.afterSales.projectPlaceholder}
-              searchPlaceholder={it.afterSales.projectSearch}
-              emptyText={
-                projects.length
-                  ? it.afterSales.noProjectMatches
-                  : it.afterSales.noDeviceProjects
-              }
-              customLabel={it.afterSales.addCustomProject}
-              customDisabled={!validAmount(item.final)}
-              customValue={customDraft ? item.project : ""}
-              clearable
-              middleControl={
-                <input
-                  ref={(element) => {
-                    priceInputs.current[index] = element;
-                  }}
-                  className="quote-price-input"
-                  aria-label={`${it.final} ${index + 1}`}
-                  placeholder={it.final}
-                  inputMode="decimal"
-                  required
-                  disabled={!priceEnabled}
-                  value={item.final}
-                  onChange={(event) =>
-                    update(index, { final: event.target.value })
-                  }
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter") return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    if (
-                      !match &&
-                      !item.saveRule &&
-                      item.project.trim() &&
-                      validAmount(item.final)
-                    )
-                      update(index, { saveRule: true });
-                  }}
-                />
-              }
-              groups={[
-                {
-                  options: projects.map((project) => {
-                    const found = matchRule(rules, device, project);
-                    return {
-                      value: project,
-                      label: project,
-                      trailing: found
-                        ? money(cents(found.rule.suggested))
-                        : undefined,
-                      secondary: found?.rule.notes || undefined,
-                    };
-                  }),
-                },
-              ]}
-              onQueryChange={(query) => {
-                setProjectQueries((current) => ({
-                  ...current,
-                  [index]: query,
-                }));
-              }}
-              onCustom={(project) => {
-                setProjectQueries((current) => ({ ...current, [index]: "" }));
-                update(index, {
-                  project,
-                  adjustmentReason: "",
-                  discount: "0",
-                  discountVisible: false,
-                  saveRule: true,
-                  requiredProductId: "",
-                  requiredQuantity: 1,
-                  requiredProductRemoved: false,
-                });
-                requestAnimationFrame(() =>
-                  priceInputs.current[index]?.focus(),
-                );
-              }}
-              onCommit={(project) => {
-                setProjectQueries((current) => ({ ...current, [index]: "" }));
-                setEditingParts((current) => ({ ...current, [index]: false }));
-                resetItem(index, project);
-                requestAnimationFrame(() =>
-                  priceInputs.current[index]?.focus(),
-                );
-              }}
-              onChange={(project) => {
-                const found = matchRule(rules, device, project);
-                setProjectQueries((current) => ({ ...current, [index]: "" }));
-                setEditingParts((current) => ({ ...current, [index]: false }));
-                if (!project) resetItem(index);
-                else
+            {itemComplete && !editingProjects[index] ? (
+              <div className="selected-project-summary">
+                <div>
+                  <strong>{item.project}</strong>
+                  <small>
+                    {match
+                      ? `${it.priceListProject} · ${device.brand} ${device.model}`
+                      : it.afterSales.customProject}
+                  </small>
+                  {match && (
+                    <small>
+                      {it.priceListPrice}: {money(cents(match.rule.suggested))}
+                    </small>
+                  )}
+                </div>
+                <div className="selected-project-actions">
+                  <label>
+                    <span>{it.currentQuote}</span>
+                    <input
+                      className="quote-summary-price"
+                      aria-label={`${it.final} ${index + 1}`}
+                      inputMode="decimal"
+                      value={item.final}
+                      aria-invalid={!validAmount(item.final)}
+                      onChange={(event) =>
+                        update(index, { final: event.target.value })
+                      }
+                    />
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() =>
+                      setEditingProjects((current) => ({
+                        ...current,
+                        [index]: true,
+                      }))
+                    }
+                  >
+                    {it.change}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <SearchableCombobox
+                className="repair-project-combobox"
+                value={item.project}
+                ariaLabel={`${it.project} ${index + 1}`}
+                placeholder={it.afterSales.projectPlaceholder}
+                searchPlaceholder={it.afterSales.projectSearch}
+                emptyText={
+                  projects.length
+                    ? it.afterSales.noProjectMatches
+                    : it.afterSales.noDeviceProjects
+                }
+                emptyCreateText={
+                  validAmount(item.final)
+                    ? it.noMatchesCreateHint.replace(
+                        "{action}",
+                        it.afterSales.addCustomProject,
+                      )
+                    : it.noMatchesPriceHint.replace(
+                        "{action}",
+                        it.afterSales.addCustomProject,
+                      )
+                }
+                customLabel={it.afterSales.addCustomProject}
+                customDisabled={!validAmount(item.final)}
+                customValue={customDraft ? item.project : ""}
+                clearable
+                autoFocusQuery={
+                  editingProjects[index] ? item.project : undefined
+                }
+                onClose={() =>
+                  setEditingProjects((current) => ({
+                    ...current,
+                    [index]: false,
+                  }))
+                }
+                middleControl={
+                  <input
+                    ref={(element) => {
+                      priceInputs.current[index] = element;
+                    }}
+                    className="quote-price-input"
+                    aria-label={`${it.final} ${index + 1}`}
+                    placeholder={it.final}
+                    inputMode="decimal"
+                    required
+                    disabled={!priceEnabled}
+                    value={item.final}
+                    onChange={(event) =>
+                      update(index, { final: event.target.value })
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (
+                        !match &&
+                        !item.saveRule &&
+                        item.project.trim() &&
+                        validAmount(item.final)
+                      )
+                        update(index, { saveRule: true });
+                    }}
+                  />
+                }
+                groups={[
+                  {
+                    options: projects.map((project) => {
+                      const found = matchRule(rules, device, project);
+                      return {
+                        value: project,
+                        label: project,
+                        trailing: found
+                          ? money(cents(found.rule.suggested))
+                          : undefined,
+                        secondary: found?.rule.notes || undefined,
+                      };
+                    }),
+                  },
+                ]}
+                onQueryChange={(query) => {
+                  setProjectQueries((current) => ({
+                    ...current,
+                    [index]: query,
+                  }));
+                }}
+                onCustom={(project) => {
+                  setProjectQueries((current) => ({ ...current, [index]: "" }));
                   update(index, {
                     project,
-                    final: found?.rule.suggested ?? "",
                     adjustmentReason: "",
                     discount: "0",
                     discountVisible: false,
-                    saveRule: false,
-                    requiredProductId: found?.rule.requiredProductId ?? "",
-                    requiredQuantity: found?.rule.requiredQuantity ?? 1,
+                    saveRule: true,
+                    requiredProductId: "",
+                    requiredQuantity: 1,
                     requiredProductRemoved: false,
                   });
-                requestAnimationFrame(() => {
-                  priceInputs.current[index]?.focus();
-                  priceInputs.current[index]?.select();
-                });
-              }}
-            />
-            {(!progressive || item.project.trim()) && (
-              <p className="quote-hint">
-                {match ? (
-                  <>
-                    {it.suggested}:{" "}
-                    <strong>{money(cents(match.rule.suggested))}</strong> ·{" "}
-                    {it.levels[match.level as keyof typeof it.levels]}
-                  </>
-                ) : (
-                  it.noMatch
-                )}
-              </p>
+                  requestAnimationFrame(() =>
+                    priceInputs.current[index]?.focus(),
+                  );
+                }}
+                onCommit={(project) => {
+                  setProjectQueries((current) => ({ ...current, [index]: "" }));
+                  setEditingParts((current) => ({
+                    ...current,
+                    [index]: false,
+                  }));
+                  resetItem(index, project);
+                  requestAnimationFrame(() =>
+                    priceInputs.current[index]?.focus(),
+                  );
+                }}
+                onChange={(project) => {
+                  const found = matchRule(rules, device, project);
+                  setProjectQueries((current) => ({ ...current, [index]: "" }));
+                  setEditingParts((current) => ({
+                    ...current,
+                    [index]: false,
+                  }));
+                  if (!project) resetItem(index);
+                  else
+                    update(index, {
+                      project,
+                      final: found?.rule.suggested ?? "",
+                      adjustmentReason: "",
+                      discount: "0",
+                      discountVisible: false,
+                      saveRule: false,
+                      requiredProductId: found?.rule.requiredProductId ?? "",
+                      requiredQuantity: found?.rule.requiredQuantity ?? 1,
+                      requiredProductRemoved: false,
+                    });
+                  if (project)
+                    setEditingProjects((current) => ({
+                      ...current,
+                      [index]: false,
+                    }));
+                  requestAnimationFrame(() => {
+                    priceInputs.current[index]?.focus();
+                    priceInputs.current[index]?.select();
+                  });
+                }}
+              />
             )}
+            {!validAmount(item.final) && item.final && (
+              <p className="field-error">{it.invalidAmount}</p>
+            )}
+            {(!progressive || item.project.trim()) &&
+              (!itemComplete || editingProjects[index]) && (
+                <p className="quote-hint">
+                  {match ? (
+                    <>
+                      {it.suggested}:{" "}
+                      <strong>{money(cents(match.rule.suggested))}</strong> ·{" "}
+                      {it.levels[match.level as keyof typeof it.levels]}
+                    </>
+                  ) : (
+                    it.noMatch
+                  )}
+                </p>
+              )}
             {(!progressive || itemComplete) && (
               <div className="quote-progressive-reveal">
                 <div className="quote-required-part">
@@ -777,20 +858,6 @@ export function ItemsEditor({
                         >
                           {it.change}
                         </Button>
-                        <button
-                          type="button"
-                          className="selected-part-remove"
-                          aria-label={`${it.remove} ${selectedProduct.name}`}
-                          onClick={() =>
-                            update(index, {
-                              requiredProductId: "",
-                              requiredQuantity: 1,
-                              requiredProductRemoved: true,
-                            })
-                          }
-                        >
-                          <X size={15} />
-                        </button>
                       </span>
                     </div>
                   ) : (
@@ -814,16 +881,16 @@ export function ItemsEditor({
                       autoFocusQuery={
                         editingParts[index] ? selectedProduct?.name : undefined
                       }
-                      onClose={() =>
-                        setEditingParts((current) => ({
-                          ...current,
-                          [index]: false,
-                        }))
-                      }
-                      customLabel={it.newPart}
-                      onCustom={(query) => setCreatingPart({ index, query })}
-                      clearable
                       groups={[
+                        ...(editingParts[index] && selectedProduct
+                          ? [
+                              {
+                                options: [
+                                  { value: "", label: it.noRequiredPart },
+                                ],
+                              },
+                            ]
+                          : []),
                         {
                           options: availableProducts.map((product) => ({
                             value: product.id,
@@ -846,6 +913,15 @@ export function ItemsEditor({
                           })),
                         },
                       ]}
+                      onClose={() =>
+                        setEditingParts((current) => ({
+                          ...current,
+                          [index]: false,
+                        }))
+                      }
+                      customLabel={it.newPart}
+                      onCustom={(query) => setCreatingPart({ index, query })}
+                      clearable
                     />
                   )}
                 </div>
@@ -886,17 +962,15 @@ export function ItemsEditor({
                         : it.addItemDiscount}
                     </Button>
                   )}
-                  {items.length > 1 && (
-                    <RecordIcon
-                      kind="delete"
-                      label={it.remove + " " + it.project + " " + (index + 1)}
-                      onClick={() =>
-                        onChange(items.filter((_, i) => i !== index))
-                      }
-                    />
-                  )}
                 </div>
               </div>
+            )}
+            {items.length > 1 && (
+              <RecordIcon
+                kind="delete"
+                label={it.remove + " " + it.project + " " + (index + 1)}
+                onClick={() => onChange(items.filter((_, i) => i !== index))}
+              />
             )}
           </div>
         );
@@ -926,12 +1000,16 @@ export function ItemsEditor({
         </div>
       )}
       {creatingPart && (
-        <FormDialog title={it.newPart} onClose={() => setCreatingPart(null)}>
+        <FormDialog
+          title={it.newRepairPart}
+          onClose={() => setCreatingPart(null)}
+        >
           <ProductForm
             categories={productCategories}
             mode="inventory"
             initialName={creatingPart.query}
             initialUsage="REPAIR"
+            quickRepair
             onClose={() => setCreatingPart(null)}
             onCreated={(product) => {
               setCreatedProducts((current) => [...current, product]);
@@ -1585,7 +1663,7 @@ export function QuoteSummary({
   try {
     q = settlement(items, { orderDiscount, includeVat, inspectionFee });
   } catch {
-    return <p className="help">{it.validationError}</p>;
+    return <p className="field-error">{it.invalidAmount}</p>;
   }
   return (
     <dl className="quote-summary">
@@ -1959,76 +2037,73 @@ export function EditOrderForm({
 
 export function WarrantyForm({
   id,
-  values,
+  items,
 }: {
   id: string;
-  values: { days: number; scope: string; notes: string };
+  items: { id: string; project: string; days: number; notes: string }[];
 }) {
   const it = useMessages();
-  const presets = [0, 30, 60, 90, 180, 365];
-  const [days, setDays] = useState(
-    presets.includes(values.days) ? String(values.days) : "custom",
-  );
+  const [values, setValues] = useState(items);
   return (
     <ActionForm
       submit={it.save}
-      action={(data) =>
-        warrantyAction(id, {
-          days:
-            str(data, "days") === "custom"
-              ? str(data, "customDays")
-              : str(data, "days"),
-          scope: str(data, "scope"),
-          notes: str(data, "notes"),
-        })
-      }
+      action={() => warrantyAction(id, { items: values })}
     >
-      <Field label={it.warranty.duration}>
-        <SimpleSelect
-          name="days"
-          value={days}
-          onChange={setDays}
-          placeholder={it.selectOption}
-          ariaLabel={it.warranty.duration}
-          options={[
-            { value: "0", label: it.warranty.none },
-            ...[30, 60, 90, 180, 365].map((value) => ({
-              value: String(value),
-              label: `${value} ${it.warranty.days}`,
-            })),
-            { value: "custom", label: it.warranty.custom },
-          ]}
-        />
-      </Field>
-      {days === "custom" && (
-        <Field label={it.warranty.customDays}>
-          <input
-            name="customDays"
-            type="number"
-            min="1"
-            max="3650"
-            defaultValue={values.days || 90}
-            required
-          />
-        </Field>
-      )}
-      <Field label={it.warranty.scope}>
-        <textarea name="scope" defaultValue={values.scope} maxLength={2000} />
-      </Field>
-      <Field label={it.warranty.notes}>
-        <textarea name="notes" defaultValue={values.notes} maxLength={2000} />
-      </Field>
+      <div className="project-warranty-editor">
+        {values.map((item, index) => (
+          <section key={item.id}>
+            <strong>{item.project}</strong>
+            <Field label={it.warranty.duration}>
+              <SimpleSelect
+                value={String(item.days)}
+                onChange={(days) =>
+                  setValues((current) =>
+                    current.map((entry, i) =>
+                      i === index ? { ...entry, days: Number(days) } : entry,
+                    ),
+                  )
+                }
+                placeholder={it.selectOption}
+                ariaLabel={`${it.warranty.duration} ${item.project}`}
+                options={[0, 7, 30, 60, 90, 180, 365].map((days) => ({
+                  value: String(days),
+                  label: days
+                    ? `${days} ${it.warranty.days}`
+                    : it.warranty.none,
+                }))}
+              />
+            </Field>
+            <Field label={it.warranty.notes}>
+              <textarea
+                value={item.notes}
+                maxLength={2000}
+                onChange={(event) =>
+                  setValues((current) =>
+                    current.map((entry, i) =>
+                      i === index
+                        ? { ...entry, notes: event.target.value }
+                        : entry,
+                    ),
+                  )
+                }
+              />
+            </Field>
+          </section>
+        ))}
+      </div>
     </ActionForm>
   );
 }
 
 export type AfterSalesProject = {
-  value: string;
   id: string;
   name: string;
-  source: "original" | "catalog" | "custom";
   price: string;
-  description?: string;
+  warranty: AfterSalesWarranty;
+  warrantyDays: number;
+  reworked: boolean;
+  requiredProductId?: string;
+  requiredQuantity?: number;
 };
 export type AfterSalesWarranty = {
   start: string;
@@ -2036,10 +2111,18 @@ export type AfterSalesWarranty = {
   progress: number;
   remainingPercent: number;
   remainingDays: number;
+  elapsedDays: number;
+  totalDays: number;
   state: "ACTIVE" | "EXPIRING" | "EXPIRED";
 } | null;
 
-function WarrantyProgressPanel({ warranty }: { warranty: AfterSalesWarranty }) {
+export function WarrantyProgressPanel({
+  warranty,
+  days,
+}: {
+  warranty: AfterSalesWarranty;
+  days?: number;
+}) {
   const it = useMessages();
   const [progress, setProgress] = useState(0);
   useEffect(() => {
@@ -2058,8 +2141,14 @@ function WarrantyProgressPanel({ warranty }: { warranty: AfterSalesWarranty }) {
       <section className="warranty-progress-panel is-none">
         <ShieldCheck size={19} aria-hidden="true" />
         <div>
-          <strong>{it.afterSales.noWarranty}</strong>
-          <p>{it.afterSales.noWarrantyHint}</p>
+          <strong>
+            {days ? `${days} ${it.warranty.days}` : it.afterSales.noWarranty}
+          </strong>
+          <p>
+            {days
+              ? it.warranty.startsAfterDelivery
+              : it.afterSales.noWarrantyHint}
+          </p>
         </div>
       </section>
     );
@@ -2081,15 +2170,16 @@ function WarrantyProgressPanel({ warranty }: { warranty: AfterSalesWarranty }) {
     <section className={`warranty-progress-panel is-${tone}`}>
       <ShieldCheck size={19} aria-hidden="true" />
       <div className="warranty-progress-content">
-        <strong>{title}</strong>
+        <strong>{days ? `${days} ${it.warranty.days}` : title}</strong>
         <p>
-          {it.afterSales.warrantyUntil} {warranty.end.replaceAll("-", "/")}
+          {title}
           {warranty.state !== "EXPIRED" &&
             ` · ${it.afterSales.remainingDays.replace("{count}", String(warranty.remainingDays))}`}
         </p>
         <div className="warranty-progress-labels">
           <span>
-            {progress}% {it.afterSales.used}
+            {warranty.elapsedDays} / {warranty.totalDays} {it.warranty.days}{" "}
+            {it.afterSales.used}
           </span>
           <span>
             {100 - progress}% {it.afterSales.remaining}
@@ -2099,7 +2189,7 @@ function WarrantyProgressPanel({ warranty }: { warranty: AfterSalesWarranty }) {
           <span style={{ width: `${progress}%` }} />
         </div>
         <div className="warranty-progress-dates">
-          <span>{warranty.start.replaceAll("-", "/")}</span>
+          <span>{it.afterSales.warrantyUntil}</span>
           <span>{warranty.end.replaceAll("-", "/")}</span>
         </div>
       </div>
@@ -2107,192 +2197,244 @@ function WarrantyProgressPanel({ warranty }: { warranty: AfterSalesWarranty }) {
   );
 }
 
+export function ReworkPartEditor({
+  orderId,
+  itemId,
+  value,
+  products,
+}: {
+  orderId: string;
+  itemId: string;
+  value: string;
+  products: CreatedProduct[];
+}) {
+  const it = useMessages();
+  const router = useRouter();
+  const [selected, setSelected] = useState(value);
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
+  return (
+    <div className="rework-part-editor">
+      <SearchableCombobox
+        value={selected}
+        disabled={pending}
+        onChange={(productId) => {
+          setSelected(productId);
+          startTransition(async () => {
+            const result = await updateReworkPartAction(orderId, itemId, {
+              productId,
+              quantity: 1,
+            });
+            if (!result.ok) {
+              setSelected(value);
+              setError(result.error);
+              return;
+            }
+            setError("");
+            router.refresh();
+          });
+        }}
+        ariaLabel={it.requiredPart}
+        placeholder={it.noRequiredPart}
+        searchPlaceholder={it.searchInventoryPart}
+        emptyText={it.noMatches}
+        clearable
+        groups={[
+          {
+            options: products.map((product) => ({
+              value: product.id,
+              label: product.name,
+              secondary: product.category,
+              trailing: `${it.actualStock} ${product.stock} · ${it.reservedStock} ${product.reserved ?? 0} · ${it.availableStock} ${product.available ?? product.stock}`,
+            })),
+          },
+        ]}
+      />
+      {error && <p className="field-error">{error}</p>}
+    </div>
+  );
+}
+
 export function AfterSalesForm({
   id,
-  warranty,
   originalProjects,
-  catalogProjects,
+  products,
   onSuccess,
 }: {
   id: string;
-  warranty: AfterSalesWarranty;
   originalProjects: AfterSalesProject[];
-  catalogProjects: AfterSalesProject[];
+  products: CreatedProduct[];
   onSuccess?: () => void;
 }) {
   const it = useMessages();
-  const [selected, setSelected] = useState(
-    originalProjects.length === 1 ? originalProjects[0].value : "",
+  const available = originalProjects.filter((project) => !project.reworked);
+  const [selected, setSelected] = useState<string[]>(
+    available.length === 1 ? [available[0].id] : [],
   );
-  const [customName, setCustomName] = useState("");
-  const [custom, setCustom] = useState(false);
-  const initialProject =
-    originalProjects.length === 1 ? originalProjects[0] : null;
-  const [treatment, setTreatment] = useState<"WARRANTY" | "PAID">(
-    warranty && warranty.state !== "EXPIRED" && initialProject
-      ? "WARRANTY"
-      : "PAID",
-  );
-  const [fee, setFee] = useState("0");
-  const [notes, setNotes] = useState("");
-  const treatmentChanged = useRef(false);
-  const customProject: AfterSalesProject | null = custom
-    ? {
-        value: "custom",
-        id: "",
-        name: customName || it.afterSales.customProject,
-        source: "custom",
-        price: "",
+  const [itemValues, setItemValues] = useState<
+    Record<
+      string,
+      {
+        treatment: "WARRANTY" | "PAID";
+        fee: string;
+        requiredProductId: string;
       }
-    : null;
-  const projects = [
-    ...originalProjects,
-    ...catalogProjects,
-    ...(customProject ? [customProject] : []),
-  ];
-  const project = projects.find((item) => item.value === selected) ?? null;
-  const recommend = (next: AfterSalesProject | null) =>
-    warranty && warranty.state !== "EXPIRED" && next?.source === "original"
-      ? "WARRANTY"
-      : "PAID";
-  const groups: SelectGroup[] = [
-    {
-      label: it.afterSales.originalProjects,
-      options: originalProjects.map((item) => ({
-        value: item.value,
-        label: item.name,
-        secondary: it.afterSales.originalProject,
-        trailing: item.price,
-        icon: <Wrench size={15} aria-hidden="true" />,
-        keywords: item.description,
-      })),
-    },
-    {
-      label: it.afterSales.otherProjects,
-      options: catalogProjects.map((item) => ({
-        value: item.value,
-        label: item.name,
-        secondary: item.description || it.afterSales.catalogProject,
-        trailing: item.price,
-        icon: <Settings size={15} aria-hidden="true" />,
-        keywords: item.description,
-      })),
-    },
-    ...(customProject
-      ? [
-          {
-            label: it.afterSales.customProject,
-            options: [
-              {
-                value: customProject.value,
-                label: customProject.name,
-                secondary: it.afterSales.customProject,
-              },
-            ],
-          },
-        ]
-      : []),
-  ];
-  function select(value: string) {
-    setSelected(value);
-    const next = projects.find((item) => item.value === value) ?? null;
-    if (!treatmentChanged.current) {
-      const recommended = recommend(next);
-      setTreatment(recommended);
-      if (recommended === "WARRANTY") setFee("0");
-    }
-  }
+    >
+  >(() =>
+    Object.fromEntries(
+      available.map((project) => [
+        project.id,
+        {
+          treatment:
+            project.warranty && project.warranty.state !== "EXPIRED"
+              ? "WARRANTY"
+              : "PAID",
+          fee: "0",
+          requiredProductId: project.requiredProductId ?? "",
+        },
+      ]),
+    ),
+  );
+  const [notes, setNotes] = useState("");
   return (
     <ActionForm
       submit={it.afterSales.openRework}
       onSuccess={onSuccess}
-      disabled={!project || (project.source === "custom" && !customName.trim())}
+      disabled={
+        !selected.length ||
+        selected.some((id) => !validAmount(itemValues[id]?.fee ?? ""))
+      }
       action={(data) =>
         afterSalesAction(id, {
-          reason: project?.name ?? "",
-          projectId: project?.id ?? "",
-          projectSource: project?.source ?? "custom",
-          treatment,
+          items: selected.map((originalItemId) => ({
+            originalItemId,
+            treatment: itemValues[originalItemId].treatment,
+            fee:
+              itemValues[originalItemId].treatment === "WARRANTY"
+                ? "0"
+                : itemValues[originalItemId].fee,
+            requiredProductId: itemValues[originalItemId].requiredProductId,
+            requiredQuantity:
+              originalProjects.find((project) => project.id === originalItemId)
+                ?.requiredQuantity ?? 1,
+          })),
           notes: str(data, "notes"),
-          fee: treatment === "WARRANTY" ? "0" : fee,
           dueDate: str(data, "dueDate"),
         })
       }
     >
-      <WarrantyProgressPanel warranty={warranty} />
-      <Field label={`${it.afterSales.project} *`}>
-        <SearchableCombobox
-          value={selected}
-          onChange={select}
-          groups={groups}
-          placeholder={it.afterSales.projectPlaceholder}
-          ariaLabel={it.afterSales.project}
-          searchPlaceholder={it.afterSales.projectSearch}
-          emptyText={it.afterSales.noProjectMatches}
-          customLabel={
-            customName
-              ? it.afterSales.customProject
-              : it.afterSales.addCustomProject
-          }
-          onCustom={(query) => {
-            setCustom(true);
-            setCustomName(query);
-            setSelected("custom");
-            if (!treatmentChanged.current) setTreatment("PAID");
-          }}
-          clearable
-        />
-      </Field>
-      {custom && (
-        <Field label={`${it.afterSales.projectName} *`}>
-          <input
-            value={customName}
-            onChange={(event) => setCustomName(event.target.value)}
-            maxLength={120}
-            required
-            autoFocus
-          />
-        </Field>
-      )}
-      {project &&
-        project.source !== "original" &&
-        warranty &&
-        warranty.state !== "EXPIRED" && (
-          <p className="after-sales-hint">{it.afterSales.nonOriginalHint}</p>
-        )}
-      <fieldset className="after-sales-treatment">
-        <legend>{it.afterSales.treatment}</legend>
-        {(["WARRANTY", "PAID"] as const).map((choice) => (
-          <label
-            className={`after-sales-radio ${treatment === choice ? "is-selected" : ""}`}
-            key={choice}
-          >
-            <input
-              type="radio"
-              name="treatment"
-              value={choice}
-              checked={treatment === choice}
-              onChange={() => {
-                treatmentChanged.current = true;
-                setTreatment(choice);
-                if (choice === "WARRANTY") setFee("0");
-              }}
-            />
-            <span>
-              <strong>
-                {choice === "WARRANTY"
-                  ? it.afterSales.warrantyTreatment
-                  : it.afterSales.paidTreatment}
-              </strong>
-              <small>
-                {choice === "WARRANTY"
-                  ? it.afterSales.warrantyTreatmentHint
-                  : it.afterSales.paidTreatmentHint}
-              </small>
-            </span>
-          </label>
-        ))}
-      </fieldset>
+      <div className="rework-project-list">
+        {originalProjects.map((project) => {
+          const checked = selected.includes(project.id);
+          const value = itemValues[project.id];
+          return (
+            <section
+              className={project.reworked ? "is-disabled" : ""}
+              key={project.id}
+            >
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  disabled={project.reworked}
+                  checked={checked}
+                  onChange={(event) =>
+                    setSelected((current) =>
+                      event.target.checked
+                        ? [...current, project.id]
+                        : current.filter((id) => id !== project.id),
+                    )
+                  }
+                />
+                <strong>{project.name}</strong>
+                <span>{project.price}</span>
+              </label>
+              {project.reworked && <p>{it.afterSales.alreadyReworked}</p>}
+              {!project.reworked && (
+                <WarrantyProgressPanel
+                  warranty={project.warranty}
+                  days={project.warrantyDays}
+                />
+              )}
+              {checked && value && (
+                <>
+                  <fieldset className="after-sales-treatment">
+                    <legend>{it.afterSales.treatment}</legend>
+                    {(["WARRANTY", "PAID"] as const).map((choice) => (
+                      <label
+                        className={`after-sales-radio ${value.treatment === choice ? "is-selected" : ""}`}
+                        key={choice}
+                      >
+                        <input
+                          type="radio"
+                          checked={value.treatment === choice}
+                          onChange={() =>
+                            setItemValues((current) => ({
+                              ...current,
+                              [project.id]: {
+                                ...value,
+                                treatment: choice,
+                                fee: choice === "WARRANTY" ? "0" : value.fee,
+                              },
+                            }))
+                          }
+                        />
+                        <span>
+                          <strong>
+                            {choice === "WARRANTY"
+                              ? it.afterSales.warrantyTreatment
+                              : it.afterSales.paidTreatment}
+                          </strong>
+                        </span>
+                      </label>
+                    ))}
+                  </fieldset>
+                  {value.treatment === "PAID" && (
+                    <Field label={it.afterSales.fee}>
+                      <input
+                        inputMode="decimal"
+                        value={value.fee}
+                        aria-invalid={!validAmount(value.fee)}
+                        onChange={(event) =>
+                          setItemValues((current) => ({
+                            ...current,
+                            [project.id]: { ...value, fee: event.target.value },
+                          }))
+                        }
+                      />
+                    </Field>
+                  )}
+                  <Field label={it.requiredPart}>
+                    <SearchableCombobox
+                      value={value.requiredProductId}
+                      onChange={(requiredProductId) =>
+                        setItemValues((current) => ({
+                          ...current,
+                          [project.id]: { ...value, requiredProductId },
+                        }))
+                      }
+                      ariaLabel={`${it.requiredPart} ${project.name}`}
+                      placeholder={it.noRequiredPart}
+                      searchPlaceholder={it.searchInventoryPart}
+                      emptyText={it.noMatches}
+                      clearable
+                      groups={[
+                        {
+                          options: products.map((product) => ({
+                            value: product.id,
+                            label: product.name,
+                            secondary: product.category,
+                            trailing: `${it.actualStock} ${product.stock} · ${it.availableStock} ${product.available ?? product.stock}`,
+                          })),
+                        },
+                      ]}
+                    />
+                  </Field>
+                </>
+              )}
+            </section>
+          );
+        })}
+      </div>
       <Field label={it.afterSales.notes} className="after-sales-notes">
         <textarea
           name="notes"
@@ -2305,19 +2447,8 @@ export function AfterSalesForm({
         <small>{notes.length}/200</small>
       </Field>
       <div className="after-sales-grid">
-        <Field label={it.afterSales.fee}>
-          <input
-            name="fee"
-            inputMode="decimal"
-            value={fee}
-            min="0"
-            readOnly={treatment === "WARRANTY"}
-            onChange={(event) => setFee(event.target.value)}
-            required
-          />
-        </Field>
         <Field label={it.afterSales.dueDate}>
-          <input type="date" name="dueDate" min={romeDay()} />
+          <DatePicker name="dueDate" min={romeDay()} />
         </Field>
       </div>
     </ActionForm>

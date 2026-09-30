@@ -29,6 +29,7 @@ export type OrderListRow = {
   due: number;
   paid: number;
   balance: number;
+  afterSalesOpen: boolean;
 };
 
 function StatusControl({
@@ -38,7 +39,13 @@ function StatusControl({
 }: {
   row: Pick<
     OrderListRow,
-    "id" | "status" | "customerName" | "due" | "paid" | "balance"
+    | "id"
+    | "status"
+    | "customerName"
+    | "due"
+    | "paid"
+    | "balance"
+    | "afterSalesOpen"
   >;
   active: boolean;
   onSettled?: (order: StatusDropdownOrder) => void;
@@ -60,14 +67,21 @@ export function DetailStatusControl({
   due,
   paid,
   balance,
+  afterSalesOpen,
 }: Pick<
   OrderListRow,
-  "id" | "status" | "customerName" | "due" | "paid" | "balance"
+  | "id"
+  | "status"
+  | "customerName"
+  | "due"
+  | "paid"
+  | "balance"
+  | "afterSalesOpen"
 >) {
   return (
     <div className="detail-status-control">
       <StatusControl
-        row={{ id, status, customerName, due, paid, balance }}
+        row={{ id, status, customerName, due, paid, balance, afterSalesOpen }}
         active
       />
     </div>

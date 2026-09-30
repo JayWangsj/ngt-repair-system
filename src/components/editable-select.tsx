@@ -2,6 +2,7 @@
 import { useMessages } from "./language";
 import { uniqueOptions } from "@/lib/options";
 import { SearchableCombobox } from "./business-select";
+import { Trash2 } from "lucide-react";
 export function EditableSelect({
   label,
   value,
@@ -13,6 +14,8 @@ export function EditableSelect({
   maxLength = 120,
   normalize,
   createLabel,
+  deletableValues = [],
+  onDelete,
 }: {
   label: string;
   value: string;
@@ -24,6 +27,8 @@ export function EditableSelect({
   maxLength?: number;
   normalize?: (value: string) => string;
   createLabel?: string;
+  deletableValues?: string[];
+  onDelete?: (value: string) => void | Promise<void>;
 }) {
   const it = useMessages();
   const normalized = options.map((o) =>
@@ -36,9 +41,23 @@ export function EditableSelect({
       normalized.find(
         (item) => item.value.toLowerCase() === option.toLowerCase(),
       )?.label ?? option,
+    trailing: deletableValues.some((value) => value === option) ? (
+      <button
+        type="button"
+        className="option-delete"
+        aria-label={`${it.remove} ${option}`}
+        onPointerDown={(event) => event.preventDefault()}
+        onClick={(event) => {
+          event.stopPropagation();
+          void onDelete?.(option);
+        }}
+      >
+        <Trash2 size={14} />
+      </button>
+    ) : undefined,
   }));
   if (value && !choices.some((option) => option.value === value))
-    choices.unshift({ value, label: value });
+    choices.unshift({ value, label: value, trailing: undefined });
   return (
     <div className="editable-field">
       <label>{label}</label>

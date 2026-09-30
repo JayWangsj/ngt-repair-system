@@ -49,8 +49,22 @@ summary {
   cursor: pointer;
 }
 button:disabled {
-  cursor: wait;
-  opacity: 0.55;
+  border-color: #e1e5e3 !important;
+  background: #f1f3f2 !important;
+  color: #9aa29f !important;
+  box-shadow: none !important;
+  cursor: not-allowed;
+  opacity: 1;
+  transform: none !important;
+  pointer-events: auto;
+}
+button:disabled:hover,
+button:disabled:active {
+  border-color: #e1e5e3 !important;
+  background: #f1f3f2 !important;
+  color: #9aa29f !important;
+  box-shadow: none !important;
+  transform: none !important;
 }
 a,
 button {
@@ -281,6 +295,63 @@ small {
     transform var(--motion-fast) var(--ease-ui),
     background var(--motion-base) var(--ease-ui),
     border-color var(--motion-base) var(--ease-ui);
+}
+
+/* A single semantic palette is shared by badges, dropdown triggers and options. */
+.badge[class*="status-"],
+.status-select[class*="status-"] {
+  color: var(--status-color) !important;
+  background: var(--status-bg) !important;
+}
+.status-received {
+  --status-color: #66737b;
+  --status-bg: #f4f6f7;
+  --status-bg-hover: #edf1f2;
+}
+.status-diagnosing {
+  --status-color: #6d7880;
+  --status-bg: #f3f5f6;
+  --status-bg-hover: #e9edef;
+}
+.status-waiting_approval {
+  --status-color: #81649a;
+  --status-bg: #f6f1f8;
+  --status-bg-hover: #eee7f3;
+}
+.status-ready {
+  --status-color: #9b741e;
+  --status-bg: #fdf8e9;
+  --status-bg-hover: #f9f0d2;
+}
+.status-repairing {
+  --status-color: #4779a8;
+  --status-bg: #f0f6fb;
+  --status-bg-hover: #e6f0f8;
+}
+.status-parts_missing {
+  --status-color: #a9632f;
+  --status-bg: #fbf3ec;
+  --status-bg-hover: #f6e8db;
+}
+.status-completed {
+  --status-color: #377b50;
+  --status-bg: #eff8f2;
+  --status-bg-hover: #e4f2e8;
+}
+.status-reworking {
+  --status-color: #236c72;
+  --status-bg: #edf7f7;
+  --status-bg-hover: #deeeee;
+}
+.status-refunded {
+  --status-color: #6f7a80;
+  --status-bg: #f4f6f7;
+  --status-bg-hover: #eceff1;
+}
+.status-cancelled {
+  --status-color: #6f7a80;
+  --status-bg: #f4f6f7;
+  --status-bg-hover: #eceff1;
 }
 .button-primary:hover,
 .button-danger:hover {
@@ -936,11 +1007,62 @@ textarea {
   color: #8b9690;
 }
 .quote-item {
+  position: relative;
   padding: 18px;
   background: #fafcfb;
   border: 1px solid var(--line);
   border-radius: 9px;
   margin-bottom: 14px;
+}
+.selected-project-summary {
+  display: flex;
+  min-height: 72px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 12px;
+  border: 1px solid #e2e5e3;
+  border-radius: 9px;
+  background: #fff;
+}
+.selected-project-summary > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.selected-project-summary small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.selected-project-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.selected-project-actions label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 5px 8px;
+  border: 1px solid #e7dfc3;
+  border-radius: 999px;
+  background: #fffdf7;
+  font-size: 10px;
+}
+.quote-summary-price {
+  width: 74px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 650;
+  outline: none;
+}
+.quote-item > .record-icon-delete {
+  position: absolute;
+  right: 10px;
+  bottom: 9px;
 }
 .quote-item label {
   margin-bottom: 10px;
@@ -1240,9 +1362,9 @@ textarea {
 }
 .status-dropdown-trigger.status-reworking,
 .status-dropdown-option.status-reworking {
-  --status-color: #876099;
-  --status-bg: #f7f1f8;
-  --status-bg-hover: #eee4f1;
+  --status-color: #236c72;
+  --status-bg: #edf7f7;
+  --status-bg-hover: #deeeee;
 }
 .status-dropdown-trigger.status-refunded,
 .status-dropdown-option.status-refunded,
@@ -1320,6 +1442,7 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  cursor: pointer;
 }
 .order-card-toggle {
   min-width: 0;
@@ -3280,6 +3403,12 @@ details[open] > summary {
   gap: 28px;
   margin-bottom: 8px;
 }
+.inspection-choice + .fault-options-heading {
+  margin-top: 22px;
+}
+.fault-options-heading + .fault-chip-grid {
+  margin-top: 12px;
+}
 .fault-options-heading > strong {
   font-size: 12px;
 }
@@ -3748,8 +3877,8 @@ details[open] > summary {
   justify-content: center;
   border: 1px solid #dfd9c8;
   border-radius: 8px;
-  background: #fff;
-  color: #66572e;
+  background: #fffdf7;
+  color: #6d5510;
   font: inherit;
   cursor: pointer;
 }
@@ -3799,8 +3928,9 @@ details[open] > summary {
 }
 .business-select-create:hover:not(:disabled) {
   transform: translateY(-1px) scale(1.01);
-  border-color: #d2b85d;
+  border-color: #c99e10;
   background: #fff9e9;
+  box-shadow: 0 4px 10px rgb(116 91 11 / 10%);
 }
 .business-select-create:active:not(:disabled) {
   transform: scale(0.98);
@@ -3830,7 +3960,8 @@ details[open] > summary {
 .business-select-create:disabled {
   background: #f4f5f5;
   color: #9ca3a0;
-  cursor: default;
+  border-color: #e1e5e3;
+  cursor: not-allowed;
 }
 .business-select-trigger {
   display: flex;
@@ -3983,6 +4114,39 @@ details[open] > summary {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+.option-delete {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #87908d;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+.business-select-option:hover .option-delete,
+.business-select-option:focus-within .option-delete {
+  opacity: 1;
+  pointer-events: auto;
+}
+.option-delete:hover {
+  background: #f8eeee;
+  color: #9a4b45;
+}
+.inventory-category-field .icon-button {
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+.inventory-category-field:hover .icon-button,
+.inventory-category-field:focus-within .icon-button {
+  opacity: 1;
+}
 .business-select-empty {
   display: grid;
   justify-items: center;
@@ -4066,6 +4230,34 @@ details[open] > summary {
 .warranty-progress-panel > svg {
   flex: 0 0 auto;
   margin-top: 1px;
+}
+.project-warranty-list,
+.project-warranty-editor,
+.rework-project-list {
+  display: grid;
+  gap: 12px;
+}
+.project-warranty-list > section,
+.project-warranty-editor > section,
+.rework-project-list > section {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fbfcfb;
+}
+.rework-project-list > section.is-disabled {
+  color: var(--muted);
+  background: #f4f5f5;
+}
+.rework-project-list .checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rework-project-list .checkbox span {
+  margin-left: auto;
 }
 .warranty-progress-content {
   min-width: 0;

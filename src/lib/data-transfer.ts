@@ -16,6 +16,9 @@ import type {
   WorkOrder,
   WorkOrderFault,
   WorkOrderItem,
+  ReworkSession,
+  ReworkItem,
+  DeviceCatalogDeletion,
 } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { db } from "./db";
@@ -23,7 +26,7 @@ import { BusinessError, type Actor } from "./domain";
 import { normalizeBrand, normalizeModel } from "./catalog";
 
 export const BACKUP_FORMAT = "ngt-repair-data";
-export const BACKUP_VERSION = 6;
+export const BACKUP_VERSION = 7;
 
 type JsonRow<T> = {
   [K in keyof T]: T[K] extends Date
@@ -54,6 +57,9 @@ type BackupData = {
   paymentAllocations: JsonRow<PaymentAllocation>[];
   workOrderProducts: JsonRow<WorkOrderProduct>[];
   workOrderFaults: JsonRow<WorkOrderFault>[];
+  reworkSessions: JsonRow<ReworkSession>[];
+  reworkItems: JsonRow<ReworkItem>[];
+  deviceCatalogDeletions: JsonRow<DeviceCatalogDeletion>[];
 };
 export type BackupFile = {
   format: typeof BACKUP_FORMAT;
@@ -104,6 +110,11 @@ function ensureBackup(value: unknown): BackupFile {
     (candidate.data as Partial<BackupData>).workOrderProducts ?? [];
   const workOrderFaults =
     (candidate.data as Partial<BackupData>).workOrderFaults ?? [];
+  const reworkSessions =
+    (candidate.data as Partial<BackupData>).reworkSessions ?? [];
+  const reworkItems = (candidate.data as Partial<BackupData>).reworkItems ?? [];
+  const deviceCatalogDeletions =
+    (candidate.data as Partial<BackupData>).deviceCatalogDeletions ?? [];
   if (
     !Array.isArray(products) ||
     !Array.isArray(inventoryMovements) ||
@@ -111,7 +122,10 @@ function ensureBackup(value: unknown): BackupFile {
     !Array.isArray(retailSaleItems) ||
     !Array.isArray(paymentAllocations) ||
     !Array.isArray(workOrderProducts) ||
-    !Array.isArray(workOrderFaults)
+    !Array.isArray(workOrderFaults) ||
+    !Array.isArray(reworkSessions) ||
+    !Array.isArray(reworkItems) ||
+    !Array.isArray(deviceCatalogDeletions)
   )
     throw new BusinessError("File di backup incompleto.");
   return {
@@ -125,6 +139,9 @@ function ensureBackup(value: unknown): BackupFile {
       paymentAllocations,
       workOrderProducts,
       workOrderFaults,
+      reworkSessions,
+      reworkItems,
+      deviceCatalogDeletions,
     },
   };
 }
@@ -155,6 +172,9 @@ export async function exportBusinessData(): Promise<BackupFile> {
     paymentAllocations,
     workOrderProducts,
     workOrderFaults,
+    reworkSessions,
+    reworkItems,
+    deviceCatalogDeletions,
   ] = await Promise.all([
     db.customer.findMany({ orderBy: { createdAt: "asc" } }),
     db.customerPhone.findMany({ orderBy: { phone: "asc" } }),
@@ -180,6 +200,9 @@ export async function exportBusinessData(): Promise<BackupFile> {
     db.paymentAllocation.findMany({ orderBy: { id: "asc" } }),
     db.workOrderProduct.findMany({ orderBy: { id: "asc" } }),
     db.workOrderFault.findMany({ orderBy: { id: "asc" } }),
+    db.reworkSession.findMany({ orderBy: { createdAt: "asc" } }),
+    db.reworkItem.findMany({ orderBy: { id: "asc" } }),
+    db.deviceCatalogDeletion.findMany({ orderBy: { createdAt: "asc" } }),
   ]);
   const data = JSON.parse(
     JSON.stringify({
@@ -200,6 +223,9 @@ export async function exportBusinessData(): Promise<BackupFile> {
       paymentAllocations,
       workOrderProducts,
       workOrderFaults,
+      reworkSessions,
+      reworkItems,
+      deviceCatalogDeletions,
     }),
   ) as BackupData;
   return {
@@ -219,6 +245,8 @@ export async function clearBusinessData(actor: Actor) {
     await tx.retailSaleItem.deleteMany();
     await tx.retailSale.deleteMany();
     await tx.workOrderProduct.deleteMany();
+    await tx.reworkItem.deleteMany();
+    await tx.reworkSession.deleteMany();
     await tx.inventoryMovement.deleteMany();
     await tx.product.deleteMany();
     await tx.statusHistory.deleteMany();
@@ -230,6 +258,7 @@ export async function clearBusinessData(actor: Actor) {
     await tx.customer.deleteMany();
     await tx.priceRule.deleteMany();
     await tx.faultOption.deleteMany();
+    await tx.deviceCatalogDeletion.deleteMany();
     await tx.$executeRawUnsafe(
       'ALTER SEQUENCE "WorkOrder_number_seq" RESTART WITH 1',
     );
@@ -257,6 +286,8 @@ export async function importBusinessData(
     const paymentIds = new Map<string, string>();
     const entityIds = new Map<string, string>();
     const faultIds = new Map<string, string>();
+    const itemIds = new Map<string, string>();
+    const reworkSessionIds = new Map<string, string>();
     const orderSourceIds = new Set(backup.data.orders.map((order) => order.id));
 
     for (const source of backup.data.products) {
@@ -593,6 +624,64 @@ export async function importBusinessData(
             minutes: source.minutes,
             requiredProductId: source.requiredProductId ?? null,
             requiredQuantity: source.requiredQuantity ?? 1,
+            warrantyStart: date(source.warrantyStart),
+            warrantyDays: source.warrantyDays ?? 0,
+            warrantyExpiresAt: date(source.warrantyExpiresAt),
+            warrantyNotes: source.warrantyNotes ?? "",
+          },
+        });
+        imported++;
+      }
+      itemIds.set(source.id, source.id);
+    }
+    for (const source of backup.data.reworkSessions) {
+      const orderId = orderIds.get(source.orderId);
+      if (!orderId) {
+        skipped++;
+        continue;
+      }
+      const exists = await tx.reworkSession.findUnique({
+        where: { id: source.id },
+      });
+      if (!exists) {
+        await tx.reworkSession.create({
+          data: {
+            id: source.id,
+            orderId,
+            receivedAt: date(source.receivedAt) ?? new Date(),
+            dueDate: source.dueDate,
+            notes: source.notes,
+            open: source.open,
+            createdAt: date(source.createdAt) ?? new Date(),
+            updatedAt: date(source.updatedAt) ?? new Date(),
+          },
+        });
+        imported++;
+      } else skipped++;
+      reworkSessionIds.set(source.id, source.id);
+    }
+    for (const source of backup.data.reworkItems) {
+      const sessionId = reworkSessionIds.get(source.sessionId);
+      const originalItemId = itemIds.get(source.originalItemId);
+      if (!sessionId || !originalItemId) {
+        skipped++;
+        continue;
+      }
+      const exists = await tx.reworkItem.findUnique({
+        where: { id: source.id },
+      });
+      if (exists) skipped++;
+      else {
+        await tx.reworkItem.create({
+          data: {
+            id: source.id,
+            sessionId,
+            originalItemId,
+            warrantyState: source.warrantyState,
+            treatment: source.treatment,
+            fee: source.fee,
+            requiredProductId: source.requiredProductId,
+            requiredQuantity: source.requiredQuantity,
           },
         });
         imported++;
@@ -620,6 +709,7 @@ export async function importBusinessData(
             productName: source.productName,
             category: source.category,
             kind: source.kind,
+            contextKey: source.contextKey ?? "ORIGINAL",
             unitPrice: source.unitPrice,
             discount: source.discount,
             quantity: source.quantity,
@@ -652,6 +742,9 @@ export async function importBusinessData(
             requestId: source.requestId,
             orderId,
             saleId,
+            reworkSessionId: source.reworkSessionId
+              ? (reworkSessionIds.get(source.reworkSessionId) ?? null)
+              : null,
             amount: source.amount,
             method: source.method,
             kind: source.kind,
@@ -824,6 +917,32 @@ export async function importBusinessData(
             note: source.note,
             actorId: actor.id,
             actorName: source.actorName,
+            createdAt: date(source.createdAt) ?? new Date(),
+          },
+        });
+        imported++;
+      }
+    }
+    for (const source of backup.data.deviceCatalogDeletions) {
+      const exists = await tx.deviceCatalogDeletion.findUnique({
+        where: {
+          category_kind_brand_value: {
+            category: source.category,
+            kind: source.kind,
+            brand: source.brand,
+            value: source.value,
+          },
+        },
+      });
+      if (exists) skipped++;
+      else {
+        await tx.deviceCatalogDeletion.create({
+          data: {
+            id: source.id,
+            category: source.category,
+            kind: source.kind,
+            brand: source.brand,
+            value: source.value,
             createdAt: date(source.createdAt) ?? new Date(),
           },
         });

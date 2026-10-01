@@ -550,6 +550,7 @@ export default async function Detail({
               order.status !== "DIAGNOSING" ? (
                 <EditQuoteForm
                   key={order.updatedAt.toISOString()}
+                  mode="totals"
                   id={id}
                   initialDiscount={order.orderDiscount.toString()}
                   initialVat={order.includeVat}

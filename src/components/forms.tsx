@@ -2873,7 +2873,7 @@ export function EditQuoteForm({
   productCategories = [],
   onSuccess,
   initialEdit,
-  compact = false,
+  mode = "all",
 }: {
   id: string;
   initial: ItemView[];
@@ -2894,7 +2894,7 @@ export function EditQuoteForm({
   owner: boolean;
   onSuccess?: () => void;
   initialEdit?: { index: number; field: "project" | "part" };
-  compact?: boolean;
+  mode?: "all" | "items" | "totals";
 }) {
   const it = useMessages();
   const [items, setItems] = useState(initial);
@@ -2907,20 +2907,34 @@ export function EditQuoteForm({
       action={() => quoteAction(id, { items, orderDiscount, includeVat })}
       onSuccess={onSuccess}
     >
-      <p className="message warning">{it.quoteNotice}</p>
-      <ItemsEditor
-        items={items}
-        onChange={setItems}
-        rules={rules}
-        device={device}
-        discounts
-        products={products}
-        productCategories={productCategories}
-        showEmptyPartSummary
-        initialEdit={initialEdit}
-      />
-      {!compact && (
+      {mode !== "totals" && (
         <>
+          <p className="message warning">{it.quoteNotice}</p>
+          <ItemsEditor
+            items={items}
+            onChange={setItems}
+            rules={rules}
+            device={device}
+            discounts
+            products={products}
+            productCategories={productCategories}
+            showEmptyPartSummary
+            initialEdit={initialEdit}
+          />
+        </>
+      )}
+      {mode !== "items" && (
+        <>
+          {mode === "totals" && (
+            <div className="quote-total">
+              <span>{it.originalTotal}</span>
+              <strong>
+                {money(
+                  items.reduce((sum, item) => sum + numeric(item.final), 0),
+                )}
+              </strong>
+            </div>
+          )}
           <div className="quote-adjustments">
             <Button
               type="button"

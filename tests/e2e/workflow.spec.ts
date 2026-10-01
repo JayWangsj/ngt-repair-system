@@ -1232,17 +1232,6 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     ),
   ).toBe(productsTop);
 
-  const productControls = products.locator(
-    ".order-product-form .business-combobox-control, .order-product-form .number-stepper, .order-product-form .button",
-  );
-  const productBoxes = await productControls.evaluateAll((elements) =>
-    elements.map((element) => {
-      const box = element.getBoundingClientRect();
-      return { bottom: box.bottom, height: box.height };
-    }),
-  );
-  expect(new Set(productBoxes.map(({ bottom }) => bottom)).size).toBe(1);
-  expect(new Set(productBoxes.map(({ height }) => height)).size).toBe(1);
   const addProduct = products.getByRole("button", {
     name: "Aggiungi prodotto",
     exact: true,
@@ -1256,6 +1245,23 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     name: "+ Quantità",
     exact: true,
   });
+  await expect(addonQuantity).toHaveCount(0);
+  await expect(addProduct).toHaveCount(0);
+  await products.getByRole("combobox", { name: "Prodotto" }).fill("Cavo");
+  await expect(addonQuantity).toHaveCount(0);
+  await expect(addProduct).toHaveCount(0);
+  await chooseBusinessOption(page, "Prodotto", "Cavo USB-C Test", products);
+  const productControls = products.locator(
+    ".order-product-form .business-combobox-control, .order-product-form .number-stepper, .order-product-form .button",
+  );
+  const productBoxes = await productControls.evaluateAll((elements) =>
+    elements.map((element) => {
+      const box = element.getBoundingClientRect();
+      return { bottom: box.bottom, height: box.height };
+    }),
+  );
+  expect(new Set(productBoxes.map(({ bottom }) => bottom)).size).toBe(1);
+  expect(new Set(productBoxes.map(({ height }) => height)).size).toBe(1);
   await expect(addonPlus).toBeVisible();
   const stepperBox = await addonStepper.boundingBox();
   const plusBox = await addonPlus.boundingBox();
@@ -1269,10 +1275,7 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await expect(addonQuantity).toHaveValue("150");
   await addonQuantity.fill("1");
   await addonQuantity.press("Tab");
-  await expect(addProduct).toBeDisabled();
-  await products.getByRole("combobox", { name: "Prodotto" }).fill("Cavo");
-  await expect(addProduct).toBeDisabled();
-  await page.keyboard.press("Escape");
+  await expect(addProduct).toBeEnabled();
 
   await details
     .getByRole("button", { name: "Modifica dati", exact: true })
@@ -1314,9 +1317,14 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await quote
     .getByRole("button", { name: "Modifica dati", exact: true })
     .click();
+  await expect(quote.locator(".items-editor")).toHaveCount(0);
+  await expect(quote.locator(".message.warning")).toHaveCount(0);
+  await expect(quote.locator(".quote-total")).toBeVisible();
+  await expect(quote.locator(".quote-adjustments")).toBeVisible();
+  await expect(quote.locator(".quote-summary")).toBeVisible();
   await expect(
     quote.getByRole("button", { name: "Aggiungi intervento" }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await quote.getByRole("button", { name: "Annulla" }).click();
   await warranty.hover();
   await warranty
@@ -1697,8 +1705,7 @@ test("searchable combobox keeps search, create and chevron as independent contro
   });
 
   await expect(customer).toBeVisible();
-  await expect(createCustomer).toBeVisible();
-  await expect(createCustomer).toBeDisabled();
+  await expect(createCustomer).toHaveCount(0);
   await expand.click();
   await expect(customer).toHaveAttribute("aria-expanded", "true");
   await expect(
@@ -1708,7 +1715,7 @@ test("searchable combobox keeps search, create and chevron as independent contro
   await expect(customer).toHaveAttribute("aria-expanded", "false");
 
   await customer.fill("Cliente");
-  await expect(createCustomer).toBeDisabled();
+  await expect(createCustomer).toHaveCount(0);
 
   await customer.fill("cliente-in-trovabile");
   const panel = page.locator(".business-select-panel.is-entering");
@@ -1729,6 +1736,7 @@ test("searchable combobox keeps search, create and chevron as independent contro
     .getByRole("button", { name: "Cancella selezione", exact: true })
     .click();
   await expect(customer).toHaveValue("");
+  await expect(createCustomer).toHaveCount(0);
 
   await customer.fill("3391234567");
   await createCustomer.click();

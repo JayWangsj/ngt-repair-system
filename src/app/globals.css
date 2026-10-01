@@ -2128,7 +2128,7 @@ details[open] > summary {
 }
 .order-product-form {
   display: grid;
-  grid-template-columns: 0.8fr minmax(220px, 1.8fr) 90px auto;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   align-items: end;
 }
@@ -5533,8 +5533,13 @@ summary.record-icon::-webkit-details-marker {
   display: grid;
   gap: 16px;
 }
-.order-product-form {
+.order-product-form.has-selection {
   grid-template-columns: minmax(180px, 1fr) 136px auto;
+}
+@media (max-width: 760px) {
+  .order-product-form.has-selection {
+    grid-template-columns: 1fr;
+  }
 }
 .inventory-disabled {
   opacity: 0.58;

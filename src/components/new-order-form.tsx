@@ -597,6 +597,7 @@ export function NewOrderWizard({
                   autoFocusQuery={choosingCustomer ? customer?.name : undefined}
                   customLabel={it.addCustomer}
                   onCustom={openCustomerDialog}
+                  creationControls="no-match"
                   clearable
                   groups={[
                     {

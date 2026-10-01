@@ -77,7 +77,7 @@ export function WorkOrderRepairSummary({
               productCategories={productCategories}
               owner={owner}
               initialEdit={editing}
-              compact
+              mode="items"
               onSuccess={() => setEditing(null)}
             />
           </FormCloseContext.Provider>

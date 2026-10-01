@@ -61,6 +61,9 @@ export function WorkOrderProducts({
   const available = products.filter(
     (product) => product.usage !== "REPAIR" && product.stock > 0,
   );
+  const hasSelectedProduct = available.some(
+    (product) => product.id === selectedProduct,
+  );
   const addonLines = lines.filter((line) => line.kind === "RETAIL_ADDON");
 
   async function add(event: FormEvent<HTMLFormElement>) {
@@ -129,7 +132,10 @@ export function WorkOrderProducts({
         <p className="muted">{it.orderProducts.empty}</p>
       )}
       {!closed && (
-        <form className="order-product-form" onSubmit={add}>
+        <form
+          className={`order-product-form${hasSelectedProduct ? " has-selection" : ""}`}
+          onSubmit={add}
+        >
           <label>
             <span>{it.orderProducts.product}</span>
             <SearchableCombobox
@@ -154,28 +160,31 @@ export function WorkOrderProducts({
               clearable
             />
           </label>
-          <label>
-            <span>{it.orderProducts.quantity}</span>
-            <QuantityStepper
-              name="quantity"
-              ariaLabel={it.orderProducts.quantity}
-              min={1}
-              max={999}
-              value={quantity}
-              onValueChange={setQuantity}
-            />
-          </label>
-          <Button
-            disabled={
-              pending ||
-              !available.some((product) => product.id === selectedProduct) ||
-              !/^\d+$/.test(quantity) ||
-              Number(quantity) < 1 ||
-              Number(quantity) > 999
-            }
-          >
-            {it.orderProducts.add}
-          </Button>
+          {hasSelectedProduct && (
+            <>
+              <label>
+                <span>{it.orderProducts.quantity}</span>
+                <QuantityStepper
+                  name="quantity"
+                  ariaLabel={it.orderProducts.quantity}
+                  min={1}
+                  max={999}
+                  value={quantity}
+                  onValueChange={setQuantity}
+                />
+              </label>
+              <Button
+                disabled={
+                  pending ||
+                  !/^\d+$/.test(quantity) ||
+                  Number(quantity) < 1 ||
+                  Number(quantity) > 999
+                }
+              >
+                {it.orderProducts.add}
+              </Button>
+            </>
+          )}
         </form>
       )}
       {error && <p className="message error">{error}</p>}

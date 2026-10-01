@@ -398,6 +398,68 @@ export default async function Detail({
                 }}
               />
             }
+            persistent={
+              order.status !== "DIAGNOSING" ? (
+                <WorkOrderRepairSummary
+                  orderId={id}
+                  locked={originalLocked}
+                  initialDiscount={order.orderDiscount.toString()}
+                  initialVat={order.includeVat}
+                  inspectionFee={order.inspectionFee.toString()}
+                  owner={actor.role === "OWNER"}
+                  device={{
+                    category: order.device.category,
+                    brand: order.device.brand,
+                    series: order.device.series,
+                    model: order.device.model,
+                  }}
+                  items={order.items.map((item) => ({
+                    project: item.project,
+                    final: item.final.toString(),
+                    discount: item.discount.toString(),
+                    adjustmentReason: item.adjustmentReason,
+                    requiredProductId: item.requiredProductId ?? "",
+                    requiredQuantity: item.requiredQuantity,
+                    source: `${it.levels[item.matchLevel as keyof typeof it.levels]} · ${order.device.brand} ${order.device.model}`,
+                    requiredProduct: item.requiredProduct
+                      ? {
+                          id: item.requiredProduct.id,
+                          name: item.requiredProduct.name,
+                          category: item.requiredProduct.category,
+                          stock: item.requiredProduct.stockQuantity,
+                          reserved:
+                            reservedByProduct.get(item.requiredProduct.id) ?? 0,
+                          available: Math.max(
+                            0,
+                            item.requiredProduct.stockQuantity -
+                              (reservedByProduct.get(item.requiredProduct.id) ??
+                                0),
+                          ),
+                        }
+                      : null,
+                  }))}
+                  rules={rules.map((rule) => ({
+                    ...rule,
+                    suggested: rule.suggested.toString(),
+                    cost: undefined,
+                    updatedAt: undefined,
+                  }))}
+                  products={products.map((product) => ({
+                    id: product.id,
+                    name: product.name,
+                    category: product.category,
+                    stock: product.stockQuantity,
+                    reserved: reservedByProduct.get(product.id) ?? 0,
+                    available: Math.max(
+                      0,
+                      product.stockQuantity -
+                        (reservedByProduct.get(product.id) ?? 0),
+                    ),
+                  }))}
+                  productCategories={productCategories}
+                />
+              ) : null
+            }
           >
             <dl className="detail-list">
               <div>
@@ -451,66 +513,6 @@ export default async function Detail({
                 {it.delivered}: {order.pickedUpBy} ·{" "}
                 {dateTime(order.pickedUpAt)}
               </p>
-            )}
-            {order.status !== "DIAGNOSING" && (
-              <WorkOrderRepairSummary
-                orderId={id}
-                locked={originalLocked}
-                initialDiscount={order.orderDiscount.toString()}
-                initialVat={order.includeVat}
-                inspectionFee={order.inspectionFee.toString()}
-                owner={actor.role === "OWNER"}
-                device={{
-                  category: order.device.category,
-                  brand: order.device.brand,
-                  series: order.device.series,
-                  model: order.device.model,
-                }}
-                items={order.items.map((item) => ({
-                  project: item.project,
-                  final: item.final.toString(),
-                  discount: item.discount.toString(),
-                  adjustmentReason: item.adjustmentReason,
-                  requiredProductId: item.requiredProductId ?? "",
-                  requiredQuantity: item.requiredQuantity,
-                  source: `${it.levels[item.matchLevel as keyof typeof it.levels]} · ${order.device.brand} ${order.device.model}`,
-                  requiredProduct: item.requiredProduct
-                    ? {
-                        id: item.requiredProduct.id,
-                        name: item.requiredProduct.name,
-                        category: item.requiredProduct.category,
-                        stock: item.requiredProduct.stockQuantity,
-                        reserved:
-                          reservedByProduct.get(item.requiredProduct.id) ?? 0,
-                        available: Math.max(
-                          0,
-                          item.requiredProduct.stockQuantity -
-                            (reservedByProduct.get(item.requiredProduct.id) ??
-                              0),
-                        ),
-                      }
-                    : null,
-                }))}
-                rules={rules.map((rule) => ({
-                  ...rule,
-                  suggested: rule.suggested.toString(),
-                  cost: undefined,
-                  updatedAt: undefined,
-                }))}
-                products={products.map((product) => ({
-                  id: product.id,
-                  name: product.name,
-                  category: product.category,
-                  stock: product.stockQuantity,
-                  reserved: reservedByProduct.get(product.id) ?? 0,
-                  available: Math.max(
-                    0,
-                    product.stockQuantity -
-                      (reservedByProduct.get(product.id) ?? 0),
-                  ),
-                }))}
-                productCategories={productCategories}
-              />
             )}
           </OrderDetailCard>
 

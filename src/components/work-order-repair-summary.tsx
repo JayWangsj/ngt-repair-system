@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { ChevronRight, Package, Wrench } from "lucide-react";
 import { cents, money } from "@/lib/domain";
 import {
@@ -10,7 +9,8 @@ import {
   type RuleView,
 } from "./forms";
 import { useMessages } from "./language";
-import { FormCloseContext } from "./ui/form-close-context";
+import { useOrderDetailEdit } from "./order-detail-ui";
+import { FormAutoSaveContext, FormCloseContext } from "./ui/form-close-context";
 
 type Product = {
   id: string;
@@ -51,12 +51,11 @@ export function WorkOrderRepairSummary({
   locked: boolean;
 }) {
   const it = useMessages();
-  const [editing, setEditing] = useState<{
-    index: number;
-    field: "project" | "part";
-  } | null>(null);
+  const cardEdit = useOrderDetailEdit();
+  const editing = cardEdit?.target?.kind === "repair" ? cardEdit.target : null;
+  const clearEditing = () => cardEdit?.clearTarget();
   const change = (index: number, field: "project" | "part") => {
-    if (!locked) setEditing({ index, field });
+    if (!locked) cardEdit?.requestEdit({ kind: "repair", index, field });
   };
 
   return (
@@ -141,23 +140,25 @@ export function WorkOrderRepairSummary({
       })}
       {editing && (
         <div className={`detail-repair-editor is-${editing.field}`}>
-          <FormCloseContext.Provider value={() => setEditing(null)}>
-            <EditQuoteForm
-              id={orderId}
-              initial={items}
-              initialDiscount={initialDiscount}
-              initialVat={initialVat}
-              inspectionFee={inspectionFee}
-              rules={rules}
-              device={device}
-              products={products}
-              productCategories={productCategories}
-              owner={owner}
-              initialEdit={editing}
-              mode="items"
-              onSuccess={() => setEditing(null)}
-            />
-          </FormCloseContext.Provider>
+          <FormAutoSaveContext.Provider value={null}>
+            <FormCloseContext.Provider value={clearEditing}>
+              <EditQuoteForm
+                id={orderId}
+                initial={items}
+                initialDiscount={initialDiscount}
+                initialVat={initialVat}
+                inspectionFee={inspectionFee}
+                rules={rules}
+                device={device}
+                products={products}
+                productCategories={productCategories}
+                owner={owner}
+                initialEdit={editing}
+                mode="items"
+                onSuccess={clearEditing}
+              />
+            </FormCloseContext.Provider>
+          </FormAutoSaveContext.Provider>
         </div>
       )}
     </section>

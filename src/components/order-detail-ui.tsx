@@ -1,7 +1,9 @@
 "use client";
 
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useRef,
   useState,
@@ -19,10 +21,27 @@ import {
 } from "./forms";
 import { useMessages } from "./language";
 
+export type OrderDetailEditTarget = {
+  kind: "repair";
+  index: number;
+  field: "project" | "part";
+};
+
+const OrderDetailEditContext = createContext<{
+  target: OrderDetailEditTarget | null;
+  requestEdit: (target: OrderDetailEditTarget) => void;
+  clearTarget: () => void;
+} | null>(null);
+
+export function useOrderDetailEdit() {
+  return useContext(OrderDetailEditContext);
+}
+
 export function OrderDetailCard({
   title,
   children,
   edit,
+  persistent,
   locked = false,
   className = "",
   defaultExpanded = true,
@@ -31,6 +50,7 @@ export function OrderDetailCard({
   title: string;
   children: ReactNode;
   edit?: ReactNode;
+  persistent?: ReactNode;
   locked?: boolean;
   className?: string;
   defaultExpanded?: boolean;
@@ -39,11 +59,22 @@ export function OrderDetailCard({
   const it = useMessages();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [editing, setEditing] = useState(false);
+  const [editTarget, setEditTarget] = useState<OrderDetailEditTarget | null>(
+    null,
+  );
   const card = useRef<HTMLElement>(null);
   const save = useRef<(() => Promise<boolean>) | null>(null);
   const saving = useRef(false);
   const editable = Boolean(edit) && !locked;
-  const closeEdit = () => setEditing(false);
+  const closeEdit = () => {
+    setEditTarget(null);
+    setEditing(false);
+  };
+  const requestEdit = (target: OrderDetailEditTarget) => {
+    setExpanded(true);
+    setEditTarget(target);
+    setEditing(true);
+  };
   const registerSave = useCallback(
     (handler: (() => Promise<boolean>) | null) => {
       save.current = handler;
@@ -53,6 +84,7 @@ export function OrderDetailCard({
   async function toggleExpanded() {
     if (!expanded) return setExpanded(true);
     if (!editing) return setExpanded(false);
+    if (editTarget) return setEditTarget(null);
     if (saving.current) return;
     saving.current = true;
     const saved = (await save.current?.()) ?? true;
@@ -85,65 +117,75 @@ export function OrderDetailCard({
     return () => document.removeEventListener("click", outside, true);
   }, [editing]);
   return (
-    <section
-      ref={card}
-      className={`panel padded order-detail-card ${editable ? "is-editable" : ""} ${editing ? "is-editing" : ""} ${locked ? "is-locked" : ""} ${className}`}
-      data-testid={testId}
+    <OrderDetailEditContext.Provider
+      value={{
+        target: editTarget,
+        requestEdit,
+        clearTarget: () => setEditTarget(null),
+      }}
     >
-      <div
-        className="order-card-heading"
-        role="button"
-        tabIndex={0}
-        aria-label={title}
-        aria-expanded={expanded}
-        onClick={() => void toggleExpanded()}
-        onKeyDown={(event) => {
-          if (event.key !== "Enter" && event.key !== " ") return;
-          event.preventDefault();
-          void toggleExpanded();
-        }}
+      <section
+        ref={card}
+        className={`panel padded order-detail-card ${editable ? "is-editable" : ""} ${editing ? "is-editing" : ""} ${locked ? "is-locked" : ""} ${className}`}
+        data-testid={testId}
       >
-        <div className="order-card-toggle">
-          <h2>{title}</h2>
-          {expanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+        <div
+          className="order-card-heading"
+          role="button"
+          tabIndex={0}
+          aria-label={title}
+          aria-expanded={expanded}
+          onClick={() => void toggleExpanded()}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            void toggleExpanded();
+          }}
+        >
+          <div className="order-card-toggle">
+            <h2>{title}</h2>
+            {expanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+          </div>
+          <div className="order-card-actions">
+            {editing && <small>{it.editing}</small>}
+            {editable && !editing && (
+              <button
+                type="button"
+                className="order-card-edit"
+                aria-label={it.edit}
+                title={it.edit}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setExpanded(true);
+                  setEditTarget(null);
+                  setEditing(true);
+                }}
+              >
+                <Pencil size={16} aria-hidden="true" />
+              </button>
+            )}
+          </div>
         </div>
-        <div className="order-card-actions">
-          {editing && <small>{it.editing}</small>}
-          {editable && !editing && (
-            <button
-              type="button"
-              className="order-card-edit"
-              aria-label={it.edit}
-              title={it.edit}
-              onClick={(event) => {
-                event.stopPropagation();
-                setExpanded(true);
-                setEditing(true);
-              }}
-            >
-              <Pencil size={16} aria-hidden="true" />
-            </button>
-          )}
+        <div
+          className={`order-card-collapse ${expanded ? "is-expanded" : ""}`}
+          aria-hidden={!expanded}
+          inert={!expanded || undefined}
+        >
+          <div className="order-card-body">
+            {editing ? (
+              <FormAutoSaveContext.Provider value={registerSave}>
+                <FormCloseContext.Provider value={closeEdit}>
+                  <div hidden={Boolean(editTarget)}>{edit}</div>
+                </FormCloseContext.Provider>
+              </FormAutoSaveContext.Provider>
+            ) : (
+              children
+            )}
+            {persistent}
+          </div>
         </div>
-      </div>
-      <div
-        className={`order-card-collapse ${expanded ? "is-expanded" : ""}`}
-        aria-hidden={!expanded}
-        inert={!expanded || undefined}
-      >
-        <div className="order-card-body">
-          {editing ? (
-            <FormAutoSaveContext.Provider value={registerSave}>
-              <FormCloseContext.Provider value={closeEdit}>
-                {edit}
-              </FormCloseContext.Provider>
-            </FormAutoSaveContext.Provider>
-          ) : (
-            children
-          )}
-        </div>
-      </div>
-    </section>
+      </section>
+    </OrderDetailEditContext.Provider>
   );
 }
 

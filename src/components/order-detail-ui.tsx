@@ -30,7 +30,6 @@ export type OrderDetailEditTarget = {
 const OrderDetailEditContext = createContext<{
   target: OrderDetailEditTarget | null;
   requestEdit: (target: OrderDetailEditTarget) => void;
-  clearTarget: () => void;
 } | null>(null);
 
 export function useOrderDetailEdit() {
@@ -63,8 +62,8 @@ export function OrderDetailCard({
     null,
   );
   const card = useRef<HTMLElement>(null);
-  const save = useRef<(() => Promise<boolean>) | null>(null);
-  const saving = useRef(false);
+  const saves = useRef(new Set<() => Promise<boolean>>());
+  const [saving, setSaving] = useState(false);
   const editable = Boolean(edit) && !locked;
   const closeEdit = () => {
     setEditTarget(null);
@@ -75,23 +74,32 @@ export function OrderDetailCard({
     setEditTarget(target);
     setEditing(true);
   };
-  const registerSave = useCallback(
-    (handler: (() => Promise<boolean>) | null) => {
-      save.current = handler;
-    },
-    [],
-  );
+  const registerSave = useCallback((handler: () => Promise<boolean>) => {
+    saves.current.add(handler);
+    return () => saves.current.delete(handler);
+  }, []);
+  const saveAll = useCallback(async () => {
+    for (const save of saves.current) if (!(await save())) return false;
+    return true;
+  }, []);
   async function toggleExpanded() {
     if (!expanded) return setExpanded(true);
     if (!editing) return setExpanded(false);
-    if (editTarget) return setEditTarget(null);
-    if (saving.current) return;
-    saving.current = true;
-    const saved = (await save.current?.()) ?? true;
-    saving.current = false;
+    if (saving) return;
+    setSaving(true);
+    const saved = await saveAll();
+    setSaving(false);
     if (!saved) return;
+    setEditTarget(null);
     setEditing(false);
     setExpanded(false);
+  }
+  async function submitEdit() {
+    if (saving) return;
+    setSaving(true);
+    const saved = await saveAll();
+    setSaving(false);
+    if (saved) closeEdit();
   }
   useEffect(() => {
     if (!editing) return;
@@ -100,28 +108,55 @@ export function OrderDetailCard({
       if (!(target instanceof Node) || card.current?.contains(target)) return;
       const clickTarget =
         target instanceof HTMLElement ? target : target.parentElement;
+      const clickPosition = { x: event.clientX, y: event.clientY };
+      const actionTarget = clickTarget?.closest<HTMLElement>("button, a");
+      const targetCard =
+        actionTarget?.closest<HTMLElement>("[data-testid]")?.dataset.testid;
+      const targetLabel = actionTarget?.getAttribute("aria-label");
+      const continueOriginalClick =
+        actionTarget?.classList.contains("order-card-edit");
       if (clickTarget?.closest("[data-prevent-card-autosave]")) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      if (saving.current) return;
-      saving.current = true;
-      const saved = (await save.current?.()) ?? true;
-      saving.current = false;
+      if (!continueOriginalClick) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+      if (saving) return;
+      setSaving(true);
+      const saved = await saveAll();
+      setSaving(false);
       if (!saved) return;
+      setEditTarget(null);
       setEditing(false);
+      if (continueOriginalClick) return;
       requestAnimationFrame(() => {
-        if (clickTarget?.isConnected) clickTarget.click();
+        const targetScope = targetCard
+          ? document.querySelector<HTMLElement>(`[data-testid="${targetCard}"]`)
+          : null;
+        const nextTarget =
+          (targetLabel
+            ? Array.from(
+                targetScope?.querySelectorAll<HTMLElement>("[aria-label]") ??
+                  [],
+              ).find(
+                (candidate) =>
+                  candidate.getAttribute("aria-label") === targetLabel,
+              )
+            : null) ??
+          (document.elementFromPoint(
+            clickPosition.x,
+            clickPosition.y,
+          ) as HTMLElement | null);
+        nextTarget?.click();
       });
     }
     document.addEventListener("click", outside, true);
     return () => document.removeEventListener("click", outside, true);
-  }, [editing]);
+  }, [editing, saveAll, saving]);
   return (
     <OrderDetailEditContext.Provider
       value={{
         target: editTarget,
         requestEdit,
-        clearTarget: () => setEditTarget(null),
       }}
     >
       <section
@@ -175,13 +210,33 @@ export function OrderDetailCard({
             {editing ? (
               <FormAutoSaveContext.Provider value={registerSave}>
                 <FormCloseContext.Provider value={closeEdit}>
-                  <div hidden={Boolean(editTarget)}>{edit}</div>
+                  {edit}
+                  {persistent}
+                  <div className="dialog-actions order-card-edit-actions">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={saving}
+                      onClick={closeEdit}
+                    >
+                      {it.cancel}
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={saving}
+                      onClick={() => void submitEdit()}
+                    >
+                      {saving ? it.saving : it.save}
+                    </Button>
+                  </div>
                 </FormCloseContext.Provider>
               </FormAutoSaveContext.Provider>
             ) : (
-              children
+              <>
+                {children}
+                {persistent}
+              </>
             )}
-            {persistent}
           </div>
         </div>
       </section>

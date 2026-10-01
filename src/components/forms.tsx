@@ -521,6 +521,7 @@ export function ItemsEditor({
   progressive = false,
   showEmptyPartSummary = true,
   initialEdit,
+  focusedEdit = false,
 }: {
   discounts?: boolean;
   items: ItemView[];
@@ -540,6 +541,7 @@ export function ItemsEditor({
   progressive?: boolean;
   showEmptyPartSummary?: boolean;
   initialEdit?: { index: number; field: "project" | "part" };
+  focusedEdit?: boolean;
 }) {
   const it = useMessages();
   const [createdProducts, setCreatedProducts] = useState<CreatedProduct[]>([]);
@@ -655,6 +657,7 @@ export function ItemsEditor({
   return (
     <div className="items-editor">
       {items.map((item, index) => {
+        if (focusedEdit && initialEdit?.index !== index) return null;
         const projects = deviceProjects(rules, device);
         const match = matchRule(rules, device, item.project);
         const projectQuery = projectQueries[index] ?? "";
@@ -681,6 +684,11 @@ export function ItemsEditor({
         const itemSelected =
           !!item.project.trim() && (!!match || !!item.saveRule);
         const itemComplete = itemSelected && itemPriceValid;
+        const editingProject =
+          (focusedEdit && initialEdit?.field === "project") ||
+          editingProjects[index];
+        const editingPart =
+          (focusedEdit && initialEdit?.field === "part") || editingParts[index];
         const selectedProduct = availableProducts.find(
           (product) => product.id === item.requiredProductId,
         );
@@ -714,8 +722,13 @@ export function ItemsEditor({
           });
         };
         return (
-          <div className="quote-item" key={index}>
-            {itemSelected && !editingProjects[index] ? (
+          <div
+            className={`quote-item${focusedEdit ? " is-focused-edit" : ""}`}
+            key={index}
+          >
+            {(!focusedEdit || initialEdit?.field === "project") &&
+            itemSelected &&
+            !editingProject ? (
               <div
                 className={`selection-summary selected-project-summary${editingPrices[index] ? "" : " is-actionable"}`}
                 onClick={(event) => {
@@ -806,7 +819,7 @@ export function ItemsEditor({
                   <ChevronRight size={15} aria-hidden="true" />
                 </button>
               </div>
-            ) : (
+            ) : !focusedEdit || initialEdit?.field === "project" ? (
               <>
                 <SearchableCombobox
                   className="repair-project-combobox"
@@ -825,15 +838,14 @@ export function ItemsEditor({
                   showEmptyPanel={false}
                   preserveQueryOnClose
                   clearable
-                  autoFocusQuery={
-                    editingProjects[index] ? item.project : undefined
-                  }
-                  onClose={() =>
+                  autoFocusQuery={editingProject ? item.project : undefined}
+                  onClose={() => {
+                    if (focusedEdit) return;
                     setEditingProjects((current) => ({
                       ...current,
                       [index]: false,
-                    }))
-                  }
+                    }));
+                  }}
                   middleControl={
                     <div className="quote-price-field">
                       <input
@@ -929,7 +941,7 @@ export function ItemsEditor({
                         requiredQuantity: found?.rule.requiredQuantity ?? 1,
                         requiredProductRemoved: false,
                       });
-                    if (project)
+                    if (project && !focusedEdit)
                       setEditingProjects((current) => ({
                         ...current,
                         [index]: false,
@@ -944,49 +956,66 @@ export function ItemsEditor({
                   <p className="repair-project-no-match-hint">{noMatchHint}</p>
                 )}
               </>
-            )}
-            {(!progressive || itemComplete) && (
-              <div className="quote-progressive-reveal">
-                <div className="quote-required-part">
-                  <strong className="quote-required-part-label">
-                    {it.requiredPart} ({it.optional})
-                  </strong>
-                  {selectedProduct && !editingParts[index] ? (
-                    <div
-                      className="selection-summary selected-part-summary is-actionable"
-                      onClick={(event) => {
-                        if ((event.target as HTMLElement).closest("button"))
-                          return;
-                        setEditingParts((current) => ({
-                          ...current,
-                          [index]: true,
-                        }));
-                      }}
-                    >
-                      <span className="selection-summary-icon is-part">
-                        <Package size={18} aria-hidden="true" />
-                      </span>
-                      <div className="selection-summary-copy">
-                        <strong>{selectedProduct.name}</strong>
-                        <small>
-                          {selectedProduct.category} · {it.actualStock}{" "}
-                          {selectedProduct.stock} · {it.reservedStock}{" "}
-                          {selectedProduct.reserved ?? 0} · {it.availableStock}{" "}
-                          {selectedProduct.available ?? selectedProduct.stock} ·{" "}
-                          <span
-                            className={`part-stock ${(selectedProduct.available ?? selectedProduct.stock) > 0 ? "is-available" : "is-empty"}`}
-                          >
-                            ●{" "}
-                            {(selectedProduct.available ??
-                              selectedProduct.stock) > 0
-                              ? it.partInStock
-                              : it.partOutOfStock}
-                          </span>
-                        </small>
+            ) : null}
+            {(!focusedEdit || initialEdit?.field === "part") &&
+              (!progressive || itemComplete) && (
+                <div className="quote-progressive-reveal">
+                  <div className="quote-required-part">
+                    <strong className="quote-required-part-label">
+                      {it.requiredPart} ({it.optional})
+                    </strong>
+                    {selectedProduct && !editingPart ? (
+                      <div
+                        className="selection-summary selected-part-summary is-actionable"
+                        onClick={(event) => {
+                          if ((event.target as HTMLElement).closest("button"))
+                            return;
+                          setEditingParts((current) => ({
+                            ...current,
+                            [index]: true,
+                          }));
+                        }}
+                      >
+                        <span className="selection-summary-icon is-part">
+                          <Package size={18} aria-hidden="true" />
+                        </span>
+                        <div className="selection-summary-copy">
+                          <strong>{selectedProduct.name}</strong>
+                          <small>
+                            {selectedProduct.category} · {it.actualStock}{" "}
+                            {selectedProduct.stock} · {it.reservedStock}{" "}
+                            {selectedProduct.reserved ?? 0} ·{" "}
+                            {it.availableStock}{" "}
+                            {selectedProduct.available ?? selectedProduct.stock}{" "}
+                            ·{" "}
+                            <span
+                              className={`part-stock ${(selectedProduct.available ?? selectedProduct.stock) > 0 ? "is-available" : "is-empty"}`}
+                            >
+                              ●{" "}
+                              {(selectedProduct.available ??
+                                selectedProduct.stock) > 0
+                                ? it.partInStock
+                                : it.partOutOfStock}
+                            </span>
+                          </small>
+                        </div>
+                        <button
+                          type="button"
+                          className="summary-action"
+                          onClick={() =>
+                            setEditingParts((current) => ({
+                              ...current,
+                              [index]: true,
+                            }))
+                          }
+                        >
+                          <span>{it.change}</span>
+                          <ChevronRight size={15} aria-hidden="true" />
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        className="summary-action"
+                    ) : showEmptyPartSummary && !editingPart ? (
+                      <div
+                        className="selection-summary selected-part-summary is-actionable"
                         onClick={() =>
                           setEditingParts((current) => ({
                             ...current,
@@ -994,148 +1023,142 @@ export function ItemsEditor({
                           }))
                         }
                       >
-                        <span>{it.change}</span>
-                        <ChevronRight size={15} aria-hidden="true" />
-                      </button>
-                    </div>
-                  ) : showEmptyPartSummary && !editingParts[index] ? (
-                    <div
-                      className="selection-summary selected-part-summary is-actionable"
-                      onClick={() =>
-                        setEditingParts((current) => ({
-                          ...current,
-                          [index]: true,
-                        }))
-                      }
-                    >
-                      <span className="selection-summary-icon is-part">
-                        <Package size={18} aria-hidden="true" />
-                      </span>
-                      <div className="selection-summary-copy">
-                        <strong>{it.afterSales.noPart}</strong>
+                        <span className="selection-summary-icon is-part">
+                          <Package size={18} aria-hidden="true" />
+                        </span>
+                        <div className="selection-summary-copy">
+                          <strong>{it.afterSales.noPart}</strong>
+                        </div>
+                        <button
+                          type="button"
+                          className="summary-action"
+                          onClick={() =>
+                            setEditingParts((current) => ({
+                              ...current,
+                              [index]: true,
+                            }))
+                          }
+                        >
+                          <span>{it.change}</span>
+                          <ChevronRight size={15} aria-hidden="true" />
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        className="summary-action"
-                        onClick={() =>
+                    ) : (
+                      <SearchableCombobox
+                        className="repair-part-combobox"
+                        value={item.requiredProductId ?? ""}
+                        onChange={(requiredProductId) => {
+                          update(index, {
+                            requiredProductId,
+                            requiredQuantity: 1,
+                            requiredProductRemoved: !requiredProductId,
+                          });
+                          if (!focusedEdit)
+                            setEditingParts((current) => ({
+                              ...current,
+                              [index]: false,
+                            }));
+                        }}
+                        ariaLabel={`${it.requiredPart} ${index + 1}`}
+                        placeholder={it.searchInventoryPart}
+                        searchPlaceholder={it.searchInventoryPart}
+                        emptyText={it.noMatches}
+                        autoFocusQuery={
+                          editingPart ? selectedProduct?.name : undefined
+                        }
+                        groups={[
+                          ...(editingPart && selectedProduct
+                            ? [
+                                {
+                                  options: [
+                                    { value: "", label: it.noRequiredPart },
+                                  ],
+                                },
+                              ]
+                            : []),
+                          {
+                            options: availableProducts.map((product) => ({
+                              value: product.id,
+                              label: product.name,
+                              secondary: product.category,
+                              keywords: product.category,
+                              trailing: (
+                                <span
+                                  className={`part-stock ${(product.available ?? product.stock) > 0 ? "is-available" : "is-empty"}`}
+                                >
+                                  {it.actualStock} {product.stock} ·{" "}
+                                  {it.reservedStock} {product.reserved ?? 0} ·{" "}
+                                  {it.availableStock}{" "}
+                                  {product.available ?? product.stock} · ●{" "}
+                                  {(product.available ?? product.stock) > 0
+                                    ? it.partInStock
+                                    : it.partOutOfStock}
+                                </span>
+                              ),
+                            })),
+                          },
+                        ]}
+                        onClose={() => {
+                          if (focusedEdit) return;
                           setEditingParts((current) => ({
                             ...current,
-                            [index]: true,
-                          }))
-                        }
-                      >
-                        <span>{it.change}</span>
-                        <ChevronRight size={15} aria-hidden="true" />
-                      </button>
-                    </div>
-                  ) : (
-                    <SearchableCombobox
-                      className="repair-part-combobox"
-                      value={item.requiredProductId ?? ""}
-                      onChange={(requiredProductId) => {
-                        update(index, {
-                          requiredProductId,
-                          requiredQuantity: 1,
-                          requiredProductRemoved: !requiredProductId,
-                        });
-                        setEditingParts((current) => ({
-                          ...current,
-                          [index]: false,
-                        }));
-                      }}
-                      ariaLabel={`${it.requiredPart} ${index + 1}`}
-                      placeholder={it.searchInventoryPart}
-                      searchPlaceholder={it.searchInventoryPart}
-                      emptyText={it.noMatches}
-                      autoFocusQuery={
-                        editingParts[index] ? selectedProduct?.name : undefined
-                      }
-                      groups={[
-                        ...(editingParts[index] && selectedProduct
-                          ? [
-                              {
-                                options: [
-                                  { value: "", label: it.noRequiredPart },
-                                ],
-                              },
-                            ]
-                          : []),
-                        {
-                          options: availableProducts.map((product) => ({
-                            value: product.id,
-                            label: product.name,
-                            secondary: product.category,
-                            keywords: product.category,
-                            trailing: (
-                              <span
-                                className={`part-stock ${(product.available ?? product.stock) > 0 ? "is-available" : "is-empty"}`}
-                              >
-                                {it.actualStock} {product.stock} ·{" "}
-                                {it.reservedStock} {product.reserved ?? 0} ·{" "}
-                                {it.availableStock}{" "}
-                                {product.available ?? product.stock} · ●{" "}
-                                {(product.available ?? product.stock) > 0
-                                  ? it.partInStock
-                                  : it.partOutOfStock}
-                              </span>
-                            ),
-                          })),
-                        },
-                      ]}
-                      onClose={() =>
-                        setEditingParts((current) => ({
-                          ...current,
-                          [index]: false,
-                        }))
-                      }
-                      customLabel={it.newPart}
-                      onCustom={(query) => setCreatingPart({ index, query })}
-                      creationControls="no-match"
-                      clearable
-                    />
-                  )}
-                </div>
-                {partShortage && (
-                  <p className="message warning">{it.requiredPartOutOfStock}</p>
-                )}
-                {discounts &&
-                  (item.discountVisible ||
-                    numeric(item.discount ?? "0") > 0) && (
-                    <Field label={`${it.itemDiscount} ${index + 1}`}>
-                      <input
-                        inputMode="decimal"
-                        required
-                        value={item.discount ?? "0"}
-                        onChange={(e) =>
-                          update(index, { discount: e.target.value })
-                        }
+                            [index]: false,
+                          }));
+                        }}
+                        customLabel={it.newPart}
+                        onCustom={(query) => setCreatingPart({ index, query })}
+                        creationControls="no-match"
+                        clearable
                       />
-                    </Field>
+                    )}
+                  </div>
+                  {partShortage && (
+                    <p className="message warning">
+                      {it.requiredPartOutOfStock}
+                    </p>
                   )}
-                <div className="item-actions">
-                  {discounts && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() =>
-                        update(index, {
-                          discountVisible: !(
-                            item.discountVisible ||
-                            numeric(item.discount ?? "0") > 0
-                          ),
-                          discount: "0",
-                        })
-                      }
-                    >
-                      {item.discountVisible || numeric(item.discount ?? "0") > 0
-                        ? it.cancelDiscount
-                        : it.addItemDiscount}
-                    </Button>
+                  {!focusedEdit &&
+                    discounts &&
+                    (item.discountVisible ||
+                      numeric(item.discount ?? "0") > 0) && (
+                      <Field label={`${it.itemDiscount} ${index + 1}`}>
+                        <input
+                          inputMode="decimal"
+                          required
+                          value={item.discount ?? "0"}
+                          onChange={(e) =>
+                            update(index, { discount: e.target.value })
+                          }
+                        />
+                      </Field>
+                    )}
+                  {!focusedEdit && (
+                    <div className="item-actions">
+                      {discounts && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() =>
+                            update(index, {
+                              discountVisible: !(
+                                item.discountVisible ||
+                                numeric(item.discount ?? "0") > 0
+                              ),
+                              discount: "0",
+                            })
+                          }
+                        >
+                          {item.discountVisible ||
+                          numeric(item.discount ?? "0") > 0
+                            ? it.cancelDiscount
+                            : it.addItemDiscount}
+                        </Button>
+                      )}
+                    </div>
                   )}
                 </div>
-              </div>
-            )}
-            {items.length > 1 && (
+              )}
+            {!focusedEdit && items.length > 1 && (
               <RecordIcon
                 kind="delete"
                 label={it.remove + " " + it.project + " " + (index + 1)}
@@ -1145,30 +1168,32 @@ export function ItemsEditor({
           </div>
         );
       })}
-      {(!progressive ||
-        items.every(
-          (item) => item.project.trim() && validAmount(item.final),
-        )) && (
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => onChange([...items, blankItem()])}
-        >
-          <Plus size={16} />
-          {it.addItem}
-        </Button>
-      )}
-      {(!progressive ||
-        items.some(
-          (item) => item.project.trim() && validAmount(item.final),
-        )) && (
-        <div className="quote-total quote-progressive-reveal">
-          <span>{it.originalTotal}</span>
-          <strong>
-            {money(items.reduce((sum, item) => sum + numeric(item.final), 0))}
-          </strong>
-        </div>
-      )}
+      {!focusedEdit &&
+        (!progressive ||
+          items.every(
+            (item) => item.project.trim() && validAmount(item.final),
+          )) && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onChange([...items, blankItem()])}
+          >
+            <Plus size={16} />
+            {it.addItem}
+          </Button>
+        )}
+      {!focusedEdit &&
+        (!progressive ||
+          items.some(
+            (item) => item.project.trim() && validAmount(item.final),
+          )) && (
+          <div className="quote-total quote-progressive-reveal">
+            <span>{it.originalTotal}</span>
+            <strong>
+              {money(items.reduce((sum, item) => sum + numeric(item.final), 0))}
+            </strong>
+          </div>
+        )}
       {creatingPart && (
         <FormDialog
           title={it.newRepairPart}
@@ -1941,10 +1966,9 @@ function ActionForm({
   }, [snapshot]);
   useEffect(() => {
     if (!registerAutoSave) return;
-    registerAutoSave(() =>
+    return registerAutoSave(() =>
       form.current ? save(form.current) : Promise.resolve(true),
     );
-    return () => registerAutoSave(null);
   }, [registerAutoSave, save]);
   async function handle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1961,7 +1985,7 @@ function ActionForm({
     >
       {children}
       <Message error={error} success={success} />
-      {closeDialog ? (
+      {registerAutoSave ? null : closeDialog ? (
         <div className="dialog-actions">
           <Button
             type="button"
@@ -2894,7 +2918,7 @@ export function EditQuoteForm({
   owner: boolean;
   onSuccess?: () => void;
   initialEdit?: { index: number; field: "project" | "part" };
-  mode?: "all" | "items" | "totals";
+  mode?: "all" | "items" | "totals" | "target";
 }) {
   const it = useMessages();
   const [items, setItems] = useState(initial);
@@ -2909,7 +2933,9 @@ export function EditQuoteForm({
     >
       {mode !== "totals" && (
         <>
-          <p className="message warning">{it.quoteNotice}</p>
+          {mode !== "target" && (
+            <p className="message warning">{it.quoteNotice}</p>
+          )}
           <ItemsEditor
             items={items}
             onChange={setItems}
@@ -2920,10 +2946,11 @@ export function EditQuoteForm({
             productCategories={productCategories}
             showEmptyPartSummary
             initialEdit={initialEdit}
+            focusedEdit={mode === "target"}
           />
         </>
       )}
-      {mode !== "items" && (
+      {mode !== "items" && mode !== "target" && (
         <>
           {mode === "totals" && (
             <div className="quote-total">

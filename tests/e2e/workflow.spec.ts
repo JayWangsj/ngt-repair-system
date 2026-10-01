@@ -1183,29 +1183,37 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     "Modifica in corso",
   );
   await expect(
+    details.getByRole("combobox", { name: "Cerca cliente", exact: true }),
+  ).toBeVisible();
+  await expect(
     details.getByRole("combobox", { name: "Intervento 1", exact: true }),
   ).toBeFocused();
+  await expect(
+    details.locator(".detail-repair-summary .selected-project-summary"),
+  ).toHaveCount(0);
+  await expect(
+    details.locator(".detail-repair-summary .selected-part-summary"),
+  ).toBeVisible();
+  await expect(details.locator(".detail-repair-editor .message")).toHaveCount(
+    0,
+  );
+  await expect(
+    details.locator(".detail-repair-editor .quote-total"),
+  ).toHaveCount(0);
+  await expect(
+    details.getByRole("button", { name: "Annulla", exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    details.getByRole("button", { name: "Salva", exact: true }),
+  ).toHaveCount(1);
+  await details.locator(".selected-part-summary .summary-action").click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
     details.locator(".detail-repair-summary .selected-project-summary"),
   ).toBeVisible();
   await expect(
     details.locator(".detail-repair-summary .selected-part-summary"),
-  ).toBeVisible();
-  await expect(
-    details.locator(".detail-repair-editor .quote-adjustments"),
   ).toHaveCount(0);
-  await expect(
-    details.locator(".detail-repair-editor .quote-summary"),
-  ).toHaveCount(0);
-  await page.keyboard.press("Escape");
-  await details.getByRole("button", { name: "Annulla", exact: true }).click();
-  await expect(details.locator(".detail-repair-editor")).toHaveCount(0);
-  await expect(
-    details.getByRole("combobox", { name: "Cerca cliente", exact: true }),
-  ).toBeVisible();
-  await expect(details).toHaveClass(/is-editing/);
-  await details.locator(".selected-part-summary .summary-action").click();
-  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
     details.getByRole("combobox", {
       name: "Ricambio richiesto 1",
@@ -1213,13 +1221,19 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     }),
   ).toBeFocused();
   await page.keyboard.press("Escape");
-  await details.getByRole("button", { name: "Annulla", exact: true }).click();
+  await details
+    .getByLabel("Note interne", { exact: true })
+    .fill("Test salvataggio unico");
+  await details.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(details).not.toHaveClass(/is-editing/);
   await expect(details.locator(".detail-repair-editor")).toHaveCount(0);
   await expect(
-    details.getByRole("combobox", { name: "Cerca cliente", exact: true }),
+    details.locator(".detail-repair-summary .selected-project-summary"),
   ).toBeVisible();
-  await details.getByRole("button", { name: "Annulla", exact: true }).click();
-  await expect(details).not.toHaveClass(/is-editing/);
+  await expect(
+    details.locator(".detail-repair-summary .selected-part-summary"),
+  ).toContainText("Batteria Test");
+  await expect(details).toContainText("Test salvataggio unico");
   await expect(
     products
       .locator(".order-product-line")

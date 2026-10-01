@@ -1645,11 +1645,14 @@ textarea {
   padding-top: 18px;
   border-top: 1px solid #f0f3f1;
 }
-.detail-repair-editor .selection-summary {
-  display: none;
+.detail-repair-editor .action-form {
+  margin-top: 0;
 }
-.detail-repair-editor.is-project .quote-required-part {
-  display: none;
+.detail-repair-editor .quote-item.is-focused-edit {
+  padding: 0;
+  margin-bottom: 0;
+  border: 0;
+  background: transparent;
 }
 .balance-card {
   background: var(--teal);

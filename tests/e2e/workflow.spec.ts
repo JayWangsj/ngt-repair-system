@@ -358,6 +358,7 @@ test("dashboard animates once per data snapshot and respects reduced motion", as
 test("creates and edits a product directly in the inventory row", async ({
   page,
 }) => {
+  const productName = `Cavo USB-C E2E ${Date.now()}`;
   await page.goto("/inventory");
   const repairPartRow = page.getByRole("row", { name: /Batteria Test/ });
   await expect(repairPartRow).toContainText("Riparazione");
@@ -370,17 +371,37 @@ test("creates and edits a product directly in the inventory row", async ({
 
   await page.getByRole("button", { name: "Nuovo prodotto" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Prodotto", { exact: true }).fill("Cavo USB-C E2E");
+  await dialog.getByLabel("Prodotto", { exact: true }).fill(productName);
   await chooseBusinessOption(page, "Categoria", "Ricarica", dialog);
   await chooseBusinessOption(page, "Utilizzo", "Vendita e riparazione", dialog);
   await dialog.getByLabel("Costo", { exact: true }).fill("4.50");
   await dialog.getByLabel("Prezzo", { exact: true }).fill("12");
-  await dialog.getByLabel("Scorta iniziale", { exact: true }).fill("4");
-  await dialog.getByLabel("Scorta minima", { exact: true }).fill("2");
+  const initialStock = dialog.getByLabel("Scorta iniziale", { exact: true });
+  const minimumStock = dialog.getByLabel("Scorta minima", { exact: true });
+  await expect(dialog.locator(".number-stepper")).toHaveCount(2);
+  await expect(
+    dialog.getByRole("button", { name: "- Scorta iniziale", exact: true }),
+  ).toBeDisabled();
+  await initialStock.fill("");
+  await expect(initialStock).toHaveValue("");
+  await initialStock.fill("150");
+  await initialStock.press("Tab");
+  await expect(initialStock).toHaveValue("150");
+  const initialPlus = dialog.getByRole("button", {
+    name: "+ Scorta iniziale",
+    exact: true,
+  });
+  await initialPlus.hover();
+  await expect(initialPlus).toHaveCSS("background-color", "rgb(255, 247, 214)");
+  expect((await initialPlus.boundingBox())!.width).toBeGreaterThanOrEqual(38);
+  await initialPlus.click();
+  await expect(initialStock).toHaveValue("151");
+  await initialStock.fill("4");
+  await minimumStock.fill("2");
   await dialog.getByLabel("Prodotto frequente", { exact: true }).check();
   await dialog.getByRole("button", { name: "Salva prodotto" }).click();
 
-  const row = page.getByRole("row", { name: /Cavo USB-C E2E/ });
+  const row = page.getByRole("row", { name: new RegExp(productName) });
   await expect(row).toContainText("Vendita e riparazione");
   await expect(row).toContainText("4");
   await row.click();
@@ -820,7 +841,25 @@ test("completes a retail sale and opens its immutable receipt", async ({
   const cable = products.getByRole("button", { name: /Cavo USB-C Test/ });
   await cable.click();
   await cable.click();
-  await expect(page.locator(".retail-cart-row")).toContainText("2");
+  const cartRow = page.locator(".retail-cart-row");
+  const retailQuantity = cartRow.getByRole("spinbutton", {
+    name: "Quantità Cavo USB-C Test",
+    exact: true,
+  });
+  await expect(retailQuantity).toHaveValue("2");
+  await retailQuantity.fill("");
+  await expect(retailQuantity).toHaveValue("");
+  await retailQuantity.fill("5");
+  await retailQuantity.press("Tab");
+  await expect(retailQuantity).toHaveValue("5");
+  await retailQuantity.fill("10");
+  await retailQuantity.press("Enter");
+  await expect(
+    cartRow.getByRole("button", { name: "+ Cavo USB-C Test", exact: true }),
+  ).toBeDisabled();
+  await retailQuantity.fill("2");
+  await retailQuantity.press("Enter");
+  await expect(retailQuantity).toHaveValue("2");
   await expect(
     products.getByRole("button", { name: /Cover esaurita Test/ }),
   ).toBeDisabled();
@@ -1187,7 +1226,7 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   ).toBe(productsTop);
 
   const productControls = products.locator(
-    ".order-product-form .business-combobox-control, .order-product-form > label > input:not([type='hidden']), .order-product-form .button",
+    ".order-product-form .business-combobox-control, .order-product-form .number-stepper, .order-product-form .button",
   );
   const productBoxes = await productControls.evaluateAll((elements) =>
     elements.map((element) => {
@@ -1201,6 +1240,17 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     name: "Aggiungi prodotto",
     exact: true,
   });
+  const addonQuantity = products.getByRole("spinbutton", {
+    name: "Quantità",
+    exact: true,
+  });
+  await addonQuantity.fill("");
+  await expect(addonQuantity).toHaveValue("");
+  await addonQuantity.fill("150");
+  await addonQuantity.press("Tab");
+  await expect(addonQuantity).toHaveValue("150");
+  await addonQuantity.fill("1");
+  await addonQuantity.press("Tab");
   await expect(addProduct).toBeDisabled();
   await products.getByRole("combobox", { name: "Prodotto" }).fill("Cavo");
   await expect(addProduct).toBeDisabled();
@@ -1503,6 +1553,16 @@ test("price editor and mobile yellow layout support both languages", async ({
   const form = page.getByRole("dialog");
   await enterBusinessValue(page, "Intervento", `pulizia ${Date.now()}`, form);
   await form.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("15");
+  await chooseBusinessOption(page, "Ricambio richiesto", "Batteria Test", form);
+  const requiredQuantity = form.getByRole("spinbutton", {
+    name: "Quantità",
+    exact: true,
+  });
+  await requiredQuantity.fill("");
+  await expect(requiredQuantity).toHaveValue("");
+  await requiredQuantity.fill("12");
+  await requiredQuantity.press("Tab");
+  await expect(requiredQuantity).toHaveValue("12");
   await form.getByRole("button", { name: "Salva", exact: true }).click();
   await expect(form).not.toBeVisible();
   await expect(page.getByRole("main").getByRole("status")).toBeVisible();
@@ -1749,8 +1809,10 @@ test("native quote choices populate prices, clear on model changes and discounts
     name: "Intervento personalizzato",
     exact: true,
   });
-  await expect(projectPrice).toHaveCount(0);
-  await expect(createProject).toHaveCount(0);
+  await expect(projectPrice).toBeVisible();
+  await expect(projectPrice).toBeDisabled();
+  await expect(createProject).toBeVisible();
+  await expect(createProject).toBeDisabled();
   const projectControl = projectSearch.locator(
     "xpath=ancestor::*[contains(@class, 'business-combobox-control')]",
   );
@@ -1763,8 +1825,10 @@ test("native quote choices populate prices, clear on model changes and discounts
   ).toBeVisible();
   await projectControl.locator(".business-combobox-chevron").click();
   await projectSearch.fill("sostituzione");
-  await expect(projectPrice).toHaveCount(0);
-  await expect(createProject).toHaveCount(0);
+  await expect(projectPrice).toBeVisible();
+  await expect(projectPrice).toBeDisabled();
+  await expect(createProject).toBeVisible();
+  await expect(createProject).toBeDisabled();
   await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
   const projectSummary = page.locator(".selected-project-summary");
   await expect(projectSummary).toContainText("sostituzione display");
@@ -1815,27 +1879,25 @@ test("native quote choices populate prices, clear on model changes and discounts
   await expect(editingProjectSearch).toBeFocused();
   await editingProjectSearch.fill(customName);
   await expect(projectPrice).toBeVisible();
+  const noMatchHint = page.locator(".repair-project-no-match-hint");
+  await expect(noMatchHint).toHaveText(
+    "Nessun contenuto corrispondente. Inserisci il prezzo per creare un intervento personalizzato.",
+  );
+  await expect(page.locator(".business-select-panel.is-entering")).toHaveCount(
+    0,
+  );
   await page
     .getByRole("combobox", { name: "Intervento 1", exact: true })
     .press("Enter");
   await expect(projectPrice).toBeFocused();
   await projectPrice.fill("0");
   await expect(createProject).toBeDisabled();
-  await expect(
-    page.getByText("Il prezzo deve essere maggiore di 0."),
-  ).toBeVisible();
-  const priceError = projectPrice.locator("xpath=..//*[@class='field-error']");
-  await expect(priceError).toHaveText("Il prezzo deve essere maggiore di 0.");
-  expect(
-    await priceError.evaluate(
-      (error, input) =>
-        error.getBoundingClientRect().top -
-        (input as Element).getBoundingClientRect().bottom,
-      await projectPrice.elementHandle(),
-    ),
-  ).toBeGreaterThanOrEqual(0);
+  const invalidLayout = await projectControl.boundingBox();
   await projectPrice.fill("99");
   await expect(createProject).toBeEnabled();
+  const validLayout = await projectControl.boundingBox();
+  expect(Math.abs(validLayout!.height - invalidLayout!.height)).toBeLessThan(1);
+  expect(Math.abs(validLayout!.width - invalidLayout!.width)).toBeLessThan(1);
   const projectControlWidths = await projectControl
     .locator(
       ":scope > .business-combobox-input, :scope > .business-combobox-chevron, :scope > .quote-price-field, :scope > .business-select-create",
@@ -1894,8 +1956,12 @@ test("native quote choices populate prices, clear on model changes and discounts
   ).toHaveValue("");
   await expect(
     page.getByLabel("Prezzo originale (€) 1", { exact: true }),
-  ).toHaveCount(0);
-  await expect(createProject).toHaveCount(0);
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Prezzo originale (€) 1", { exact: true }),
+  ).toBeDisabled();
+  await expect(createProject).toBeVisible();
+  await expect(createProject).toBeDisabled();
   await expect(
     page.getByText("Altri dettagli (facoltativi)", { exact: true }),
   ).toHaveCount(0);

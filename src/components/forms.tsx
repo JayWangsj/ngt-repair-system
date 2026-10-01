@@ -39,6 +39,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { Button } from "./ui/button";
+import { QuantityStepper } from "./ui/quantity-stepper";
 import { FormAutoSaveContext, FormCloseContext } from "./ui/form-close-context";
 import { useMessages, useLanguage } from "./language";
 import { translateError } from "@/lib/i18n";
@@ -449,20 +450,20 @@ export function ProductForm({
           </Field>
         )}
         <Field label={it.inventory.initialStock}>
-          <input
+          <QuantityStepper
             name="initialStock"
-            type="number"
-            min="0"
-            defaultValue="0"
+            ariaLabel={it.inventory.initialStock}
+            min={0}
+            defaultValue={0}
             required
           />
         </Field>
         <Field label={it.inventory.minimumStock}>
-          <input
+          <QuantityStepper
             name="minStock"
-            type="number"
-            min="0"
-            defaultValue="0"
+            ariaLabel={it.inventory.minimumStock}
+            min={0}
+            defaultValue={0}
             required
           />
         </Field>
@@ -798,150 +799,144 @@ export function ItemsEditor({
                 </button>
               </div>
             ) : (
-              <SearchableCombobox
-                className="repair-project-combobox"
-                value={item.project}
-                ariaLabel={`${it.project} ${index + 1}`}
-                placeholder={it.afterSales.projectPlaceholder}
-                searchPlaceholder={it.afterSales.projectSearch}
-                emptyText={
-                  projects.length
-                    ? it.afterSales.noProjectMatches
-                    : it.afterSales.noDeviceProjects
-                }
-                emptyCreateText={
-                  validPositiveAmount(item.final)
-                    ? it.noMatchesCreateHint.replace(
-                        "{action}",
-                        it.afterSales.addCustomProject,
-                      )
-                    : it.noMatchesPriceHint.replace(
-                        "{action}",
-                        it.afterSales.addCustomProject,
-                      )
-                }
-                customLabel={it.afterSales.addCustomProject}
-                customDisabled={!validPositiveAmount(item.final)}
-                creationControls="no-match"
-                preserveQueryOnClose
-                clearable
-                autoFocusQuery={
-                  editingProjects[index] ? item.project : undefined
-                }
-                onClose={() =>
-                  setEditingProjects((current) => ({
-                    ...current,
-                    [index]: false,
-                  }))
-                }
-                middleControl={
-                  <div className="quote-price-field">
-                    <input
-                      ref={(element) => {
-                        priceInputs.current[index] = element;
-                      }}
-                      className="quote-price-input"
-                      aria-label={`${it.final} ${index + 1}`}
-                      placeholder={it.final}
-                      inputMode="decimal"
-                      required
-                      disabled={!noProjectMatches}
-                      value={item.final}
-                      aria-invalid={
-                        noProjectMatches && !validPositiveAmount(item.final)
-                      }
-                      onChange={(event) =>
-                        update(index, { final: event.target.value })
-                      }
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter") return;
-                        event.preventDefault();
-                        event.stopPropagation();
-                        createTemporaryProject(projectQuery);
-                      }}
-                    />
-                    {noProjectMatches && !validPositiveAmount(item.final) && (
-                      <small className="field-error">
-                        {it.positiveAmountError}
-                      </small>
-                    )}
-                  </div>
-                }
-                groups={[
-                  {
-                    options: projects.map((project) => {
-                      const found = matchRule(rules, device, project);
-                      return {
-                        value: project,
-                        label: project,
-                        trailing: found
-                          ? money(cents(found.rule.suggested))
-                          : undefined,
-                        secondary: found?.rule.notes || undefined,
-                      };
-                    }),
-                  },
-                  {
-                    options: drafts.map((draft) => ({
-                      value: draft.project,
-                      label: draft.project,
-                      secondary: it.afterSales.temporaryProject,
-                    })),
-                  },
-                ]}
-                onQueryChange={(query) => {
-                  setProjectQueries((current) => ({
-                    ...current,
-                    [index]: query,
-                  }));
-                }}
-                onCustom={createTemporaryProject}
-                onNoMatchEnter={(project) => {
-                  setProjectQueries((current) => ({
-                    ...current,
-                    [index]: project,
-                  }));
-                  requestAnimationFrame(() =>
-                    priceInputs.current[index]?.focus(),
-                  );
-                }}
-                onChange={(project) => {
-                  const found = matchRule(rules, device, project);
-                  const draft = drafts.find(
-                    (candidate) =>
-                      normalizedProject(candidate.project) ===
-                      normalizedProject(project),
-                  );
-                  setProjectQueries((current) => ({ ...current, [index]: "" }));
-                  setEditingParts((current) => ({
-                    ...current,
-                    [index]: false,
-                  }));
-                  if (!project) resetItem(index);
-                  else if (draft) update(index, draft);
-                  else
-                    update(index, {
-                      project,
-                      final: found?.rule.suggested ?? "",
-                      adjustmentReason: "",
-                      discount: "0",
-                      discountVisible: false,
-                      saveRule: false,
-                      requiredProductId: found?.rule.requiredProductId ?? "",
-                      requiredQuantity: found?.rule.requiredQuantity ?? 1,
-                      requiredProductRemoved: false,
-                    });
-                  if (project)
+              <>
+                <SearchableCombobox
+                  className="repair-project-combobox"
+                  value={item.project}
+                  ariaLabel={`${it.project} ${index + 1}`}
+                  placeholder={it.afterSales.projectPlaceholder}
+                  searchPlaceholder={it.afterSales.projectSearch}
+                  emptyText={
+                    projects.length
+                      ? it.afterSales.noProjectMatches
+                      : it.afterSales.noDeviceProjects
+                  }
+                  customLabel={it.afterSales.addCustomProject}
+                  customDisabled={!validPositiveAmount(item.final)}
+                  showEmptyPanel={false}
+                  preserveQueryOnClose
+                  clearable
+                  autoFocusQuery={
+                    editingProjects[index] ? item.project : undefined
+                  }
+                  onClose={() =>
                     setEditingProjects((current) => ({
                       ...current,
                       [index]: false,
+                    }))
+                  }
+                  middleControl={
+                    <div className="quote-price-field">
+                      <input
+                        ref={(element) => {
+                          priceInputs.current[index] = element;
+                        }}
+                        className="quote-price-input"
+                        aria-label={`${it.final} ${index + 1}`}
+                        placeholder={it.final}
+                        inputMode="decimal"
+                        required
+                        disabled={!noProjectMatches}
+                        value={item.final}
+                        aria-invalid={
+                          noProjectMatches && !validPositiveAmount(item.final)
+                        }
+                        onChange={(event) =>
+                          update(index, { final: event.target.value })
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter") return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          createTemporaryProject(projectQuery);
+                        }}
+                      />
+                    </div>
+                  }
+                  groups={[
+                    {
+                      options: projects.map((project) => {
+                        const found = matchRule(rules, device, project);
+                        return {
+                          value: project,
+                          label: project,
+                          trailing: found
+                            ? money(cents(found.rule.suggested))
+                            : undefined,
+                          secondary: found?.rule.notes || undefined,
+                        };
+                      }),
+                    },
+                    {
+                      options: drafts.map((draft) => ({
+                        value: draft.project,
+                        label: draft.project,
+                        secondary: it.afterSales.temporaryProject,
+                      })),
+                    },
+                  ]}
+                  onQueryChange={(query) => {
+                    setProjectQueries((current) => ({
+                      ...current,
+                      [index]: query,
                     }));
-                  requestAnimationFrame(() => {
-                    priceInputs.current[index]?.focus();
-                    priceInputs.current[index]?.select();
-                  });
-                }}
-              />
+                  }}
+                  onCustom={createTemporaryProject}
+                  onNoMatchEnter={(project) => {
+                    setProjectQueries((current) => ({
+                      ...current,
+                      [index]: project,
+                    }));
+                    requestAnimationFrame(() =>
+                      priceInputs.current[index]?.focus(),
+                    );
+                  }}
+                  onChange={(project) => {
+                    const found = matchRule(rules, device, project);
+                    const draft = drafts.find(
+                      (candidate) =>
+                        normalizedProject(candidate.project) ===
+                        normalizedProject(project),
+                    );
+                    setProjectQueries((current) => ({
+                      ...current,
+                      [index]: "",
+                    }));
+                    setEditingParts((current) => ({
+                      ...current,
+                      [index]: false,
+                    }));
+                    if (!project) resetItem(index);
+                    else if (draft) update(index, draft);
+                    else
+                      update(index, {
+                        project,
+                        final: found?.rule.suggested ?? "",
+                        adjustmentReason: "",
+                        discount: "0",
+                        discountVisible: false,
+                        saveRule: false,
+                        requiredProductId: found?.rule.requiredProductId ?? "",
+                        requiredQuantity: found?.rule.requiredQuantity ?? 1,
+                        requiredProductRemoved: false,
+                      });
+                    if (project)
+                      setEditingProjects((current) => ({
+                        ...current,
+                        [index]: false,
+                      }));
+                    requestAnimationFrame(() => {
+                      priceInputs.current[index]?.focus();
+                      priceInputs.current[index]?.select();
+                    });
+                  }}
+                />
+                {noProjectMatches && (
+                  <p className="repair-project-no-match-hint">
+                    {it.noMatchesPriceHint}
+                  </p>
+                )}
+              </>
             )}
             {(!progressive || itemComplete) && (
               <div className="quote-progressive-reveal">
@@ -3113,11 +3108,11 @@ export function RuleForm({
         </Field>
         {requiredProductId && (
           <Field label={it.orderProducts.quantity}>
-            <input
+            <QuantityStepper
               name="requiredQuantity"
-              type="number"
-              min="1"
-              max="999"
+              ariaLabel={it.orderProducts.quantity}
+              min={1}
+              max={999}
               defaultValue={rule?.requiredQuantity ?? 1}
             />
           </Field>

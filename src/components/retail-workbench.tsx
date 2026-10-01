@@ -1,13 +1,14 @@
 "use client";
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
-import { Check, Minus, Plus, ShoppingBag, Star, Trash2 } from "lucide-react";
+import { Check, ShoppingBag, Star, Trash2 } from "lucide-react";
 import { createRetailSaleAction } from "@/app/actions";
 import { cents, creatablePaymentMethods, money } from "@/lib/domain";
 import { useMessages } from "./language";
 import { NewProductDialogButton } from "./inventory";
 import type { CategoryView } from "./inventory";
 import { Button } from "./ui/button";
+import { QuantityStepper } from "./ui/quantity-stepper";
 
 type RetailProduct = {
   id: string;
@@ -241,22 +242,16 @@ export function RetailWorkbench({
                 >
                   ×
                 </button>
-                <div className="quantity-control">
-                  <button
-                    aria-label={`- ${item.name}`}
-                    onClick={() => setQuantity(item, item.quantity - 1)}
-                  >
-                    <Minus size={14} />
-                  </button>
-                  <span>{item.quantity}</span>
-                  <button
-                    aria-label={`+ ${item.name}`}
-                    disabled={item.quantity >= item.stockQuantity}
-                    onClick={() => setQuantity(item, item.quantity + 1)}
-                  >
-                    <Plus size={14} />
-                  </button>
-                </div>
+                <QuantityStepper
+                  key={`${item.id}-${item.quantity}`}
+                  className="is-retail"
+                  ariaLabel={`${it.retail.quantity} ${item.name}`}
+                  buttonLabel={item.name}
+                  defaultValue={item.quantity}
+                  min={0}
+                  max={item.stockQuantity}
+                  onCommit={(quantity) => setQuantity(item, quantity)}
+                />
                 <b>{money(item.salePrice * item.quantity)}</b>
               </div>
             ))

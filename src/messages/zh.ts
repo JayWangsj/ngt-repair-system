@@ -296,8 +296,7 @@ export const zh: typeof it = {
   noPriceResults: "没有找到报价。",
   noMatches: "没有找到匹配内容。",
   noMatchesCreateHint: "没有匹配的内容，可点击右侧「+{action}」创建。",
-  noMatchesPriceHint:
-    "没有匹配的内容，输入报价后，可点击右侧「+{action}」创建。",
+  noMatchesPriceHint: "没有匹配的内容。请输入报价后，可创建自定义维修项目。",
   invalidAmount: "请输入有效金额",
   positiveAmountError: "报价必须大于0。",
   customPriceRequiredHint: "没有匹配的维修项目，请先填写报价。",

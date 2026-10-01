@@ -344,7 +344,7 @@ export const it = {
   noMatchesCreateHint:
     "Nessun risultato. Usa «+{action}» a destra per crearne uno.",
   noMatchesPriceHint:
-    "Nessun risultato. Inserisci il prezzo, poi usa «+{action}» a destra.",
+    "Nessun contenuto corrispondente. Inserisci il prezzo per creare un intervento personalizzato.",
   invalidAmount: "Inserisci un importo valido",
   positiveAmountError: "Il prezzo deve essere maggiore di 0.",
   customPriceRequiredHint:

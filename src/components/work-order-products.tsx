@@ -17,6 +17,7 @@ import {
 } from "@/lib/domain";
 import { useMessages } from "./language";
 import { Button } from "./ui/button";
+import { QuantityStepper } from "./ui/quantity-stepper";
 import { OrderDetailCard } from "./order-detail-ui";
 import { FormDialog } from "./forms";
 import { SearchableCombobox, SimpleSelect } from "./business-select";
@@ -153,13 +154,13 @@ export function WorkOrderProducts({
           </label>
           <label>
             <span>{it.orderProducts.quantity}</span>
-            <input
+            <QuantityStepper
               name="quantity"
-              type="number"
-              min="1"
-              max="999"
+              ariaLabel={it.orderProducts.quantity}
+              min={1}
+              max={999}
               value={quantity}
-              onChange={(event) => setQuantity(event.target.value)}
+              onValueChange={setQuantity}
             />
           </label>
           <Button

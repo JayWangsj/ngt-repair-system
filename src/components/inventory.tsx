@@ -9,6 +9,7 @@ import { useMessages } from "./language";
 import { FormDialog, ProductForm, type CategoryView } from "./forms";
 import { SearchableCombobox, SimpleSelect } from "./business-select";
 import { Button } from "./ui/button";
+import { QuantityStepper } from "./ui/quantity-stepper";
 export type { CategoryView } from "./forms";
 
 const presetCategories = [
@@ -74,29 +75,15 @@ function StockEditor({
   onSave: (value: number) => void;
 }) {
   return (
-    <div className="stock-stepper" onClick={(event) => event.stopPropagation()}>
-      <button
-        type="button"
-        aria-label={`- ${label}`}
-        disabled={value <= 0}
-        onClick={() => onSave(value - 1)}
-      >
-        −
-      </button>
-      <input
-        aria-label={label}
-        type="number"
-        min="0"
-        value={value}
-        onChange={(event) => onSave(Math.max(0, Number(event.target.value)))}
+    <div onClick={(event) => event.stopPropagation()}>
+      <QuantityStepper
+        key={value}
+        className="is-table"
+        ariaLabel={label}
+        defaultValue={value}
+        min={0}
+        onCommit={onSave}
       />
-      <button
-        type="button"
-        aria-label={`+ ${label}`}
-        onClick={() => onSave(value + 1)}
-      >
-        +
-      </button>
     </div>
   );
 }

@@ -92,6 +92,7 @@ export function SelectDropdown({
   preserveQueryOnClose = false,
   clearable = false,
   loading = false,
+  showEmptyPanel = true,
   autoFocusQuery,
   className = "",
 }: {
@@ -120,6 +121,7 @@ export function SelectDropdown({
   preserveQueryOnClose?: boolean;
   clearable?: boolean;
   loading?: boolean;
+  showEmptyPanel?: boolean;
   autoFocusQuery?: string;
   className?: string;
 }) {
@@ -443,6 +445,7 @@ export function SelectDropdown({
         </button>
       )}
       {present &&
+        (showEmptyPanel || loading || visible.length > 0) &&
         portalTarget &&
         createPortal(
           <div

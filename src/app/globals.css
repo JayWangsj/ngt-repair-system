@@ -1618,6 +1618,25 @@ textarea {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+.detail-repair-summaries {
+  display: grid;
+  gap: 18px;
+  padding-top: 22px;
+  margin-top: 18px;
+  border-top: 1px solid #f0f3f1;
+}
+.detail-repair-summaries > h3 {
+  margin: 0;
+  font-size: 13px;
+}
+.detail-repair-summary {
+  display: grid;
+  gap: 12px;
+}
+.detail-repair-summary + .detail-repair-summary {
+  padding-top: 18px;
+  border-top: 1px solid #f0f3f1;
+}
 .balance-card {
   background: var(--teal);
   color: #d7eee6;

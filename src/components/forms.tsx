@@ -518,6 +518,7 @@ export function ItemsEditor({
   productCategories = [],
   discounts = false,
   progressive = false,
+  showEmptyPartSummary = true,
 }: {
   discounts?: boolean;
   items: ItemView[];
@@ -535,6 +536,7 @@ export function ItemsEditor({
   device: { category: string; brand: string; series: string; model: string };
   owner?: boolean;
   progressive?: boolean;
+  showEmptyPartSummary?: boolean;
 }) {
   const it = useMessages();
   const [createdProducts, setCreatedProducts] = useState<CreatedProduct[]>([]);
@@ -990,6 +992,36 @@ export function ItemsEditor({
                         <ChevronRight size={15} aria-hidden="true" />
                       </button>
                     </div>
+                  ) : showEmptyPartSummary && !editingParts[index] ? (
+                    <div
+                      className="selection-summary selected-part-summary is-actionable"
+                      onClick={() =>
+                        setEditingParts((current) => ({
+                          ...current,
+                          [index]: true,
+                        }))
+                      }
+                    >
+                      <span className="selection-summary-icon is-part">
+                        <Package size={18} aria-hidden="true" />
+                      </span>
+                      <div className="selection-summary-copy">
+                        <strong>{it.afterSales.noPart}</strong>
+                      </div>
+                      <button
+                        type="button"
+                        className="summary-action"
+                        onClick={() =>
+                          setEditingParts((current) => ({
+                            ...current,
+                            [index]: true,
+                          }))
+                        }
+                      >
+                        <span>{it.change}</span>
+                        <ChevronRight size={15} aria-hidden="true" />
+                      </button>
+                    </div>
                   ) : (
                     <SearchableCombobox
                       value={item.requiredProductId ?? ""}
@@ -1051,6 +1083,7 @@ export function ItemsEditor({
                       }
                       customLabel={it.newPart}
                       onCustom={(query) => setCreatingPart({ index, query })}
+                      creationControls="no-match"
                       clearable
                     />
                   )}
@@ -2398,11 +2431,13 @@ export function ReworkPartEditor({
   itemId,
   value,
   products,
+  productCategories,
 }: {
   orderId: string;
   itemId: string;
   value: string;
   products: CreatedProduct[];
+  productCategories: CategoryView[];
 }) {
   const it = useMessages();
   const router = useRouter();
@@ -2410,7 +2445,35 @@ export function ReworkPartEditor({
   const [editing, setEditing] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
-  const selectedProduct = products.find((product) => product.id === selected);
+  const [createdProducts, setCreatedProducts] = useState<CreatedProduct[]>([]);
+  const [creatingPart, setCreatingPart] = useState<string | null>(null);
+  const availableProducts = [
+    ...products,
+    ...createdProducts.filter(
+      (created) => !products.some((product) => product.id === created.id),
+    ),
+  ];
+  const selectedProduct = availableProducts.find(
+    (product) => product.id === selected,
+  );
+  const select = (productId: string) => {
+    setSelected(productId);
+    startTransition(async () => {
+      const result = await updateReworkPartAction(orderId, itemId, {
+        productId,
+        quantity: 1,
+      });
+      if (!result.ok) {
+        setSelected(value);
+        setEditing(true);
+        setError(result.error);
+        return;
+      }
+      setEditing(false);
+      setError("");
+      router.refresh();
+    });
+  };
   return (
     <div className="rework-part-editor">
       {editing ? (
@@ -2419,24 +2482,7 @@ export function ReworkPartEditor({
           disabled={pending}
           autoFocusQuery={selectedProduct?.name ?? ""}
           onClose={() => setEditing(false)}
-          onChange={(productId) => {
-            setSelected(productId);
-            startTransition(async () => {
-              const result = await updateReworkPartAction(orderId, itemId, {
-                productId,
-                quantity: 1,
-              });
-              if (!result.ok) {
-                setSelected(value);
-                setEditing(true);
-                setError(result.error);
-                return;
-              }
-              setEditing(false);
-              setError("");
-              router.refresh();
-            });
-          }}
+          onChange={select}
           ariaLabel={it.requiredPart}
           placeholder={it.noRequiredPart}
           searchPlaceholder={it.searchInventoryPart}
@@ -2444,7 +2490,7 @@ export function ReworkPartEditor({
           clearable
           groups={[
             {
-              options: products.map((product) => ({
+              options: availableProducts.map((product) => ({
                 value: product.id,
                 label: product.name,
                 secondary: product.category,
@@ -2452,6 +2498,9 @@ export function ReworkPartEditor({
               })),
             },
           ]}
+          customLabel={it.newPart}
+          onCustom={setCreatingPart}
+          creationControls="no-match"
         />
       ) : (
         <ReworkPartSummary
@@ -2461,6 +2510,25 @@ export function ReworkPartEditor({
         />
       )}
       {error && <p className="field-error">{error}</p>}
+      {creatingPart !== null && (
+        <FormDialog
+          title={it.newRepairPart}
+          onClose={() => setCreatingPart(null)}
+        >
+          <ProductForm
+            categories={productCategories}
+            mode="inventory"
+            initialName={creatingPart}
+            initialUsage="REPAIR"
+            quickRepair
+            onClose={() => setCreatingPart(null)}
+            onCreated={(product) => {
+              setCreatedProducts((current) => [...current, product]);
+              select(product.id);
+            }}
+          />
+        </FormDialog>
+      )}
     </div>
   );
 }
@@ -2469,11 +2537,13 @@ export function AfterSalesForm({
   id,
   originalProjects,
   products,
+  productCategories,
   onSuccess,
 }: {
   id: string;
   originalProjects: AfterSalesProject[];
   products: CreatedProduct[];
+  productCategories: CategoryView[];
   onSuccess?: () => void;
 }) {
   const it = useMessages();
@@ -2507,12 +2577,20 @@ export function AfterSalesForm({
     ),
   );
   const [editingParts, setEditingParts] = useState<Record<string, boolean>>(
-    () =>
-      Object.fromEntries(
-        available.map((project) => [project.id, !project.requiredProductId]),
-      ),
+    () => Object.fromEntries(available.map((project) => [project.id, false])),
   );
   const [notes, setNotes] = useState("");
+  const [createdProducts, setCreatedProducts] = useState<CreatedProduct[]>([]);
+  const [creatingPart, setCreatingPart] = useState<{
+    projectId: string;
+    query: string;
+  } | null>(null);
+  const availableProducts = [
+    ...products,
+    ...createdProducts.filter(
+      (created) => !products.some((product) => product.id === created.id),
+    ),
+  ];
   return (
     <ActionForm
       submit={it.afterSales.openRework}
@@ -2544,7 +2622,7 @@ export function AfterSalesForm({
         {originalProjects.map((project) => {
           const checked = selected.includes(project.id);
           const value = itemValues[project.id];
-          const selectedProduct = products.find(
+          const selectedProduct = availableProducts.find(
             (product) => product.id === value?.requiredProductId,
           );
           return (
@@ -2654,7 +2732,7 @@ export function AfterSalesForm({
                         clearable
                         groups={[
                           {
-                            options: products.map((product) => ({
+                            options: availableProducts.map((product) => ({
                               value: product.id,
                               label: product.name,
                               secondary: product.category,
@@ -2662,6 +2740,11 @@ export function AfterSalesForm({
                             })),
                           },
                         ]}
+                        customLabel={it.newPart}
+                        onCustom={(query) =>
+                          setCreatingPart({ projectId: project.id, query })
+                        }
+                        creationControls="no-match"
                       />
                     ) : (
                       <ReworkPartSummary
@@ -2697,6 +2780,35 @@ export function AfterSalesForm({
           <DatePicker name="dueDate" min={today} />
         </Field>
       </div>
+      {creatingPart && (
+        <FormDialog
+          title={it.newRepairPart}
+          onClose={() => setCreatingPart(null)}
+        >
+          <ProductForm
+            categories={productCategories}
+            mode="inventory"
+            initialName={creatingPart.query}
+            initialUsage="REPAIR"
+            quickRepair
+            onClose={() => setCreatingPart(null)}
+            onCreated={(product) => {
+              setCreatedProducts((current) => [...current, product]);
+              setItemValues((current) => ({
+                ...current,
+                [creatingPart.projectId]: {
+                  ...current[creatingPart.projectId],
+                  requiredProductId: product.id,
+                },
+              }));
+              setEditingParts((current) => ({
+                ...current,
+                [creatingPart.projectId]: false,
+              }));
+            }}
+          />
+        </FormDialog>
+      )}
     </ActionForm>
   );
 }
@@ -2752,6 +2864,7 @@ export function EditQuoteForm({
   device,
   products = [],
   productCategories = [],
+  onSuccess,
 }: {
   id: string;
   initial: ItemView[];
@@ -2770,6 +2883,7 @@ export function EditQuoteForm({
   productCategories?: CategoryView[];
   device: { category: string; brand: string; series: string; model: string };
   owner: boolean;
+  onSuccess?: () => void;
 }) {
   const it = useMessages();
   const [items, setItems] = useState(initial);
@@ -2780,6 +2894,7 @@ export function EditQuoteForm({
     <ActionForm
       submit={it.save}
       action={() => quoteAction(id, { items, orderDiscount, includeVat })}
+      onSuccess={onSuccess}
     >
       <p className="message warning">{it.quoteNotice}</p>
       <ItemsEditor
@@ -2790,6 +2905,7 @@ export function EditQuoteForm({
         discounts
         products={products}
         productCategories={productCategories}
+        showEmptyPartSummary
       />
       <div className="quote-adjustments">
         <Button

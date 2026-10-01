@@ -283,10 +283,10 @@ export function SelectDropdown({
       initialFocusApplied.current
     )
       return;
-    initialFocusApplied.current = true;
     const frame = requestAnimationFrame(() => {
       const element = trigger.current;
       if (!element || disabled) return;
+      initialFocusApplied.current = true;
       if (closingTimer.current) window.clearTimeout(closingTimer.current);
       setPortalTarget(element.closest("dialog") ?? document.body);
       setQuery(autoFocusQuery);

@@ -36,6 +36,7 @@ import {
 import { DetailStatusControl } from "@/components/order-list-controls";
 import { CompleteInspectionButton } from "@/components/inspection-quote";
 import { getBusinessDay } from "@/lib/business-date";
+import { WorkOrderRepairSummary } from "@/components/work-order-repair-summary";
 
 type TimelineEvent = {
   id: string;
@@ -451,6 +452,66 @@ export default async function Detail({
                 {dateTime(order.pickedUpAt)}
               </p>
             )}
+            {order.status !== "DIAGNOSING" && (
+              <WorkOrderRepairSummary
+                orderId={id}
+                locked={originalLocked}
+                initialDiscount={order.orderDiscount.toString()}
+                initialVat={order.includeVat}
+                inspectionFee={order.inspectionFee.toString()}
+                owner={actor.role === "OWNER"}
+                device={{
+                  category: order.device.category,
+                  brand: order.device.brand,
+                  series: order.device.series,
+                  model: order.device.model,
+                }}
+                items={order.items.map((item) => ({
+                  project: item.project,
+                  final: item.final.toString(),
+                  discount: item.discount.toString(),
+                  adjustmentReason: item.adjustmentReason,
+                  requiredProductId: item.requiredProductId ?? "",
+                  requiredQuantity: item.requiredQuantity,
+                  source: `${it.levels[item.matchLevel as keyof typeof it.levels]} · ${order.device.brand} ${order.device.model}`,
+                  requiredProduct: item.requiredProduct
+                    ? {
+                        id: item.requiredProduct.id,
+                        name: item.requiredProduct.name,
+                        category: item.requiredProduct.category,
+                        stock: item.requiredProduct.stockQuantity,
+                        reserved:
+                          reservedByProduct.get(item.requiredProduct.id) ?? 0,
+                        available: Math.max(
+                          0,
+                          item.requiredProduct.stockQuantity -
+                            (reservedByProduct.get(item.requiredProduct.id) ??
+                              0),
+                        ),
+                      }
+                    : null,
+                }))}
+                rules={rules.map((rule) => ({
+                  ...rule,
+                  suggested: rule.suggested.toString(),
+                  cost: undefined,
+                  updatedAt: undefined,
+                }))}
+                products={products.map((product) => ({
+                  id: product.id,
+                  name: product.name,
+                  category: product.category,
+                  stock: product.stockQuantity,
+                  reserved: reservedByProduct.get(product.id) ?? 0,
+                  available: Math.max(
+                    0,
+                    product.stockQuantity -
+                      (reservedByProduct.get(product.id) ?? 0),
+                  ),
+                }))}
+                productCategories={productCategories}
+              />
+            )}
           </OrderDetailCard>
 
           <WorkOrderProducts
@@ -599,50 +660,6 @@ export default async function Detail({
                     <strong>{money(cents(order.inspectionFee))}</strong>
                   </p>
                 )}
-                <div className="table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>{it.project}</th>
-                        <th>{it.suggested}</th>
-                        <th>{it.final}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {order.items.map((item) => (
-                        <tr key={item.id}>
-                          <td>
-                            <strong>{item.project}</strong>
-                            <small>
-                              {
-                                it.levels[
-                                  item.matchLevel as keyof typeof it.levels
-                                ]
-                              }{" "}
-                              · {item.minutes} min
-                            </small>
-                            {item.adjustmentReason && (
-                              <small>{item.adjustmentReason}</small>
-                            )}
-                            {item.requiredProduct && (
-                              <small>
-                                {it.requiredPart}: {item.requiredProduct.name} ·{" "}
-                                {it.inventory.currentStock}:{" "}
-                                {item.requiredProduct.stockQuantity}
-                              </small>
-                            )}
-                          </td>
-                          <td>
-                            {item.suggested === null
-                              ? "—"
-                              : money(cents(item.suggested))}
-                          </td>
-                          <td>{money(cents(item.final))}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
                 <QuoteSummary
                   items={order.items.map((item) => ({
                     final: item.final.toString(),
@@ -711,6 +728,7 @@ export default async function Detail({
                                 (reservedByProduct.get(product.id) ?? 0),
                             ),
                           }))}
+                          productCategories={productCategories}
                         />
                       </div>
                     )}
@@ -847,6 +865,7 @@ export default async function Detail({
                     (reservedByProduct.get(product.id) ?? 0),
                 ),
               }))}
+              productCategories={productCategories}
             />
           )}
         </div>

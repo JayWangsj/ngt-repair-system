@@ -171,11 +171,13 @@ export function AfterSalesActions({
   received,
   originalProjects,
   products,
+  productCategories,
 }: {
   orderId: string;
   received: number;
   originalProjects: AfterSalesProject[];
   products: import("./forms").CreatedProduct[];
+  productCategories: import("./forms").CategoryView[];
 }) {
   const it = useMessages();
   const [dialog, setDialog] = useState<"rework" | "refund" | null>(null);
@@ -204,6 +206,7 @@ export function AfterSalesActions({
             id={orderId}
             originalProjects={originalProjects}
             products={products}
+            productCategories={productCategories}
             onSuccess={() => setDialog(null)}
           />
         </FormDialog>

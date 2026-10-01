@@ -20,6 +20,20 @@ async function chooseBusinessOption(
     await panel.getByRole("option").filter({ hasText: option }).first().click();
 }
 
+async function chooseRequiredPart(
+  page: Page,
+  option: string,
+  scope: Page | Locator = page,
+) {
+  const combobox = scope.getByRole("combobox", {
+    name: "Ricambio richiesto 1",
+    exact: true,
+  });
+  if (!(await combobox.isVisible()))
+    await scope.locator(".selected-part-summary").first().click();
+  await chooseBusinessOption(page, "Ricambio richiesto 1", option, scope);
+}
+
 async function enterBusinessValue(
   page: Page,
   label: string,
@@ -145,8 +159,14 @@ async function openStep(page: Page, index: number) {
 }
 async function state(page: Page, next: string) {
   const label = next === "REPAIRING" ? "In riparazione" : "Da ritirare";
-  await page.locator(".detail-status .status-dropdown-trigger").click();
-  await page.getByRole("option", { name: label, exact: true }).click();
+  const trigger = page.locator(".detail-status .status-dropdown-trigger");
+  const option = page.getByRole("option", { name: label, exact: true });
+  for (let attempt = 0; attempt < 3 && !(await option.isVisible()); attempt++) {
+    await trigger.click({ delay: 100 });
+    await page.waitForTimeout(250);
+  }
+  await expect(option).toBeVisible();
+  await option.click({ delay: 100 });
   await expect(
     page.locator(".detail-status .status-dropdown-trigger"),
   ).toBeEnabled();
@@ -668,10 +688,14 @@ test("diagnostic order saves faults, date and quote in one progressive flow", as
   const status = page.locator(".detail-status .status-dropdown-trigger");
   await expect(status).toContainText("In diagnosi");
   const quote = page.getByTestId("quote-card");
+  const details = page.getByTestId("details-card");
   await expect(quote).toContainText("Dispositivo in diagnosi");
   await expect(quote).toContainText("30,00 €");
   await expect(quote).toContainText("6,60 €");
   await expect(quote.getByRole("row")).toHaveCount(0);
+  await details.locator(".order-card-heading").click();
+  await expect(details.locator(".detail-repair-summaries")).toHaveCount(0);
+  await details.locator(".order-card-heading").click();
 
   await status.click();
   const statusMenu = page.locator(".status-dropdown-menu");
@@ -719,20 +743,34 @@ test("diagnostic order saves faults, date and quote in one progressive flow", as
     "sostituzione display",
     dialog,
   );
+  await expect(dialog.locator(".selected-project-summary")).toContainText(
+    "100,00 €",
+  );
+  await expect(dialog.locator(".selected-part-summary")).toContainText(
+    "Nessuno",
+  );
   await expect(
-    dialog.getByLabel("Prezzo originale (€) 1", { exact: true }),
-  ).toHaveValue("100");
+    dialog.getByRole("combobox", {
+      name: "Ricambio richiesto 1",
+      exact: true,
+    }),
+  ).toHaveCount(0);
   await expect(saveInspection).toBeEnabled();
   await saveInspection.click();
   await expect(dialog).toHaveCount(0);
   await expect(status).toContainText("In riparazione");
-  const details = page.getByTestId("details-card");
   await details.locator(".order-card-heading").click();
   await expect(details).toContainText("Display rotto");
   await expect(details).toContainText(result);
+  await expect(details.locator(".detail-repair-summaries")).toBeVisible();
+  await expect(details.locator(".selected-project-summary")).toContainText(
+    "sostituzione display",
+  );
+  await expect(details.locator(".selected-part-summary")).toContainText(
+    "Nessuno",
+  );
   await quote.locator(".order-card-heading").click();
   await expect(quote).toContainText("Costo diagnosi (IVA esclusa)");
-  await expect(quote).toContainText("sostituzione display");
   const history = page.getByTestId("history-card");
   await history.locator(".order-card-heading").click();
   await expect(history).toContainText("Diagnosi avviata");
@@ -1031,7 +1069,7 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   page,
 }) => {
   await fillOrder(page, { manual: true });
-  await chooseBusinessOption(page, "Ricambio richiesto 1", "Batteria Test");
+  await chooseRequiredPart(page, "Batteria Test");
   await openPayment(page);
   await page
     .getByLabel("Incasso alla creazione (€)", { exact: true })
@@ -1067,8 +1105,23 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await expect(page.getByTestId("other-information-card")).toHaveCount(0);
   await details.locator(".order-card-heading").click();
   await page.waitForTimeout(250);
+  const repairSummary = details.locator(".detail-repair-summary");
+  await expect(
+    repairSummary.locator(".selected-project-summary"),
+  ).toContainText("Fotocamera");
+  const requiredPartSummary = repairSummary.locator(".selected-part-summary");
+  await expect(requiredPartSummary).toContainText("Batteria Test");
+  await expect(requiredPartSummary).toContainText("Scorta reale 3");
+  await expect(requiredPartSummary).toContainText("Impegnata 1");
+  await expect(requiredPartSummary).toContainText("Disponibile 2");
+  await expect(requiredPartSummary).toContainText("● Disponibile");
+  await expect(
+    products
+      .locator(".order-product-line")
+      .filter({ hasText: "Batteria Test" }),
+  ).toHaveCount(0);
   const productsTop = await products.evaluate(
-    (element) => element.getBoundingClientRect().top,
+    (element) => element.getBoundingClientRect().top + window.scrollY,
   );
   const detailsEdit = details.getByRole("button", { name: "Modifica dati" });
   await details
@@ -1091,7 +1144,9 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     /matrix\(1\.003, 0, 0, 1\.003, 0, -1\)/,
   );
   expect(
-    await products.evaluate((element) => element.getBoundingClientRect().top),
+    await products.evaluate(
+      (element) => element.getBoundingClientRect().top + window.scrollY,
+    ),
   ).toBe(productsTop);
 
   const productControls = products.locator(
@@ -1244,6 +1299,14 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     name: /Ricambio richiesto/,
   });
   await expect(dialogPartSearch).toBeFocused();
+  const dialogNewPart = dialog.getByRole("button", {
+    name: "Nuovo ricambio",
+  });
+  await expect(dialogNewPart).toHaveCount(0);
+  await dialogPartSearch.fill("Batteria");
+  await expect(dialogNewPart).toHaveCount(0);
+  await dialogPartSearch.fill(`Ricambio assente ${Date.now()}`);
+  await expect(dialogNewPart).toBeVisible();
   await dialogPartSearch.fill("");
   await expect(dialog.locator(".selected-part-summary")).toContainText(
     "Nessuno",
@@ -1802,12 +1865,23 @@ test("creates a repair part from the quote and selects it immediately", async ({
   await openStep(page, 2);
   await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
 
+  const emptyPartSummary = page.locator(".selected-part-summary");
+  await expect(emptyPartSummary).toContainText("Nessuno");
+  await expect(
+    page.getByRole("combobox", {
+      name: "Ricambio richiesto 1",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await emptyPartSummary.click();
   const partSearch = page.getByRole("combobox", {
     name: "Ricambio richiesto 1",
     exact: true,
   });
   const newPart = page.getByRole("button", { name: "Nuovo ricambio" });
-  await expect(newPart).toBeDisabled();
+  await expect(newPart).toHaveCount(0);
+  await partSearch.fill("Batteria");
+  await expect(newPart).toHaveCount(0);
   const productName = `Ricambio E2E ${Date.now()}`;
   await partSearch.fill(productName);
   await expect(newPart).toBeEnabled();
@@ -1852,7 +1926,7 @@ test("changing a selected repair part focuses its current name and preserves it 
     .getByLabel("Consegna prevista", { exact: true })
     .fill("2099-12-31");
   await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
-  await chooseBusinessOption(page, "Ricambio richiesto 1", "Batteria Test");
+  await chooseRequiredPart(page, "Batteria Test");
   const summary = page.locator(".selected-part-summary");
   await expect(summary).toContainText("Batteria Test");
   const projectSummary = page.locator(".selected-project-summary");
@@ -2005,7 +2079,7 @@ test("clears a repair item and creates a custom item with Enter without submitti
   ).toBeGreaterThanOrEqual(6);
   await removeItem.click();
 
-  await chooseBusinessOption(page, "Ricambio richiesto 1", "Batteria Test");
+  await chooseRequiredPart(page, "Batteria Test");
   await save(page);
   await page.goto("/prices");
   await page.getByLabel("Cerca", { exact: true }).fill(name);

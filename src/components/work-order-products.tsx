@@ -58,6 +58,7 @@ export function WorkOrderProducts({
   const available = products.filter(
     (product) => product.usage !== "REPAIR" && product.stock > 0,
   );
+  const addonLines = lines.filter((line) => line.kind === "RETAIL_ADDON");
 
   async function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -94,25 +95,19 @@ export function WorkOrderProducts({
       defaultExpanded
     >
       <p className="muted">{it.orderProducts.description}</p>
-      {lines.length ? (
+      {addonLines.length ? (
         <div className="order-product-lines">
-          {lines.map((line) => (
+          {addonLines.map((line) => (
             <div className="order-product-line" key={line.id}>
               <div>
                 <strong>{line.productName}</strong>
                 <small>
-                  {line.kind === "REPAIR_PART"
-                    ? it.orderProducts.repairParts
-                    : it.orderProducts.retailAddons}
+                  {it.orderProducts.retailAddons}
                   {line.consumedAt ? ` · ${it.orderProducts.consumed}` : ""}
                 </small>
               </div>
               <span>× {line.quantity}</span>
-              <strong>
-                {line.kind === "REPAIR_PART"
-                  ? it.orderProducts.included
-                  : money(cents(line.unitPrice) * line.quantity)}
-              </strong>
+              <strong>{money(cents(line.unitPrice) * line.quantity)}</strong>
               {!closed && !line.consumedAt && (
                 <button
                   className="icon-button"

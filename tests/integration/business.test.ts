@@ -1729,7 +1729,55 @@ describe("work order products and combined checkout", () => {
     ).toBe(2);
   });
 
-  it("rolls back checkout when an add-on lacks stock", async () => {
+  it("reserves add-on stock across open work orders", async () => {
+    const addon = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Cover prenotata test",
+      category: "Cover",
+      usage: "RETAIL",
+      costPrice: "3",
+      salePrice: "15",
+      initialStock: 10,
+      minStock: 0,
+    });
+    const firstOrder = await createOrder(
+      staff,
+      input({ dueDate: "2099-12-31" }),
+    );
+    const secondOrder = await createOrder(
+      staff,
+      input({
+        requestId: randomUUID(),
+        phone: "333 765 4321",
+        dueDate: "2099-12-31",
+      }),
+    );
+    await addWorkOrderProduct(staff, firstOrder.id, {
+      productId: addon.id,
+      kind: "RETAIL_ADDON",
+      quantity: 10,
+    });
+    await expect(
+      addWorkOrderProduct(staff, secondOrder.id, {
+        productId: addon.id,
+        kind: "RETAIL_ADDON",
+        quantity: 1,
+      }),
+    ).rejects.toThrow("insufficienti");
+    await expect(
+      addWorkOrderProduct(staff, firstOrder.id, {
+        productId: addon.id,
+        kind: "RETAIL_ADDON",
+        quantity: 10,
+      }),
+    ).resolves.toMatchObject({ quantity: 10 });
+    expect(
+      (await db.product.findUniqueOrThrow({ where: { id: addon.id } }))
+        .stockQuantity,
+    ).toBe(10);
+  });
+
+  it("rolls back checkout when reserved add-on stock later becomes insufficient", async () => {
     const addon = await createProduct(owner, {
       requestId: randomUUID(),
       name: "Cover insufficiente test",
@@ -1737,14 +1785,20 @@ describe("work order products and combined checkout", () => {
       usage: "RETAIL",
       costPrice: "3",
       salePrice: "15",
-      initialStock: 1,
+      initialStock: 2,
       minStock: 0,
     });
-    const order = await createOrder(staff, input());
+    const order = await createOrder(staff, input({ dueDate: "2099-12-31" }));
     await addWorkOrderProduct(staff, order.id, {
       productId: addon.id,
       kind: "RETAIL_ADDON",
       quantity: 2,
+    });
+    await adjustInventory(staff, addon.id, {
+      requestId: randomUUID(),
+      quantity: -1,
+      type: "MANUAL_ADJUSTMENT",
+      note: "Rettifica dopo prenotazione",
     });
     await changeStatus(staff, order.id, { status: "REPAIRING" });
     await changeStatus(staff, order.id, { status: "READY" });

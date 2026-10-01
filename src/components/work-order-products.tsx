@@ -29,9 +29,12 @@ type ProductOption = {
   usage: "RETAIL" | "REPAIR" | "BOTH";
   salePrice: string;
   stock: number;
+  reserved: number;
+  available: number;
 };
 type ProductLine = {
   id: string;
+  productId: string;
   productName: string;
   kind: "REPAIR_PART" | "RETAIL_ADDON";
   unitPrice: string;
@@ -58,13 +61,21 @@ export function WorkOrderProducts({
   const [error, setError] = useState("");
   const [selectedProduct, setSelectedProduct] = useState("");
   const [quantity, setQuantity] = useState("1");
-  const available = products.filter(
-    (product) => product.usage !== "REPAIR" && product.stock > 0,
-  );
-  const hasSelectedProduct = available.some(
-    (product) => product.id === selectedProduct,
-  );
   const addonLines = lines.filter((line) => line.kind === "RETAIL_ADDON");
+  const availableForOrder = (product: ProductOption) =>
+    Math.min(
+      product.stock,
+      product.available +
+        (addonLines.find(
+          (line) => line.productId === product.id && line.consumedAt === null,
+        )?.quantity ?? 0),
+    );
+  const available = products.filter(
+    (product) => product.usage !== "REPAIR" && availableForOrder(product) > 0,
+  );
+  const selected = available.find((product) => product.id === selectedProduct);
+  const selectedMaximum = selected ? availableForOrder(selected) : 0;
+  const hasSelectedProduct = Boolean(selected);
 
   async function add(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -147,7 +158,7 @@ export function WorkOrderProducts({
                   options: available.map((product) => ({
                     value: product.id,
                     label: product.name,
-                    secondary: `${it.inventory.currentStock}: ${product.stock}`,
+                    secondary: `${it.inventory.currentStock}: ${product.stock} · ${it.availableStock}: ${availableForOrder(product)}`,
                     trailing: money(cents(product.salePrice)),
                     keywords: product.category,
                   })),
@@ -168,7 +179,7 @@ export function WorkOrderProducts({
                   name="quantity"
                   ariaLabel={it.orderProducts.quantity}
                   min={1}
-                  max={999}
+                  max={selectedMaximum}
                   value={quantity}
                   onValueChange={setQuantity}
                 />
@@ -178,7 +189,7 @@ export function WorkOrderProducts({
                   pending ||
                   !/^\d+$/.test(quantity) ||
                   Number(quantity) < 1 ||
-                  Number(quantity) > 999
+                  Number(quantity) > selectedMaximum
                 }
               >
                 {it.orderProducts.add}

@@ -167,7 +167,6 @@ async function newLinesNeedParts(
   const reservations = await tx.workOrderProduct.findMany({
     where: {
       productId: { in: lines.map((line) => line.product.id) },
-      kind: "REPAIR_PART",
       consumedAt: null,
       ...(excludeOrderId ? { orderId: { not: excludeOrderId } } : {}),
       order: { status: { in: [...reservationStatuses] } },
@@ -199,7 +198,6 @@ async function orderNeedsParts(tx: Tx, orderId: string) {
   const lines = await tx.workOrderProduct.findMany({
     where: {
       productId: { in: target.map((line) => line.productId) },
-      kind: "REPAIR_PART",
       consumedAt: null,
       order: { status: { in: [...reservationStatuses] } },
     },
@@ -1715,6 +1713,25 @@ export async function addWorkOrderProduct(
     });
     if (existing?.consumedAt)
       throw new BusinessError("Il movimento di magazzino è già registrato.");
+    const reserved = await tx.workOrderProduct.aggregate({
+      where: {
+        productId: product.id,
+        consumedAt: null,
+        ...(existing ? { id: { not: existing.id } } : {}),
+        order: {
+          status: { notIn: ["COMPLETED", "REFUNDED", "CANCELLED"] },
+        },
+      },
+      _sum: { quantity: true },
+    });
+    const available = Math.max(
+      0,
+      product.stockQuantity - (reserved._sum.quantity ?? 0),
+    );
+    if (data.quantity > available)
+      throw new BusinessError(
+        "Scorte insufficienti o prodotto non disponibile.",
+      );
     const line = await tx.workOrderProduct.upsert({
       where: {
         orderId_productId_kind_contextKey: {

@@ -127,7 +127,6 @@ export default async function Detail({
     db.workOrderProduct.groupBy({
       by: ["productId"],
       where: {
-        kind: "REPAIR_PART",
         consumedAt: null,
         order: {
           status: { notIn: ["COMPLETED", "REFUNDED", "CANCELLED"] },
@@ -527,9 +526,16 @@ export default async function Detail({
               usage: product.usage,
               salePrice: product.salePrice.toString(),
               stock: product.stockQuantity,
+              reserved: reservedByProduct.get(product.id) ?? 0,
+              available: Math.max(
+                0,
+                product.stockQuantity -
+                  (reservedByProduct.get(product.id) ?? 0),
+              ),
             }))}
             lines={order.products.map((line) => ({
               id: line.id,
+              productId: line.productId,
               productName: line.productName,
               kind: line.kind,
               unitPrice: line.unitPrice.toString(),

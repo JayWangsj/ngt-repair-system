@@ -1182,12 +1182,20 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     details.getByRole("combobox", { name: "Intervento 1", exact: true }),
   ).toBeFocused();
   await expect(
+    details.locator(".detail-repair-summary .selected-project-summary"),
+  ).toBeVisible();
+  await expect(
+    details.locator(".detail-repair-summary .selected-part-summary"),
+  ).toBeVisible();
+  await expect(
     details.locator(".detail-repair-editor .quote-adjustments"),
   ).toHaveCount(0);
   await expect(
     details.locator(".detail-repair-editor .quote-summary"),
   ).toHaveCount(0);
+  await page.keyboard.press("Escape");
   await details.getByRole("button", { name: "Annulla", exact: true }).click();
+  await expect(details.locator(".detail-repair-editor")).toHaveCount(0);
   await details.locator(".selected-part-summary .summary-action").click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
@@ -1196,6 +1204,7 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
       exact: true,
     }),
   ).toBeFocused();
+  await page.keyboard.press("Escape");
   await details.getByRole("button", { name: "Annulla", exact: true }).click();
   await expect(
     products
@@ -1271,8 +1280,10 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await addonQuantity.fill("");
   await expect(addonQuantity).toHaveValue("");
   await addonQuantity.fill("150");
-  await addonQuantity.press("Tab");
   await expect(addonQuantity).toHaveValue("150");
+  await addonQuantity.press("Tab");
+  await expect(addonQuantity).toHaveValue("10");
+  await expect(addonPlus).toBeDisabled();
   await addonQuantity.fill("1");
   await addonQuantity.press("Tab");
   await expect(addProduct).toBeEnabled();

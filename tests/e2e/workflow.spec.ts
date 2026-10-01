@@ -1221,6 +1221,15 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   const dialogPartSummary = dialog.locator(".selected-part-summary");
   await expect(dialogPartSummary).toContainText("Batteria Test");
   await expect(dialogPartSummary).toContainText("Disponibile");
+  await dialog.locator(".after-sales-part-field > span").click();
+  await expect(
+    dialog.getByRole("combobox", { name: /Ricambio richiesto/ }),
+  ).toHaveCount(0);
+  await dialogPartSummary.hover();
+  await expect(dialogPartSummary.locator(".summary-action svg")).toHaveCSS(
+    "transform",
+    "matrix(1, 0, 0, 1, 4, 0)",
+  );
   expect(
     await dialog.locator(".after-sales-notes").evaluate((notes) => {
       const list = notes.closest("form")?.querySelector(".rework-project-list");
@@ -1230,7 +1239,7 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
         : 0;
     }),
   ).toBeGreaterThanOrEqual(18);
-  await dialogPartSummary.locator(".summary-action").click();
+  await dialogPartSummary.locator(".selection-summary-copy").click();
   const dialogPartSearch = dialog.getByRole("combobox", {
     name: /Ricambio richiesto/,
   });
@@ -1315,7 +1324,7 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     ".active-rework-summary .selected-part-summary",
   );
   await expect(detailPartSummary).toContainText("Nessuno");
-  await detailPartSummary.locator(".summary-action").click();
+  await detailPartSummary.locator(".selection-summary-copy").click();
   const detailPartSearch = warranty.getByRole("combobox", {
     name: "Ricambio richiesto",
     exact: true,
@@ -1458,6 +1467,21 @@ test("creates a customer and selects it without another search", async ({
   await expect(page.locator(".selected-customer-summary")).toContainText(
     "+39" + phone,
   );
+  await expect(
+    page.locator(".order-step-card").nth(1).locator(".order-step-heading"),
+  ).toHaveAttribute("aria-expanded", "true");
+  await openStep(page, 0);
+  const customerSummary = page.locator(".selected-customer-summary");
+  await customerSummary.hover();
+  await expect(customerSummary.locator(".summary-action svg")).toHaveCSS(
+    "transform",
+    "matrix(1, 0, 0, 1, 4, 0)",
+  );
+  await customerSummary.locator(".selection-summary-copy").click();
+  await expect(
+    page.getByRole("combobox", { name: "Cerca cliente", exact: true }),
+  ).toBeVisible();
+  await expect(customerSummary).toHaveCount(0);
 });
 
 test("searchable combobox keeps search, create and chevron as independent controls", async ({
@@ -1649,6 +1673,9 @@ test("native quote choices populate prices, clear on model changes and discounts
     page.getByLabel("Prezzo originale (€) 1", { exact: true }),
   ).toHaveCount(0);
   await projectSummary.locator(".summary-price-button").click();
+  await expect(
+    page.getByRole("combobox", { name: "Intervento 1", exact: true }),
+  ).toHaveCount(0);
   const inlinePrice = page.getByLabel("Prezzo originale (€) 1", {
     exact: true,
   });
@@ -1869,7 +1896,12 @@ test("changing a selected repair part focuses its current name and preserves it 
       );
     }),
   ).toBeLessThanOrEqual(1);
-  await summary.getByRole("button", { name: "Cambia", exact: true }).click();
+  await summary.hover();
+  await expect(summary.locator(".summary-action svg")).toHaveCSS(
+    "transform",
+    "matrix(1, 0, 0, 1, 4, 0)",
+  );
+  await summary.locator(".selection-summary-copy").click();
   const search = page.getByRole("combobox", {
     name: "Ricambio richiesto 1",
     exact: true,

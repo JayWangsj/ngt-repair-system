@@ -613,7 +613,13 @@ export function NewOrderWizard({
                 />
               </Field>
             ) : (
-              <div className="selection-summary selected-customer-summary">
+              <div
+                className="selection-summary selected-customer-summary is-actionable"
+                onClick={(event) => {
+                  if ((event.target as HTMLElement).closest("button")) return;
+                  clearCustomerSelection();
+                }}
+              >
                 <span className="selection-summary-icon is-customer">
                   <UserRound size={19} aria-hidden="true" />
                 </span>

@@ -2589,6 +2589,9 @@ details[open] > summary {
   border-radius: 10px;
   background: #fff;
 }
+.selection-summary.is-actionable {
+  cursor: pointer;
+}
 .selection-summary.selected-customer-summary,
 .selection-summary.selected-part-summary {
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -2703,6 +2706,15 @@ details[open] > summary {
 }
 .summary-action:hover svg,
 .summary-action:focus-visible svg {
+  transform: translateX(4px);
+}
+.selection-summary.is-actionable:hover .summary-action {
+  color: #a06f00;
+}
+.selection-summary.is-actionable:hover .summary-action span::after {
+  transform: scaleX(1);
+}
+.selection-summary.is-actionable:hover .summary-action svg {
   transform: translateX(4px);
 }
 .fault-chip-grid {
@@ -4585,6 +4597,15 @@ details[open] > summary {
 .after-sales-notes {
   position: relative;
   margin-top: 18px;
+}
+.after-sales-part-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 17px;
+  color: #53645e;
+  font-size: 12px;
+  font-weight: 500;
 }
 .after-sales-notes textarea {
   resize: vertical;

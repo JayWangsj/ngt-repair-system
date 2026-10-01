@@ -701,7 +701,20 @@ export function ItemsEditor({
         return (
           <div className="quote-item" key={index}>
             {itemSelected && !editingProjects[index] ? (
-              <div className="selection-summary selected-project-summary">
+              <div
+                className={`selection-summary selected-project-summary${editingPrices[index] ? "" : " is-actionable"}`}
+                onClick={(event) => {
+                  if (
+                    editingPrices[index] ||
+                    (event.target as HTMLElement).closest("button, input")
+                  )
+                    return;
+                  setEditingProjects((current) => ({
+                    ...current,
+                    [index]: true,
+                  }));
+                }}
+              >
                 <span className="selection-summary-icon is-project">
                   <Wrench size={18} aria-hidden="true" />
                 </span>
@@ -931,7 +944,17 @@ export function ItemsEditor({
                     {it.requiredPart} ({it.optional})
                   </strong>
                   {selectedProduct && !editingParts[index] ? (
-                    <div className="selection-summary selected-part-summary">
+                    <div
+                      className="selection-summary selected-part-summary is-actionable"
+                      onClick={(event) => {
+                        if ((event.target as HTMLElement).closest("button"))
+                          return;
+                        setEditingParts((current) => ({
+                          ...current,
+                          [index]: true,
+                        }));
+                      }}
+                    >
                       <span className="selection-summary-icon is-part">
                         <Package size={18} aria-hidden="true" />
                       </span>
@@ -2328,7 +2351,13 @@ function ReworkPartSummary({
   const it = useMessages();
   const available = product?.available ?? product?.stock ?? 0;
   return (
-    <div className="selection-summary selected-part-summary rework-part-summary">
+    <div
+      className={`selection-summary selected-part-summary rework-part-summary${disabled ? "" : " is-actionable"}`}
+      onClick={(event) => {
+        if (disabled || (event.target as HTMLElement).closest("button")) return;
+        onChange();
+      }}
+    >
       <span className="selection-summary-icon is-part">
         <Package size={18} aria-hidden="true" />
       </span>
@@ -2594,10 +2623,8 @@ export function AfterSalesForm({
                       />
                     </Field>
                   )}
-                  <Field
-                    label={it.requiredPart}
-                    className="after-sales-part-field"
-                  >
+                  <div className="after-sales-part-field">
+                    <span>{it.requiredPart}</span>
                     {editingParts[project.id] ? (
                       <SearchableCombobox
                         value={value.requiredProductId}
@@ -2647,7 +2674,7 @@ export function AfterSalesForm({
                         }
                       />
                     )}
-                  </Field>
+                  </div>
                 </>
               )}
             </section>

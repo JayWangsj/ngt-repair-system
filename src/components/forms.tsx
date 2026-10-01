@@ -670,6 +670,14 @@ export function ItemsEditor({
             normalizedProject(project).includes(normalizedQuery),
           );
         const itemPriceValid = validPositiveAmount(item.final);
+        const noMatchHint = !item.final.trim()
+          ? it.noMatchesPriceHint
+          : itemPriceValid
+            ? it.customPriceReadyHint.replace(
+                "{action}",
+                it.afterSales.addCustomProject,
+              )
+            : it.customPriceInvalidHint;
         const itemSelected =
           !!item.project.trim() && (!!match || !!item.saveRule);
         const itemComplete = itemSelected && itemPriceValid;
@@ -813,6 +821,7 @@ export function ItemsEditor({
                   }
                   customLabel={it.afterSales.addCustomProject}
                   customDisabled={!validPositiveAmount(item.final)}
+                  creationControls="no-match"
                   showEmptyPanel={false}
                   preserveQueryOnClose
                   clearable
@@ -932,9 +941,7 @@ export function ItemsEditor({
                   }}
                 />
                 {noProjectMatches && (
-                  <p className="repair-project-no-match-hint">
-                    {it.noMatchesPriceHint}
-                  </p>
+                  <p className="repair-project-no-match-hint">{noMatchHint}</p>
                 )}
               </>
             )}
@@ -2866,6 +2873,7 @@ export function EditQuoteForm({
   productCategories = [],
   onSuccess,
   initialEdit,
+  compact = false,
 }: {
   id: string;
   initial: ItemView[];
@@ -2886,6 +2894,7 @@ export function EditQuoteForm({
   owner: boolean;
   onSuccess?: () => void;
   initialEdit?: { index: number; field: "project" | "part" };
+  compact?: boolean;
 }) {
   const it = useMessages();
   const [items, setItems] = useState(initial);
@@ -2910,42 +2919,46 @@ export function EditQuoteForm({
         showEmptyPartSummary
         initialEdit={initialEdit}
       />
-      <div className="quote-adjustments">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => {
-            setDiscounts(!discounts);
-            setOrderDiscount("0");
-          }}
-        >
-          {discounts ? it.cancelDiscount : it.addOrderDiscount}
-        </Button>
-        {discounts && (
-          <Field label={it.orderDiscount}>
-            <input
-              inputMode="decimal"
-              required
-              value={orderDiscount}
-              onChange={(e) => setOrderDiscount(e.target.value)}
-            />
-          </Field>
-        )}
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={includeVat}
-            onChange={(e) => setIncludeVat(e.target.checked)}
+      {!compact && (
+        <>
+          <div className="quote-adjustments">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setDiscounts(!discounts);
+                setOrderDiscount("0");
+              }}
+            >
+              {discounts ? it.cancelDiscount : it.addOrderDiscount}
+            </Button>
+            {discounts && (
+              <Field label={it.orderDiscount}>
+                <input
+                  inputMode="decimal"
+                  required
+                  value={orderDiscount}
+                  onChange={(e) => setOrderDiscount(e.target.value)}
+                />
+              </Field>
+            )}
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={includeVat}
+                onChange={(e) => setIncludeVat(e.target.checked)}
+              />
+              {it.includeVat}
+            </label>
+          </div>
+          <QuoteSummary
+            items={items}
+            orderDiscount={orderDiscount}
+            includeVat={includeVat}
+            inspectionFee={inspectionFee}
           />
-          {it.includeVat}
-        </label>
-      </div>
-      <QuoteSummary
-        items={items}
-        orderDiscount={orderDiscount}
-        includeVat={includeVat}
-        inspectionFee={inspectionFee}
-      />
+        </>
+      )}
     </ActionForm>
   );
 }

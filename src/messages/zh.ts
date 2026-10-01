@@ -301,6 +301,7 @@ export const zh: typeof it = {
   positiveAmountError: "报价必须大于0。",
   customPriceRequiredHint: "没有匹配的维修项目，请先填写报价。",
   customPriceReadyHint: "报价已填写，请点击右侧「+{action}」创建。",
+  customPriceInvalidHint: "报价不可为 0，请输入有效报价。",
   cancel: "取消",
   close: "关闭",
   search: "搜索",

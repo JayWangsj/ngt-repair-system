@@ -44,11 +44,13 @@ export function WorkOrderProducts({
   products,
   lines,
   closed,
+  defaultExpanded = true,
 }: {
   orderId: string;
   products: ProductOption[];
   lines: ProductLine[];
   closed: boolean;
+  defaultExpanded?: boolean;
 }) {
   const it = useMessages();
   const router = useRouter();
@@ -93,7 +95,7 @@ export function WorkOrderProducts({
       locked={closed}
       className="order-products"
       testId="products-card"
-      defaultExpanded
+      defaultExpanded={defaultExpanded}
     >
       <p className="muted">{it.orderProducts.description}</p>
       {addonLines.length ? (

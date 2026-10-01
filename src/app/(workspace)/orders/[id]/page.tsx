@@ -370,6 +370,7 @@ export default async function Detail({
       <div className="detail-grid">
         <div className="stack">
           <OrderDetailCard
+            key={`details-${order.afterSalesOpen}`}
             title={it.details}
             locked={originalLocked}
             defaultExpanded={false}
@@ -515,8 +516,10 @@ export default async function Detail({
           </OrderDetailCard>
 
           <WorkOrderProducts
+            key={`products-${order.afterSalesOpen}`}
             orderId={id}
             closed={originalLocked}
+            defaultExpanded={!order.afterSalesOpen}
             products={products.map((product) => ({
               id: product.id,
               name: product.name,
@@ -536,6 +539,7 @@ export default async function Detail({
           />
 
           <OrderDetailCard
+            key={`quote-${order.afterSalesOpen}`}
             title={
               order.status === "DIAGNOSING" ? it.inspectionAndQuote : it.quote
             }
@@ -674,9 +678,10 @@ export default async function Detail({
           </OrderDetailCard>
 
           <OrderDetailCard
+            key={`warranty-${order.afterSalesOpen}`}
             title={it.warranty.title}
             locked={originalLocked}
-            defaultExpanded={false}
+            defaultExpanded={order.afterSalesOpen}
             testId="warranty-card"
             edit={
               <WarrantyForm
@@ -739,6 +744,7 @@ export default async function Detail({
           </OrderDetailCard>
 
           <OrderDetailCard
+            key={`history-${order.afterSalesOpen}`}
             title={it.history}
             locked
             defaultExpanded={false}

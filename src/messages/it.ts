@@ -351,6 +351,8 @@ export const it = {
     "Nessun intervento corrispondente. Inserisci prima il prezzo.",
   customPriceReadyHint:
     "Prezzo inserito. Usa «+{action}» a destra per creare l'intervento.",
+  customPriceInvalidHint:
+    "Il prezzo non può essere 0. Inserisci un prezzo valido.",
   cancel: "Annulla",
   close: "Chiudi",
   search: "Cerca",

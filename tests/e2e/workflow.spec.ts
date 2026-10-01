@@ -1181,6 +1181,12 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await expect(
     details.getByRole("combobox", { name: "Intervento 1", exact: true }),
   ).toBeFocused();
+  await expect(
+    details.locator(".detail-repair-editor .quote-adjustments"),
+  ).toHaveCount(0);
+  await expect(
+    details.locator(".detail-repair-editor .quote-summary"),
+  ).toHaveCount(0);
   await details.getByRole("button", { name: "Annulla", exact: true }).click();
   await details.locator(".selected-part-summary .summary-action").click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -1199,10 +1205,11 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   const productsTop = await products.evaluate(
     (element) => element.getBoundingClientRect().top + window.scrollY,
   );
-  const detailsEdit = details.getByRole("button", { name: "Modifica dati" });
-  await details
-    .locator(".order-card-heading")
-    .evaluate((element) => (element as HTMLElement).blur());
+  const detailsEdit = details.getByRole("button", {
+    name: "Modifica dati",
+    exact: true,
+  });
+  await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
   await page.mouse.move(0, 0);
   await expect(detailsEdit).toHaveCSS("opacity", "0");
   await details.hover();
@@ -1244,6 +1251,17 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     name: "Quantità",
     exact: true,
   });
+  const addonStepper = products.locator(".order-product-form .number-stepper");
+  const addonPlus = products.getByRole("button", {
+    name: "+ Quantità",
+    exact: true,
+  });
+  await expect(addonPlus).toBeVisible();
+  const stepperBox = await addonStepper.boundingBox();
+  const plusBox = await addonPlus.boundingBox();
+  expect(plusBox!.x + plusBox!.width).toBeLessThanOrEqual(
+    stepperBox!.x + stepperBox!.width + 1,
+  );
   await addonQuantity.fill("");
   await expect(addonQuantity).toHaveValue("");
   await addonQuantity.fill("150");
@@ -1256,7 +1274,9 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await expect(addProduct).toBeDisabled();
   await page.keyboard.press("Escape");
 
-  await details.getByRole("button", { name: "Modifica dati" }).click();
+  await details
+    .getByRole("button", { name: "Modifica dati", exact: true })
+    .click();
   await expect(details).toHaveClass(/is-editing/);
   await expect(details.locator(".order-card-heading")).toBeEnabled();
   await details
@@ -1270,12 +1290,16 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   );
   await details.locator(".order-card-heading").click();
   await expect(details).toContainText("Fotocamera non funziona");
-  await details.getByRole("button", { name: "Modifica dati" }).click();
+  await details
+    .getByRole("button", { name: "Modifica dati", exact: true })
+    .click();
   await details
     .getByLabel("Descrizione aggiuntiva")
     .fill("Fotocamera non funziona ancora");
   await quote.hover();
-  await quote.getByRole("button", { name: "Modifica dati" }).click();
+  await quote
+    .getByRole("button", { name: "Modifica dati", exact: true })
+    .click();
   await expect(details).not.toHaveClass(/is-editing/);
   await expect(details).toContainText("Fotocamera non funziona");
   await expect(quote).toHaveClass(/is-editing/);
@@ -1287,13 +1311,17 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await expect(quote.locator(".quote-summary")).toBeHidden();
   await quote.locator(".order-card-heading").click();
   await expect(quote.locator(".quote-summary")).toBeVisible();
-  await quote.getByRole("button", { name: "Modifica dati" }).click();
+  await quote
+    .getByRole("button", { name: "Modifica dati", exact: true })
+    .click();
   await expect(
     quote.getByRole("button", { name: "Aggiungi intervento" }),
   ).toBeVisible();
   await quote.getByRole("button", { name: "Annulla" }).click();
   await warranty.hover();
-  await warranty.getByRole("button", { name: "Modifica dati" }).click();
+  await warranty
+    .getByRole("button", { name: "Modifica dati", exact: true })
+    .click();
   const warrantyProject = await warranty
     .locator(".project-warranty-editor section strong")
     .textContent();
@@ -1335,10 +1363,10 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   ).toHaveText(/Consegnato/);
   const firstDelivery = await details.getByText(/Ritirato da/).textContent();
   await expect(
-    details.getByRole("button", { name: "Modifica dati" }),
+    details.getByRole("button", { name: "Modifica dati", exact: true }),
   ).toHaveCount(0);
   await expect(
-    quote.getByRole("button", { name: "Modifica dati" }),
+    quote.getByRole("button", { name: "Modifica dati", exact: true }),
   ).toHaveCount(0);
   await expect(page.locator(".order-product-form")).toHaveCount(0);
   await details.hover();
@@ -1445,6 +1473,16 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     "background-color",
     "rgb(252, 231, 243)",
   );
+  await expect(warranty.locator(".order-card-heading")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  for (const card of [details, products, quote, history]) {
+    await expect(card.locator(".order-card-heading")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  }
   await expect(page.locator(".balance-card>strong")).toContainText("50,00");
   await expect(page.getByTestId("history-card")).toContainText(
     "Riparazione post-vendita aperta",
@@ -1456,12 +1494,6 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await expect(page.getByTestId("history-card")).toContainText(
     "Note post-vendita (facoltative): Difetto ricomparso",
   );
-  if (
-    (await warranty
-      .locator(".order-card-heading")
-      .getAttribute("aria-expanded")) !== "true"
-  )
-    await warranty.locator(".order-card-heading").click();
   await expect(warranty.locator(".project-warranty-list > section")).toHaveCSS(
     "padding",
     "18px",
@@ -1483,7 +1515,7 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await detailPartSearch.press("Escape");
   await expect(detailPartSummary).toContainText("Nessuno");
   await expect(
-    details.getByRole("button", { name: "Modifica dati" }),
+    details.getByRole("button", { name: "Modifica dati", exact: true }),
   ).toHaveCount(0);
   await page.getByLabel("Importo (€)", { exact: true }).fill("50");
   await page.getByRole("button", { name: "Registra incasso" }).click();
@@ -1809,10 +1841,8 @@ test("native quote choices populate prices, clear on model changes and discounts
     name: "Intervento personalizzato",
     exact: true,
   });
-  await expect(projectPrice).toBeVisible();
-  await expect(projectPrice).toBeDisabled();
-  await expect(createProject).toBeVisible();
-  await expect(createProject).toBeDisabled();
+  await expect(projectPrice).toHaveCount(0);
+  await expect(createProject).toHaveCount(0);
   const projectControl = projectSearch.locator(
     "xpath=ancestor::*[contains(@class, 'business-combobox-control')]",
   );
@@ -1825,10 +1855,8 @@ test("native quote choices populate prices, clear on model changes and discounts
   ).toBeVisible();
   await projectControl.locator(".business-combobox-chevron").click();
   await projectSearch.fill("sostituzione");
-  await expect(projectPrice).toBeVisible();
-  await expect(projectPrice).toBeDisabled();
-  await expect(createProject).toBeVisible();
-  await expect(createProject).toBeDisabled();
+  await expect(projectPrice).toHaveCount(0);
+  await expect(createProject).toHaveCount(0);
   await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
   const projectSummary = page.locator(".selected-project-summary");
   await expect(projectSummary).toContainText("sostituzione display");
@@ -1881,7 +1909,7 @@ test("native quote choices populate prices, clear on model changes and discounts
   await expect(projectPrice).toBeVisible();
   const noMatchHint = page.locator(".repair-project-no-match-hint");
   await expect(noMatchHint).toHaveText(
-    "Nessun contenuto corrispondente. Inserisci il prezzo per creare un intervento personalizzato.",
+    "Prezzo inserito. Usa «+Intervento personalizzato» a destra per creare l'intervento.",
   );
   await expect(page.locator(".business-select-panel.is-entering")).toHaveCount(
     0,
@@ -1890,11 +1918,21 @@ test("native quote choices populate prices, clear on model changes and discounts
     .getByRole("combobox", { name: "Intervento 1", exact: true })
     .press("Enter");
   await expect(projectPrice).toBeFocused();
+  await projectPrice.fill("");
+  await expect(noMatchHint).toHaveText(
+    "Nessun contenuto corrispondente. Inserisci il prezzo per creare un intervento personalizzato.",
+  );
   await projectPrice.fill("0");
   await expect(createProject).toBeDisabled();
+  await expect(noMatchHint).toHaveText(
+    "Il prezzo non può essere 0. Inserisci un prezzo valido.",
+  );
   const invalidLayout = await projectControl.boundingBox();
   await projectPrice.fill("99");
   await expect(createProject).toBeEnabled();
+  await expect(noMatchHint).toHaveText(
+    "Prezzo inserito. Usa «+Intervento personalizzato» a destra per creare l'intervento.",
+  );
   const validLayout = await projectControl.boundingBox();
   expect(Math.abs(validLayout!.height - invalidLayout!.height)).toBeLessThan(1);
   expect(Math.abs(validLayout!.width - invalidLayout!.width)).toBeLessThan(1);
@@ -1909,7 +1947,6 @@ test("native quote choices populate prices, clear on model changes and discounts
   expect(projectControlWidths[0]).toBeLessThanOrEqual(420);
   expect(Math.abs(projectControlWidths[1] - 36)).toBeLessThanOrEqual(1);
   expect(Math.abs(projectControlWidths[2] - 145)).toBeLessThanOrEqual(1);
-  await expect(page.getByText(/Prezzo inserito/)).toHaveCount(0);
   await expect(
     page.locator(".quote-item").first().locator(":scope > .quote-hint"),
   ).toHaveCount(0);
@@ -1956,12 +1993,8 @@ test("native quote choices populate prices, clear on model changes and discounts
   ).toHaveValue("");
   await expect(
     page.getByLabel("Prezzo originale (€) 1", { exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByLabel("Prezzo originale (€) 1", { exact: true }),
-  ).toBeDisabled();
-  await expect(createProject).toBeVisible();
-  await expect(createProject).toBeDisabled();
+  ).toHaveCount(0);
+  await expect(createProject).toHaveCount(0);
   await expect(
     page.getByText("Altri dettagli (facoltativi)", { exact: true }),
   ).toHaveCount(0);

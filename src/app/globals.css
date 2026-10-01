@@ -4050,6 +4050,15 @@ details[open] > summary {
 .business-combobox-control.has-middle {
   grid-template-columns: minmax(220px, 1fr) 36px minmax(118px, 145px) auto;
 }
+.repair-project-combobox .business-combobox-control.has-middle {
+  grid-template-columns: minmax(220px, 420px) 36px 145px auto;
+  justify-content: start;
+}
+@container (max-width: 820px) {
+  .repair-project-combobox .business-combobox-control.has-middle {
+    grid-template-columns: minmax(180px, 1fr) 36px 145px auto;
+  }
+}
 .business-combobox-input {
   display: flex;
   min-width: 0;
@@ -4112,7 +4121,8 @@ details[open] > summary {
   font: inherit;
   cursor: pointer;
 }
-.repair-project-combobox .business-select-create {
+.repair-project-combobox .business-select-create,
+.repair-part-combobox .business-select-create {
   max-width: none;
   border-color: #d6aa14;
   background: #fff0a8;
@@ -4166,7 +4176,8 @@ details[open] > summary {
   background: #fff9e9;
   box-shadow: 0 4px 10px rgb(116 91 11 / 10%);
 }
-.repair-project-combobox .business-select-create:hover:not(:disabled) {
+.repair-project-combobox .business-select-create:hover:not(:disabled),
+.repair-part-combobox .business-select-create:hover:not(:disabled) {
   border-color: #b98d00;
   background: #ffe578;
   box-shadow: 0 5px 12px rgb(116 91 11 / 14%);
@@ -4663,6 +4674,9 @@ details[open] > summary {
     white-space: nowrap;
   }
   .business-combobox-control.has-middle {
+    grid-template-columns: minmax(0, 1fr) 36px;
+  }
+  .repair-project-combobox .business-combobox-control.has-middle {
     grid-template-columns: minmax(0, 1fr) 36px;
   }
   .business-combobox-control.has-middle .quote-price-input,

@@ -519,6 +519,7 @@ export function ItemsEditor({
   discounts = false,
   progressive = false,
   showEmptyPartSummary = true,
+  initialEdit,
 }: {
   discounts?: boolean;
   items: ItemView[];
@@ -537,6 +538,7 @@ export function ItemsEditor({
   owner?: boolean;
   progressive?: boolean;
   showEmptyPartSummary?: boolean;
+  initialEdit?: { index: number; field: "project" | "part" };
 }) {
   const it = useMessages();
   const [createdProducts, setCreatedProducts] = useState<CreatedProduct[]>([]);
@@ -553,10 +555,12 @@ export function ItemsEditor({
   const [projectQueries, setProjectQueries] = useState<Record<number, string>>(
     {},
   );
-  const [editingParts, setEditingParts] = useState<Record<number, boolean>>({});
+  const [editingParts, setEditingParts] = useState<Record<number, boolean>>(
+    initialEdit?.field === "part" ? { [initialEdit.index]: true } : {},
+  );
   const [editingProjects, setEditingProjects] = useState<
     Record<number, boolean>
-  >({});
+  >(initialEdit?.field === "project" ? { [initialEdit.index]: true } : {});
   const [editingPrices, setEditingPrices] = useState<Record<number, boolean>>(
     {},
   );
@@ -1024,6 +1028,7 @@ export function ItemsEditor({
                     </div>
                   ) : (
                     <SearchableCombobox
+                      className="repair-part-combobox"
                       value={item.requiredProductId ?? ""}
                       onChange={(requiredProductId) => {
                         update(index, {
@@ -2865,6 +2870,7 @@ export function EditQuoteForm({
   products = [],
   productCategories = [],
   onSuccess,
+  initialEdit,
 }: {
   id: string;
   initial: ItemView[];
@@ -2884,6 +2890,7 @@ export function EditQuoteForm({
   device: { category: string; brand: string; series: string; model: string };
   owner: boolean;
   onSuccess?: () => void;
+  initialEdit?: { index: number; field: "project" | "part" };
 }) {
   const it = useMessages();
   const [items, setItems] = useState(initial);
@@ -2906,6 +2913,7 @@ export function EditQuoteForm({
         products={products}
         productCategories={productCategories}
         showEmptyPartSummary
+        initialEdit={initialEdit}
       />
       <div className="quote-adjustments">
         <Button

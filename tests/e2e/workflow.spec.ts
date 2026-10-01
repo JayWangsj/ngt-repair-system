@@ -737,6 +737,26 @@ test("diagnostic order saves faults, date and quote in one progressive flow", as
   await dialog
     .getByLabel("Consegna prevista", { exact: true })
     .fill("2099-12-31");
+  const inspectionProjectSearch = dialog.getByRole("combobox", {
+    name: "Intervento 1",
+    exact: true,
+  });
+  await inspectionProjectSearch.fill(`Intervento layout ${Date.now()}`);
+  const inspectionProjectControl = inspectionProjectSearch.locator(
+    "xpath=ancestor::*[contains(@class, 'business-combobox-control')]",
+  );
+  const inspectionControlWidths = await inspectionProjectControl
+    .locator(
+      ":scope > .business-combobox-input, :scope > .business-combobox-chevron, :scope > .quote-price-field, :scope > .business-select-create",
+    )
+    .evaluateAll((elements) =>
+      elements.map((element) => element.getBoundingClientRect().width),
+    );
+  expect(inspectionControlWidths).toHaveLength(4);
+  expect(inspectionControlWidths[0]).toBeLessThanOrEqual(420);
+  expect(Math.abs(inspectionControlWidths[1] - 36)).toBeLessThanOrEqual(1);
+  expect(Math.abs(inspectionControlWidths[2] - 145)).toBeLessThanOrEqual(1);
+  await inspectionProjectSearch.fill("");
   await chooseBusinessOption(
     page,
     "Intervento 1",
@@ -1115,6 +1135,23 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await expect(requiredPartSummary).toContainText("Impegnata 1");
   await expect(requiredPartSummary).toContainText("Disponibile 2");
   await expect(requiredPartSummary).toContainText("● Disponibile");
+  await repairSummary
+    .locator(".selected-project-summary .summary-action")
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    details.getByRole("combobox", { name: "Intervento 1", exact: true }),
+  ).toBeFocused();
+  await details.getByRole("button", { name: "Annulla", exact: true }).click();
+  await details.locator(".selected-part-summary .summary-action").click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    details.getByRole("combobox", {
+      name: "Ricambio richiesto 1",
+      exact: true,
+    }),
+  ).toBeFocused();
+  await details.getByRole("button", { name: "Annulla", exact: true }).click();
   await expect(
     products
       .locator(".order-product-line")
@@ -1771,9 +1808,12 @@ test("native quote choices populate prices, clear on model changes and discounts
   await expect(page.locator(".price-breakdown")).toContainText("105,00");
   await projectSummary.getByRole("button", { name: "Cambia" }).click();
   const customName = `Intervento temporaneo ${Date.now()}`;
-  await page
-    .getByRole("combobox", { name: "Intervento 1", exact: true })
-    .fill(customName);
+  const editingProjectSearch = page.getByRole("combobox", {
+    name: "Intervento 1",
+    exact: true,
+  });
+  await expect(editingProjectSearch).toBeFocused();
+  await editingProjectSearch.fill(customName);
   await expect(projectPrice).toBeVisible();
   await page
     .getByRole("combobox", { name: "Intervento 1", exact: true })
@@ -1796,6 +1836,17 @@ test("native quote choices populate prices, clear on model changes and discounts
   ).toBeGreaterThanOrEqual(0);
   await projectPrice.fill("99");
   await expect(createProject).toBeEnabled();
+  const projectControlWidths = await projectControl
+    .locator(
+      ":scope > .business-combobox-input, :scope > .business-combobox-chevron, :scope > .quote-price-field, :scope > .business-select-create",
+    )
+    .evaluateAll((elements) =>
+      elements.map((element) => element.getBoundingClientRect().width),
+    );
+  expect(projectControlWidths).toHaveLength(4);
+  expect(projectControlWidths[0]).toBeLessThanOrEqual(420);
+  expect(Math.abs(projectControlWidths[1] - 36)).toBeLessThanOrEqual(1);
+  expect(Math.abs(projectControlWidths[2] - 145)).toBeLessThanOrEqual(1);
   await expect(page.getByText(/Prezzo inserito/)).toHaveCount(0);
   await expect(
     page.locator(".quote-item").first().locator(":scope > .quote-hint"),
@@ -1993,6 +2044,16 @@ test("changing a selected repair part focuses its current name and preserves it 
   await expect(search).toHaveAttribute("aria-expanded", "true");
   await search.press("Escape");
   await expect(summary).toContainText("Batteria Test");
+  await summary.locator(".summary-action").click();
+  await expect(search).toBeFocused();
+  await search.fill(`Ricambio stile ${Date.now()}`);
+  const newPart = page.getByRole("button", {
+    name: "Nuovo ricambio",
+    exact: true,
+  });
+  await expect(newPart).toBeEnabled();
+  await expect(newPart).toHaveCSS("background-color", "rgb(255, 240, 168)");
+  await expect(newPart).toHaveCSS("font-weight", "650");
 });
 
 test("clears a repair item and creates a custom item with Enter without submitting the order", async ({

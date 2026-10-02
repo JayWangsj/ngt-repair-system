@@ -13,6 +13,7 @@ export function planComfortableScroll({
   spaceBelow = 0,
   margin = 24,
   targetRatio = 0.38,
+  repositionBelowRatio,
   reducedMotion = false,
 }: {
   top: number;
@@ -24,10 +25,15 @@ export function planComfortableScroll({
   spaceBelow?: number;
   margin?: number;
   targetRatio?: number;
+  repositionBelowRatio?: number;
   reducedMotion?: boolean;
 }): ComfortableScrollPlan | null {
   const viewportBottom = viewportTop + viewportHeight;
+  const belowComfortablePosition =
+    repositionBelowRatio !== undefined &&
+    (top + bottom) / 2 > viewportTop + viewportHeight * repositionBelowRatio;
   if (
+    !belowComfortablePosition &&
     top >= viewportTop + margin &&
     bottom + spaceBelow <= viewportBottom - margin
   )
@@ -59,7 +65,10 @@ function scrollContainer(element: HTMLElement) {
 
 export function ensureComfortableInteractionSpace(
   element: HTMLElement,
-  { spaceBelow = 0 }: { spaceBelow?: number } = {},
+  {
+    spaceBelow = 0,
+    repositionBelowRatio,
+  }: { spaceBelow?: number; repositionBelowRatio?: number } = {},
 ) {
   const rect = element.getBoundingClientRect();
   const container = scrollContainer(element);
@@ -76,6 +85,7 @@ export function ensureComfortableInteractionSpace(
       scrollTop: container.scrollTop,
       scrollHeight: container.scrollHeight,
       spaceBelow,
+      repositionBelowRatio,
       reducedMotion,
     });
     if (plan) container.scrollTo(plan);
@@ -90,6 +100,7 @@ export function ensureComfortableInteractionSpace(
     scrollTop: window.scrollY,
     scrollHeight: document.documentElement.scrollHeight,
     spaceBelow,
+    repositionBelowRatio,
     reducedMotion,
   });
   if (plan) window.scrollTo(plan);

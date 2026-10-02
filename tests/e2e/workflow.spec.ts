@@ -1648,6 +1648,12 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await page.getByRole("button", { name: "Registra incasso" }).click();
   await expect(page.locator(".balance-card>strong")).toContainText("0,00");
   await state(page, "READY");
+  await reworkStatus.click();
+  const reworkReadyMenu = page.locator(".status-dropdown-menu");
+  await expect(
+    reworkReadyMenu.getByRole("option", { name: "Annullato", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
   await page
     .getByLabel("Nome di chi ritira", { exact: true })
     .fill("Altro nome");

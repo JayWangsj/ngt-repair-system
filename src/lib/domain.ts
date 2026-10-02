@@ -142,7 +142,8 @@ export function allowedTransitions(
   from: OrderStatus,
   afterSalesOpen = false,
 ): OrderStatus[] {
-  if (from === "READY" && afterSalesOpen) return ["REWORKING", "COMPLETED"];
+  if (from === "READY" && afterSalesOpen)
+    return ["REWORKING", "COMPLETED", "CANCELLED"];
   return transitions[from];
 }
 export function assertTransition(

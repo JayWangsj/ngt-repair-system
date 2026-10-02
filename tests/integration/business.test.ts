@@ -372,7 +372,10 @@ describe("PostgreSQL workflow", () => {
       favorite: false,
       enabled: true,
     });
-    const created = await createOrder(staff, input({ deposit: "100" }));
+    const created = await createOrder(
+      staff,
+      input({ deposit: "100", dueDate: "2099-12-31" }),
+    );
     const item = await db.workOrderItem.findFirstOrThrow({
       where: { orderId: created.id },
     });
@@ -425,6 +428,21 @@ describe("PostgreSQL workflow", () => {
     expect(
       await db.reworkSession.count({ where: { orderId: created.id } }),
     ).toBe(1);
+    await changeStatus(staff, created.id, { status: "READY" });
+    await changeStatus(staff, created.id, {
+      status: "CANCELLED",
+      note: "Cliente rinuncia al ritiro",
+    });
+    const cancelled = await db.workOrder.findUniqueOrThrow({
+      where: { id: created.id },
+      include: { history: { orderBy: { createdAt: "desc" } } },
+    });
+    expect(cancelled.status).toBe("CANCELLED");
+    expect(cancelled.history[0]).toMatchObject({
+      from: "READY",
+      to: "CANCELLED",
+      note: "Cliente rinuncia al ritiro",
+    });
   });
   it("refunds the full received amount without deleting original payments", async () => {
     const created = await createOrder(staff, input({ deposit: "100" }));

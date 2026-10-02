@@ -14,6 +14,32 @@ describe("comfortable interaction scrolling", () => {
     ).toBeNull();
   });
 
+  it("moves a focused control from the lower half to the comfortable position", () => {
+    expect(
+      planComfortableScroll({
+        top: 520,
+        bottom: 564,
+        viewportHeight: 800,
+        scrollTop: 400,
+        scrollHeight: 2400,
+        repositionBelowRatio: 0.5,
+      }),
+    ).toEqual({ top: 616, behavior: "smooth" });
+  });
+
+  it("does not move a focused control that is already near 40 percent", () => {
+    expect(
+      planComfortableScroll({
+        top: 304,
+        bottom: 348,
+        viewportHeight: 800,
+        scrollTop: 400,
+        scrollHeight: 2400,
+        repositionBelowRatio: 0.5,
+      }),
+    ).toBeNull();
+  });
+
   it("keeps a dropdown in place when its expected panel has room", () => {
     expect(
       planComfortableScroll({

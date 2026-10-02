@@ -10,7 +10,7 @@ export function ComfortableScrollManager() {
       if (!(target instanceof HTMLElement)) return;
       if (
         !target.matches(
-          'input:not([type="hidden"]), textarea, select, [contenteditable="true"]',
+          'input:not([type="hidden"]), textarea, select, [contenteditable="true"], [role="combobox"], [aria-haspopup="listbox"]',
         )
       )
         return;
@@ -21,7 +21,10 @@ export function ComfortableScrollManager() {
           ? 240
           : 0;
       requestAnimationFrame(() =>
-        ensureComfortableInteractionSpace(target, { spaceBelow }),
+        ensureComfortableInteractionSpace(target, {
+          spaceBelow,
+          repositionBelowRatio: 0.5,
+        }),
       );
     }
     document.addEventListener("focusin", focus, true);

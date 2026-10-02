@@ -2,10 +2,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronRight, Trash2 } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { CustomerForm, DeviceForm, FormDialog } from "./forms";
 import { RecordIcon } from "./ui/record-icon";
 import { Button } from "./ui/button";
+import { BatchControls } from "./ui/batch-controls";
 import { useLanguage, useMessages } from "./language";
 import {
   deleteCustomerAction,
@@ -49,11 +50,13 @@ function RecordActions({
   customer,
   device,
   returnTo,
+  closeOnDelete = false,
   disabled = false,
 }: {
   customer?: Customer;
   device?: Device;
   returnTo?: string;
+  closeOnDelete?: boolean;
   disabled?: boolean;
 }) {
   const it = useMessages();
@@ -82,7 +85,10 @@ function RecordActions({
         : await deleteCustomerAction(customer!.id);
       if (!result.ok) setError(result.error ?? "Errore");
       else {
-        if (!device && returnTo) router.push(returnTo);
+        if (!device && returnTo) {
+          if (closeOnDelete) router.back();
+          else router.push(returnTo);
+        }
         router.refresh();
       }
     } catch {
@@ -153,11 +159,11 @@ export function CustomerList({
   const params = useSearchParams();
   const router = useRouter();
   const { locale } = useLanguage();
+  const [query, setQuery] = useState(() => params.get("q") ?? "");
   const [selected, setSelected] = useState<string[]>([]);
   const [batchMode, setBatchMode] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const query = params.get("q") ?? "";
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem("customer-list-position");
@@ -207,8 +213,13 @@ export function CustomerList({
     }
   }
   function search(value: string) {
+    setQuery(value);
     setSelected([]);
-    window.history.replaceState(null, "", customerListUrl(value));
+    window.history.replaceState(
+      { ...window.history.state },
+      "",
+      customerListUrl(value),
+    );
   }
   return (
     <>
@@ -241,56 +252,34 @@ export function CustomerList({
       <p className="customer-result-count" role="status">
         {shown.length} {it.customerResults}
       </p>
-      <div className="catalog-toolbar price-batch-toolbar customer-batch-toolbar">
-        <Button
-          variant="outline"
-          disabled={pending}
-          aria-pressed={batchMode}
-          onClick={() => {
-            setBatchMode(!batchMode);
+      <div className="inventory-batch-controls customer-batch-toolbar">
+        <BatchControls
+          active={batchMode}
+          pending={pending}
+          selectedCount={selectedIds.length}
+          deleteDisabled={selectedIds.length > 500}
+          hasItems={shown.length > 0}
+          manageLabel={it.batchManage}
+          selectedLabel={it.inventory.selectedCount.replace(
+            "{count}",
+            String(selectedIds.length),
+          )}
+          selectAllLabel={it.selectAll}
+          deleteLabel={it.deleteCustomers}
+          finishLabel={it.finishBatch}
+          onStart={() => {
+            setBatchMode(true);
             setSelected([]);
           }}
-        >
-          {batchMode ? it.finishBatch : it.batchManage}
-        </Button>
-        {batchMode && (
-          <>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                aria-label={it.selectAll}
-                disabled={pending || !shown.length}
-                checked={
-                  shown.length > 0 && selectedIds.length === shown.length
-                }
-                ref={(element) => {
-                  if (element)
-                    element.indeterminate =
-                      selectedIds.length > 0 &&
-                      selectedIds.length < shown.length;
-                }}
-                onChange={(event) =>
-                  setSelected(
-                    event.target.checked ? shown.map((c) => c.id) : [],
-                  )
-                }
-              />
-              {it.selectAll}
-            </label>
-            <Button
-              variant="outline"
-              disabled={
-                pending || !selectedIds.length || selectedIds.length > 500
-              }
-              onClick={removeSelected}
-            >
-              <Trash2 size={18} aria-hidden="true" />
-              {it.deleteCustomers} ({selectedIds.length})
-            </Button>
-            {selectedIds.length > 500 && (
-              <span role="alert">{it.batchLimit}</span>
-            )}
-          </>
+          onSelectAll={() => setSelected(shown.map((customer) => customer.id))}
+          onDelete={removeSelected}
+          onFinish={() => {
+            setBatchMode(false);
+            setSelected([]);
+          }}
+        />
+        {batchMode && selectedIds.length > 500 && (
+          <span role="alert">{it.batchLimit}</span>
         )}
       </div>
       {error && (
@@ -318,7 +307,7 @@ export function CustomerList({
               {shown.map((customer) => {
                 const href = `/customers/${customer.id}${query ? `?q=${encodeURIComponent(query)}` : ""}`;
                 return (
-                  <tr key={customer.id}>
+                  <tr className="business-list-row" key={customer.id}>
                     {batchMode && (
                       <td className="customer-selection">
                         <input
@@ -349,7 +338,7 @@ export function CustomerList({
                           } catch {}
                         }}
                       >
-                        {customer.name}
+                        <span>{customer.name}</span>
                         <ChevronRight size={15} aria-hidden="true" />
                       </Link>
                     </td>
@@ -387,19 +376,27 @@ export function CustomerSummary({
   customer,
   query,
   deleted,
+  showHeading = true,
+  dialog = false,
 }: {
   customer: Customer;
   query: string;
   deleted: boolean;
+  showHeading?: boolean;
+  dialog?: boolean;
 }) {
   return (
     <section className="panel padded customer-summary">
       <div>
-        <h1>{customer.name}</h1>
+        {showHeading && <h1>{customer.name}</h1>}
         <PhoneList customer={customer} />
       </div>
       {!deleted && (
-        <RecordActions customer={customer} returnTo={customerListUrl(query)} />
+        <RecordActions
+          customer={customer}
+          returnTo={customerListUrl(query)}
+          closeOnDelete={dialog}
+        />
       )}
     </section>
   );
@@ -416,7 +413,10 @@ export function CustomerDevices({
     <section className="panel customer-device-list">
       {devices.length ? (
         devices.map((device) => (
-          <article className="customer-device-row" key={device.id}>
+          <article
+            className="customer-device-row business-list-row"
+            key={device.id}
+          >
             <div>
               <strong>
                 {device.brand} {device.model}

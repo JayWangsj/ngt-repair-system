@@ -295,7 +295,7 @@ export function OrderListBody({
           <tr
             key={row.id}
             data-order-id={row.id}
-            className={`${active ? "order-row-active" : ""} ${highlightedId === row.id ? "order-row-status-highlight" : ""}`.trim()}
+            className={`business-list-row ${active ? "order-row-active" : ""} ${highlightedId === row.id ? "order-row-status-highlight" : ""}`.trim()}
             onClick={() => setActiveId(row.id)}
           >
             <td>

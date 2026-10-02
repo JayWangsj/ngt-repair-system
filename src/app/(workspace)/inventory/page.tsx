@@ -6,7 +6,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { db } from "@/lib/db";
-import { cents, dateTime, inventoryStatus, money } from "@/lib/domain";
+import { cents, dateTime, inventoryStatus, money, romeDay } from "@/lib/domain";
 import { getMessages } from "@/lib/i18n-server";
 import { requireActor } from "@/lib/session";
 import { PageHeader } from "@/components/common";
@@ -32,7 +32,6 @@ export default async function InventoryPage() {
     db.inventoryMovement.findMany({
       include: { product: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
-      take: 50,
     }),
     db.workOrderProduct.groupBy({
       by: ["productId"],
@@ -117,6 +116,7 @@ export default async function InventoryPage() {
           </div>
         ))}
         <InventoryHistoryCard
+          currentPeriod={romeDay().slice(0, 7)}
           movements={movements.map((movement) => ({
             id: movement.id,
             productName: movement.product.name,
@@ -125,6 +125,7 @@ export default async function InventoryPage() {
             stockAfter: movement.stockAfter,
             type: movement.type,
             at: dateTime(movement.createdAt),
+            period: romeDay(movement.createdAt).slice(0, 7),
           }))}
         />
       </div>

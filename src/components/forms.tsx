@@ -3745,6 +3745,7 @@ export function FormDialog({
       aria-labelledby={titleId}
       onCancel={(e) => {
         e.preventDefault();
+        e.stopPropagation();
         if (!busy()) onClose();
       }}
     >

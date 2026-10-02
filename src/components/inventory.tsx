@@ -2,21 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ArrowRight,
-  ListChecks,
-  PackageOpen,
-  Plus,
-  Star,
-  Trash2,
-  X,
-} from "lucide-react";
+import { ArrowRight, PackageOpen, Plus, Star } from "lucide-react";
 import { deleteProductsAction, updateProductAction } from "@/app/actions";
 import { decimal, inventoryStatus, money } from "@/lib/domain";
 import { useMessages } from "./language";
 import { FormDialog, ProductForm, type CategoryView } from "./forms";
-import { SearchableCombobox, SimpleSelect } from "./business-select";
+import {
+  DatePicker,
+  SearchableCombobox,
+  SimpleSelect,
+} from "./business-select";
 import { Button } from "./ui/button";
+import { BatchControls } from "./ui/batch-controls";
 import { QuantityStepper } from "./ui/quantity-stepper";
 export type { CategoryView } from "./forms";
 
@@ -56,16 +53,21 @@ type InventoryMovementView = {
     | "SALE_RETURN"
     | "MANUAL_ADJUSTMENT";
   at: string;
+  period: string;
 };
 
 export function InventoryHistoryCard({
   movements,
+  currentPeriod,
 }: {
   movements: InventoryMovementView[];
+  currentPeriod: string;
 }) {
   const it = useMessages();
   const [open, setOpen] = useState(false);
+  const [period, setPeriod] = useState(currentPeriod);
   const latest = movements[0];
+  const filtered = movements.filter((movement) => movement.period === period);
   const typeLabel = (type: InventoryMovementView["type"]) =>
     it.inventory.movementTypes[type];
   return (
@@ -138,9 +140,20 @@ export function InventoryHistoryCard({
           onClose={() => setOpen(false)}
         >
           <div className="inventory-movements-dialog" data-form-dialog-body>
-            {movements.length ? (
-              movements.map((movement) => (
-                <div className="movement-row" key={movement.id}>
+            <DatePicker
+              className="retail-period-picker"
+              aria-label={it.month}
+              name="period"
+              type="month"
+              value={period}
+              onChange={(event) => setPeriod(event.target.value)}
+            />
+            {filtered.length ? (
+              filtered.map((movement) => (
+                <div
+                  className="movement-row business-list-row"
+                  key={movement.id}
+                >
                   <span
                     className={
                       movement.quantity > 0
@@ -386,58 +399,32 @@ export function InventoryWorkspace({
           ]}
         />
         <div className="inventory-batch-controls">
-          {!batchMode ? (
-            <Button
-              variant="outline"
-              aria-pressed="false"
-              disabled={pending}
-              onClick={() => {
-                setBatchMode(true);
-                setChecked([]);
-              }}
-            >
-              <ListChecks size={17} aria-hidden="true" />
-              {it.batchManage}
-            </Button>
-          ) : (
-            <>
-              <span className="inventory-selected-count" role="status">
-                {it.inventory.selectedCount.replace(
-                  "{count}",
-                  String(checked.length),
-                )}
-              </span>
-              <Button
-                variant="outline"
-                disabled={pending || !filtered.length}
-                onClick={() =>
-                  setChecked(filtered.map((product) => product.id))
-                }
-              >
-                {it.selectAll}
-              </Button>
-              <Button
-                variant="outline"
-                className="button-danger"
-                disabled={!checked.length || pending}
-                onClick={removeSelected}
-              >
-                <Trash2 size={17} aria-hidden="true" />
-                {it.inventory.deleteBatch}
-              </Button>
-              <Button
-                variant="outline"
-                disabled={pending}
-                onClick={() => {
-                  setBatchMode(false);
-                  setChecked([]);
-                }}
-              >
-                <X size={17} aria-hidden="true" />
-                {it.inventory.finishBatch}
-              </Button>
-            </>
-          )}
+          <BatchControls
+            active={batchMode}
+            pending={pending}
+            selectedCount={checked.length}
+            hasItems={filtered.length > 0}
+            manageLabel={it.batchManage}
+            selectedLabel={it.inventory.selectedCount.replace(
+              "{count}",
+              String(checked.length),
+            )}
+            selectAllLabel={it.selectAll}
+            deleteLabel={it.inventory.deleteBatch}
+            finishLabel={it.inventory.finishBatch}
+            onStart={() => {
+              setBatchMode(true);
+              setChecked([]);
+            }}
+            onSelectAll={() =>
+              setChecked(filtered.map((product) => product.id))
+            }
+            onDelete={removeSelected}
+            onFinish={() => {
+              setBatchMode(false);
+              setChecked([]);
+            }}
+          />
         </div>
       </div>
       {error && <p className="message error">{error}</p>}
@@ -513,7 +500,7 @@ export function InventoryWorkspace({
                 return (
                   <tr
                     key={product.id}
-                    className={selected ? "inventory-selected" : ""}
+                    className={`business-list-row${selected ? " inventory-selected" : ""}`}
                     data-inventory-product={product.id}
                     tabIndex={selected ? 0 : undefined}
                     onClick={(event) => {

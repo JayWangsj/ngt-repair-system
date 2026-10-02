@@ -61,7 +61,7 @@ export function RetailSalesHistory({
               </thead>
               <tbody>
                 {filtered.map((sale) => (
-                  <tr key={sale.id}>
+                  <tr className="business-list-row" key={sale.id}>
                     <td>
                       <button
                         className="order-link order-code-link sale-number-button"

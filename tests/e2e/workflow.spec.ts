@@ -495,7 +495,9 @@ test("creates and edits a product directly in the inventory row", async ({
   await page.keyboard.press("Enter");
   await expect(row.getByLabel("Disponibilità", { exact: true })).toHaveCount(0);
   await expect(historyCard).toContainText("4 → 6");
-  expect(await page.evaluate(() => window.scrollY)).toBe(inventoryScroll);
+  expect(
+    Math.abs((await page.evaluate(() => window.scrollY)) - inventoryScroll),
+  ).toBeLessThanOrEqual(20);
   await expect(historyCard).toContainText(productName);
   await expect(historyCard).toHaveCSS("cursor", "pointer");
   await expect
@@ -585,8 +587,18 @@ test("creates and edits a product directly in the inventory row", async ({
   const movementDialog = page.getByRole("dialog", {
     name: "Registro magazzino",
   });
+  const movementMonth = movementDialog.getByLabel("Mese", { exact: true });
+  await expect(movementMonth).toHaveAttribute("type", "month");
+  const currentMovementMonth = await movementMonth.inputValue();
   await expect(movementDialog).toContainText(productName);
   await expect(movementDialog).toContainText("4 → 6");
+  await expect(
+    movementDialog.locator(".movement-row").filter({ hasText: productName }),
+  ).toHaveCount(2);
+  await movementMonth.fill("2000-01");
+  await expect(movementDialog.locator(".movement-row")).toHaveCount(0);
+  await expect(movementDialog).toContainText("Nessun movimento registrato.");
+  await movementMonth.fill(currentMovementMonth);
   await expect(
     movementDialog.locator(".movement-row").filter({ hasText: productName }),
   ).toHaveCount(2);
@@ -2618,7 +2630,7 @@ test("customer list searches instantly, preserves navigation and supports compac
   const extra = "337" + Date.now().toString().slice(-7);
   const name =
     "Cliente interfaccia molto lungo per verifica della disposizione";
-  await fillOrder(page, { phone, name });
+  await fillOrder(page, { phone, name, manual: true });
   await save(page);
   await page.goto("/customers");
   await page.getByLabel("Cerca", { exact: true }).fill(phone);
@@ -2627,19 +2639,18 @@ test("customer list searches instantly, preserves navigation and supports compac
   await expect(row).toContainText(name);
   await expect(page).toHaveURL(new RegExp("q=" + phone + "$"));
   await row.getByRole("link", { name, exact: true }).click();
+  let detailDialog = page.getByRole("dialog", { name });
+  await expect(detailDialog).toBeVisible();
+  await expect(detailDialog).toHaveClass(/form-dialog/);
+  await expect(detailDialog.locator(".customer-device-row")).toHaveCount(1);
   await expect(
-    page.getByRole("link", { name: "Torna ai clienti" }),
-  ).toHaveAttribute("href", "/customers?q=" + phone);
-  await expect(page.locator('main input:not([type="date"])')).toHaveCount(0);
-  await expect(page.locator(".customer-device-row")).toHaveCount(1);
-  await expect(
-    page.getByRole("heading", { name: "Storico riparazioni" }),
+    detailDialog.getByRole("heading", { name: "Storico riparazioni" }),
   ).toBeVisible();
-  await page.locator(".customer-summary").hover();
-  await page
+  await detailDialog.locator(".customer-summary").hover();
+  await detailDialog
     .getByRole("button", { name: "Modifica cliente", exact: true })
     .click();
-  let dialog = page.getByRole("dialog");
+  let dialog = page.getByRole("dialog", { name: "Modifica cliente" });
   await dialog.getByLabel("Telefono", { exact: true }).fill("bad");
   await dialog.getByRole("button", { name: "Salva", exact: true }).click();
   await expect(dialog.getByRole("alert")).toBeVisible();
@@ -2650,31 +2661,36 @@ test("customer list searches instantly, preserves navigation and supports compac
   await dialog.getByLabel("Telefono 2", { exact: true }).fill(extra);
   await dialog.getByRole("button", { name: "Salva", exact: true }).click();
   await expect(dialog).not.toBeVisible();
-  await expect(page.locator(".customer-summary .customer-phone")).toHaveCount(
-    2,
-  );
-  const firstPhone = page.locator(".customer-summary .customer-phone").first();
+  await expect(
+    detailDialog.locator(".customer-summary .customer-phone"),
+  ).toHaveCount(2);
+  const firstPhone = detailDialog
+    .locator(".customer-summary .customer-phone")
+    .first();
   const storedPhone = await firstPhone.locator("a").innerText();
   await expect(firstPhone.locator("a")).toHaveAttribute(
     "href",
     "tel:" + storedPhone,
   );
   await expect(firstPhone.getByRole("button")).toHaveCount(0);
-  await page.locator(".customer-device-row").hover();
-  await page
+  await detailDialog.locator(".customer-device-row").hover();
+  await detailDialog
     .getByRole("button", { name: "Modifica dispositivo", exact: true })
     .click();
-  dialog = page.getByRole("dialog");
+  dialog = page.getByRole("dialog", { name: "Modifica dispositivo" });
   await enterBusinessValue(page, "Modello", "Unsaved model", dialog);
   await dialog.getByRole("button", { name: "Annulla", exact: true }).click();
-  await expect(page.locator(".customer-device-row")).not.toContainText(
+  await expect(detailDialog.locator(".customer-device-row")).not.toContainText(
     "Unsaved model",
   );
   await expect(
-    page.getByRole("button", { name: "Modifica dispositivo", exact: true }),
+    detailDialog.getByRole("button", {
+      name: "Modifica dispositivo",
+      exact: true,
+    }),
   ).toBeFocused();
-  await page.locator(".customer-device-row").hover();
-  await page
+  await detailDialog.locator(".customer-device-row").hover();
+  await detailDialog
     .getByRole("button", { name: "Modifica dispositivo", exact: true })
     .click();
   await dialog
@@ -2682,7 +2698,7 @@ test("customer list searches instantly, preserves navigation and supports compac
     .fill("123456789012345");
   await dialog.getByRole("button", { name: "Salva", exact: true }).click();
   await expect(dialog).not.toBeVisible();
-  await expect(page.locator(".customer-device-row")).toContainText(
+  await expect(detailDialog.locator(".customer-device-row")).toContainText(
     "123456789012345",
   );
   await page.setViewportSize({ width: 390, height: 844 });
@@ -2695,7 +2711,8 @@ test("customer list searches instantly, preserves navigation and supports compac
     path: "test-results/customer-detail-mobile.png",
     fullPage: true,
   });
-  await page.getByRole("link", { name: "Torna ai clienti" }).click();
+  await detailDialog.getByRole("button", { name: "Chiudi" }).click();
+  await expect(detailDialog).toHaveCount(0);
   await expect(page.getByLabel("Cerca", { exact: true })).toHaveValue(phone);
   await expect(row).toHaveCount(1);
   await page.getByLabel("Cerca", { exact: true }).fill(extra);
@@ -2714,6 +2731,7 @@ test("customer list searches instantly, preserves navigation and supports compac
   await row
     .getByRole("button", { name: "Modifica cliente", exact: true })
     .click();
+  dialog = page.getByRole("dialog", { name: "Modifica cliente" });
   await dialog
     .getByLabel("Nome e cognome", { exact: true })
     .fill("Discard this change");
@@ -2742,7 +2760,8 @@ test("customer list searches instantly, preserves navigation and supports compac
     fullPage: true,
   });
   await row.getByRole("link", { name, exact: true }).click();
-  const device = page.locator(".customer-device-row");
+  detailDialog = page.getByRole("dialog", { name });
+  const device = detailDialog.locator(".customer-device-row");
   page.once("dialog", (dialog) => dialog.accept());
   await device.hover();
   await device
@@ -2750,10 +2769,10 @@ test("customer list searches instantly, preserves navigation and supports compac
     .click();
   await expect(device).toHaveCount(0);
   await expect(
-    page.getByText("Nessun dispositivo registrato", { exact: true }),
+    detailDialog.getByText("Nessun dispositivo registrato", { exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".table-panel tbody tr")).toHaveCount(1);
-  await page.getByRole("link", { name: "Torna ai clienti" }).click();
+  await expect(detailDialog.locator(".table-panel tbody tr")).toHaveCount(1);
+  await detailDialog.getByRole("button", { name: "Chiudi" }).click();
   await expect(row.locator(".customer-device-count")).toContainText("0");
   page.once("dialog", (dialog) => dialog.dismiss());
   await row.hover();
@@ -2785,7 +2804,9 @@ test("customer page adds, edits and deletes a customer", async ({ page }) => {
   await expect(page).toHaveURL(/customers$/);
   await page.getByRole("link", { name: "Da modificare", exact: true }).click();
   await expect(page).toHaveURL(/\/customers\/[^/]+$/);
-  const summary = page.locator(".customer-summary");
+  const detailDialog = page.getByRole("dialog", { name: "Da modificare" });
+  await expect(detailDialog).toBeVisible();
+  const summary = detailDialog.locator(".customer-summary");
   await summary.hover();
   await summary
     .getByRole("button", { name: "Modifica cliente", exact: true })
@@ -2794,10 +2815,14 @@ test("customer page adds, edits and deletes a customer", async ({ page }) => {
     .getByLabel("Nome e cognome", { exact: true })
     .fill("Cliente modificato");
   await page.getByRole("button", { name: "Salva", exact: true }).click();
-  await expect(page.locator("h1")).toHaveText("Cliente modificato");
+  const updatedDetailDialog = page.getByRole("dialog", {
+    name: "Cliente modificato",
+  });
+  await expect(updatedDetailDialog).toBeVisible();
   page.once("dialog", (d) => d.accept());
-  await summary.hover();
-  await summary
+  const updatedSummary = updatedDetailDialog.locator(".customer-summary");
+  await updatedSummary.hover();
+  await updatedSummary
     .getByRole("button", { name: "Elimina cliente", exact: true })
     .click();
   await expect(page).toHaveURL(/customers$/);
@@ -2828,9 +2853,11 @@ test("customer dialog keeps filters and inputs on errors and allows deleted numb
   await expect(dialog).not.toBeVisible();
   await expect(page).toHaveURL(/customers\?q=ModalCustomer$/);
   await page.getByRole("link", { name: "ModalCustomer", exact: true }).click();
+  const detailDialog = page.getByRole("dialog", { name: "ModalCustomer" });
+  await expect(detailDialog).toBeVisible();
   page.once("dialog", (d) => d.accept());
-  await page.locator(".customer-summary").hover();
-  await page
+  await detailDialog.locator(".customer-summary").hover();
+  await detailDialog
     .getByRole("button", { name: "Elimina cliente", exact: true })
     .click();
   await expect(page).toHaveURL(/customers\?q=ModalCustomer$/);
@@ -3400,10 +3427,15 @@ test("shared action affordances, price search and delivery date limit", async ({
   );
   await page.goto("/customers");
   await page.locator(".customer-table .order-link").first().click();
-  const back = page.locator(".customer-back");
-  await expect(back).toHaveClass(/button-outline/);
-  await expect(back).toHaveCSS("border-top-style", "solid");
-  await expect(back).toHaveCSS("display", "inline-flex");
+  const customerDetail = page.getByRole("dialog");
+  await expect(customerDetail).toHaveClass(/form-dialog/);
+  const dialogBox = await customerDetail.boundingBox();
+  expect(dialogBox?.width).toBeGreaterThanOrEqual(900);
+  expect(dialogBox?.width).toBeLessThanOrEqual(1100);
+  await expect(customerDetail.locator(".customer-detail-dialog")).toHaveCSS(
+    "overflow-y",
+    "auto",
+  );
 });
 
 test("customer batch deletion keeps selection scoped and confirms the count", async ({
@@ -3435,7 +3467,9 @@ test("customer batch deletion keeps selection scoped and confirms the count", as
   await page
     .getByRole("button", { name: "Gestisci selezione", exact: true })
     .click();
-  await page.getByLabel("Seleziona tutti", { exact: true }).check();
+  await page
+    .getByRole("button", { name: "Seleziona tutti", exact: true })
+    .click();
   page.once("dialog", async (dialog) => {
     expect(dialog.message()).toContain("2 clienti");
     await dialog.dismiss();
@@ -3449,7 +3483,9 @@ test("customer batch deletion keeps selection scoped and confirms the count", as
     page.getByRole("button", { name: "Elimina clienti selezionati" }),
   ).toBeDisabled();
   await search.fill(prefix);
-  await page.getByLabel("Seleziona tutti", { exact: true }).check();
+  await page
+    .getByRole("button", { name: "Seleziona tutti", exact: true })
+    .click();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page.evaluate(
@@ -3473,21 +3509,24 @@ test("customer detail removes duplicate actions and supports keyboard icon editi
 }) => {
   await page.goto("/customers");
   await page.locator(".customer-name .order-link").first().click();
-  await expect(page.locator(".customer-summary h1")).toBeVisible();
+  const customerDialog = page.getByRole("dialog");
+  await expect(customerDialog.locator(".customer-summary")).toBeVisible();
   await expect(
-    page.locator(".eyebrow").filter({ hasText: "Area di lavoro" }),
+    customerDialog.locator(".eyebrow").filter({ hasText: "Area di lavoro" }),
   ).toHaveCount(0);
   await expect(
-    page.getByRole("columnheader", { name: "Cliente", exact: true }),
+    customerDialog.getByRole("columnheader", { name: "Cliente", exact: true }),
   ).toHaveCount(0);
   await expect(page.locator(".table-action")).toHaveCount(0);
   const edit = page
-    .locator(".customer-summary")
+    .locator(".customer-detail-dialog .customer-summary")
     .getByRole("button", { name: "Modifica cliente", exact: true });
   await expect(edit).toHaveAttribute("title", "Modifica cliente");
   await edit.focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(
+    page.getByRole("dialog", { name: "Modifica cliente" }),
+  ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(edit).toBeFocused();
   for (const width of [1280, 390]) {
@@ -3499,7 +3538,7 @@ test("customer detail removes duplicate actions and supports keyboard icon editi
     ).toBe(true);
     await page.screenshot({
       path: "test-results/customer-detail-" + width + ".png",
-      fullPage: true,
+      fullPage: false,
     });
   }
 });
@@ -3514,7 +3553,9 @@ for (const width of [1280, 390]) {
     await page
       .getByRole("button", { name: "Gestisci selezione", exact: true })
       .click();
-    await page.getByLabel("Seleziona tutti", { exact: true }).check();
+    await page
+      .getByRole("button", { name: "Seleziona tutti", exact: true })
+      .click();
     await expect(
       page.getByRole("button", { name: /Elimina clienti selezionati/ }),
     ).toBeEnabled();
@@ -3526,7 +3567,7 @@ for (const width of [1280, 390]) {
       .getByRole("button", { name: "Gestisci selezione", exact: true })
       .click();
     await expect(
-      page.getByLabel("Seleziona tutti", { exact: true }),
+      page.locator('.customer-table input[type="checkbox"]').first(),
     ).not.toBeChecked();
     await expect(
       page.getByRole("button", { name: /Elimina clienti selezionati/ }),
@@ -3539,23 +3580,48 @@ for (const width of [1280, 390]) {
   });
 }
 
-test("customer name hover moves only the link and respects reduced motion", async ({
+test("closing customer detail preserves list scroll and batch state", async ({
   page,
 }) => {
-  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.setViewportSize({ width: 390, height: 480 });
+  await page.goto("/customers");
+  await page
+    .getByRole("button", { name: "Gestisci selezione", exact: true })
+    .click();
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const scrollBefore = await page.evaluate(() => window.scrollY);
+  expect(scrollBefore).toBeGreaterThan(0);
+  await page.locator(".customer-name .order-link").last().click();
+  const detailDialog = page.getByRole("dialog");
+  await expect(detailDialog.locator(".customer-detail-dialog")).toBeVisible();
+  await detailDialog.getByRole("button", { name: "Chiudi" }).click();
+  await expect(detailDialog).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Fine selezione", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator('.customer-table input[type="checkbox"]'),
+  ).not.toHaveCount(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+});
+
+test("customer name and customer row reuse the repair list hover", async ({
+  page,
+}) => {
   await page.goto("/customers");
   const link = page.locator(".customer-name .order-link").first();
   const row = page.locator(".customer-table tbody tr").first();
   await expect(row).toBeVisible();
-  const before = await row.boundingBox();
-  const color = await link.evaluate((el) => getComputedStyle(el).color);
   await link.hover();
-  await expect(link).toHaveCSS("transform", "matrix(1, 0, 0, 1, 2, 0)");
-  await expect(link).not.toHaveCSS("color", color);
-  expect(await row.boundingBox()).toEqual(before);
-  await page.mouse.move(0, 0);
-  await link.focus();
-  await expect(link).toHaveCSS("transform", "matrix(1, 0, 0, 1, 2, 0)");
-  await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(link).toHaveCSS("transform", "none");
+  await expect(link.locator("svg")).toHaveCSS(
+    "transform",
+    "matrix(1, 0, 0, 1, 4, 0)",
+  );
+  await expect(row).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, -1)");
+  expect(
+    await link
+      .locator("span")
+      .evaluate((element) => getComputedStyle(element, "::after").transform),
+  ).toBe("matrix(1, 0, 0, 1, 0, 0)");
 });

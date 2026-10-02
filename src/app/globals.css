@@ -5306,8 +5306,8 @@ summary.record-icon::-webkit-details-marker {
   background: conic-gradient(
       from -35deg,
       transparent 0deg 294deg,
-      rgb(224 160 0 / 12%) 318deg,
-      rgb(224 160 0 / 72%) 338deg,
+      rgb(240 164 0 / 20%) 318deg,
+      rgb(240 164 0 / 88%) 338deg,
       transparent 360deg
     )
     border-box;
@@ -5353,7 +5353,7 @@ summary.record-icon::-webkit-details-marker {
   left: 0;
   height: 2px;
   border-radius: 999px;
-  background: #e5b300;
+  background: #f0a400;
   content: "";
   transform: scaleX(0);
   transform-origin: left center;
@@ -5405,12 +5405,14 @@ summary.record-icon::-webkit-details-marker {
 }
 .inventory-history-card:hover,
 .inventory-history-card:focus-visible {
-  border-color: #e0a000;
-  box-shadow: 0 7px 20px rgb(128 96 0 / 8%);
+  border-color: #f0a400;
+  box-shadow:
+    0 0 0 1px rgb(240 164 0 / 28%),
+    0 8px 22px rgb(128 96 0 / 10%);
 }
 .inventory-history-card:hover::before,
 .inventory-history-card:focus-visible::before {
-  animation: inventory-history-border-sweep 280ms ease-out 1;
+  animation: inventory-history-border-sweep 650ms ease-out 1;
 }
 .inventory-history-card:hover .inventory-history-title::after,
 .inventory-history-card:focus-visible .inventory-history-title::after {
@@ -5418,8 +5420,8 @@ summary.record-icon::-webkit-details-marker {
 }
 .inventory-history-card:hover .inventory-history-arrow,
 .inventory-history-card:focus-visible .inventory-history-arrow {
-  color: #d99500;
-  transform: translateX(4px);
+  color: #ee9700;
+  transform: translateX(6px);
 }
 .inventory-layout {
   display: grid;
@@ -5894,6 +5896,6 @@ summary.record-icon::-webkit-details-marker {
   }
   .inventory-history-card:hover .inventory-history-arrow,
   .inventory-history-card:focus-visible .inventory-history-arrow {
-    transform: none;
+    transform: translateX(3px);
   }
 }

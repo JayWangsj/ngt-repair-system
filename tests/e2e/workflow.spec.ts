@@ -490,7 +490,7 @@ test("creates and edits a product directly in the inventory row", async ({
     "none",
   );
   await historyCard.hover();
-  await expect(historyCard).toHaveCSS("border-color", "rgb(224, 160, 0)");
+  await expect(historyCard).toHaveCSS("border-color", "rgb(240, 164, 0)");
   await expect
     .poll(() =>
       historyCard.evaluate(
@@ -504,7 +504,7 @@ test("creates and edits a product directly in the inventory row", async ({
         (element) => getComputedStyle(element, "::before").animationDuration,
       ),
     )
-    .toBe("0.28s");
+    .toBe("0.65s");
   await expect
     .poll(() =>
       historyCard
@@ -514,11 +514,11 @@ test("creates and edits a product directly in the inventory row", async ({
     .toBe("matrix(1, 0, 0, 1, 0, 0)");
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
     "transform",
-    "matrix(1, 0, 0, 1, 4, 0)",
+    "matrix(1, 0, 0, 1, 6, 0)",
   );
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
     "color",
-    "rgb(217, 149, 0)",
+    "rgb(238, 151, 0)",
   );
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect
@@ -530,7 +530,7 @@ test("creates and edits a product directly in the inventory row", async ({
     .toBe("none");
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
     "transform",
-    "none",
+    "matrix(1, 0, 0, 1, 3, 0)",
   );
   await historyCard.click();
   const movementDialog = page.getByRole("dialog", {

@@ -905,11 +905,15 @@ test("sales history uses a monthly filter", async ({ page }) => {
   await page.getByRole("button", { name: "Vendite", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
-  await expect(dialog.locator('input[name="period"]')).toHaveAttribute(
-    "type",
-    "month",
-  );
-  await dialog.getByRole("button", { name: "Filtra", exact: true }).click();
+  const dialogBox = await dialog.boundingBox();
+  expect(dialogBox?.width).toBeGreaterThan(800);
+  expect(dialogBox?.height).toBeGreaterThan(600);
+  const period = dialog.getByLabel("Mese");
+  await expect(period).toHaveAttribute("type", "month");
+  await expect(period).toHaveCSS("cursor", "pointer");
+  await period.fill("2025-01");
+  await expect(dialog).toContainText("Nessuna vendita registrata.");
+  await period.fill(new Date().toISOString().slice(0, 7));
   await expect(page.locator('select[name="mode"]')).toHaveCount(0);
   await expect(page).toHaveURL(/\/retail$/);
   await dialog.getByRole("button", { name: "Chiudi" }).click();
@@ -968,13 +972,18 @@ test("completes a retail sale and opens its immutable receipt", async ({
 
   await page.getByRole("button", { name: "Vendite", exact: true }).click();
   const historyDialog = page.getByRole("dialog");
-  await historyDialog
+  const saleNumber = historyDialog
     .getByRole("button", { name: /^V-\d{8}\d{3}$/ })
-    .first()
-    .click();
+    .first();
+  await expect(saleNumber).toHaveClass(/order-code-link/);
+  await saleNumber.click();
   await expect(page.getByRole("dialog")).toHaveCount(1);
   await expect(historyDialog).toContainText("Cavo USB-C Test");
-  await historyDialog.getByRole("button", { name: /Storico vendite/ }).click();
+  const backToHistory = historyDialog.getByRole("button", {
+    name: /Storico vendite/,
+  });
+  await expect(backToHistory).toHaveClass(/back-link/);
+  await backToHistory.click();
   await expect(historyDialog.getByText("Numero vendita")).toBeVisible();
   await historyDialog.getByRole("button", { name: "Chiudi" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);

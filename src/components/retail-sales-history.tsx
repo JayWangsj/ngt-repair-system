@@ -1,4 +1,5 @@
 import { ChevronRight } from "lucide-react";
+import { DatePicker } from "./business-select";
 import { useMessages } from "./language";
 import { money } from "@/lib/domain";
 
@@ -37,17 +38,14 @@ export function RetailSalesHistory({
   const filtered = sales.filter((sale) => sale.period === period);
   return (
     <div className="retail-history-dialog" data-form-dialog-body>
-      <form
-        className="filters retail-sales-filter"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const data = new FormData(event.currentTarget);
-          onPeriodChange(String(data.get("period") ?? ""));
-        }}
-      >
-        <input name="period" type="month" defaultValue={period} />
-        <button className="button button-outline">{it.filter}</button>
-      </form>
+      <DatePicker
+        className="retail-period-picker"
+        aria-label={it.month}
+        name="period"
+        type="month"
+        value={period}
+        onChange={(event) => onPeriodChange(event.target.value)}
+      />
       <section className="panel table-panel">
         {filtered.length ? (
           <div className="table-scroll">
@@ -66,11 +64,11 @@ export function RetailSalesHistory({
                   <tr key={sale.id}>
                     <td>
                       <button
-                        className="order-link sale-number-button"
+                        className="order-link order-code-link sale-number-button"
                         onClick={() => onSelect(sale)}
                       >
-                        {sale.code}
-                        <ChevronRight size={15} />
+                        <span>{sale.code}</span>
+                        <ChevronRight size={15} aria-hidden="true" />
                       </button>
                     </td>
                     <td>{sale.date}</td>

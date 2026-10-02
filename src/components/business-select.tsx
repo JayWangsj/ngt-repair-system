@@ -587,11 +587,11 @@ export function SearchableCombobox(
 }
 
 export function DatePicker(props: InputHTMLAttributes<HTMLInputElement>) {
-  const { onClick, ...rest } = props;
+  const { onClick, type = "date", ...rest } = props;
   return (
     <input
       {...rest}
-      type="date"
+      type={type}
       onClick={(event) => {
         onClick?.(event);
         event.currentTarget.showPicker?.();

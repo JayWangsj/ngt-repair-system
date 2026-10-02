@@ -340,7 +340,7 @@ export function RetailWorkbench({
               <span className="retail-dialog-title">
                 <button
                   type="button"
-                  className="retail-dialog-back"
+                  className="button button-outline back-link retail-dialog-back"
                   onClick={() =>
                     setDialog(
                       dialog.returnTo === "history"

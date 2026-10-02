@@ -5462,7 +5462,8 @@ summary.record-icon::-webkit-details-marker {
   transform: scale(1.015);
 }
 .order-list-body .order-link,
-.order-detail-card .order-customer-link {
+.order-detail-card .order-customer-link,
+.retail-history-dialog .order-code-link {
   position: relative;
   color: #715300;
   text-decoration: none;
@@ -5472,11 +5473,13 @@ summary.record-icon::-webkit-details-marker {
     transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .order-list-body .order-link > span,
-.order-detail-card .order-customer-link > span {
+.order-detail-card .order-customer-link > span,
+.retail-history-dialog .order-code-link > span {
   position: relative;
 }
 .order-list-body .order-link > span::after,
-.order-detail-card .order-customer-link > span::after {
+.order-detail-card .order-customer-link > span::after,
+.retail-history-dialog .order-code-link > span::after {
   position: absolute;
   right: 0;
   bottom: -2px;
@@ -5491,19 +5494,24 @@ summary.record-icon::-webkit-details-marker {
 .order-list-body .order-link:hover,
 .order-list-body .order-link:focus-visible,
 .order-detail-card .order-customer-link:hover,
-.order-detail-card .order-customer-link:focus-visible {
+.order-detail-card .order-customer-link:focus-visible,
+.retail-history-dialog .order-code-link:hover,
+.retail-history-dialog .order-code-link:focus-visible {
   color: #543e00;
   transform: none;
 }
 .order-list-body .order-link:hover > span::after,
 .order-list-body .order-link:focus-visible > span::after,
 .order-detail-card .order-customer-link:hover > span::after,
-.order-detail-card .order-customer-link:focus-visible > span::after {
+.order-detail-card .order-customer-link:focus-visible > span::after,
+.retail-history-dialog .order-code-link:hover > span::after,
+.retail-history-dialog .order-code-link:focus-visible > span::after {
   transform: scaleX(1);
 }
 .order-list-body .order-code-link svg,
 .order-list-body .order-customer-link svg,
-.order-detail-card .order-customer-link svg {
+.order-detail-card .order-customer-link svg,
+.retail-history-dialog .order-code-link svg {
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .order-list-body .order-code-link:hover svg,
@@ -5511,7 +5519,9 @@ summary.record-icon::-webkit-details-marker {
 .order-list-body .order-customer-link:hover svg,
 .order-list-body .order-customer-link:focus-visible svg,
 .order-detail-card .order-customer-link:hover svg,
-.order-detail-card .order-customer-link:focus-visible svg {
+.order-detail-card .order-customer-link:focus-visible svg,
+.retail-history-dialog .order-code-link:hover svg,
+.retail-history-dialog .order-code-link:focus-visible svg {
   transform: translateX(4px);
 }
 .table-panel tbody tr:has(.order-payment-values) {
@@ -5553,25 +5563,33 @@ summary.record-icon::-webkit-details-marker {
   font: inherit;
   cursor: pointer;
 }
-.retail-history-dialog .retail-sales-filter {
-  margin: 0 0 16px;
+.form-dialog:has(.retail-history-dialog),
+.form-dialog:has(.retail-sale-dialog) {
+  width: min(880px, calc(100vw - 32px));
+  height: min(680px, calc(100dvh - 32px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.form-dialog:has(.retail-history-dialog) > [data-form-dialog-body],
+.form-dialog:has(.retail-sale-dialog) > [data-form-dialog-body] {
+  min-height: 0;
+  max-height: none;
+  flex: 1;
+}
+.retail-period-picker {
+  width: 100%;
+  min-height: 48px;
+  margin-bottom: 18px;
+  cursor: pointer;
 }
 .retail-dialog-title {
   display: grid;
   gap: 8px;
 }
-.retail-dialog-back {
+.retail-dialog-back.back-link {
   width: max-content;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  color: #70580f;
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-.retail-dialog-back:hover {
-  color: var(--teal);
+  margin: 0;
 }
 .retail-sale-dialog {
   display: grid;

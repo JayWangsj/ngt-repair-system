@@ -406,6 +406,22 @@ test("creates and edits a product directly in the inventory row", async ({
 }) => {
   const productName = `Cavo USB-C E2E ${Date.now()}`;
   await page.goto("/inventory");
+  const inventoryMain = page.locator(".inventory-main");
+  const batchControls = inventoryMain.locator(".inventory-batch-controls");
+  await expect(inventoryMain.locator('input[type="checkbox"]')).toHaveCount(0);
+  await expect(inventoryMain.locator(".inventory-batch-toolbar")).toHaveCount(
+    0,
+  );
+  const searchBox = inventoryMain.getByLabel("Cerca prodotto o categoria");
+  const manageBatch = batchControls.getByRole("button", {
+    name: "Gestisci selezione",
+    exact: true,
+  });
+  expect(
+    Math.abs(
+      (await searchBox.boundingBox())!.y - (await manageBatch.boundingBox())!.y,
+    ),
+  ).toBeLessThan(2);
   const repairPartRow = page.getByRole("row", { name: /Batteria Test/ });
   await expect(repairPartRow).toContainText("Riparazione");
   await expect(repairPartRow.locator("td").nth(4)).toHaveText("—");
@@ -456,13 +472,50 @@ test("creates and edits a product directly in the inventory row", async ({
     "5",
   );
   await row.getByLabel("Prodotto frequente", { exact: true }).click();
-  await page
-    .getByRole("button", { name: "Gestisci selezione", exact: true })
-    .click();
+  const historyCard = page.locator(".inventory-history-card");
+  await expect(historyCard).toContainText(productName);
+  await historyCard.hover();
+  await expect(historyCard).toHaveCSS("border-color", "rgb(224, 160, 0)");
+  await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
+    "transform",
+    "matrix(1, 0, 0, 1, 4, 0)",
+  );
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
+    "transform",
+    "none",
+  );
+  await historyCard.click();
+  const movementDialog = page.getByRole("dialog", {
+    name: "Registro magazzino",
+  });
+  await expect(movementDialog).toContainText(productName);
+  await expect(movementDialog).toContainText("4 → 5");
+  await movementDialog.getByRole("button", { name: "Chiudi" }).click();
+
+  await manageBatch.click();
+  const deleteBatch = batchControls.getByRole("button", {
+    name: "Elimina",
+    exact: true,
+  });
+  await expect(batchControls).toContainText("0 selezionati");
+  await expect(deleteBatch).toBeDisabled();
   await row.getByRole("checkbox").check();
-  await expect(
-    page.getByRole("button", { name: /Elimina prodotti selezionati/ }),
-  ).toContainText("(1)");
+  await expect(batchControls).toContainText("1 selezionati");
+  await expect(deleteBatch).toBeEnabled();
+  await batchControls
+    .getByRole("button", { name: "Seleziona tutti", exact: true })
+    .click();
+  const tableCheckboxes = inventoryMain.locator(
+    '.inventory-table input[type="checkbox"]',
+  );
+  await expect(tableCheckboxes.first()).toBeChecked();
+  await expect(tableCheckboxes.last()).toBeChecked();
+  await batchControls
+    .getByRole("button", { name: "Fine", exact: true })
+    .click();
+  await expect(inventoryMain.locator('input[type="checkbox"]')).toHaveCount(0);
+  await expect(batchControls).not.toContainText("selezionati");
 });
 
 test("repair list exposes month, status, due-date and payment controls", async ({

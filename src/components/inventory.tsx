@@ -2,7 +2,15 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Star, Trash2 } from "lucide-react";
+import {
+  ArrowRight,
+  ListChecks,
+  PackageOpen,
+  Plus,
+  Star,
+  Trash2,
+  X,
+} from "lucide-react";
 import { deleteProductsAction, updateProductAction } from "@/app/actions";
 import { decimal, inventoryStatus, money } from "@/lib/domain";
 import { useMessages } from "./language";
@@ -33,6 +41,120 @@ export type ProductView = {
   enabled: boolean;
   history: { id: string; at: string; label: string }[];
 };
+
+type InventoryMovementView = {
+  id: string;
+  productName: string;
+  quantity: number;
+  stockBefore: number;
+  stockAfter: number;
+  type:
+    | "INITIAL_STOCK"
+    | "STOCK_IN"
+    | "RETAIL_SALE"
+    | "REPAIR_USE"
+    | "SALE_RETURN"
+    | "MANUAL_ADJUSTMENT";
+  at: string;
+};
+
+export function InventoryHistoryCard({
+  movements,
+}: {
+  movements: InventoryMovementView[];
+}) {
+  const it = useMessages();
+  const [open, setOpen] = useState(false);
+  const latest = movements[0];
+  const typeLabel = (type: InventoryMovementView["type"]) =>
+    it.inventory.movementTypes[type];
+  return (
+    <>
+      <button
+        type="button"
+        className="metric inventory-history-card"
+        onClick={() => setOpen(true)}
+      >
+        <span className="inventory-history-card-heading">
+          <span className="inventory-history-title">
+            {it.inventory.movementHistory}
+          </span>
+          <ArrowRight
+            className="inventory-history-arrow"
+            size={19}
+            aria-hidden="true"
+          />
+        </span>
+        {latest ? (
+          <span className="inventory-history-preview">
+            <span className="metric-icon orange">
+              <PackageOpen size={20} aria-hidden="true" />
+            </span>
+            <span>
+              <strong>{latest.productName}</strong>
+              <span>
+                {latest.stockBefore} → {latest.stockAfter}{" "}
+                <em
+                  className={
+                    latest.quantity > 0
+                      ? "movement-positive"
+                      : "movement-negative"
+                  }
+                >
+                  ({latest.quantity > 0 ? "+" : ""}
+                  {latest.quantity})
+                </em>
+              </span>
+              <small>
+                {typeLabel(latest.type)} · {latest.at}
+              </small>
+            </span>
+          </span>
+        ) : (
+          <small className="inventory-history-empty">
+            {it.inventory.noMovements}
+          </small>
+        )}
+      </button>
+      {open && (
+        <FormDialog
+          title={it.inventory.movementHistory}
+          onClose={() => setOpen(false)}
+        >
+          <div className="inventory-movements-dialog" data-form-dialog-body>
+            {movements.length ? (
+              movements.map((movement) => (
+                <div className="movement-row" key={movement.id}>
+                  <span
+                    className={
+                      movement.quantity > 0
+                        ? "movement-positive"
+                        : "movement-negative"
+                    }
+                  >
+                    {movement.quantity > 0 ? "+" : ""}
+                    {movement.quantity}
+                  </span>
+                  <div>
+                    <strong>{movement.productName}</strong>
+                    <small>
+                      {typeLabel(movement.type)} · {movement.at}
+                    </small>
+                  </div>
+                  <b>
+                    {movement.stockBefore} → {movement.stockAfter}
+                  </b>
+                </div>
+              ))
+            ) : (
+              <p className="inventory-empty">{it.inventory.noMovements}</p>
+            )}
+          </div>
+        </FormDialog>
+      )}
+    </>
+  );
+}
 
 export function NewProductDialogButton({
   categories,
@@ -218,47 +340,60 @@ export function InventoryWorkspace({
             { value: "OUT_OF_STOCK", label: it.inventory.out },
           ]}
         />
-      </div>
-      <div className="catalog-toolbar inventory-batch-toolbar">
-        <Button
-          variant="outline"
-          aria-pressed={batchMode}
-          disabled={pending}
-          onClick={() => {
-            setBatchMode(!batchMode);
-            setChecked([]);
-          }}
-        >
-          {batchMode ? it.finishBatch : it.batchManage}
-        </Button>
-        {batchMode && (
-          <>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={
-                  filtered.length > 0 && checked.length === filtered.length
-                }
-                onChange={(event) =>
-                  setChecked(
-                    event.target.checked
-                      ? filtered.map((product) => product.id)
-                      : [],
-                  )
-                }
-              />
-              {it.selectAll}
-            </label>
+        <div className="inventory-batch-controls">
+          {!batchMode ? (
             <Button
               variant="outline"
-              disabled={!checked.length || pending}
-              onClick={removeSelected}
+              aria-pressed="false"
+              disabled={pending}
+              onClick={() => {
+                setBatchMode(true);
+                setChecked([]);
+              }}
             >
-              <Trash2 size={17} />
-              {it.inventory.deleteSelected} ({checked.length})
+              <ListChecks size={17} aria-hidden="true" />
+              {it.batchManage}
             </Button>
-          </>
-        )}
+          ) : (
+            <>
+              <span className="inventory-selected-count" role="status">
+                {it.inventory.selectedCount.replace(
+                  "{count}",
+                  String(checked.length),
+                )}
+              </span>
+              <Button
+                variant="outline"
+                disabled={pending || !filtered.length}
+                onClick={() =>
+                  setChecked(filtered.map((product) => product.id))
+                }
+              >
+                {it.selectAll}
+              </Button>
+              <Button
+                variant="outline"
+                className="button-danger"
+                disabled={!checked.length || pending}
+                onClick={removeSelected}
+              >
+                <Trash2 size={17} aria-hidden="true" />
+                {it.inventory.deleteBatch}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={pending}
+                onClick={() => {
+                  setBatchMode(false);
+                  setChecked([]);
+                }}
+              >
+                <X size={17} aria-hidden="true" />
+                {it.inventory.finishBatch}
+              </Button>
+            </>
+          )}
+        </div>
       </div>
       {error && <p className="message error">{error}</p>}
       {filtered.length ? (
@@ -266,7 +401,38 @@ export function InventoryWorkspace({
           <table className="inventory-table" ref={table}>
             <thead>
               <tr>
-                {batchMode && <th />}
+                {batchMode && (
+                  <th className="inventory-selection">
+                    <input
+                      type="checkbox"
+                      aria-label={it.selectAll}
+                      disabled={pending || !filtered.length}
+                      checked={
+                        filtered.length > 0 &&
+                        filtered.every((product) =>
+                          checked.includes(product.id),
+                        )
+                      }
+                      ref={(element) => {
+                        if (element)
+                          element.indeterminate =
+                            checked.some((id) =>
+                              filtered.some((product) => product.id === id),
+                            ) &&
+                            !filtered.every((product) =>
+                              checked.includes(product.id),
+                            );
+                      }}
+                      onChange={(event) =>
+                        setChecked(
+                          event.target.checked
+                            ? filtered.map((product) => product.id)
+                            : [],
+                        )
+                      }
+                    />
+                  </th>
+                )}
                 <th>{it.inventory.product}</th>
                 <th>{it.inventory.category}</th>
                 <th>{it.inventory.usage}</th>
@@ -292,7 +458,7 @@ export function InventoryWorkspace({
                     onClick={() => !batchMode && setSelectedId(product.id)}
                   >
                     {batchMode && (
-                      <td>
+                      <td className="inventory-selection">
                         <input
                           type="checkbox"
                           aria-label={`${it.selectOption} ${product.name}`}

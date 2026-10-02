@@ -11,6 +11,7 @@ import { getMessages } from "@/lib/i18n-server";
 import { requireActor } from "@/lib/session";
 import { PageHeader } from "@/components/common";
 import {
+  InventoryHistoryCard,
   InventoryWorkspace,
   NewProductDialogButton,
   type ProductView,
@@ -19,7 +20,7 @@ import {
 export default async function InventoryPage() {
   await requireActor();
   const it = await getMessages();
-  const [products, categories, audits] = await Promise.all([
+  const [products, categories, audits, movements] = await Promise.all([
     db.product.findMany({
       where: { enabled: true },
       include: { movements: { orderBy: { createdAt: "desc" }, take: 20 } },
@@ -32,6 +33,11 @@ export default async function InventoryPage() {
     db.auditLog.findMany({
       where: { action: "PRODUCT_UPDATED" },
       orderBy: { createdAt: "desc" },
+    }),
+    db.inventoryMovement.findMany({
+      include: { product: { select: { name: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 50,
     }),
   ]);
   const productViews: ProductView[] = products.map((product) => ({
@@ -125,6 +131,17 @@ export default async function InventoryPage() {
             <strong>{value}</strong>
           </div>
         ))}
+        <InventoryHistoryCard
+          movements={movements.map((movement) => ({
+            id: movement.id,
+            productName: movement.product.name,
+            quantity: movement.quantity,
+            stockBefore: movement.stockBefore,
+            stockAfter: movement.stockAfter,
+            type: movement.type,
+            at: dateTime(movement.createdAt),
+          }))}
+        />
       </div>
       <InventoryWorkspace products={productViews} categories={categories} />
     </>

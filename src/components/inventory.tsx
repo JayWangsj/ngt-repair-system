@@ -213,7 +213,12 @@ function StockEditor({
   onSave: (value: number) => void;
 }) {
   return (
-    <div onClick={(event) => event.stopPropagation()}>
+    <div
+      onClick={(event) => {
+        event.stopPropagation();
+        event.currentTarget.closest("tr")?.focus({ preventScroll: true });
+      }}
+    >
       <QuantityStepper
         key={value}
         className="is-table"
@@ -510,22 +515,28 @@ export function InventoryWorkspace({
                     key={product.id}
                     className={selected ? "inventory-selected" : ""}
                     data-inventory-product={product.id}
-                    onClick={() => {
+                    tabIndex={selected ? 0 : undefined}
+                    onClick={(event) => {
                       if (batchMode || selected) return;
+                      const row = event.currentTarget;
                       setSelectedId(product.id);
+                      requestAnimationFrame(() =>
+                        row.focus({ preventScroll: true }),
+                      );
                     }}
                     onKeyDown={(event) => {
                       if (
                         !selected ||
                         event.key !== "Enter" ||
-                        !(event.target instanceof HTMLInputElement) ||
+                        !(event.target instanceof Element) ||
                         event.target.closest("[data-prevent-card-autosave]")
                       )
                         return;
                       event.preventDefault();
                       event.stopPropagation();
                       const scrollTop = window.scrollY;
-                      event.target.blur();
+                      const active = document.activeElement;
+                      if (active instanceof HTMLElement) active.blur();
                       requestAnimationFrame(() => {
                         commit(product.id, scrollTop);
                         setSelectedId("");

@@ -478,6 +478,10 @@ test("creates and edits a product directly in the inventory row", async ({
   await expect(row.locator(".inventory-quantity-cell")).toHaveText(["0", "4"]);
   await expect(row.locator(".inventory-quantity-cell input")).toHaveCount(0);
   await row.click();
+  await expect(row.locator("input")).not.toHaveCount(0);
+  await page.keyboard.press("Enter");
+  await expect(row.locator("input")).toHaveCount(0);
+  await row.click();
   await row.getByLabel("+ Disponibilità").click();
   await row.getByLabel("+ Disponibilità").click();
   await expect(row.getByLabel("Disponibilità", { exact: true })).toHaveValue(
@@ -488,7 +492,7 @@ test("creates and edits a product directly in the inventory row", async ({
   const historyCard = page.locator(".inventory-history-card");
   await expect(historyCard).toContainText("0 → 4");
   const inventoryScroll = await page.evaluate(() => window.scrollY);
-  await row.getByLabel("Disponibilità", { exact: true }).press("Enter");
+  await page.keyboard.press("Enter");
   await expect(row.getByLabel("Disponibilità", { exact: true })).toHaveCount(0);
   await expect(historyCard).toContainText("4 → 6");
   expect(await page.evaluate(() => window.scrollY)).toBe(inventoryScroll);

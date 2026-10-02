@@ -372,7 +372,7 @@ export default async function Dashboard({
         <section className="panel padded dashboard-list-card">
           <div className="section-heading">
             <h2>{it.dashboard.recentSales}</h2>
-            <Link href="/retail/sales">
+            <Link href="/retail?view=sales">
               {it.viewAll}
               <ArrowUpRight size={15} />
             </Link>
@@ -380,7 +380,7 @@ export default async function Dashboard({
           {sales.map((sale) => (
             <Link
               className="dashboard-list-row"
-              href={`/retail/sales/${sale.id}`}
+              href={`/retail?view=sale&id=${sale.id}`}
               key={sale.id}
             >
               <span>
@@ -396,7 +396,7 @@ export default async function Dashboard({
         <section className="panel padded dashboard-list-card">
           <div className="section-heading">
             <h2>{it.dashboard.hotProducts}</h2>
-            <Link href="/retail/sales">
+            <Link href="/retail?view=sales">
               {it.viewAll}
               <ArrowUpRight size={15} />
             </Link>

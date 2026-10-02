@@ -1,8 +1,4 @@
-"use client";
-
-import { useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { FormDialog } from "./forms";
 import { useMessages } from "./language";
 import { money } from "@/lib/domain";
 
@@ -10,6 +6,7 @@ export type SaleHistoryRow = {
   id: string;
   code: string;
   date: string;
+  period: string;
   itemCount: number;
   method: "CASH" | "CARD" | "TRANSFER" | "OTHER" | null;
   subtotal: number;
@@ -25,13 +22,34 @@ export type SaleHistoryRow = {
   }[];
 };
 
-export function RetailSalesHistory({ sales }: { sales: SaleHistoryRow[] }) {
+export function RetailSalesHistory({
+  sales,
+  period,
+  onPeriodChange,
+  onSelect,
+}: {
+  sales: SaleHistoryRow[];
+  period: string;
+  onPeriodChange: (period: string) => void;
+  onSelect: (sale: SaleHistoryRow) => void;
+}) {
   const it = useMessages();
-  const [selected, setSelected] = useState<SaleHistoryRow | null>(null);
+  const filtered = sales.filter((sale) => sale.period === period);
   return (
-    <>
+    <div className="retail-history-dialog" data-form-dialog-body>
+      <form
+        className="filters retail-sales-filter"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const data = new FormData(event.currentTarget);
+          onPeriodChange(String(data.get("period") ?? ""));
+        }}
+      >
+        <input name="period" type="month" defaultValue={period} />
+        <button className="button button-outline">{it.filter}</button>
+      </form>
       <section className="panel table-panel">
-        {sales.length ? (
+        {filtered.length ? (
           <div className="table-scroll">
             <table>
               <thead>
@@ -44,12 +62,12 @@ export function RetailSalesHistory({ sales }: { sales: SaleHistoryRow[] }) {
                 </tr>
               </thead>
               <tbody>
-                {sales.map((sale) => (
+                {filtered.map((sale) => (
                   <tr key={sale.id}>
                     <td>
                       <button
                         className="order-link sale-number-button"
-                        onClick={() => setSelected(sale)}
+                        onClick={() => onSelect(sale)}
                       >
                         {sale.code}
                         <ChevronRight size={15} />
@@ -68,55 +86,61 @@ export function RetailSalesHistory({ sales }: { sales: SaleHistoryRow[] }) {
           <p className="inventory-empty">{it.retail.noSales}</p>
         )}
       </section>
-      {selected && (
-        <FormDialog
-          title={`${it.retail.detail} · ${selected.code}`}
-          onClose={() => setSelected(null)}
-        >
-          <div className="retail-sale-dialog">
-            <small>{selected.date}</small>
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>{it.inventory.product}</th>
-                    <th className="numeric">{it.retail.unitPrice}</th>
-                    <th className="numeric">{it.retail.quantity}</th>
-                    <th className="numeric">{it.retail.subtotal}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selected.items.map((item) => (
-                    <tr key={item.id}>
-                      <td>
-                        <strong>{item.name}</strong>
-                        <small>{item.category}</small>
-                      </td>
-                      <td className="numeric">{money(item.unitPrice)}</td>
-                      <td className="numeric">{item.quantity}</td>
-                      <td className="numeric">{money(item.subtotal)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <dl className="quote-summary">
-              <div>
-                <dt>{it.retail.subtotal}</dt>
-                <dd>{money(selected.subtotal)}</dd>
-              </div>
-              <div>
-                <dt>{it.retail.discount}</dt>
-                <dd>− {money(selected.discount)}</dd>
-              </div>
-              <div>
-                <dt>{it.retail.total}</dt>
-                <dd>{money(selected.total)}</dd>
-              </div>
-            </dl>
-          </div>
-        </FormDialog>
-      )}
-    </>
+    </div>
+  );
+}
+
+export function RetailSaleDetail({ sale }: { sale: SaleHistoryRow }) {
+  const it = useMessages();
+  return (
+    <div className="retail-sale-dialog" data-form-dialog-body>
+      <div className="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>{it.inventory.product}</th>
+              <th className="numeric">{it.retail.unitPrice}</th>
+              <th className="numeric">{it.retail.quantity}</th>
+              <th className="numeric">{it.retail.subtotal}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sale.items.map((item) => (
+              <tr key={item.id}>
+                <td>
+                  <strong>{item.name}</strong>
+                  <small>{item.category}</small>
+                </td>
+                <td className="numeric">{money(item.unitPrice)}</td>
+                <td className="numeric">{item.quantity}</td>
+                <td className="numeric">{money(item.subtotal)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <dl className="quote-summary">
+        <div>
+          <dt>{it.retail.subtotal}</dt>
+          <dd>{money(sale.subtotal)}</dd>
+        </div>
+        <div>
+          <dt>{it.retail.discount}</dt>
+          <dd>− {money(sale.discount)}</dd>
+        </div>
+        <div>
+          <dt>{it.retail.total}</dt>
+          <dd>{money(sale.total)}</dd>
+        </div>
+        <div>
+          <dt>{it.retail.paymentMethod}</dt>
+          <dd>{sale.method ? it.methods[sale.method] : "—"}</dd>
+        </div>
+        <div>
+          <dt>{it.retail.date}</dt>
+          <dd>{sale.date}</dd>
+        </div>
+      </dl>
+    </div>
   );
 }

@@ -3506,6 +3506,20 @@ details[open] > summary {
   padding: 42px;
   text-align: center;
 }
+.retail-success-dialog {
+  margin: 10px auto 20px;
+  padding: 20px;
+  box-shadow: none;
+}
+.form-dialog:has(.retail-success-dialog) > .dialog-heading {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  z-index: 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
 .retail-success > span {
   display: grid;
   place-items: center;
@@ -5538,6 +5552,26 @@ summary.record-icon::-webkit-details-marker {
   padding: 0;
   font: inherit;
   cursor: pointer;
+}
+.retail-history-dialog .retail-sales-filter {
+  margin: 0 0 16px;
+}
+.retail-dialog-title {
+  display: grid;
+  gap: 8px;
+}
+.retail-dialog-back {
+  width: max-content;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #70580f;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.retail-dialog-back:hover {
+  color: var(--teal);
 }
 .retail-sale-dialog {
   display: grid;

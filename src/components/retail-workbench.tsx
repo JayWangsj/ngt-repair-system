@@ -1,12 +1,17 @@
 "use client";
-import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
-import { Check, ShoppingBag, Star, Trash2 } from "lucide-react";
+import { Check, ClipboardList, ShoppingBag, Star, Trash2 } from "lucide-react";
 import { createRetailSaleAction } from "@/app/actions";
 import { cents, creatablePaymentMethods, money } from "@/lib/domain";
+import { FormDialog } from "./forms";
 import { useMessages } from "./language";
 import { NewProductDialogButton } from "./inventory";
 import type { CategoryView } from "./inventory";
+import {
+  RetailSaleDetail,
+  RetailSalesHistory,
+  type SaleHistoryRow,
+} from "./retail-sales-history";
 import { Button } from "./ui/button";
 import { QuantityStepper } from "./ui/quantity-stepper";
 
@@ -19,12 +24,33 @@ type RetailProduct = {
   favorite: boolean;
 };
 
+type RetailDialog =
+  | { view: "history" }
+  | {
+      view: "detail";
+      sale: SaleHistoryRow;
+      returnTo: "history" | "completed";
+    }
+  | { view: "completed"; sale: SaleHistoryRow };
+
 export function RetailWorkbench({
   products,
   categories: productCategories,
+  sales: initialSales,
+  initialPeriod,
+  initialView,
+  initialSaleId,
+  title,
+  description,
 }: {
   products: RetailProduct[];
   categories: CategoryView[];
+  sales: SaleHistoryRow[];
+  initialPeriod: string;
+  initialView?: "history" | "detail";
+  initialSaleId?: string;
+  title: string;
+  description: string;
 }) {
   const it = useMessages();
   const [query, setQuery] = useState("");
@@ -34,12 +60,16 @@ export function RetailWorkbench({
   const [discount, setDiscount] = useState("0");
   const [method, setMethod] =
     useState<(typeof creatablePaymentMethods)[number]>("CASH");
-  const [completed, setCompleted] = useState<{
-    id: string;
-    total: number;
-    count: number;
-    method: typeof method;
-  } | null>(null);
+  const [sales, setSales] = useState(initialSales);
+  const [period, setPeriod] = useState(initialPeriod);
+  const [dialog, setDialog] = useState<RetailDialog | null>(() => {
+    if (initialView === "history") return { view: "history" };
+    if (initialView === "detail") {
+      const sale = initialSales.find((item) => item.id === initialSaleId);
+      if (sale) return { view: "detail", sale, returnTo: "history" };
+    }
+    return null;
+  });
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const categories = useMemo(
@@ -92,216 +122,295 @@ export function RetailWorkbench({
         discount,
         method,
       });
-      if (!result.ok || !result.id)
+      if (!result.ok || !result.data)
         return setError(result.ok ? it.connectionError : result.error);
-      setCompleted({ id: result.id, total, count, method });
+      const sale = result.data;
+      setSales((current) => [
+        sale,
+        ...current.filter((item) => item.id !== sale.id),
+      ]);
+      setCart({});
+      setDiscount("0");
+      setMethod("CASH");
+      setDialog({ view: "completed", sale });
     });
   }
-  if (completed)
-    return (
-      <section className="panel retail-success" role="status">
-        <span>
-          <Check size={34} />
-        </span>
-        <h2>{it.retail.completed}</h2>
-        <strong>{money(completed.total)}</strong>
-        <p>
-          {it.methods[completed.method]} · {completed.count}{" "}
-          {it.retail.products}
-        </p>
-        <div>
-          <Button asChild variant="outline">
-            <Link href={`/retail/sales/${completed.id}`}>
-              {it.retail.viewSale}
-            </Link>
-          </Button>
-          <Button
-            onClick={() => {
-              setCart({});
-              setDiscount("0");
-              setCompleted(null);
-            }}
-          >
-            {it.retail.nextSale}
-          </Button>
-        </div>
-      </section>
-    );
+  function closeDialog() {
+    setDialog(null);
+    if (initialView) window.history.replaceState(null, "", "/retail");
+  }
   return (
-    <div className="retail-layout">
-      <section className="retail-products">
-        <div className="panel retail-toolbar">
-          <input
-            aria-label={it.retail.search}
-            placeholder={it.retail.search}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-          <div className="retail-tabs">
-            <button
-              className={!category && !favorites ? "active" : ""}
-              onClick={() => {
-                setCategory("");
-                setFavorites(false);
-              }}
-            >
-              {it.retail.all}
-            </button>
-            <button
-              className={favorites ? "active" : ""}
-              onClick={() => {
-                setFavorites(true);
-                setCategory("");
-              }}
-            >
-              <Star size={15} />
-              {it.retail.favorites}
-            </button>
-            {categories.map((item) => (
+    <>
+      <header className="page-header">
+        <div>
+          <div className="eyebrow">{it.workspace}</div>
+          <h1>{title}</h1>
+          <p>{description}</p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => setDialog({ view: "history" })}
+        >
+          <ClipboardList size={18} />
+          {it.retail.sales}
+        </Button>
+      </header>
+      <div className="retail-layout">
+        <section className="retail-products">
+          <div className="panel retail-toolbar">
+            <input
+              aria-label={it.retail.search}
+              placeholder={it.retail.search}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            <div className="retail-tabs">
               <button
-                className={category === item ? "active" : ""}
-                key={item}
+                className={!category && !favorites ? "active" : ""}
                 onClick={() => {
-                  setCategory(item);
+                  setCategory("");
                   setFavorites(false);
                 }}
               >
-                {item}
+                {it.retail.all}
+              </button>
+              <button
+                className={favorites ? "active" : ""}
+                onClick={() => {
+                  setFavorites(true);
+                  setCategory("");
+                }}
+              >
+                <Star size={15} />
+                {it.retail.favorites}
+              </button>
+              {categories.map((item) => (
+                <button
+                  className={category === item ? "active" : ""}
+                  key={item}
+                  onClick={() => {
+                    setCategory(item);
+                    setFavorites(false);
+                  }}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="retail-product-grid">
+            {filtered.map((product) => {
+              const unavailable = product.stockQuantity <= 0;
+              return (
+                <button
+                  className="retail-product-card"
+                  key={product.id}
+                  disabled={unavailable}
+                  onClick={() =>
+                    setQuantity(product, (cart[product.id] ?? 0) + 1)
+                  }
+                >
+                  {product.favorite && (
+                    <Star
+                      className="retail-favorite"
+                      size={16}
+                      fill="currentColor"
+                    />
+                  )}
+                  <span className="retail-product-icon">
+                    <ShoppingBag size={24} />
+                  </span>
+                  <strong>{product.name}</strong>
+                  <small>{product.category}</small>
+                  <b>{money(product.salePrice)}</b>
+                  <span className={unavailable ? "danger-text" : "muted"}>
+                    {unavailable
+                      ? it.retail.outOfStock
+                      : `${it.inventory.currentStock} ${product.stockQuantity}`}
+                  </span>
+                </button>
+              );
+            })}
+            <div className="retail-new-product">
+              <NewProductDialogButton
+                categories={productCategories}
+                mode="retail"
+              />
+            </div>
+          </div>
+        </section>
+        <aside className="panel retail-cart">
+          <div className="section-heading">
+            <div>
+              <h2>{it.retail.cart}</h2>
+              <span className="muted">
+                {count} {it.retail.products}
+              </span>
+            </div>
+            {items.length > 0 && (
+              <Button variant="ghost" onClick={() => setCart({})}>
+                <Trash2 size={15} />
+                {it.retail.clear}
+              </Button>
+            )}
+          </div>
+          <div className="retail-cart-items">
+            {items.length ? (
+              items.map((item) => (
+                <div className="retail-cart-row" key={item.id}>
+                  <div>
+                    <strong>{item.name}</strong>
+                    <small>{money(item.salePrice)}</small>
+                  </div>
+                  <button
+                    className="retail-remove"
+                    aria-label={`${it.retail.remove} ${item.name}`}
+                    onClick={() => setQuantity(item, 0)}
+                  >
+                    ×
+                  </button>
+                  <QuantityStepper
+                    key={`${item.id}-${item.quantity}`}
+                    className="is-retail"
+                    ariaLabel={`${it.retail.quantity} ${item.name}`}
+                    buttonLabel={item.name}
+                    defaultValue={item.quantity}
+                    min={0}
+                    max={item.stockQuantity}
+                    onCommit={(quantity) => setQuantity(item, quantity)}
+                  />
+                  <b>{money(item.salePrice * item.quantity)}</b>
+                </div>
+              ))
+            ) : (
+              <p className="retail-empty-cart">{it.retail.emptyCart}</p>
+            )}
+          </div>
+          <div className="retail-totals">
+            <div>
+              <span>{it.retail.subtotal}</span>
+              <strong>{money(subtotal)}</strong>
+            </div>
+            <label>
+              <span>{it.retail.discount}</span>
+              <input
+                aria-label={it.retail.discount}
+                inputMode="decimal"
+                value={discount}
+                onChange={(event) => setDiscount(event.target.value)}
+              />
+            </label>
+            <div className="retail-total">
+              <span>{it.retail.total}</span>
+              <strong>{money(total)}</strong>
+            </div>
+          </div>
+          <fieldset className="payment-methods">
+            <legend>{it.retail.paymentMethod}</legend>
+            {creatablePaymentMethods.map((value) => (
+              <button
+                type="button"
+                className={method === value ? "active" : ""}
+                key={value}
+                onClick={() => setMethod(value)}
+              >
+                {it.methods[value]}
               </button>
             ))}
-          </div>
-        </div>
-        <div className="retail-product-grid">
-          {filtered.map((product) => {
-            const unavailable = product.stockQuantity <= 0;
-            return (
-              <button
-                className="retail-product-card"
-                key={product.id}
-                disabled={unavailable}
-                onClick={() =>
-                  setQuantity(product, (cart[product.id] ?? 0) + 1)
-                }
-              >
-                {product.favorite && (
-                  <Star
-                    className="retail-favorite"
-                    size={16}
-                    fill="currentColor"
-                  />
-                )}
-                <span className="retail-product-icon">
-                  <ShoppingBag size={24} />
-                </span>
-                <strong>{product.name}</strong>
-                <small>{product.category}</small>
-                <b>{money(product.salePrice)}</b>
-                <span className={unavailable ? "danger-text" : "muted"}>
-                  {unavailable
-                    ? it.retail.outOfStock
-                    : `${it.inventory.currentStock} ${product.stockQuantity}`}
-                </span>
-              </button>
-            );
-          })}
-          <div className="retail-new-product">
-            <NewProductDialogButton
-              categories={productCategories}
-              mode="retail"
-            />
-          </div>
-        </div>
-      </section>
-      <aside className="panel retail-cart">
-        <div className="section-heading">
-          <div>
-            <h2>{it.retail.cart}</h2>
-            <span className="muted">
-              {count} {it.retail.products}
-            </span>
-          </div>
-          {items.length > 0 && (
-            <Button variant="ghost" onClick={() => setCart({})}>
-              <Trash2 size={15} />
-              {it.retail.clear}
-            </Button>
-          )}
-        </div>
-        <div className="retail-cart-items">
-          {items.length ? (
-            items.map((item) => (
-              <div className="retail-cart-row" key={item.id}>
-                <div>
-                  <strong>{item.name}</strong>
-                  <small>{money(item.salePrice)}</small>
-                </div>
+          </fieldset>
+          {error && <p className="message error">{error}</p>}
+          <Button
+            className="retail-checkout"
+            disabled={
+              pending ||
+              !items.length ||
+              total <= 0 ||
+              discountCents >= subtotal
+            }
+            onClick={checkout}
+          >
+            {it.retail.checkout} {money(total)}
+          </Button>
+        </aside>
+      </div>
+      {dialog && (
+        <FormDialog
+          title={
+            dialog.view === "detail" ? (
+              <span className="retail-dialog-title">
                 <button
-                  className="retail-remove"
-                  aria-label={`${it.retail.remove} ${item.name}`}
-                  onClick={() => setQuantity(item, 0)}
+                  type="button"
+                  className="retail-dialog-back"
+                  onClick={() =>
+                    setDialog(
+                      dialog.returnTo === "history"
+                        ? { view: "history" }
+                        : { view: "completed", sale: dialog.sale },
+                    )
+                  }
                 >
-                  ×
+                  ←{" "}
+                  {dialog.returnTo === "history"
+                    ? it.retail.salesHistory
+                    : it.retail.completed}
                 </button>
-                <QuantityStepper
-                  key={`${item.id}-${item.quantity}`}
-                  className="is-retail"
-                  ariaLabel={`${it.retail.quantity} ${item.name}`}
-                  buttonLabel={item.name}
-                  defaultValue={item.quantity}
-                  min={0}
-                  max={item.stockQuantity}
-                  onCommit={(quantity) => setQuantity(item, quantity)}
-                />
-                <b>{money(item.salePrice * item.quantity)}</b>
-              </div>
-            ))
-          ) : (
-            <p className="retail-empty-cart">{it.retail.emptyCart}</p>
-          )}
-        </div>
-        <div className="retail-totals">
-          <div>
-            <span>{it.retail.subtotal}</span>
-            <strong>{money(subtotal)}</strong>
-          </div>
-          <label>
-            <span>{it.retail.discount}</span>
-            <input
-              aria-label={it.retail.discount}
-              inputMode="decimal"
-              value={discount}
-              onChange={(event) => setDiscount(event.target.value)}
-            />
-          </label>
-          <div className="retail-total">
-            <span>{it.retail.total}</span>
-            <strong>{money(total)}</strong>
-          </div>
-        </div>
-        <fieldset className="payment-methods">
-          <legend>{it.retail.paymentMethod}</legend>
-          {creatablePaymentMethods.map((value) => (
-            <button
-              type="button"
-              className={method === value ? "active" : ""}
-              key={value}
-              onClick={() => setMethod(value)}
-            >
-              {it.methods[value]}
-            </button>
-          ))}
-        </fieldset>
-        {error && <p className="message error">{error}</p>}
-        <Button
-          className="retail-checkout"
-          disabled={
-            pending || !items.length || total <= 0 || discountCents >= subtotal
+                <span>
+                  {it.retail.detail} · {dialog.sale.code}
+                </span>
+              </span>
+            ) : dialog.view === "history" ? (
+              it.retail.salesHistory
+            ) : (
+              <span className="sr-only">{it.retail.completed}</span>
+            )
           }
-          onClick={checkout}
+          subtitle={dialog.view === "detail" ? dialog.sale.date : undefined}
+          onClose={closeDialog}
         >
-          {it.retail.checkout} {money(total)}
-        </Button>
-      </aside>
-    </div>
+          {dialog.view === "history" && (
+            <RetailSalesHistory
+              sales={sales}
+              period={period}
+              onPeriodChange={setPeriod}
+              onSelect={(sale) =>
+                setDialog({ view: "detail", sale, returnTo: "history" })
+              }
+            />
+          )}
+          {dialog.view === "detail" && <RetailSaleDetail sale={dialog.sale} />}
+          {dialog.view === "completed" && (
+            <section
+              className="retail-success retail-success-dialog"
+              role="status"
+            >
+              <span>
+                <Check size={34} />
+              </span>
+              <h2>{it.retail.completed}</h2>
+              <strong>{money(dialog.sale.total)}</strong>
+              <p>
+                {dialog.sale.method ? it.methods[dialog.sale.method] : "—"} ·{" "}
+                {dialog.sale.itemCount} {it.retail.products}
+              </p>
+              <div>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    setDialog({
+                      view: "detail",
+                      sale: dialog.sale,
+                      returnTo: "completed",
+                    })
+                  }
+                >
+                  {it.retail.viewSale}
+                </Button>
+                <Button onClick={closeDialog}>{it.retail.nextSale}</Button>
+              </div>
+            </section>
+          )}
+        </FormDialog>
+      )}
+    </>
   );
 }

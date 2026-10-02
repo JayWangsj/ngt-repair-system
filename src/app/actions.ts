@@ -4,6 +4,9 @@ import * as service from "@/lib/service";
 import {
   balance,
   BusinessError,
+  cents,
+  dateTime,
+  romeDay,
   settlement,
   type StatusMutationSnapshot,
 } from "@/lib/domain";
@@ -158,7 +161,28 @@ export async function deleteDeviceCatalogOptionAction(input: unknown) {
 }
 export async function createRetailSaleAction(input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.createRetailSale(actor, input));
+  return execute(
+    () => service.createRetailSale(actor, input),
+    (sale) => ({
+      id: sale.id,
+      code: sale.code,
+      date: dateTime(sale.createdAt),
+      period: romeDay(sale.createdAt).slice(0, 7),
+      itemCount: sale.itemCount,
+      method: sale.payments[0]?.method ?? null,
+      subtotal: cents(sale.subtotal),
+      discount: cents(sale.discount),
+      total: cents(sale.total),
+      items: sale.items.map((item) => ({
+        id: item.id,
+        name: item.productName,
+        category: item.category,
+        unitPrice: cents(item.unitPrice),
+        quantity: item.quantity,
+        subtotal: cents(item.subtotal),
+      })),
+    }),
+  );
 }
 export async function addWorkOrderProductAction(id: string, input: unknown) {
   const actor = await requireActor();

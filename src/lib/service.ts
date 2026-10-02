@@ -2340,7 +2340,10 @@ export async function createRetailSale(actorInput: Actor, raw: unknown) {
     const actor = await currentActor(tx, actorInput);
     const existing = await tx.retailSale.findUnique({
       where: { requestId: data.requestId },
-      include: { payments: true },
+      include: {
+        items: true,
+        payments: { orderBy: { receivedAt: "asc" } },
+      },
     });
     if (existing) return existing;
     const products = await tx.product.findMany({
@@ -2421,7 +2424,10 @@ export async function createRetailSale(actorInput: Actor, raw: unknown) {
     });
     return tx.retailSale.findUniqueOrThrow({
       where: { id: sale.id },
-      include: { payments: true },
+      include: {
+        items: true,
+        payments: { orderBy: { receivedAt: "asc" } },
+      },
     });
   });
 }

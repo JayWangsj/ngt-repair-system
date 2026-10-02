@@ -901,16 +901,24 @@ test("diagnostic order saves faults, date and quote in one progressive flow", as
 });
 
 test("sales history uses a monthly filter", async ({ page }) => {
-  await page.goto("/retail/sales");
-  await expect(
-    page.getByRole("link", { name: /Vendita rapida/ }),
-  ).toBeVisible();
-  await expect(page.locator('input[name="period"]')).toHaveAttribute(
+  await page.goto("/retail");
+  await page.getByRole("button", { name: "Vendite", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('input[name="period"]')).toHaveAttribute(
     "type",
     "month",
   );
-  await page.getByRole("button", { name: "Filtra", exact: true }).click();
+  await dialog.getByRole("button", { name: "Filtra", exact: true }).click();
   await expect(page.locator('select[name="mode"]')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/retail$/);
+  await dialog.getByRole("button", { name: "Chiudi" }).click();
+
+  await page.goto("/retail/sales");
+  await expect(page).toHaveURL(/\/retail\?view=sales$/);
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await page.getByRole("button", { name: "Chiudi" }).click();
+  await expect(page).toHaveURL(/\/retail$/);
 });
 
 test("completes a retail sale and opens its immutable receipt", async ({
@@ -946,20 +954,31 @@ test("completes a retail sale and opens its immutable receipt", async ({
   await expect(page.getByRole("button", { name: "Bonifico" })).toHaveCount(0);
   await page.getByRole("button", { name: "Carta", exact: true }).click();
   await page.getByRole("button", { name: /Conferma incasso.*24,00/ }).click();
-  await expect(page.getByRole("status")).toContainText("Vendita completata");
-  await expect(page.getByRole("status")).toContainText("24,00 €");
-  await page.getByRole("link", { name: "Vedi vendita" }).click();
-  await expect(page).toHaveURL(/\/retail\/sales\/[a-z0-9]+$/);
-  await expect(
-    page.getByRole("heading", { name: /Dettaglio vendita/ }),
-  ).toBeVisible();
-  await expect(page.getByText("Cavo USB-C Test")).toBeVisible();
-  await page.goto("/retail/sales");
-  await page
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("status")).toContainText("Vendita completata");
+  await expect(dialog.getByRole("status")).toContainText("24,00 €");
+  await dialog.getByRole("button", { name: "Vedi vendita" }).click();
+  await expect(page).toHaveURL(/\/retail$/);
+  await expect(dialog.getByText(/Dettaglio vendita · V-/)).toBeVisible();
+  await expect(dialog.getByText("Cavo USB-C Test")).toBeVisible();
+  await dialog.getByRole("button", { name: /Vendita completata/ }).click();
+  await dialog.getByRole("button", { name: "Prossima vendita" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator(".retail-empty-cart")).toBeVisible();
+
+  await page.getByRole("button", { name: "Vendite", exact: true }).click();
+  const historyDialog = page.getByRole("dialog");
+  await historyDialog
     .getByRole("button", { name: /^V-\d{8}\d{3}$/ })
     .first()
     .click();
-  await expect(page.getByRole("dialog")).toContainText("Cavo USB-C Test");
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(historyDialog).toContainText("Cavo USB-C Test");
+  await historyDialog.getByRole("button", { name: /Storico vendite/ }).click();
+  await expect(historyDialog.getByText("Numero vendita")).toBeVisible();
+  await historyDialog.getByRole("button", { name: "Chiudi" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/retail$/);
 });
 test("creates automatic quote, receives payment and delivers", async ({
   page,

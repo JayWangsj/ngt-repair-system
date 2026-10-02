@@ -3713,7 +3713,7 @@ export function FormDialog({
   onClose,
   children,
 }: {
-  title: string;
+  title: ReactNode;
   subtitle?: string;
   onClose: () => void;
   children: ReactNode;

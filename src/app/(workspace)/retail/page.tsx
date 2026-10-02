@@ -1,17 +1,18 @@
-import Link from "next/link";
-import { ClipboardList } from "lucide-react";
 import { db } from "@/lib/db";
-import { cents } from "@/lib/domain";
+import { cents, dateTime, romeDay } from "@/lib/domain";
 import { getMessages } from "@/lib/i18n-server";
 import { requireActor } from "@/lib/session";
-import { PageHeader } from "@/components/common";
 import { RetailWorkbench } from "@/components/retail-workbench";
-import { Button } from "@/components/ui/button";
 
-export default async function RetailPage() {
+export default async function RetailPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ view?: string; id?: string; period?: string }>;
+}) {
   await requireActor();
   const it = await getMessages();
-  const [products, categories] = await Promise.all([
+  const query = await searchParams;
+  const [products, categories, sales] = await Promise.all([
     db.product.findMany({
       where: { enabled: true, usage: { in: ["RETAIL", "BOTH"] } },
       orderBy: [{ favorite: "desc" }, { name: "asc" }],
@@ -20,32 +21,60 @@ export default async function RetailPage() {
       where: { deletedAt: null, repairOnly: false },
       orderBy: { name: "asc" },
     }),
+    db.retailSale.findMany({
+      include: {
+        items: true,
+        payments: { orderBy: { receivedAt: "asc" } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
+  const today = romeDay();
   return (
-    <>
-      <PageHeader
-        title={it.retail.title}
-        description={it.retail.description}
-        actionNode={
-          <Button asChild variant="outline">
-            <Link href="/retail/sales">
-              <ClipboardList size={18} />
-              {it.retail.sales}
-            </Link>
-          </Button>
-        }
-      />
-      <RetailWorkbench
-        categories={categories}
-        products={products.map((product) => ({
-          id: product.id,
-          name: product.name,
-          category: product.category,
-          salePrice: cents(product.salePrice),
-          stockQuantity: product.stockQuantity,
-          favorite: product.favorite,
-        }))}
-      />
-    </>
+    <RetailWorkbench
+      title={it.retail.title}
+      description={it.retail.description}
+      initialPeriod={
+        /^\d{4}-\d{2}$/.test(query.period ?? "")
+          ? query.period!
+          : today.slice(0, 7)
+      }
+      initialView={
+        query.view === "sales"
+          ? "history"
+          : query.view === "sale"
+            ? "detail"
+            : undefined
+      }
+      initialSaleId={query.id}
+      categories={categories}
+      products={products.map((product) => ({
+        id: product.id,
+        name: product.name,
+        category: product.category,
+        salePrice: cents(product.salePrice),
+        stockQuantity: product.stockQuantity,
+        favorite: product.favorite,
+      }))}
+      sales={sales.map((sale) => ({
+        id: sale.id,
+        code: sale.code,
+        date: dateTime(sale.createdAt),
+        period: romeDay(sale.createdAt).slice(0, 7),
+        itemCount: sale.itemCount,
+        method: sale.payments[0]?.method ?? null,
+        subtotal: cents(sale.subtotal),
+        discount: cents(sale.discount),
+        total: cents(sale.total),
+        items: sale.items.map((item) => ({
+          id: item.id,
+          name: item.productName,
+          category: item.category,
+          unitPrice: cents(item.unitPrice),
+          quantity: item.quantity,
+          subtotal: cents(item.subtotal),
+        })),
+      }))}
+    />
   );
 }

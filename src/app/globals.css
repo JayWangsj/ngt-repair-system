@@ -1645,7 +1645,8 @@ textarea {
   padding-top: 18px;
   border-top: 1px solid #f0f3f1;
 }
-.detail-repair-editor .action-form {
+.detail-repair-editor .quote-required-part,
+.quote-draft-save-form {
   margin-top: 0;
 }
 .detail-repair-editor .quote-item.is-focused-edit {

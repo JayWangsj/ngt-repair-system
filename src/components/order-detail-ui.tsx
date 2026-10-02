@@ -28,8 +28,11 @@ export type OrderDetailEditTarget = {
 };
 
 const OrderDetailEditContext = createContext<{
+  editing: boolean;
+  session: number;
   target: OrderDetailEditTarget | null;
   requestEdit: (target: OrderDetailEditTarget) => void;
+  clearTarget: () => void;
 } | null>(null);
 
 export function useOrderDetailEdit() {
@@ -58,6 +61,7 @@ export function OrderDetailCard({
   const it = useMessages();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [editing, setEditing] = useState(false);
+  const [editSession, setEditSession] = useState(0);
   const [editTarget, setEditTarget] = useState<OrderDetailEditTarget | null>(
     null,
   );
@@ -71,6 +75,7 @@ export function OrderDetailCard({
   };
   const requestEdit = (target: OrderDetailEditTarget) => {
     setExpanded(true);
+    if (!editing) setEditSession((current) => current + 1);
     setEditTarget(target);
     setEditing(true);
   };
@@ -155,8 +160,11 @@ export function OrderDetailCard({
   return (
     <OrderDetailEditContext.Provider
       value={{
+        editing,
+        session: editSession,
         target: editTarget,
         requestEdit,
+        clearTarget: () => setEditTarget(null),
       }}
     >
       <section
@@ -192,6 +200,7 @@ export function OrderDetailCard({
                 onClick={(event) => {
                   event.stopPropagation();
                   setExpanded(true);
+                  setEditSession((current) => current + 1);
                   setEditTarget(null);
                   setEditing(true);
                 }}

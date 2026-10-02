@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { ChevronRight, Package, Wrench } from "lucide-react";
 import { cents, money } from "@/lib/domain";
 import {
-  EditQuoteForm,
+  ItemsEditor,
+  QuoteItemsDraftForm,
   type CategoryView,
   type ItemView,
   type RuleView,
@@ -33,8 +35,6 @@ export function WorkOrderRepairSummary({
   productCategories,
   initialDiscount,
   initialVat,
-  inspectionFee,
-  owner,
   locked,
 }: {
   orderId: string;
@@ -51,36 +51,45 @@ export function WorkOrderRepairSummary({
 }) {
   const it = useMessages();
   const cardEdit = useOrderDetailEdit();
+  const session = cardEdit?.session ?? 0;
+  const [draft, setDraft] = useState<{ session: number; items: ItemView[] }>({
+    session,
+    items,
+  });
+  if (cardEdit?.editing && draft.session !== session)
+    setDraft({ session, items });
+  const draftItems = draft.items;
+  const setDraftItems = (next: ItemView[]) =>
+    setDraft({ session, items: next });
   const editing = cardEdit?.target?.kind === "repair" ? cardEdit.target : null;
   const change = (index: number, field: "project" | "part") => {
     if (!locked) cardEdit?.requestEdit({ kind: "repair", index, field });
   };
   const editor = (index: number, field: "project" | "part") => (
     <div className={`detail-repair-editor is-${field}`}>
-      <EditQuoteForm
-        id={orderId}
-        initial={items}
-        initialDiscount={initialDiscount}
-        initialVat={initialVat}
-        inspectionFee={inspectionFee}
+      <ItemsEditor
+        items={draftItems}
+        onChange={setDraftItems}
         rules={rules}
         device={device}
         products={products}
         productCategories={productCategories}
-        owner={owner}
         initialEdit={{ index, field }}
-        mode="target"
+        focusedEdit
+        showEmptyPartSummary
+        onFocusedEditComplete={cardEdit?.clearTarget}
       />
     </div>
   );
+  const displayedItems = cardEdit?.editing ? draftItems : items;
 
   return (
     <section className="detail-repair-summaries">
       <h3>{it.quoteSection}</h3>
-      {items.map((item, index) => {
-        const product =
-          item.requiredProduct ??
-          products.find((candidate) => candidate.id === item.requiredProductId);
+      {displayedItems.map((item, index) => {
+        const product = products.find(
+          (candidate) => candidate.id === item.requiredProductId,
+        );
         return (
           <div
             className="detail-repair-summary"
@@ -98,7 +107,7 @@ export function WorkOrderRepairSummary({
                 </span>
                 <div className="selection-summary-copy">
                   <strong>{item.project}</strong>
-                  <small>{item.source}</small>
+                  <small>{items[index]?.source}</small>
                 </div>
                 <div className="selection-summary-value">
                   <small>{it.currentQuote}</small>
@@ -162,6 +171,14 @@ export function WorkOrderRepairSummary({
           </div>
         );
       })}
+      {cardEdit?.editing && !locked && (
+        <QuoteItemsDraftForm
+          id={orderId}
+          items={draftItems}
+          orderDiscount={initialDiscount}
+          includeVat={initialVat}
+        />
+      )}
     </section>
   );
 }

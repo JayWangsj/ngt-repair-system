@@ -522,6 +522,7 @@ export function ItemsEditor({
   showEmptyPartSummary = true,
   initialEdit,
   focusedEdit = false,
+  onFocusedEditComplete,
 }: {
   discounts?: boolean;
   items: ItemView[];
@@ -542,6 +543,7 @@ export function ItemsEditor({
   showEmptyPartSummary?: boolean;
   initialEdit?: { index: number; field: "project" | "part" };
   focusedEdit?: boolean;
+  onFocusedEditComplete?: () => void;
 }) {
   const it = useMessages();
   const [createdProducts, setCreatedProducts] = useState<CreatedProduct[]>([]);
@@ -720,6 +722,7 @@ export function ItemsEditor({
             requiredQuantity: 1,
             requiredProductRemoved: false,
           });
+          if (focusedEdit) onFocusedEditComplete?.();
         };
         return (
           <div
@@ -941,11 +944,14 @@ export function ItemsEditor({
                         requiredQuantity: found?.rule.requiredQuantity ?? 1,
                         requiredProductRemoved: false,
                       });
-                    if (project && !focusedEdit)
-                      setEditingProjects((current) => ({
-                        ...current,
-                        [index]: false,
-                      }));
+                    if (project) {
+                      if (focusedEdit) onFocusedEditComplete?.();
+                      else
+                        setEditingProjects((current) => ({
+                          ...current,
+                          [index]: false,
+                        }));
+                    }
                     requestAnimationFrame(() => {
                       priceInputs.current[index]?.focus();
                       priceInputs.current[index]?.select();
@@ -961,9 +967,11 @@ export function ItemsEditor({
               (!progressive || itemComplete) && (
                 <div className="quote-progressive-reveal">
                   <div className="quote-required-part">
-                    <strong className="quote-required-part-label">
-                      {it.requiredPart} ({it.optional})
-                    </strong>
+                    {!focusedEdit && (
+                      <strong className="quote-required-part-label">
+                        {it.requiredPart} ({it.optional})
+                      </strong>
+                    )}
                     {selectedProduct && !editingPart ? (
                       <div
                         className="selection-summary selected-part-summary is-actionable"
@@ -1058,6 +1066,7 @@ export function ItemsEditor({
                               ...current,
                               [index]: false,
                             }));
+                          else onFocusedEditComplete?.();
                         }}
                         ariaLabel={`${it.requiredPart} ${index + 1}`}
                         placeholder={it.searchInventoryPart}
@@ -1887,12 +1896,14 @@ function ActionForm({
   submit,
   onSuccess,
   disabled = false,
+  className = "",
 }: {
   action: (data: FormData) => Promise<ActionResult>;
   children: ReactNode;
   submit: string;
   onSuccess?: () => void;
   disabled?: boolean;
+  className?: string;
 }) {
   const it = useMessages();
   const closeDialog = useContext(FormCloseContext);
@@ -1980,7 +1991,7 @@ function ActionForm({
     <form
       ref={form}
       onSubmit={handle}
-      className="action-form"
+      className={`action-form ${className}`}
       aria-busy={pending}
     >
       {children}
@@ -2896,7 +2907,6 @@ export function EditQuoteForm({
   products = [],
   productCategories = [],
   onSuccess,
-  initialEdit,
   mode = "all",
 }: {
   id: string;
@@ -2917,8 +2927,7 @@ export function EditQuoteForm({
   device: { category: string; brand: string; series: string; model: string };
   owner: boolean;
   onSuccess?: () => void;
-  initialEdit?: { index: number; field: "project" | "part" };
-  mode?: "all" | "items" | "totals" | "target";
+  mode?: "all" | "items" | "totals";
 }) {
   const it = useMessages();
   const [items, setItems] = useState(initial);
@@ -2933,9 +2942,7 @@ export function EditQuoteForm({
     >
       {mode !== "totals" && (
         <>
-          {mode !== "target" && (
-            <p className="message warning">{it.quoteNotice}</p>
-          )}
+          <p className="message warning">{it.quoteNotice}</p>
           <ItemsEditor
             items={items}
             onChange={setItems}
@@ -2945,12 +2952,10 @@ export function EditQuoteForm({
             products={products}
             productCategories={productCategories}
             showEmptyPartSummary
-            initialEdit={initialEdit}
-            focusedEdit={mode === "target"}
           />
         </>
       )}
-      {mode !== "items" && mode !== "target" && (
+      {mode !== "items" && (
         <>
           {mode === "totals" && (
             <div className="quote-total">
@@ -3000,6 +3005,32 @@ export function EditQuoteForm({
           />
         </>
       )}
+    </ActionForm>
+  );
+}
+export function QuoteItemsDraftForm({
+  id,
+  items,
+  orderDiscount,
+  includeVat,
+}: {
+  id: string;
+  items: ItemView[];
+  orderDiscount: string;
+  includeVat: boolean;
+}) {
+  const it = useMessages();
+  return (
+    <ActionForm
+      className="quote-draft-save-form"
+      submit={it.save}
+      action={() => quoteAction(id, { items, orderDiscount, includeVat })}
+    >
+      <input
+        type="hidden"
+        name="quoteItemsDraft"
+        value={JSON.stringify(items)}
+      />
     </ActionForm>
   );
 }

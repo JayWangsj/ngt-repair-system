@@ -1206,6 +1206,24 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await expect(
     details.getByRole("button", { name: "Salva", exact: true }),
   ).toHaveCount(1);
+  await chooseBusinessOption(
+    page,
+    "Intervento 1",
+    "sostituzione display",
+    details,
+  );
+  await expect(
+    details.getByRole("combobox", { name: "Intervento 1", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    details.locator(".detail-repair-summary .selected-project-summary"),
+  ).toContainText("sostituzione display");
+  await expect(details).toHaveClass(/is-editing/);
+  await details.getByRole("button", { name: "Annulla", exact: true }).click();
+  await expect(details).not.toHaveClass(/is-editing/);
+  await expect(
+    details.locator(".detail-repair-summary .selected-project-summary"),
+  ).toContainText("Fotocamera");
   await details.locator(".selected-part-summary .summary-action").click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
@@ -1220,7 +1238,23 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
       exact: true,
     }),
   ).toBeFocused();
-  await page.keyboard.press("Escape");
+  await expect(details.locator(".quote-required-part-label")).toHaveCount(1);
+  await chooseBusinessOption(
+    page,
+    "Ricambio richiesto 1",
+    "Batteria Test",
+    details,
+  );
+  await expect(
+    details.getByRole("combobox", {
+      name: "Ricambio richiesto 1",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await expect(
+    details.locator(".detail-repair-summary .selected-part-summary"),
+  ).toContainText("Batteria Test");
+  await expect(details).toHaveClass(/is-editing/);
   await details
     .getByLabel("Note interne", { exact: true })
     .fill("Test salvataggio unico");

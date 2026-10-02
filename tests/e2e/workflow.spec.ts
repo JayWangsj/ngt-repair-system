@@ -489,8 +489,11 @@ test("creates and edits a product directly in the inventory row", async ({
     "transform",
     "none",
   );
+  const defaultBorderColor = await historyCard.evaluate(
+    (element) => getComputedStyle(element).borderColor,
+  );
   await historyCard.hover();
-  await expect(historyCard).toHaveCSS("border-color", "rgb(240, 164, 0)");
+  await expect(historyCard).toHaveCSS("border-color", defaultBorderColor);
   await expect
     .poll(() =>
       historyCard
@@ -505,6 +508,12 @@ test("creates and edits a product directly in the inventory row", async ({
         .evaluate((element) => getComputedStyle(element).animationDuration),
     )
     .toBe("0.9s");
+  await expect(
+    historyCard.locator(".inventory-history-border-flow rect"),
+  ).toHaveCSS("animation-iteration-count", "infinite");
+  await expect(
+    historyCard.locator(".inventory-history-border-flow rect"),
+  ).toHaveCSS("animation-timing-function", "linear");
   await expect
     .poll(() =>
       historyCard
@@ -527,7 +536,13 @@ test("creates and edits a product directly in the inventory row", async ({
         .locator(".inventory-history-border-flow rect")
         .evaluate((element) => getComputedStyle(element).animationDuration),
     )
-    .toBe("0.7s");
+    .toBe("1.4s");
+  await expect(
+    historyCard.locator(".inventory-history-title-underline"),
+  ).toHaveCSS("transition-duration", "0.26s");
+  await expect(
+    historyCard.locator(".inventory-history-title-underline"),
+  ).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
     "transform",
     "matrix(1, 0, 0, 1, 3, 0)",

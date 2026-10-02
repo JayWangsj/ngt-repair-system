@@ -5293,9 +5293,6 @@ summary.record-icon::-webkit-details-marker {
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition:
-    border-color 240ms ease-out,
-    box-shadow 240ms ease-out;
 }
 .inventory-history-border-flow {
   position: absolute;
@@ -5322,17 +5319,11 @@ summary.record-icon::-webkit-details-marker {
 @keyframes inventory-history-border-flow {
   0% {
     stroke-dashoffset: 100;
-    stroke-opacity: 0;
-  }
-  12% {
-    stroke-opacity: 0.95;
-  }
-  82% {
-    stroke-opacity: 0.85;
+    stroke-opacity: 0.82;
   }
   100% {
     stroke-dashoffset: 0;
-    stroke-opacity: 0;
+    stroke-opacity: 0.82;
   }
 }
 .inventory-history-card-heading {
@@ -5404,16 +5395,9 @@ summary.record-icon::-webkit-details-marker {
   display: block;
   margin-top: 18px;
 }
-.inventory-history-card:hover,
-.inventory-history-card:focus-visible {
-  border-color: #f0a400;
-  box-shadow:
-    0 0 0 1px rgb(240 164 0 / 28%),
-    0 8px 22px rgb(128 96 0 / 10%);
-}
 .inventory-history-card:hover .inventory-history-border-flow rect,
 .inventory-history-card:focus-visible .inventory-history-border-flow rect {
-  animation: inventory-history-border-flow 900ms ease-out 1;
+  animation: inventory-history-border-flow 900ms linear infinite;
 }
 .inventory-history-card:hover .inventory-history-title-underline,
 .inventory-history-card:focus-visible .inventory-history-title-underline {
@@ -5886,14 +5870,15 @@ summary.record-icon::-webkit-details-marker {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .inventory-history-card,
-  .inventory-history-title-underline,
   .inventory-history-arrow {
     transition: none;
   }
+  .inventory-history-title-underline {
+    transition: transform 260ms ease-out;
+  }
   .inventory-history-card:hover .inventory-history-border-flow rect,
   .inventory-history-card:focus-visible .inventory-history-border-flow rect {
-    animation-duration: 700ms;
+    animation-duration: 1400ms;
   }
   .inventory-history-card:hover .inventory-history-arrow,
   .inventory-history-card:focus-visible .inventory-history-arrow {

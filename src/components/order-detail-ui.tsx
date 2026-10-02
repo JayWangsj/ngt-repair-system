@@ -69,6 +69,7 @@ export function OrderDetailCard({
   const card = useRef<HTMLElement>(null);
   const heading = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
+  const wasExpanded = useRef(expanded);
   const saves = useRef(new Set<() => Promise<boolean>>());
   const [saving, setSaving] = useState(false);
   const editable = Boolean(edit) && !locked;
@@ -87,7 +88,9 @@ export function OrderDetailCard({
     return () => saves.current.delete(handler);
   }, []);
   useEffect(() => {
-    if (!expanded || editTarget) return;
+    const justExpanded = expanded && !wasExpanded.current;
+    wasExpanded.current = expanded;
+    if (!justExpanded) return;
     const frame = requestAnimationFrame(() => {
       if (!heading.current || !body.current) return;
       ensureComfortableInteractionSpace(heading.current, {
@@ -98,7 +101,7 @@ export function OrderDetailCard({
       });
     });
     return () => cancelAnimationFrame(frame);
-  }, [editTarget, editing, expanded]);
+  }, [expanded]);
   const saveAll = useCallback(async () => {
     for (const save of saves.current) if (!(await save())) return false;
     return true;

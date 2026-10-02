@@ -17,7 +17,7 @@ export default async function Prices() {
       ],
     }),
     db.product.findMany({
-      where: { enabled: true, usage: { in: ["REPAIR", "BOTH"] } },
+      where: { enabled: true, usage: "REPAIR" },
       select: { id: true, name: true, stockQuantity: true },
       orderBy: { name: "asc" },
     }),

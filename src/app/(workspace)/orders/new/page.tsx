@@ -47,7 +47,7 @@ export default async function NewOrder() {
       orderBy: { name: "asc" },
     }),
     db.product.findMany({
-      where: { enabled: true, usage: { in: ["REPAIR", "BOTH"] } },
+      where: { enabled: true, usage: "REPAIR" },
       select: { id: true, name: true, category: true, stockQuantity: true },
       orderBy: [{ favorite: "desc" }, { name: "asc" }],
     }),

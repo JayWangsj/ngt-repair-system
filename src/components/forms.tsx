@@ -314,7 +314,7 @@ export function ProductForm({
   onClose: () => void;
   mode: "inventory" | "retail";
   initialName?: string;
-  initialUsage?: "RETAIL" | "REPAIR" | "BOTH";
+  initialUsage?: "RETAIL" | "REPAIR";
   onCreated?: (product: CreatedProduct) => void;
   quickRepair?: boolean;
 }) {
@@ -324,7 +324,7 @@ export function ProductForm({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const [category, setCategory] = useState(quickRepair ? "Ricambi" : "");
-  const [usage, setUsage] = useState<"RETAIL" | "REPAIR" | "BOTH">(
+  const [usage, setUsage] = useState<"RETAIL" | "REPAIR">(
     quickRepair ? "REPAIR" : (initialUsage ?? "RETAIL"),
   );
   const [hiddenCategories, setHiddenCategories] = useState<string[]>([]);
@@ -431,7 +431,6 @@ export function ProductForm({
               options={[
                 { value: "RETAIL", label: it.inventory.retail },
                 { value: "REPAIR", label: it.inventory.repair },
-                { value: "BOTH", label: it.inventory.both },
               ]}
             />
           </Field>
@@ -1092,7 +1091,9 @@ export function ItemsEditor({
                         searchPlaceholder={it.searchInventoryPart}
                         emptyText={it.noMatches}
                         autoFocusQuery={
-                          editingPart ? selectedProduct?.name : undefined
+                          editingPart
+                            ? (selectedProduct?.name ?? "")
+                            : undefined
                         }
                         groups={[
                           ...(editingPart && selectedProduct

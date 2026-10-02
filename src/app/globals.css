@@ -5418,6 +5418,41 @@ summary.record-icon::-webkit-details-marker {
   min-width: 0;
   overflow: hidden;
 }
+.inventory-table {
+  min-width: 1400px;
+  overflow-anchor: none;
+}
+.inventory-table th,
+.inventory-table td {
+  padding-right: 14px;
+  padding-left: 14px;
+}
+.inventory-product-cell {
+  width: 22%;
+  min-width: 240px;
+}
+.inventory-category-cell {
+  width: 15%;
+  min-width: 180px;
+}
+.inventory-usage-cell {
+  width: 12%;
+  min-width: 145px;
+}
+.inventory-price-cell {
+  min-width: 95px;
+}
+.inventory-stepper-cell {
+  min-width: 130px;
+}
+.inventory-quantity-cell {
+  min-width: 82px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.inventory-status-cell {
+  min-width: 88px;
+}
 .inventory-table tbody tr {
   cursor: pointer;
 }
@@ -5428,7 +5463,7 @@ summary.record-icon::-webkit-details-marker {
 .inventory-table input,
 .inventory-table select {
   min-height: 32px;
-  max-width: 150px;
+  max-width: none;
   padding: 4px 7px;
   font-size: 11px;
 }
@@ -5436,6 +5471,16 @@ summary.record-icon::-webkit-details-marker {
   display: flex;
   align-items: center;
   gap: 5px;
+}
+.inventory-name-edit input {
+  width: 100%;
+  min-width: 180px;
+}
+.inventory-category-cell .business-select {
+  min-width: 170px;
+}
+.inventory-usage-cell .business-select {
+  min-width: 135px;
 }
 .favorite-toggle {
   border: 0;
@@ -5516,25 +5561,6 @@ summary.record-icon::-webkit-details-marker {
 .inventory-table tbody td:first-child input[type="checkbox"] {
   width: 18px;
   height: 18px;
-}
-.inventory-history {
-  margin-top: 5px;
-}
-.inventory-history summary {
-  min-height: 0;
-  padding: 2px 0;
-  color: var(--muted);
-  font-size: 11px;
-}
-.inventory-history ol {
-  display: grid;
-  gap: 5px;
-  min-width: 250px;
-  padding: 8px 0 0 18px;
-}
-.inventory-history li small {
-  display: block;
-  color: var(--muted);
 }
 .inventory-category-field {
   display: grid;

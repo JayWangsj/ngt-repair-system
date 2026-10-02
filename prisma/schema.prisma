@@ -48,7 +48,6 @@ enum RevenueSource {
 enum ProductUsage {
   RETAIL
   REPAIR
-  BOTH
 }
 
 enum InventoryMovementType {

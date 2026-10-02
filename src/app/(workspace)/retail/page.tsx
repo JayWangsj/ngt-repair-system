@@ -14,7 +14,7 @@ export default async function RetailPage({
   const query = await searchParams;
   const [products, categories, sales] = await Promise.all([
     db.product.findMany({
-      where: { enabled: true, usage: { in: ["RETAIL", "BOTH"] } },
+      where: { enabled: true, usage: "RETAIL" },
       orderBy: [{ favorite: "desc" }, { name: "asc" }],
     }),
     db.inventoryCategory.findMany({

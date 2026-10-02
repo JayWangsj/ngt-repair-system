@@ -32,14 +32,14 @@ export type ProductView = {
   id: string;
   name: string;
   category: string;
-  usage: "RETAIL" | "REPAIR" | "BOTH";
+  usage: "RETAIL" | "REPAIR";
   costPrice: number;
   salePrice: number;
   stockQuantity: number;
+  reservedQuantity: number;
   minStock: number;
   favorite: boolean;
   enabled: boolean;
-  history: { id: string; at: string; label: string }[];
 };
 
 type InventoryMovementView = {
@@ -243,21 +243,13 @@ export function InventoryWorkspace({
   const [batchMode, setBatchMode] = useState(false);
   const [checked, setChecked] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Record<string, ProductView>>({});
+  const draftsRef = useRef(drafts);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
-  const table = useRef<HTMLTableElement>(null);
   const categories = useMemo(
     () => [...new Set(products.map((product) => product.category))].sort(),
     [products],
   );
-  useEffect(() => {
-    function outside(event: PointerEvent) {
-      if (!table.current?.contains(event.target as Node))
-        requestAnimationFrame(() => setSelectedId(""));
-    }
-    document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
-  }, []);
   const filtered = useMemo(
     () =>
       products.filter((product) => {
@@ -278,31 +270,64 @@ export function InventoryWorkspace({
     [products, query, category, usage, status],
   );
   const usageLabel = (value: ProductView["usage"]) =>
-    value === "RETAIL"
-      ? it.inventory.retail
-      : value === "REPAIR"
-        ? it.inventory.repair
-        : it.inventory.both;
+    value === "RETAIL" ? it.inventory.retail : it.inventory.repair;
   const statusLabel = (value: ReturnType<typeof inventoryStatus>) =>
     value === "IN_STOCK"
       ? it.inventory.inStock
       : value === "LOW_STOCK"
         ? it.inventory.low
         : it.inventory.out;
-  function save(product: ProductView, changes: Partial<ProductView>) {
-    const next = { ...product, ...changes };
-    setDrafts((current) => ({ ...current, [product.id]: next }));
+  function updateDraft(product: ProductView, changes: Partial<ProductView>) {
+    const next = {
+      ...draftsRef.current,
+      [product.id]: {
+        ...(draftsRef.current[product.id] ?? product),
+        ...changes,
+      },
+    };
+    draftsRef.current = next;
+    setDrafts(next);
+  }
+  function restoreScroll(top: number) {
+    requestAnimationFrame(() => {
+      window.scrollTo({ top, behavior: "auto" });
+      requestAnimationFrame(() => window.scrollTo({ top, behavior: "auto" }));
+    });
+  }
+  function commit(productId: string, scrollTop = window.scrollY) {
+    const next = draftsRef.current[productId];
+    if (!next) return;
     setError("");
     startTransition(async () => {
-      const result = await updateProductAction(product.id, {
+      const result = await updateProductAction(productId, {
         ...next,
         costPrice: decimal(next.costPrice),
         salePrice: decimal(next.salePrice),
       });
-      if (!result.ok) return setError(result.error);
+      if (!result.ok) {
+        setSelectedId(productId);
+        return setError(result.error);
+      }
       router.refresh();
+      restoreScroll(scrollTop);
     });
   }
+  useEffect(() => {
+    function outside(event: PointerEvent) {
+      if (!selectedId) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest(`[data-inventory-product="${selectedId}"]`)) return;
+      const scrollTop = window.scrollY;
+      const active = document.activeElement;
+      if (active instanceof HTMLElement) active.blur();
+      commit(selectedId, scrollTop);
+      setSelectedId("");
+      restoreScroll(scrollTop);
+    }
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  });
   function removeSelected() {
     if (!checked.length || !window.confirm(it.deleteConfirm)) return;
     startTransition(async () => {
@@ -341,7 +366,6 @@ export function InventoryWorkspace({
             { value: "", label: it.inventory.allUsages },
             { value: "RETAIL", label: it.inventory.retail },
             { value: "REPAIR", label: it.inventory.repair },
-            { value: "BOTH", label: it.inventory.both },
           ]}
         />
         <SimpleSelect
@@ -414,7 +438,7 @@ export function InventoryWorkspace({
       {error && <p className="message error">{error}</p>}
       {filtered.length ? (
         <div className="table-scroll">
-          <table className="inventory-table" ref={table}>
+          <table className="inventory-table">
             <thead>
               <tr>
                 {batchMode && (
@@ -449,14 +473,28 @@ export function InventoryWorkspace({
                     />
                   </th>
                 )}
-                <th>{it.inventory.product}</th>
-                <th>{it.inventory.category}</th>
-                <th>{it.inventory.usage}</th>
-                <th className="numeric">{it.inventory.costPrice}</th>
-                <th className="numeric">{it.inventory.salePrice}</th>
-                <th>{it.inventory.currentStock}</th>
-                <th>{it.inventory.minimumStock}</th>
-                <th>{it.inventory.status}</th>
+                <th className="inventory-product-cell">
+                  {it.inventory.product}
+                </th>
+                <th className="inventory-category-cell">
+                  {it.inventory.category}
+                </th>
+                <th className="inventory-usage-cell">{it.inventory.usage}</th>
+                <th className="numeric inventory-price-cell">
+                  {it.inventory.costPrice}
+                </th>
+                <th className="numeric inventory-price-cell">
+                  {it.inventory.salePrice}
+                </th>
+                <th className="inventory-stepper-cell">
+                  {it.inventory.currentStock}
+                </th>
+                <th className="inventory-quantity-cell">{it.reservedStock}</th>
+                <th className="inventory-quantity-cell">{it.availableStock}</th>
+                <th className="inventory-stepper-cell">
+                  {it.inventory.minimumStock}
+                </th>
+                <th className="inventory-status-cell">{it.inventory.status}</th>
               </tr>
             </thead>
             <tbody>
@@ -471,7 +509,29 @@ export function InventoryWorkspace({
                   <tr
                     key={product.id}
                     className={selected ? "inventory-selected" : ""}
-                    onClick={() => !batchMode && setSelectedId(product.id)}
+                    data-inventory-product={product.id}
+                    onClick={() => {
+                      if (batchMode || selected) return;
+                      setSelectedId(product.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (
+                        !selected ||
+                        event.key !== "Enter" ||
+                        !(event.target instanceof HTMLInputElement) ||
+                        event.target.closest("[data-prevent-card-autosave]")
+                      )
+                        return;
+                      event.preventDefault();
+                      event.stopPropagation();
+                      const scrollTop = window.scrollY;
+                      event.target.blur();
+                      requestAnimationFrame(() => {
+                        commit(product.id, scrollTop);
+                        setSelectedId("");
+                        restoreScroll(scrollTop);
+                      });
+                    }}
                   >
                     {batchMode && (
                       <td className="inventory-selection">
@@ -489,7 +549,7 @@ export function InventoryWorkspace({
                         />
                       </td>
                     )}
-                    <td>
+                    <td className="inventory-product-cell">
                       {selected ? (
                         <div className="inventory-name-edit">
                           <button
@@ -497,7 +557,9 @@ export function InventoryWorkspace({
                             aria-label={it.inventory.favorite}
                             className="favorite-toggle"
                             onClick={() =>
-                              save(product, { favorite: !product.favorite })
+                              updateDraft(product, {
+                                favorite: !product.favorite,
+                              })
                             }
                           >
                             <Star
@@ -508,15 +570,10 @@ export function InventoryWorkspace({
                           <input
                             value={product.name}
                             onChange={(event) =>
-                              setDrafts((current) => ({
-                                ...current,
-                                [product.id]: {
-                                  ...product,
-                                  name: event.target.value,
-                                },
-                              }))
+                              updateDraft(product, {
+                                name: event.target.value,
+                              })
                             }
-                            onBlur={() => save(product, {})}
                           />
                         </div>
                       ) : (
@@ -527,28 +584,14 @@ export function InventoryWorkspace({
                           <strong>{product.name}</strong>
                         </span>
                       )}
-                      {product.history.length > 0 && (
-                        <details
-                          className="inventory-history"
-                          onClick={(event) => event.stopPropagation()}
-                        >
-                          <summary>{it.history}</summary>
-                          <ol>
-                            {product.history.slice(0, 20).map((entry) => (
-                              <li key={entry.id}>
-                                <span>{entry.label}</span>
-                                <small>{entry.at}</small>
-                              </li>
-                            ))}
-                          </ol>
-                        </details>
-                      )}
                     </td>
-                    <td>
+                    <td className="inventory-category-cell">
                       {selected ? (
                         <SearchableCombobox
                           value={product.category}
-                          onChange={(category) => save(product, { category })}
+                          onChange={(category) =>
+                            updateDraft(product, { category })
+                          }
                           groups={[
                             {
                               options: [
@@ -569,12 +612,12 @@ export function InventoryWorkspace({
                         product.category
                       )}
                     </td>
-                    <td>
+                    <td className="inventory-usage-cell">
                       {selected ? (
                         <SimpleSelect
                           value={product.usage}
                           onChange={(value) =>
-                            save(product, {
+                            updateDraft(product, {
                               usage: value as ProductView["usage"],
                             })
                           }
@@ -583,21 +626,20 @@ export function InventoryWorkspace({
                           options={[
                             { value: "RETAIL", label: it.inventory.retail },
                             { value: "REPAIR", label: it.inventory.repair },
-                            { value: "BOTH", label: it.inventory.both },
                           ]}
                         />
                       ) : (
                         usageLabel(product.usage)
                       )}
                     </td>
-                    <td className="numeric">
+                    <td className="numeric inventory-price-cell">
                       {selected ? (
                         <input
                           className="price-input"
                           inputMode="decimal"
                           defaultValue={decimal(product.costPrice)}
                           onBlur={(event) =>
-                            save(product, {
+                            updateDraft(product, {
                               costPrice: Math.round(
                                 Number(event.target.value.replace(",", ".")) *
                                   100,
@@ -609,7 +651,7 @@ export function InventoryWorkspace({
                         money(product.costPrice)
                       )}
                     </td>
-                    <td className="numeric">
+                    <td className="numeric inventory-price-cell">
                       {product.usage === "REPAIR" ? (
                         "—"
                       ) : selected ? (
@@ -618,7 +660,7 @@ export function InventoryWorkspace({
                           inputMode="decimal"
                           defaultValue={decimal(product.salePrice)}
                           onBlur={(event) =>
-                            save(product, {
+                            updateDraft(product, {
                               salePrice: Math.round(
                                 Number(event.target.value.replace(",", ".")) *
                                   100,
@@ -630,31 +672,42 @@ export function InventoryWorkspace({
                         money(product.salePrice)
                       )}
                     </td>
-                    <td>
+                    <td className="inventory-stepper-cell">
                       {selected ? (
                         <StockEditor
                           value={product.stockQuantity}
                           label={it.inventory.currentStock}
                           onSave={(value) =>
-                            save(product, { stockQuantity: value })
+                            updateDraft(product, { stockQuantity: value })
                           }
                         />
                       ) : (
                         product.stockQuantity
                       )}
                     </td>
-                    <td>
+                    <td className="inventory-quantity-cell">
+                      {product.reservedQuantity}
+                    </td>
+                    <td className="inventory-quantity-cell">
+                      {Math.max(
+                        0,
+                        product.stockQuantity - product.reservedQuantity,
+                      )}
+                    </td>
+                    <td className="inventory-stepper-cell">
                       {selected ? (
                         <StockEditor
                           value={product.minStock}
                           label={it.inventory.minimumStock}
-                          onSave={(value) => save(product, { minStock: value })}
+                          onSave={(value) =>
+                            updateDraft(product, { minStock: value })
+                          }
                         />
                       ) : (
                         product.minStock
                       )}
                     </td>
-                    <td>
+                    <td className="inventory-status-cell">
                       <span
                         className={`stock-badge stock-${productStatus.toLowerCase()}`}
                       >

@@ -20,26 +20,33 @@ import {
 export default async function InventoryPage() {
   await requireActor();
   const it = await getMessages();
-  const [products, categories, audits, movements] = await Promise.all([
+  const [products, categories, movements, reservations] = await Promise.all([
     db.product.findMany({
       where: { enabled: true },
-      include: { movements: { orderBy: { createdAt: "desc" }, take: 20 } },
       orderBy: [{ favorite: "desc" }, { name: "asc" }],
     }),
     db.inventoryCategory.findMany({
       where: { deletedAt: null },
       orderBy: { name: "asc" },
     }),
-    db.auditLog.findMany({
-      where: { action: "PRODUCT_UPDATED" },
-      orderBy: { createdAt: "desc" },
-    }),
     db.inventoryMovement.findMany({
       include: { product: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
       take: 50,
     }),
+    db.workOrderProduct.groupBy({
+      by: ["productId"],
+      where: {
+        kind: "REPAIR_PART",
+        consumedAt: null,
+        order: { status: { notIn: ["COMPLETED", "REFUNDED", "CANCELLED"] } },
+      },
+      _sum: { quantity: true },
+    }),
   ]);
+  const reservedByProduct = new Map(
+    reservations.map((entry) => [entry.productId, entry._sum.quantity ?? 0]),
+  );
   const productViews: ProductView[] = products.map((product) => ({
     id: product.id,
     name: product.name,
@@ -48,32 +55,10 @@ export default async function InventoryPage() {
     costPrice: cents(product.costPrice),
     salePrice: cents(product.salePrice),
     stockQuantity: product.stockQuantity,
+    reservedQuantity: reservedByProduct.get(product.id) ?? 0,
     minStock: product.minStock,
     favorite: product.favorite,
     enabled: product.enabled,
-    history: [
-      ...product.movements.map((movement) => ({
-        id: movement.id,
-        at: dateTime(movement.createdAt),
-        label: `${movement.quantity > 0 ? "+" : ""}${movement.quantity} · ${movement.stockBefore} → ${movement.stockAfter}`,
-      })),
-      ...audits
-        .filter((audit) => audit.entityId === product.id)
-        .flatMap((audit) => {
-          const context = audit.context as {
-            before?: { costPrice?: string; salePrice?: string };
-            after?: { costPrice?: string; salePrice?: string };
-          };
-          if (!context.before || !context.after) return [];
-          return [
-            {
-              id: audit.id,
-              at: dateTime(audit.createdAt),
-              label: `${it.inventory.costPrice}: ${context.before.costPrice} → ${context.after.costPrice} · ${it.inventory.salePrice}: ${context.before.salePrice} → ${context.after.salePrice}`,
-            },
-          ];
-        }),
-    ],
   }));
   const enabled = productViews.filter((product) => product.enabled);
   const metrics = [

@@ -227,6 +227,11 @@ test("inputs and expanding controls scroll only when interaction space is tight"
 
   await customer.evaluate((element) => (element as HTMLElement).blur());
   await page.setViewportSize({ width: 1280, height: 450 });
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await customer.click();
+  await page.waitForTimeout(250);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  await customer.evaluate((element) => (element as HTMLElement).blur());
   await customer.focus();
   await expect
     .poll(() => page.evaluate(() => window.scrollY))
@@ -438,7 +443,7 @@ test("creates and edits a product directly in the inventory row", async ({
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Prodotto", { exact: true }).fill(productName);
   await chooseBusinessOption(page, "Categoria", "Ricarica", dialog);
-  await chooseBusinessOption(page, "Utilizzo", "Vendita e riparazione", dialog);
+  await chooseBusinessOption(page, "Utilizzo", "Vendita", dialog);
   await dialog.getByLabel("Costo", { exact: true }).fill("4.50");
   await dialog.getByLabel("Prezzo", { exact: true }).fill("12");
   const initialStock = dialog.getByLabel("Scorta iniziale", { exact: true });
@@ -467,15 +472,26 @@ test("creates and edits a product directly in the inventory row", async ({
   await dialog.getByRole("button", { name: "Salva prodotto" }).click();
 
   const row = page.getByRole("row", { name: new RegExp(productName) });
-  await expect(row).toContainText("Vendita e riparazione");
+  await expect(row).toContainText("Vendita");
   await expect(row).toContainText("4");
+  await expect(row.getByText("Cronologia", { exact: true })).toHaveCount(0);
+  await expect(row.locator(".inventory-quantity-cell")).toHaveText(["0", "4"]);
+  await expect(row.locator(".inventory-quantity-cell input")).toHaveCount(0);
   await row.click();
   await row.getByLabel("+ Disponibilità").click();
+  await row.getByLabel("+ Disponibilità").click();
   await expect(row.getByLabel("Disponibilità", { exact: true })).toHaveValue(
-    "5",
+    "6",
   );
+  await expect(row.locator(".inventory-quantity-cell")).toHaveText(["0", "6"]);
   await row.getByLabel("Prodotto frequente", { exact: true }).click();
   const historyCard = page.locator(".inventory-history-card");
+  await expect(historyCard).toContainText("0 → 4");
+  const inventoryScroll = await page.evaluate(() => window.scrollY);
+  await row.getByLabel("Disponibilità", { exact: true }).press("Enter");
+  await expect(row.getByLabel("Disponibilità", { exact: true })).toHaveCount(0);
+  await expect(historyCard).toContainText("4 → 6");
+  expect(await page.evaluate(() => window.scrollY)).toBe(inventoryScroll);
   await expect(historyCard).toContainText(productName);
   await expect(historyCard).toHaveCSS("cursor", "pointer");
   await expect
@@ -566,7 +582,10 @@ test("creates and edits a product directly in the inventory row", async ({
     name: "Registro magazzino",
   });
   await expect(movementDialog).toContainText(productName);
-  await expect(movementDialog).toContainText("4 → 5");
+  await expect(movementDialog).toContainText("4 → 6");
+  await expect(
+    movementDialog.locator(".movement-row").filter({ hasText: productName }),
+  ).toHaveCount(2);
   await movementDialog.getByRole("button", { name: "Chiudi" }).click();
 
   await manageBatch.click();
@@ -1011,6 +1030,14 @@ test("diagnostic order saves faults, date and quote in one progressive flow", as
   await expect(details.locator(".selected-part-summary")).toContainText(
     "Nessuno",
   );
+  await details.locator(".selected-part-summary .summary-action").click();
+  await expect(
+    details.getByRole("combobox", {
+      name: "Ricambio richiesto 1",
+      exact: true,
+    }),
+  ).toBeFocused();
+  await details.getByRole("button", { name: "Annulla", exact: true }).click();
   await quote.locator(".order-card-heading").click();
   await expect(quote).toContainText("Costo diagnosi (IVA esclusa)");
   const history = page.getByTestId("history-card");

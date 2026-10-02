@@ -158,7 +158,7 @@ export const productInput = z.object({
   requestId: z.string().uuid(),
   name: short,
   category: short,
-  usage: z.enum(["RETAIL", "REPAIR", "BOTH"]),
+  usage: z.enum(["RETAIL", "REPAIR"]),
   costPrice: amountInput,
   salePrice: amountInput,
   initialStock: z.coerce.number().int().min(0).max(1_000_000).default(0),
@@ -169,7 +169,7 @@ export const productInput = z.object({
 export const productUpdateInput = z.object({
   name: short,
   category: short,
-  usage: z.enum(["RETAIL", "REPAIR", "BOTH"]),
+  usage: z.enum(["RETAIL", "REPAIR"]),
   costPrice: amountInput,
   salePrice: amountInput,
   stockQuantity: z.coerce.number().int().min(0).max(1_000_000),

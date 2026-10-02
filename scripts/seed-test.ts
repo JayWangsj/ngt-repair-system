@@ -91,7 +91,7 @@ async function main() {
     {
       name: "Cavo USB-C Test",
       category: "Ricarica",
-      usage: "BOTH" as const,
+      usage: "RETAIL" as const,
       costPrice: "4.00",
       salePrice: "12.00",
       stockQuantity: 10,

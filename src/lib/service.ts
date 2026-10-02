@@ -1718,12 +1718,7 @@ export async function addWorkOrderProduct(
       where: {
         id: data.productId,
         enabled: true,
-        usage: {
-          in:
-            data.kind === "REPAIR_PART"
-              ? ["REPAIR", "BOTH"]
-              : ["RETAIL", "BOTH"],
-        },
+        usage: data.kind === "REPAIR_PART" ? "REPAIR" : "RETAIL",
       },
     });
     if (!product) throw new BusinessError("Prodotto non disponibile.");
@@ -2105,7 +2100,7 @@ export async function openAfterSales(
         where: {
           id: reworkItem.requiredProductId,
           enabled: true,
-          usage: { in: ["REPAIR", "BOTH"] },
+          usage: "REPAIR",
         },
       });
       if (!product) throw new BusinessError("Ricambio non disponibile.");
@@ -2202,7 +2197,7 @@ export async function updateReworkPart(
         where: {
           id: data.productId,
           enabled: true,
-          usage: { in: ["REPAIR", "BOTH"] },
+          usage: "REPAIR",
         },
       });
       if (!product) throw new BusinessError("Ricambio non disponibile.");
@@ -2350,7 +2345,7 @@ export async function createRetailSale(actorInput: Actor, raw: unknown) {
       where: {
         id: { in: [...uniqueItems.keys()] },
         enabled: true,
-        usage: { in: ["RETAIL", "BOTH"] },
+        usage: "RETAIL",
       },
     });
     if (products.length !== uniqueItems.size)

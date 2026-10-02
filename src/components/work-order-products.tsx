@@ -26,7 +26,7 @@ type ProductOption = {
   id: string;
   name: string;
   category: string;
-  usage: "RETAIL" | "REPAIR" | "BOTH";
+  usage: "RETAIL" | "REPAIR";
   salePrice: string;
   stock: number;
   reserved: number;

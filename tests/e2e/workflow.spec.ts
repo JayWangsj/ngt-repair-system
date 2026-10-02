@@ -212,6 +212,52 @@ test("new repair uses a single selected accordion step", async ({ page }) => {
   expect(actionGap).toBeGreaterThanOrEqual(20);
 });
 
+test("inputs and expanding controls scroll only when interaction space is tight", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/orders/new");
+  const customer = page.getByRole("combobox", {
+    name: "Cerca cliente",
+    exact: true,
+  });
+  await customer.focus();
+  await page.waitForTimeout(250);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+  await customer.evaluate((element) => (element as HTMLElement).blur());
+  await page.setViewportSize({ width: 1280, height: 450 });
+  await customer.focus();
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY))
+    .toBeGreaterThan(0);
+  const customerTop = await customer.evaluate(
+    (element) => element.getBoundingClientRect().top,
+  );
+  expect(customerTop).toBeGreaterThanOrEqual(130);
+  expect(customerTop).toBeLessThanOrEqual(210);
+
+  const paymentHeading = page
+    .locator(".order-step-card")
+    .nth(3)
+    .locator(".order-step-heading");
+  await paymentHeading.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    window.scrollBy({ top: box.bottom - window.innerHeight + 8 });
+  });
+  await paymentHeading.evaluate((element) => (element as HTMLElement).click());
+  await expect
+    .poll(() =>
+      paymentHeading.evaluate((element) => element.getBoundingClientRect().top),
+    )
+    .toBeGreaterThan(120);
+  expect(
+    await paymentHeading.evaluate(
+      (element) => element.getBoundingClientRect().top,
+    ),
+  ).toBeLessThan(230);
+});
+
 test("device step gates faults and advances only after faults and due date", async ({
   page,
 }) => {

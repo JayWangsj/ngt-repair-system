@@ -21,6 +21,10 @@ import { useMessages } from "./language";
 import { Field, FormDialog } from "./forms";
 import { WorkOrderCheckoutDialog } from "./work-order-products";
 import { Button } from "./ui/button";
+import {
+  ensureComfortableInteractionSpace,
+  focusComfortably,
+} from "@/lib/comfortable-scroll";
 
 type Option = { value: OrderStatus; label: string };
 
@@ -43,6 +47,15 @@ function StatusSelect({
   const menu = useRef<HTMLDivElement>(null);
   const menuId = useId();
   const interactive = !disabled && options.length > 0;
+  const estimatedMenuHeight = Math.min(320, Math.max(48, options.length * 42));
+  function openMenu() {
+    if (!interactive) return;
+    if (trigger.current)
+      ensureComfortableInteractionSpace(trigger.current, {
+        spaceBelow: estimatedMenuHeight,
+      });
+    setOpen(true);
+  }
   function place() {
     const rect = trigger.current?.getBoundingClientRect();
     if (rect)
@@ -72,9 +85,11 @@ function StatusSelect({
     if (!interactive) return;
     if (["ArrowDown", "Enter", " "].includes(event.key)) {
       event.preventDefault();
-      setOpen(true);
+      openMenu();
       requestAnimationFrame(() =>
-        menu.current?.querySelector<HTMLButtonElement>("button")?.focus(),
+        focusComfortably(
+          menu.current?.querySelector<HTMLButtonElement>("button") ?? null,
+        ),
       );
     }
   }
@@ -93,7 +108,11 @@ function StatusSelect({
         aria-haspopup="listbox"
         aria-controls={interactive ? menuId : undefined}
         disabled={disabled}
-        onClick={() => interactive && setOpen((current) => !current)}
+        onClick={() => {
+          if (!interactive) return;
+          if (open) setOpen(false);
+          else openMenu();
+        }}
         onKeyDown={keyboard}
       >
         <span className="status-dropdown-dot" aria-hidden="true" />
@@ -119,7 +138,7 @@ function StatusSelect({
             onKeyDown={(event) => {
               if (event.key === "Escape") {
                 setOpen(false);
-                trigger.current?.focus();
+                focusComfortably(trigger.current);
               }
             }}
           >

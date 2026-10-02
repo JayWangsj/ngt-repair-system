@@ -90,6 +90,7 @@ import {
   createProductAction,
   deleteInventoryCategoryAction,
 } from "@/app/actions";
+import { focusComfortably } from "@/lib/comfortable-scroll";
 
 export type RuleView = {
   id: string;
@@ -327,10 +328,16 @@ export function ProductForm({
     quickRepair ? "REPAIR" : (initialUsage ?? "RETAIL"),
   );
   const [hiddenCategories, setHiddenCategories] = useState<string[]>([]);
+  const nameInput = useRef<HTMLInputElement>(null);
   const costInput = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    if (!quickRepair || !initialName) return;
-    const frame = requestAnimationFrame(() => costInput.current?.focus());
+    const target = !quickRepair
+      ? nameInput.current
+      : initialName
+        ? costInput.current
+        : null;
+    if (!target) return;
+    const frame = requestAnimationFrame(() => focusComfortably(target));
     return () => cancelAnimationFrame(frame);
   }, [initialName, quickRepair]);
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -386,10 +393,10 @@ export function ProductForm({
       <div className="form-grid">
         <Field label={it.inventory.product}>
           <input
+            ref={nameInput}
             name="name"
             required
             maxLength={120}
-            autoFocus={!quickRepair}
             defaultValue={initialName}
           />
         </Field>
@@ -436,7 +443,6 @@ export function ProductForm({
             inputMode="decimal"
             defaultValue="0"
             required
-            autoFocus={quickRepair && Boolean(initialName)}
           />
         </Field>
         {(mode === "retail" || usage !== "REPAIR") && (
@@ -573,6 +579,16 @@ export function ItemsEditor({
     Record<number, ItemView[]>
   >({});
   const priceInputs = useRef<Record<number, HTMLInputElement | null>>({});
+  useEffect(() => {
+    const index = Object.entries(editingPrices).find(
+      ([, active]) => active,
+    )?.[0];
+    if (index === undefined) return;
+    const frame = requestAnimationFrame(() =>
+      focusComfortably(priceInputs.current[Number(index)]),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [editingPrices]);
   const deviceKey = [
     device.category,
     device.brand,
@@ -762,7 +778,9 @@ export function ItemsEditor({
                   {editingPrices[index] ? (
                     <div className="quote-summary-price-field">
                       <input
-                        autoFocus
+                        ref={(element) => {
+                          priceInputs.current[index] = element;
+                        }}
                         className="quote-summary-price"
                         aria-label={`${it.final} ${index + 1}`}
                         inputMode="decimal"
@@ -912,7 +930,7 @@ export function ItemsEditor({
                       [index]: project,
                     }));
                     requestAnimationFrame(() =>
-                      priceInputs.current[index]?.focus(),
+                      focusComfortably(priceInputs.current[index]),
                     );
                   }}
                   onChange={(project) => {
@@ -953,8 +971,9 @@ export function ItemsEditor({
                         }));
                     }
                     requestAnimationFrame(() => {
-                      priceInputs.current[index]?.focus();
-                      priceInputs.current[index]?.select();
+                      focusComfortably(priceInputs.current[index], {
+                        select: true,
+                      });
                     });
                   }}
                 />
@@ -3713,7 +3732,7 @@ export function FormDialog({
     return () => {
       element?.close();
       document.body.style.overflow = overflow;
-      previous?.focus();
+      focusComfortably(previous);
     };
   }, []);
   if (typeof document === "undefined") return null;

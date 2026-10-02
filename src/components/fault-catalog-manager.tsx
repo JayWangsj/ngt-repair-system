@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, GripVertical, Plus, Search, Trash2 } from "lucide-react";
 import {
@@ -12,6 +12,7 @@ import { categories, type Category } from "@/lib/catalog";
 import { useLanguage, useMessages } from "./language";
 import { FormDialog } from "./forms";
 import { Button } from "./ui/button";
+import { focusComfortably } from "@/lib/comfortable-scroll";
 
 export type FaultCatalogItem = {
   id: string;
@@ -88,6 +89,14 @@ export function FaultCatalogManager({
   const [dragId, setDragId] = useState("");
   const savingName = useRef(false);
   const cancellingName = useRef(false);
+  const editingInput = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!editingId) return;
+    const frame = requestAnimationFrame(() =>
+      focusComfortably(editingInput.current, { select: true }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [editingId]);
   const searchRequest = useRef(0);
   const scoped = useMemo(
     () =>
@@ -356,8 +365,8 @@ export function FaultCatalogManager({
                   </span>
                   {editingId === item.id ? (
                     <input
+                      ref={editingInput}
                       className="fault-inline-name"
-                      autoFocus
                       maxLength={120}
                       value={editingName}
                       onChange={(event) => setEditingName(event.target.value)}

@@ -53,6 +53,10 @@ import { type FaultCatalogItem } from "./fault-catalog-manager";
 import { FaultSelector } from "./fault-selector";
 import { useLanguage, useMessages } from "./language";
 import { Button } from "./ui/button";
+import {
+  ensureComfortableInteractionSpace,
+  focusComfortably,
+} from "@/lib/comfortable-scroll";
 
 type CustomerOption = {
   id: string;
@@ -113,6 +117,21 @@ function StepCard({
   children: React.ReactNode;
 }) {
   const it = useMessages();
+  const heading = useRef<HTMLButtonElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!expanded) return;
+    const frame = requestAnimationFrame(() => {
+      if (!heading.current || !body.current) return;
+      ensureComfortableInteractionSpace(heading.current, {
+        spaceBelow: Math.min(
+          body.current.scrollHeight,
+          window.innerHeight * 0.55,
+        ),
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [expanded]);
   const label =
     state === "completed"
       ? it.stepComplete
@@ -124,6 +143,7 @@ function StepCard({
       className={`panel order-step-card is-${state} ${selected ? "is-selected" : ""}`}
     >
       <button
+        ref={heading}
         type="button"
         className="order-step-heading"
         onClick={onToggle}
@@ -147,7 +167,9 @@ function StepCard({
         aria-hidden={!expanded}
         inert={!expanded || undefined}
       >
-        <div className="order-step-body">{children}</div>
+        <div ref={body} className="order-step-body">
+          {children}
+        </div>
       </div>
     </section>
   );
@@ -511,8 +533,7 @@ export function NewOrderWizard({
         newCustomerFocus.current === "name"
           ? newCustomerNameInput.current
           : newCustomerPhoneInput.current;
-      input?.focus();
-      input?.select();
+      focusComfortably(input, { select: true });
     });
     return () => cancelAnimationFrame(frame);
   }, [newCustomer]);

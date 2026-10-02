@@ -20,6 +20,7 @@ import {
   type AfterSalesProject,
 } from "./forms";
 import { useMessages } from "./language";
+import { ensureComfortableInteractionSpace } from "@/lib/comfortable-scroll";
 
 export type OrderDetailEditTarget = {
   kind: "repair";
@@ -66,6 +67,8 @@ export function OrderDetailCard({
     null,
   );
   const card = useRef<HTMLElement>(null);
+  const heading = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
   const saves = useRef(new Set<() => Promise<boolean>>());
   const [saving, setSaving] = useState(false);
   const editable = Boolean(edit) && !locked;
@@ -83,6 +86,19 @@ export function OrderDetailCard({
     saves.current.add(handler);
     return () => saves.current.delete(handler);
   }, []);
+  useEffect(() => {
+    if (!expanded || editTarget) return;
+    const frame = requestAnimationFrame(() => {
+      if (!heading.current || !body.current) return;
+      ensureComfortableInteractionSpace(heading.current, {
+        spaceBelow: Math.min(
+          body.current.scrollHeight,
+          window.innerHeight * 0.55,
+        ),
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [editTarget, editing, expanded]);
   const saveAll = useCallback(async () => {
     for (const save of saves.current) if (!(await save())) return false;
     return true;
@@ -173,6 +189,7 @@ export function OrderDetailCard({
         data-testid={testId}
       >
         <div
+          ref={heading}
           className="order-card-heading"
           role="button"
           tabIndex={0}
@@ -215,7 +232,7 @@ export function OrderDetailCard({
           aria-hidden={!expanded}
           inert={!expanded || undefined}
         >
-          <div className="order-card-body">
+          <div ref={body} className="order-card-body">
             {editing ? (
               <FormAutoSaveContext.Provider value={registerSave}>
                 <FormCloseContext.Provider value={closeEdit}>

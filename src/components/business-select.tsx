@@ -14,6 +14,10 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useMessages } from "./language";
+import {
+  ensureComfortableInteractionSpace,
+  focusComfortably,
+} from "@/lib/comfortable-scroll";
 
 export type SelectOption = {
   value: string;
@@ -136,6 +140,7 @@ export function SelectDropdown({
   const simpleTrigger = useRef<HTMLButtonElement>(null);
   const closingTimer = useRef<number | null>(null);
   const initialFocusApplied = useRef(false);
+  const openFocusApplied = useRef(false);
   const id = useId();
   const optionId = (index: number) => `${id}-option-${index}`;
   const { trigger, panel, position } = useDropdown(present);
@@ -168,6 +173,13 @@ export function SelectDropdown({
   const showCreationControls =
     creationControls === "always" ||
     (!!trimmedQuery && !loading && visible.length === 0);
+  const estimatedPanelHeight = Math.min(
+    340,
+    Math.max(
+      52,
+      visible.length * 42 + filtered.filter((group) => group.label).length * 26,
+    ),
+  );
 
   const close = useCallback(
     ({
@@ -183,7 +195,7 @@ export function SelectDropdown({
       closingTimer.current = window.setTimeout(() => setPresent(false), 180);
       if (focus)
         requestAnimationFrame(() =>
-          searchable ? search.current?.focus() : simpleTrigger.current?.focus(),
+          focusComfortably(searchable ? search.current : simpleTrigger.current),
         );
     },
     [onClose, onCommit, preserveQueryOnClose, query, searchable],
@@ -191,6 +203,9 @@ export function SelectDropdown({
   function openDropdown() {
     const element = trigger.current;
     if (!element || disabled) return;
+    ensureComfortableInteractionSpace(element, {
+      spaceBelow: estimatedPanelHeight,
+    });
     if (closingTimer.current) window.clearTimeout(closingTimer.current);
     setPortalTarget(element.closest("dialog") ?? document.body);
     setPresent(true);
@@ -203,7 +218,7 @@ export function SelectDropdown({
     onChange?.(option.value);
     close({ commit: false });
     if (searchable) search.current?.blur();
-    else requestAnimationFrame(() => simpleTrigger.current?.focus());
+    else requestAnimationFrame(() => focusComfortably(simpleTrigger.current));
   }
   function move(event: KeyboardEvent, delta: number) {
     event.preventDefault();
@@ -275,9 +290,18 @@ export function SelectDropdown({
     return () => document.removeEventListener("pointerdown", outside);
   }, [close, open, panel, trigger]);
   useEffect(() => {
-    if (open && searchable)
-      requestAnimationFrame(() => search.current?.focus());
-  }, [open, searchable]);
+    if (!open) {
+      openFocusApplied.current = false;
+      return;
+    }
+    if (!searchable || openFocusApplied.current) return;
+    openFocusApplied.current = true;
+    requestAnimationFrame(() =>
+      focusComfortably(search.current, {
+        spaceBelow: estimatedPanelHeight,
+      }),
+    );
+  }, [estimatedPanelHeight, open, searchable]);
   useEffect(() => {
     if (
       !searchable ||
@@ -289,6 +313,7 @@ export function SelectDropdown({
       const element = trigger.current;
       if (!element || disabled) return;
       initialFocusApplied.current = true;
+      openFocusApplied.current = true;
       if (closingTimer.current) window.clearTimeout(closingTimer.current);
       setPortalTarget(element.closest("dialog") ?? document.body);
       setQuery(autoFocusQuery);
@@ -297,12 +322,21 @@ export function SelectDropdown({
       setPresent(true);
       setOpen(true);
       requestAnimationFrame(() => {
-        search.current?.focus();
-        search.current?.select();
+        focusComfortably(search.current, {
+          spaceBelow: estimatedPanelHeight,
+          select: true,
+        });
       });
     });
     return () => cancelAnimationFrame(frame);
-  }, [autoFocusQuery, disabled, onQueryChange, searchable, trigger]);
+  }, [
+    autoFocusQuery,
+    disabled,
+    estimatedPanelHeight,
+    onQueryChange,
+    searchable,
+    trigger,
+  ]);
   useEffect(
     () => () => {
       if (closingTimer.current) window.clearTimeout(closingTimer.current);
@@ -342,6 +376,7 @@ export function SelectDropdown({
               aria-controls={id}
               aria-autocomplete="list"
               aria-activedescendant={activeDescendant}
+              data-comfortable-expansion={estimatedPanelHeight}
               disabled={disabled}
               onChange={(event) => {
                 const next = event.target.value;
@@ -374,7 +409,7 @@ export function SelectDropdown({
                   setPresent(false);
                   onQueryChange?.("");
                   onChange?.("");
-                  requestAnimationFrame(() => search.current?.focus());
+                  requestAnimationFrame(() => focusComfortably(search.current));
                 }}
               >
                 <X size={14} aria-hidden="true" />
@@ -426,6 +461,7 @@ export function SelectDropdown({
           aria-expanded={open}
           aria-haspopup="listbox"
           aria-controls={id}
+          data-comfortable-expansion={estimatedPanelHeight}
           disabled={disabled}
           onClick={() => {
             if (open) close();

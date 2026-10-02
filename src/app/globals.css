@@ -5297,40 +5297,42 @@ summary.record-icon::-webkit-details-marker {
     border-color 240ms ease-out,
     box-shadow 240ms ease-out;
 }
-.inventory-history-card::before {
+.inventory-history-border-flow {
   position: absolute;
-  inset: -1px;
-  z-index: 1;
-  border: 1px solid transparent;
-  border-radius: inherit;
-  background: conic-gradient(
-      from -35deg,
-      transparent 0deg 294deg,
-      rgb(240 164 0 / 20%) 318deg,
-      rgb(240 164 0 / 88%) 338deg,
-      transparent 360deg
-    )
-    border-box;
-  content: "";
-  opacity: 0;
+  inset: 0;
+  z-index: 2;
   pointer-events: none;
-  -webkit-mask:
-    linear-gradient(#000 0 0) padding-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
 }
-@keyframes inventory-history-border-sweep {
+.inventory-history-border-flow svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.inventory-history-border-flow rect {
+  fill: none;
+  stroke: #f5aa00;
+  stroke-dasharray: 16 84;
+  stroke-dashoffset: 100;
+  stroke-linecap: round;
+  stroke-opacity: 0;
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+@keyframes inventory-history-border-flow {
   0% {
-    opacity: 0;
-    transform: rotate(0deg);
+    stroke-dashoffset: 100;
+    stroke-opacity: 0;
   }
-  18% {
-    opacity: 0.68;
+  12% {
+    stroke-opacity: 0.95;
+  }
+  82% {
+    stroke-opacity: 0.85;
   }
   100% {
-    opacity: 0;
-    transform: rotate(360deg);
+    stroke-dashoffset: 0;
+    stroke-opacity: 0;
   }
 }
 .inventory-history-card-heading {
@@ -5346,7 +5348,7 @@ summary.record-icon::-webkit-details-marker {
   position: relative;
   width: max-content;
 }
-.inventory-history-title::after {
+.inventory-history-title-underline {
   position: absolute;
   right: 0;
   bottom: -4px;
@@ -5354,7 +5356,6 @@ summary.record-icon::-webkit-details-marker {
   height: 2px;
   border-radius: 999px;
   background: #f0a400;
-  content: "";
   transform: scaleX(0);
   transform-origin: left center;
   transition: transform 240ms ease-out;
@@ -5410,12 +5411,12 @@ summary.record-icon::-webkit-details-marker {
     0 0 0 1px rgb(240 164 0 / 28%),
     0 8px 22px rgb(128 96 0 / 10%);
 }
-.inventory-history-card:hover::before,
-.inventory-history-card:focus-visible::before {
-  animation: inventory-history-border-sweep 650ms ease-out 1;
+.inventory-history-card:hover .inventory-history-border-flow rect,
+.inventory-history-card:focus-visible .inventory-history-border-flow rect {
+  animation: inventory-history-border-flow 900ms ease-out 1;
 }
-.inventory-history-card:hover .inventory-history-title::after,
-.inventory-history-card:focus-visible .inventory-history-title::after {
+.inventory-history-card:hover .inventory-history-title-underline,
+.inventory-history-card:focus-visible .inventory-history-title-underline {
   transform: scaleX(1);
 }
 .inventory-history-card:hover .inventory-history-arrow,
@@ -5886,13 +5887,13 @@ summary.record-icon::-webkit-details-marker {
 }
 @media (prefers-reduced-motion: reduce) {
   .inventory-history-card,
-  .inventory-history-title::after,
+  .inventory-history-title-underline,
   .inventory-history-arrow {
     transition: none;
   }
-  .inventory-history-card::before {
-    animation: none !important;
-    opacity: 0;
+  .inventory-history-card:hover .inventory-history-border-flow rect,
+  .inventory-history-card:focus-visible .inventory-history-border-flow rect {
+    animation-duration: 700ms;
   }
   .inventory-history-card:hover .inventory-history-arrow,
   .inventory-history-card:focus-visible .inventory-history-arrow {

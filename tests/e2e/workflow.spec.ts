@@ -481,8 +481,8 @@ test("creates and edits a product directly in the inventory row", async ({
   await expect
     .poll(() =>
       historyCard
-        .locator(".inventory-history-title")
-        .evaluate((element) => getComputedStyle(element, "::after").transform),
+        .locator(".inventory-history-title-underline")
+        .evaluate((element) => getComputedStyle(element).transform),
     )
     .toBe("matrix(0, 0, 0, 1, 0, 0)");
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
@@ -493,23 +493,23 @@ test("creates and edits a product directly in the inventory row", async ({
   await expect(historyCard).toHaveCSS("border-color", "rgb(240, 164, 0)");
   await expect
     .poll(() =>
-      historyCard.evaluate(
-        (element) => getComputedStyle(element, "::before").animationName,
-      ),
+      historyCard
+        .locator(".inventory-history-border-flow rect")
+        .evaluate((element) => getComputedStyle(element).animationName),
     )
-    .toBe("inventory-history-border-sweep");
-  await expect
-    .poll(() =>
-      historyCard.evaluate(
-        (element) => getComputedStyle(element, "::before").animationDuration,
-      ),
-    )
-    .toBe("0.65s");
+    .toBe("inventory-history-border-flow");
   await expect
     .poll(() =>
       historyCard
-        .locator(".inventory-history-title")
-        .evaluate((element) => getComputedStyle(element, "::after").transform),
+        .locator(".inventory-history-border-flow rect")
+        .evaluate((element) => getComputedStyle(element).animationDuration),
+    )
+    .toBe("0.9s");
+  await expect
+    .poll(() =>
+      historyCard
+        .locator(".inventory-history-title-underline")
+        .evaluate((element) => getComputedStyle(element).transform),
     )
     .toBe("matrix(1, 0, 0, 1, 0, 0)");
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
@@ -523,11 +523,11 @@ test("creates and edits a product directly in the inventory row", async ({
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect
     .poll(() =>
-      historyCard.evaluate(
-        (element) => getComputedStyle(element, "::before").animationName,
-      ),
+      historyCard
+        .locator(".inventory-history-border-flow rect")
+        .evaluate((element) => getComputedStyle(element).animationDuration),
     )
-    .toBe("none");
+    .toBe("0.7s");
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
     "transform",
     "matrix(1, 0, 0, 1, 3, 0)",

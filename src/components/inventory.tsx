@@ -75,9 +75,25 @@ export function InventoryHistoryCard({
         className="metric inventory-history-card"
         onClick={() => setOpen(true)}
       >
+        <span className="inventory-history-border-flow" aria-hidden="true">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+            <rect
+              x="0.75"
+              y="0.75"
+              width="98.5"
+              height="98.5"
+              rx="7"
+              pathLength="100"
+            />
+          </svg>
+        </span>
         <span className="inventory-history-card-heading">
           <span className="inventory-history-title">
             {it.inventory.movementHistory}
+            <span
+              className="inventory-history-title-underline"
+              aria-hidden="true"
+            />
           </span>
           <ArrowRight
             className="inventory-history-arrow"

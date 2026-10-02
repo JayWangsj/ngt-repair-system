@@ -5355,8 +5355,8 @@ summary.record-icon::-webkit-details-marker {
   flex: 0 0 auto;
   color: #7c8985;
   transition:
-    color 240ms ease-out,
-    transform 240ms ease-out;
+    color 200ms ease-out 240ms,
+    transform 200ms ease-out 240ms;
 }
 .inventory-history-preview {
   display: grid;
@@ -5406,7 +5406,7 @@ summary.record-icon::-webkit-details-marker {
 .inventory-history-card:hover .inventory-history-arrow,
 .inventory-history-card:focus-visible .inventory-history-arrow {
   color: #ee9700;
-  transform: translateX(6px);
+  transform: translateX(8px);
 }
 .inventory-layout {
   display: grid;
@@ -5871,7 +5871,9 @@ summary.record-icon::-webkit-details-marker {
 }
 @media (prefers-reduced-motion: reduce) {
   .inventory-history-arrow {
-    transition: none;
+    transition:
+      color 180ms ease-out 260ms,
+      transform 180ms ease-out 260ms;
   }
   .inventory-history-title-underline {
     transition: transform 260ms ease-out;
@@ -5882,6 +5884,6 @@ summary.record-icon::-webkit-details-marker {
   }
   .inventory-history-card:hover .inventory-history-arrow,
   .inventory-history-card:focus-visible .inventory-history-arrow {
-    transform: translateX(3px);
+    transform: translateX(8px);
   }
 }

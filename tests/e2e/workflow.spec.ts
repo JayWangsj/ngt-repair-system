@@ -489,10 +489,20 @@ test("creates and edits a product directly in the inventory row", async ({
     "transform",
     "none",
   );
+  await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
+    "transition-delay",
+    "0.24s, 0.24s",
+  );
   const defaultBorderColor = await historyCard.evaluate(
     (element) => getComputedStyle(element).borderColor,
   );
   await historyCard.hover();
+  await page.waitForTimeout(100);
+  expect(
+    await historyCard
+      .locator(".inventory-history-arrow")
+      .evaluate((element) => getComputedStyle(element).transform),
+  ).toBe("matrix(1, 0, 0, 1, 0, 0)");
   await expect(historyCard).toHaveCSS("border-color", defaultBorderColor);
   await expect
     .poll(() =>
@@ -523,7 +533,7 @@ test("creates and edits a product directly in the inventory row", async ({
     .toBe("matrix(1, 0, 0, 1, 0, 0)");
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
     "transform",
-    "matrix(1, 0, 0, 1, 6, 0)",
+    "matrix(1, 0, 0, 1, 8, 0)",
   );
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
     "color",
@@ -544,8 +554,12 @@ test("creates and edits a product directly in the inventory row", async ({
     historyCard.locator(".inventory-history-title-underline"),
   ).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
+    "transition-delay",
+    "0.26s, 0.26s",
+  );
+  await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
     "transform",
-    "matrix(1, 0, 0, 1, 3, 0)",
+    "matrix(1, 0, 0, 1, 8, 0)",
   );
   await historyCard.click();
   const movementDialog = page.getByRole("dialog", {

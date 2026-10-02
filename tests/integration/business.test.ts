@@ -1606,6 +1606,61 @@ describe("work order products and combined checkout", () => {
     ).toBe(1);
   });
 
+  it("recreates a repair reservation after the previous part was consumed", async () => {
+    const part = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Ricambio riaperto test",
+      category: "Ricambi",
+      usage: "REPAIR",
+      costPrice: "10",
+      salePrice: "0",
+      initialStock: 2,
+      minStock: 0,
+    });
+    await savePriceRule(owner, null, {
+      brand: "Apple",
+      model: "iPhone 13",
+      project: "Riapertura reservation",
+      suggested: "40",
+      minutes: 30,
+      enabled: true,
+      requiredProductId: part.id,
+      requiredQuantity: 1,
+    });
+    const order = await createOrder(
+      staff,
+      input({
+        deposit: "0",
+        dueDate: "2026-10-02",
+        items: [{ project: "Riapertura reservation", final: "40" }],
+      }),
+    );
+
+    await changeStatus(staff, order.id, { status: "READY" });
+    await changeStatus(staff, order.id, { status: "REPAIRING" });
+    await replaceQuote(owner, order.id, {
+      items: [
+        {
+          project: "Riapertura reservation",
+          final: "40",
+          requiredProductId: part.id,
+          requiredQuantity: 1,
+        },
+      ],
+      orderDiscount: "0",
+      includeVat: false,
+    });
+
+    const lines = await db.workOrderProduct.findMany({
+      where: { orderId: order.id, productId: part.id, kind: "REPAIR_PART" },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(lines).toHaveLength(2);
+    expect(lines.filter((line) => line.consumedAt)).toHaveLength(1);
+    expect(lines.filter((line) => !line.consumedAt)).toHaveLength(1);
+    expect(new Set(lines.map((line) => line.contextKey)).size).toBe(2);
+  });
+
   it("records a partial checkout payment and delivers only after the balance is cleared", async () => {
     const order = await createOrder(staff, input({ deposit: "20" }));
     await changeStatus(staff, order.id, { status: "REPAIRING" });

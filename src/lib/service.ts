@@ -914,6 +914,31 @@ export async function replaceQuote(
       where: { orderId: id, kind: "REPAIR_PART", consumedAt: null },
     });
     const requiredParts = await requiredPartLines(tx, items);
+    const existingPartContexts = requiredParts.length
+      ? await tx.workOrderProduct.findMany({
+          where: {
+            orderId: id,
+            kind: "REPAIR_PART",
+            productId: { in: requiredParts.map((line) => line.product.id) },
+          },
+          select: { productId: true, contextKey: true },
+        })
+      : [];
+    const requiredPartContexts = new Map<string, string>();
+    for (const { product } of requiredParts) {
+      const used = new Set(
+        existingPartContexts
+          .filter((line) => line.productId === product.id)
+          .map((line) => line.contextKey),
+      );
+      let sequence = 1;
+      let contextKey = "ORIGINAL";
+      while (used.has(contextKey)) {
+        sequence += 1;
+        contextKey = `ORIGINAL:${sequence}`;
+      }
+      requiredPartContexts.set(product.id, contextKey);
+    }
     const nextStatus = (await newLinesNeedParts(tx, requiredParts, id))
       ? "PARTS_MISSING"
       : "REPAIRING";
@@ -933,6 +958,7 @@ export async function replaceQuote(
                 productName: product.name,
                 category: product.category,
                 kind: "REPAIR_PART" as const,
+                contextKey: requiredPartContexts.get(product.id),
                 unitPrice: decimal(0),
                 quantity,
               })),

@@ -5297,6 +5297,42 @@ summary.record-icon::-webkit-details-marker {
     border-color 240ms ease-out,
     box-shadow 240ms ease-out;
 }
+.inventory-history-card::before {
+  position: absolute;
+  inset: -1px;
+  z-index: 1;
+  border: 1px solid transparent;
+  border-radius: inherit;
+  background: conic-gradient(
+      from -35deg,
+      transparent 0deg 294deg,
+      rgb(224 160 0 / 12%) 318deg,
+      rgb(224 160 0 / 72%) 338deg,
+      transparent 360deg
+    )
+    border-box;
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+@keyframes inventory-history-border-sweep {
+  0% {
+    opacity: 0;
+    transform: rotate(0deg);
+  }
+  18% {
+    opacity: 0.68;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(360deg);
+  }
+}
 .inventory-history-card-heading {
   display: flex;
   align-items: center;
@@ -5371,6 +5407,10 @@ summary.record-icon::-webkit-details-marker {
 .inventory-history-card:focus-visible {
   border-color: #e0a000;
   box-shadow: 0 7px 20px rgb(128 96 0 / 8%);
+}
+.inventory-history-card:hover::before,
+.inventory-history-card:focus-visible::before {
+  animation: inventory-history-border-sweep 280ms ease-out 1;
 }
 .inventory-history-card:hover .inventory-history-title::after,
 .inventory-history-card:focus-visible .inventory-history-title::after {
@@ -5847,6 +5887,10 @@ summary.record-icon::-webkit-details-marker {
   .inventory-history-title::after,
   .inventory-history-arrow {
     transition: none;
+  }
+  .inventory-history-card::before {
+    animation: none !important;
+    opacity: 0;
   }
   .inventory-history-card:hover .inventory-history-arrow,
   .inventory-history-card:focus-visible .inventory-history-arrow {

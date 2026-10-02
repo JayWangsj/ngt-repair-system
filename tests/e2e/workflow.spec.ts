@@ -406,6 +406,7 @@ test("creates and edits a product directly in the inventory row", async ({
 }) => {
   const productName = `Cavo USB-C E2E ${Date.now()}`;
   await page.goto("/inventory");
+  await expect(page.getByRole("heading", { name: "Magazzino" })).toBeVisible();
   const inventoryMain = page.locator(".inventory-main");
   const batchControls = inventoryMain.locator(".inventory-batch-controls");
   await expect(inventoryMain.locator('input[type="checkbox"]')).toHaveCount(0);
@@ -417,6 +418,8 @@ test("creates and edits a product directly in the inventory row", async ({
     name: "Gestisci selezione",
     exact: true,
   });
+  await expect(searchBox).toBeVisible();
+  await expect(manageBatch).toBeVisible();
   expect(
     Math.abs(
       (await searchBox.boundingBox())!.y - (await manageBatch.boundingBox())!.y,
@@ -474,13 +477,57 @@ test("creates and edits a product directly in the inventory row", async ({
   await row.getByLabel("Prodotto frequente", { exact: true }).click();
   const historyCard = page.locator(".inventory-history-card");
   await expect(historyCard).toContainText(productName);
+  await expect(historyCard).toHaveCSS("cursor", "pointer");
+  await expect
+    .poll(() =>
+      historyCard
+        .locator(".inventory-history-title")
+        .evaluate((element) => getComputedStyle(element, "::after").transform),
+    )
+    .toBe("matrix(0, 0, 0, 1, 0, 0)");
+  await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
+    "transform",
+    "none",
+  );
   await historyCard.hover();
   await expect(historyCard).toHaveCSS("border-color", "rgb(224, 160, 0)");
+  await expect
+    .poll(() =>
+      historyCard.evaluate(
+        (element) => getComputedStyle(element, "::before").animationName,
+      ),
+    )
+    .toBe("inventory-history-border-sweep");
+  await expect
+    .poll(() =>
+      historyCard.evaluate(
+        (element) => getComputedStyle(element, "::before").animationDuration,
+      ),
+    )
+    .toBe("0.28s");
+  await expect
+    .poll(() =>
+      historyCard
+        .locator(".inventory-history-title")
+        .evaluate((element) => getComputedStyle(element, "::after").transform),
+    )
+    .toBe("matrix(1, 0, 0, 1, 0, 0)");
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
     "transform",
     "matrix(1, 0, 0, 1, 4, 0)",
   );
+  await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
+    "color",
+    "rgb(217, 149, 0)",
+  );
   await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect
+    .poll(() =>
+      historyCard.evaluate(
+        (element) => getComputedStyle(element, "::before").animationName,
+      ),
+    )
+    .toBe("none");
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
     "transform",
     "none",

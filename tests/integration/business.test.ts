@@ -585,6 +585,7 @@ describe("PostgreSQL workflow", () => {
         fault: "",
         items: [],
         diagnosticFee: "12.50",
+        dueDate: "2099-12-31",
         deposit: "0",
       }),
     );
@@ -611,7 +612,7 @@ describe("PostgreSQL workflow", () => {
       items: [{ project: "Display", final: "100", adjustmentReason: "" }],
       orderDiscount: "0",
       includeVat: false,
-      dueDate: "2026-10-01",
+      dueDate: "2099-12-31",
     });
     const quoted = await db.workOrder.findUniqueOrThrow({
       where: { id: order.id },
@@ -623,6 +624,24 @@ describe("PostgreSQL workflow", () => {
     expect(quoted.fault).toBe("Display assembly damaged");
     expect(quoted.faultNote).toBe("Vetro e pannello danneggiati");
     expect(quoted.items).toHaveLength(1);
+    await changeStatus(staff, order.id, { status: "READY" });
+    await checkoutWorkOrder(staff, order.id, {
+      requestId: randomUUID(),
+      amount: "112.50",
+      method: "CASH",
+      pickedUpBy: "Test Cliente",
+    });
+    const completed = await db.workOrder.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { payments: { include: { allocations: true } } },
+    });
+    expect(completed.status).toBe("COMPLETED");
+    expect(
+      completed.payments.at(-1)?.allocations.map((allocation) => ({
+        source: allocation.source,
+        amount: allocation.amount.toString(),
+      })),
+    ).toEqual([{ source: "REPAIR", amount: "112.5" }]);
   });
   it("uses optional quote parts to drive missing-parts status", async () => {
     const part = await createProduct(owner, {

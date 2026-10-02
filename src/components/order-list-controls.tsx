@@ -242,27 +242,27 @@ export function OrderListBody({
     );
     pendingStatusAnimation.current = "";
     if (!target) return;
-    const reduceMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
     let moved = false;
-    if (!reduceMotion)
-      elements.forEach((element) => {
-        const previous = previousRowPositions.current.get(
-          element.dataset.orderId ?? "",
+    elements.forEach((element) => {
+      const previous = previousRowPositions.current.get(
+        element.dataset.orderId ?? "",
+      );
+      if (!previous) return;
+      const delta = previous.top - element.getBoundingClientRect().top;
+      if (Math.abs(delta) < 1) return;
+      moved = true;
+      element
+        .querySelectorAll<HTMLTableCellElement>("td")
+        .forEach((cell) =>
+          cell.animate(
+            [
+              { transform: `translateY(${delta}px)` },
+              { transform: "translateY(0)" },
+            ],
+            { duration: 360, easing: "ease-out" },
+          ),
         );
-        if (!previous) return;
-        const delta = previous.top - element.getBoundingClientRect().top;
-        if (Math.abs(delta) < 1) return;
-        moved = true;
-        element.animate(
-          [
-            { transform: `translateY(${delta}px)` },
-            { transform: "translateY(0)" },
-          ],
-          { duration: 360, easing: "ease-out" },
-        );
-      });
+    });
     if (highlightStartTimer.current)
       window.clearTimeout(highlightStartTimer.current);
     highlightStartTimer.current = window.setTimeout(

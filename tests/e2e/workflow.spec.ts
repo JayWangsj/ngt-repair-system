@@ -569,6 +569,7 @@ test("repair list exposes month, status, due-date and payment controls", async (
 test("repair list animates a row reordered by a local status change", async ({
   page,
 }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await fillOrder(page, { manual: true });
   await save(page);
   const olderOrderPath = new URL(page.url()).pathname;
@@ -594,6 +595,26 @@ test("repair list animates a row reordered by a local status change", async ({
     .getByRole("option", { name: "Annullato", exact: true })
     .click();
   const dialog = page.getByRole("dialog", { name: "Annulla scheda" });
+  await page.evaluate(() => {
+    document.body.dataset.orderAnimationMax = "0";
+    const started = performance.now();
+    const sample = () => {
+      let maximum = Number(document.body.dataset.orderAnimationMax ?? "0");
+      document
+        .querySelectorAll(".order-list-body > tr > td")
+        .forEach((cell) => {
+          const transform = getComputedStyle(cell).transform;
+          if (transform === "none") return;
+          maximum = Math.max(
+            maximum,
+            Math.abs(new DOMMatrixReadOnly(transform).m42),
+          );
+        });
+      document.body.dataset.orderAnimationMax = String(maximum);
+      if (performance.now() - started < 5000) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
   await dialog
     .getByRole("button", { name: "Conferma annullamento" })
     .click({ delay: 150 });
@@ -604,10 +625,10 @@ test("repair list animates a row reordered by a local status change", async ({
   await expect
     .poll(() =>
       page
-        .locator("tbody tr")
-        .evaluateAll((rows) =>
-          rows.some((row) =>
-            row
+        .locator("tbody td")
+        .evaluateAll((cells) =>
+          cells.some((cell) =>
+            cell
               .getAnimations()
               .some(
                 (animation) => animation.effect?.getTiming().duration === 360,
@@ -616,6 +637,11 @@ test("repair list animates a row reordered by a local status change", async ({
         ),
     )
     .toBe(true);
+  expect(
+    await page.evaluate(() =>
+      Number(document.body.dataset.orderAnimationMax ?? "0"),
+    ),
+  ).toBeGreaterThan(1);
   await expect(olderRow).toHaveClass(/order-row-status-highlight/, {
     timeout: 1000,
   });
@@ -864,6 +890,14 @@ test("diagnostic order saves faults, date and quote in one progressive flow", as
   await expect(history).toContainText("Diagnosi completata");
   await expect(history).toContainText("Preventivo creato");
   await expect(history).toContainText("Stato aggiornato: In riparazione");
+  const balanceCard = page.locator(".balance-card");
+  await expect(balanceCard).toContainText("Riparazione: 100,00 €");
+  await expect(balanceCard).toContainText("Diagnosi: 30,00 €");
+  await expect(balanceCard).toContainText("Totale: 130,00 €");
+  await state(page, "READY");
+  await page.getByRole("button", { name: /Incassa e consegna/ }).click();
+  await expect(page.locator(".message.error")).toHaveCount(0);
+  await expect(status).toContainText("Consegnato");
 });
 
 test("sales history uses a monthly filter", async ({ page }) => {

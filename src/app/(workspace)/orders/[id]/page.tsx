@@ -149,7 +149,10 @@ export default async function Detail({
   const currentDue = financiallyClosed ? 0 : totals.due;
   const repairAmount = financiallyClosed
     ? 0
-    : totals.due - totals.productTotal - totals.afterSalesTotal;
+    : totals.due -
+      totals.productTotal -
+      totals.afterSalesTotal -
+      totals.inspectionTotal;
   const productAmount = financiallyClosed ? 0 : totals.productTotal;
   const afterSalesAmount = financiallyClosed ? 0 : totals.afterSalesTotal;
   const originalLocked =

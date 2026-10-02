@@ -1883,6 +1883,7 @@ export async function checkoutWorkOrder(
         orderDiscount: order.orderDiscount,
         includeVat: order.includeVat,
         afterSalesFee: order.afterSalesFee,
+        inspectionFee: order.inspectionFee,
       }).due;
       const retailDue = settlement([], {
         products: order.products,

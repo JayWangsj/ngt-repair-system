@@ -395,6 +395,11 @@ test("dashboard animates once per data snapshot and respects reduced motion", as
   await expect(dashboard).not.toHaveClass(/dashboard-animating/, {
     timeout: 2000,
   });
+  await expect(page.locator(".dashboard-kpis .metric")).toHaveCount(6);
+  await expect(page.locator(".dashboard-chart-empty")).toBeVisible();
+  await expect(page.locator(".revenue-bar")).toHaveCount(0);
+  await expect(page.locator(".payment-method-row")).toHaveCount(3);
+  await expect(page.locator(".payment-method-row").first()).toContainText("0%");
 
   await page.goto("/orders");
   await page.goto("/");
@@ -406,6 +411,22 @@ test("dashboard animates once per data snapshot and respects reduced motion", as
       sessionStorage.getItem("ngt-dashboard-animation"),
     ),
   ).toBe(fingerprint);
+
+  await page.evaluate(() => {
+    (window as Window & { dashboardMarker?: string }).dashboardMarker =
+      "preserved";
+  });
+  await page
+    .locator('.dashboard-date-filter input[type="date"]')
+    .fill("2026-10-03");
+  await page.locator(".dashboard-date-filter button").click();
+  await expect(dashboard).toHaveClass(/dashboard-updating/);
+  await expect(page).toHaveURL(/day=2026-10-03/);
+  expect(
+    await page.evaluate(
+      () => (window as Window & { dashboardMarker?: string }).dashboardMarker,
+    ),
+  ).toBe("preserved");
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.evaluate(() =>
@@ -1210,6 +1231,18 @@ test("completes a retail sale and opens its immutable receipt", async ({
   await historyDialog.getByRole("button", { name: "Chiudi" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page).toHaveURL(/\/retail$/);
+
+  await page.goto("/");
+  await expect(page.locator(".revenue-bar")).toHaveCount(14);
+  const latestDay = page.locator(".revenue-day").last();
+  await latestDay.hover();
+  await expect(latestDay.locator(".revenue-tooltip")).toHaveCSS("opacity", "1");
+  await expect(latestDay.locator(".revenue-tooltip")).toContainText("24,00");
+  await expect(page.locator(".donut-segment")).toHaveCount(2);
+  await expect(page.locator(".revenue-source-legend")).toContainText("100%");
+  await expect(page.locator(".payment-method-row").nth(1)).toContainText(
+    "100%",
+  );
 });
 test("creates automatic quote, receives payment and delivers", async ({
   page,

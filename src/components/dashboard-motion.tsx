@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, type FormEvent, type ReactNode } from "react";
 
 export function DashboardMotion({
   fingerprint,
@@ -12,11 +13,36 @@ export function DashboardMotion({
   children: ReactNode;
 }) {
   const root = useRef<HTMLDivElement>(null);
+  const navigationTimer = useRef<ReturnType<typeof setTimeout>>(null);
+  const router = useRouter();
+
+  function handleSubmit(event: FormEvent<HTMLDivElement>) {
+    const form = event.target as HTMLFormElement;
+    if (!form.matches(".dashboard-date-filter")) return;
+    event.preventDefault();
+    const day = String(new FormData(form).get("day") ?? "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
+    const navigate = () => router.push(`/?day=${encodeURIComponent(day)}`);
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      navigate();
+      return;
+    }
+    root.current?.classList.add("dashboard-updating");
+    navigationTimer.current = setTimeout(navigate, 120);
+  }
+
+  useEffect(
+    () => () => {
+      if (navigationTimer.current) clearTimeout(navigationTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     const element = root.current;
-    if (!element || matchMedia("(prefers-reduced-motion: reduce)").matches)
-      return;
+    if (!element) return;
+    element.classList.remove("dashboard-updating");
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const storageKey = "ngt-dashboard-animation";
     if (sessionStorage.getItem(storageKey) === fingerprint) return;
     element.classList.add("dashboard-animating");
@@ -30,7 +56,9 @@ export function DashboardMotion({
     const progress = Array.from(
       element.querySelectorAll<HTMLElement>("[data-progress]"),
     );
-    const donut = element.querySelector<HTMLElement>("[data-donut]");
+    const donutSegments = Array.from(
+      element.querySelectorAll<SVGCircleElement>("[data-donut-segment]"),
+    );
     const moneyFormat = new Intl.NumberFormat(
       locale === "zh" ? "zh-CN" : "it-IT",
       { style: "currency", currency: "EUR" },
@@ -45,15 +73,16 @@ export function DashboardMotion({
     });
     bars.forEach((node) => (node.style.height = "0%"));
     progress.forEach((node) => (node.style.width = "0%"));
-    if (donut)
-      donut.style.background =
-        "conic-gradient(var(--accent) 0 0%, #ffe49a 0 100%)";
+    donutSegments.forEach((node) => {
+      node.style.strokeDasharray = "0 100";
+      node.style.strokeDashoffset = node.dataset.donutOffset ?? "0";
+    });
 
     void element.offsetHeight;
 
     let frame = 0;
-    const start = performance.now() + 150;
-    const duration = 720;
+    const start = performance.now() + 70;
+    const duration = 500;
     const animate = (now: number) => {
       const raw = Math.max(0, Math.min(1, (now - start) / duration));
       const eased = 1 - Math.pow(1 - raw, 3);
@@ -65,10 +94,6 @@ export function DashboardMotion({
             ? moneyFormat.format(value / 100)
             : integerFormat.format(value);
       });
-      if (donut) {
-        const share = Number(donut.dataset.donut ?? 0) * eased;
-        donut.style.background = `conic-gradient(var(--accent) 0 ${share}%, #ffe49a 0 100%)`;
-      }
       if (raw < 1) frame = requestAnimationFrame(animate);
       else {
         completed = true;
@@ -79,11 +104,16 @@ export function DashboardMotion({
     const reveal = requestAnimationFrame(() => {
       element.classList.add("dashboard-running");
       bars.forEach((node, index) => {
-        node.style.transitionDelay = `${250 + index * 35}ms`;
+        node.style.transitionDelay = `${80 + (index % 2) * 55}ms`;
         node.style.height = node.dataset.bar ?? "0%";
       });
       progress.forEach((node) => {
         node.style.width = node.dataset.progress ?? "0%";
+      });
+      donutSegments.forEach((node, index) => {
+        const share = Number(node.dataset.donutSegment ?? 0);
+        node.style.transitionDelay = `${100 + index * 55}ms`;
+        node.style.strokeDasharray = `${share} ${100 - share}`;
       });
       frame = requestAnimationFrame(animate);
     });
@@ -97,7 +127,7 @@ export function DashboardMotion({
   }, [fingerprint, locale]);
 
   return (
-    <div ref={root} data-testid="dashboard-motion">
+    <div ref={root} data-testid="dashboard-motion" onSubmit={handleSubmit}>
       {children}
     </div>
   );

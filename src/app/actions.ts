@@ -241,13 +241,9 @@ export async function ruleAction(id: string | null, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.savePriceRule(actor, id, input));
 }
-export async function updatePriceRuleFieldAction(
-  id: string,
-  field: "project" | "suggested",
-  value: string,
-) {
+export async function updatePriceRuleFieldsAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.updatePriceRuleField(actor, id, field, value));
+  return execute(() => service.updatePriceRuleFields(actor, id, input));
 }
 
 export async function lookupCustomerAction(phone: string) {

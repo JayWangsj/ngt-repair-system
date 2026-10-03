@@ -77,7 +77,7 @@ import {
   updateOrderAction,
   quoteAction,
   ruleAction,
-  updatePriceRuleFieldAction,
+  updatePriceRuleFieldsAction,
   customerAction,
   createDeviceAction,
   hideFaultAction,
@@ -111,75 +111,123 @@ export type RuleView = {
   requiredProductRemoved?: boolean;
 };
 
-function InlineRuleField({
+function InlineRuleFields({
   rule,
-  field,
+  active,
   disabled,
+  projectLabel,
+  quoteLabel,
+  onClose,
   onError,
   onSaved,
 }: {
   rule: RuleView;
-  field: "project" | "suggested";
+  active: boolean;
   disabled: boolean;
+  projectLabel: string;
+  quoteLabel: string;
+  onClose: () => void;
   onError: (message: string) => void;
   onSaved: () => void;
 }) {
   const router = useRouter();
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(rule[field]);
+  const [project, setProject] = useState(rule.project);
+  const [suggested, setSuggested] = useState(rule.suggested);
   const [pending, setPending] = useState(false);
-  const input = useRef<HTMLInputElement>(null);
   const saving = useRef(false);
-  useEffect(() => {
-    if (editing) input.current?.select();
-  }, [editing]);
-  async function save() {
+  const save = useCallback(async () => {
     if (saving.current) return;
-    const next = value.trim();
-    if (next === rule[field]) return setEditing(false);
+    const nextProject = project.trim();
+    const nextSuggested = suggested.trim();
+    if (nextProject === rule.project && nextSuggested === rule.suggested) {
+      onClose();
+      return;
+    }
     saving.current = true;
     setPending(true);
     onError("");
-    const result = await updatePriceRuleFieldAction(rule.id, field, next);
+    const result = await updatePriceRuleFieldsAction(rule.id, {
+      project: nextProject,
+      suggested: nextSuggested,
+    });
     setPending(false);
     saving.current = false;
     if (!result.ok) return onError(result.error);
-    setEditing(false);
+    onClose();
     onSaved();
     router.refresh();
+  }, [onClose, onError, onSaved, project, router, rule, suggested]);
+  useEffect(() => {
+    if (!active) return;
+    function saveOutside(event: PointerEvent) {
+      const target = event.target;
+      if (
+        target instanceof Element &&
+        !target.closest(`[data-price-rule="${rule.id}"]`)
+      ) {
+        void save();
+      }
+    }
+    document.addEventListener("pointerdown", saveOutside);
+    return () => document.removeEventListener("pointerdown", saveOutside);
+  }, [active, rule.id, save]);
+  function cancel() {
+    setProject(rule.project);
+    setSuggested(rule.suggested);
+    onClose();
   }
-  if (editing)
+  if (active)
     return (
-      <input
-        ref={input}
-        className={`inline-rule-input inline-rule-${field}`}
-        value={value}
-        inputMode={field === "suggested" ? "decimal" : undefined}
-        maxLength={field === "project" ? 120 : undefined}
-        disabled={pending}
-        onChange={(event) => setValue(event.target.value)}
-        onBlur={() => void save()}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            event.preventDefault();
-            void save();
-          }
-          if (event.key === "Escape") {
-            setValue(rule[field]);
-            setEditing(false);
-          }
-        }}
-      />
+      <>
+        <input
+          className="inline-rule-input inline-rule-project"
+          aria-label={projectLabel}
+          value={project}
+          maxLength={120}
+          disabled={disabled || pending}
+          onChange={(event) => setProject(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void save();
+            }
+            if (event.key === "Escape") cancel();
+          }}
+        />
+        <input
+          className="inline-rule-input inline-rule-suggested"
+          aria-label={quoteLabel}
+          value={suggested}
+          inputMode="decimal"
+          disabled={disabled || pending}
+          onChange={(event) => setSuggested(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void save();
+            }
+            if (event.key === "Escape") cancel();
+          }}
+        />
+      </>
     );
   return (
-    <button
-      type="button"
-      className={`inline-rule-value inline-rule-${field}`}
-      disabled={disabled}
-      onClick={() => setEditing(true)}
-    >
-      {field === "suggested" ? money(cents(rule.suggested)) : rule.project}
-    </button>
+    <>
+      <button
+        type="button"
+        className="inline-rule-value inline-rule-project"
+        disabled={disabled}
+      >
+        {rule.project}
+      </button>
+      <button
+        type="button"
+        className="inline-rule-value inline-rule-suggested"
+        disabled={disabled}
+      >
+        {money(cents(rule.suggested))}
+      </button>
+    </>
   );
 }
 export type ItemView = {
@@ -3481,18 +3529,6 @@ export function PriceList({
       reveal.current = "";
     }
   }, [rules, creating]);
-  useEffect(() => {
-    function clearActiveRule(event: PointerEvent) {
-      if (
-        event.target instanceof Element &&
-        !event.target.closest(".price-rule-row")
-      ) {
-        setActiveRuleId("");
-      }
-    }
-    document.addEventListener("pointerdown", clearActiveRule);
-    return () => document.removeEventListener("pointerdown", clearActiveRule);
-  }, []);
   function toggle(key: string) {
     setExpanded((current) =>
       current.includes(key)
@@ -3737,6 +3773,7 @@ export function PriceList({
                               <article
                                 className={`price-rule-row business-list-row${batchMode ? " is-batch" : ""}${!batchMode && activeRuleId === rule.id ? " order-row-active" : ""}`}
                                 key={rule.id}
+                                data-price-rule={rule.id}
                                 onClick={() => {
                                   if (!batchMode) setActiveRuleId(rule.id);
                                 }}
@@ -3762,27 +3799,33 @@ export function PriceList({
                                     }
                                   />
                                 )}
-                                <InlineRuleField
+                                <InlineRuleFields
+                                  key={`${rule.id}:${rule.project}:${rule.suggested}`}
                                   rule={rule}
-                                  field="project"
+                                  active={
+                                    !batchMode && activeRuleId === rule.id
+                                  }
                                   disabled={pending}
-                                  onError={setError}
-                                  onSaved={() => setSaved(true)}
-                                />
-                                <InlineRuleField
-                                  rule={rule}
-                                  field="suggested"
-                                  disabled={pending}
+                                  projectLabel={it.project}
+                                  quoteLabel={it.quote}
+                                  onClose={() =>
+                                    setActiveRuleId((current) =>
+                                      current === rule.id ? "" : current,
+                                    )
+                                  }
                                   onError={setError}
                                   onSaved={() => setSaved(true)}
                                 />
                                 <span className="price-row-actions record-actions">
-                                  {!batchMode && (
+                                  {!batchMode && activeRuleId !== rule.id && (
                                     <RecordIcon
                                       kind="edit"
                                       label={it.editQuote}
                                       disabled={pending}
-                                      onClick={() => setEditing(rule)}
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        setEditing(rule);
+                                      }}
                                     />
                                   )}
                                 </span>

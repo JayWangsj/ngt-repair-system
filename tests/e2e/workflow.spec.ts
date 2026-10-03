@@ -491,6 +491,7 @@ test("creates and edits a product directly in the inventory row", async ({
   await row.click();
   await expect(row).toHaveClass(/order-row-active/);
   await expect(row).toHaveCSS("background-color", "rgb(255, 249, 232)");
+  await expect(row).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
   await expect(row.locator("td").first()).toHaveCSS(
     "box-shadow",
     /rgb\(228, 182, 0\)/,
@@ -2980,11 +2981,18 @@ test("quote tree supports contextual dialogs, search, editing and empty branch r
   await expect(page.locator(".rule-list > article")).toHaveCount(1);
   const directPrice = page.locator(".price-rule-row").first();
   await directPrice.locator("button.inline-rule-suggested").click();
+  await expect(directPrice.locator("input.inline-rule-project")).toBeVisible();
+  await directPrice
+    .locator("input.inline-rule-project")
+    .fill("Test battery updated");
   await directPrice.locator("input.inline-rule-suggested").fill("45");
   await directPrice.locator("input.inline-rule-suggested").press("Enter");
   await expect(
     directPrice.locator("button.inline-rule-suggested"),
   ).toContainText("45,00");
+  await expect(directPrice.locator("button.inline-rule-project")).toContainText(
+    "Test battery updated",
+  );
   await expect(page.getByLabel("Cerca", { exact: true })).toHaveValue(
     "Test battery",
   );
@@ -3281,6 +3289,7 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
   ).toBeLessThanOrEqual(720);
   const row = rows.first();
   await expect(row).toBeVisible();
+  const rowPosition = await row.boundingBox();
   await expect(page.getByRole("checkbox")).toHaveCount(0);
   await expect(
     row.getByRole("button", { name: "Elimina preventivo", exact: true }),
@@ -3317,12 +3326,32 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
   await row.click({ position: { x: 3, y: 3 } });
   await expect(row).toHaveClass(/order-row-active/);
   await expect(row).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+  await expect(row.locator("input.inline-rule-project")).toBeVisible();
+  await expect(row.locator("input.inline-rule-suggested")).toBeVisible();
+  const activeRowPosition = await row.boundingBox();
+  expect(activeRowPosition!.width).toBe(rowPosition!.width);
+  expect(activeRowPosition!.height).toBe(rowPosition!.height);
   const nextRow = rows.nth(1);
   await nextRow.click({ position: { x: 3, y: 3 } });
   await expect(nextRow).toHaveClass(/order-row-active/);
   await expect(row).not.toHaveClass(/order-row-active/);
+  await nextRow.locator("input.inline-rule-suggested").fill("88");
   await searchBox.click();
   await expect(nextRow).not.toHaveClass(/order-row-active/);
+  await expect(nextRow.locator("button.inline-rule-suggested")).toContainText(
+    "88,00",
+  );
+  await nextRow.click({ position: { x: 3, y: 3 } });
+  await expect(nextRow).toHaveClass(/order-row-active/);
+  const originalProject = await nextRow
+    .locator("input.inline-rule-project")
+    .inputValue();
+  await nextRow.locator("input.inline-rule-project").fill("annullato");
+  await nextRow.locator("input.inline-rule-project").press("Escape");
+  await expect(nextRow).not.toHaveClass(/order-row-active/);
+  await expect(nextRow.locator("button.inline-rule-project")).toHaveText(
+    originalProject,
+  );
   await nextRow.click({ position: { x: 3, y: 3 } });
   await expect(nextRow).toHaveClass(/order-row-active/);
   await expect(row.locator(".price-rule-header")).toHaveCount(0);

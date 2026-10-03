@@ -1341,28 +1341,29 @@ export async function savePriceRule(
   });
 }
 
-export async function updatePriceRuleField(
+export async function updatePriceRuleFields(
   actorInput: Actor,
   id: string,
-  field: "project" | "suggested",
   raw: unknown,
 ) {
-  const value =
-    field === "project"
-      ? z.string().trim().min(1).max(120).parse(raw)
-      : amountInput.parse(raw);
+  const input = z
+    .object({
+      project: z.string().trim().min(1).max(120),
+      suggested: amountInput,
+    })
+    .parse(raw);
   return transact(async (tx) => {
     const actor = await currentActor(tx, actorInput);
     assertOwner(actor);
     await tx.priceRule.update({
       where: { id },
-      data:
-        field === "project"
-          ? { project: value }
-          : { suggested: decimal(cents(value)) },
+      data: {
+        project: input.project,
+        suggested: decimal(cents(input.suggested)),
+      },
     });
     await audit(tx, actor, id, "PRICE_RULE_UPDATED", {
-      fields: [field],
+      fields: ["project", "suggested"],
     });
   });
 }

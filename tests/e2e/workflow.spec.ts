@@ -3298,16 +3298,29 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
     actions.getByRole("button", { name: "Modifica preventivo" }),
   ).toHaveCSS("opacity", "0");
   await row.hover();
-  await expect(row).toHaveCSS("background-color", "rgb(255, 249, 223)");
+  await expect(row).toHaveClass(/business-list-row/);
+  await expect(row).toHaveCSS("background-color", "rgb(255, 249, 232)");
+  await expect(row).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, -1)");
   await expect(
     actions.getByRole("button", { name: "Modifica preventivo" }),
   ).toHaveCSS("opacity", "1");
-  expect(await row.locator("button.inline-rule-project").boundingBox()).toEqual(
-    projectPosition,
-  );
-  expect(
-    await row.locator("button.inline-rule-suggested").boundingBox(),
-  ).toEqual(pricePosition);
+  const hoveredProjectPosition = await row
+    .locator("button.inline-rule-project")
+    .boundingBox();
+  const hoveredPricePosition = await row
+    .locator("button.inline-rule-suggested")
+    .boundingBox();
+  expect(hoveredProjectPosition!.x).toBe(projectPosition!.x);
+  expect(hoveredProjectPosition!.width).toBe(projectPosition!.width);
+  expect(hoveredPricePosition!.x).toBe(pricePosition!.x);
+  expect(hoveredPricePosition!.width).toBe(pricePosition!.width);
+  await row.click({ position: { x: 3, y: 3 } });
+  await expect(row).toHaveClass(/order-row-active/);
+  await expect(row).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+  const nextRow = rows.nth(1);
+  await nextRow.click({ position: { x: 3, y: 3 } });
+  await expect(nextRow).toHaveClass(/order-row-active/);
+  await expect(row).not.toHaveClass(/order-row-active/);
   await expect(row.locator(".price-rule-header")).toHaveCount(0);
   await expect(page.locator(".price-rule-header").first()).toContainText(
     "Intervento",
@@ -3331,6 +3344,7 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
   await page
     .getByRole("button", { name: "Gestisci selezione", exact: true })
     .click();
+  await expect(nextRow).not.toHaveClass(/order-row-active/);
   const modelSelection = page.getByRole("checkbox", {
     name: "Seleziona iPhone 13",
     exact: true,

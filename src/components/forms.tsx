@@ -3461,6 +3461,7 @@ export function PriceList({
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<string[]>([]);
   const [batchMode, setBatchMode] = useState(false);
+  const [activeRuleId, setActiveRuleId] = useState("");
   const [creating, setCreating] = useState<Partial<RuleView> | null>(null);
   const [editing, setEditing] = useState<RuleView | null>(null);
   const [saved, setSaved] = useState(false);
@@ -3609,6 +3610,7 @@ export function PriceList({
             onStart={() => {
               setBatchMode(true);
               setSelected([]);
+              setActiveRuleId("");
             }}
             onSelectAll={() => setSelected(visibleIds)}
             onDelete={() => remove(selectedIds)}
@@ -3721,8 +3723,11 @@ export function PriceList({
                             </div>
                             {group.rules.map((rule) => (
                               <article
-                                className={`price-rule-row${batchMode ? " is-batch" : ""}`}
+                                className={`price-rule-row business-list-row${batchMode ? " is-batch" : ""}${!batchMode && activeRuleId === rule.id ? " order-row-active" : ""}`}
                                 key={rule.id}
+                                onClick={() => {
+                                  if (!batchMode) setActiveRuleId(rule.id);
+                                }}
                               >
                                 {batchMode && (
                                   <input

@@ -5817,6 +5817,18 @@ summary.record-icon::-webkit-details-marker {
     inset 0 1px rgb(228 182 0 / 18%),
     inset 0 -1px rgb(228 182 0 / 18%);
 }
+.price-rule-row.business-list-row:hover:not(.order-row-active) {
+  box-shadow:
+    inset 2px 0 #e4b600,
+    0 2px 6px rgb(128 96 0 / 8%);
+}
+.price-rule-row.business-list-row.order-row-active {
+  box-shadow:
+    inset 2px 0 #e4b600,
+    inset 0 1px rgb(228 182 0 / 18%),
+    inset -1px 0 rgb(228 182 0 / 18%),
+    inset 0 -1px rgb(228 182 0 / 18%);
+}
 @keyframes order-row-status-highlight {
   0%,
   61.5% {

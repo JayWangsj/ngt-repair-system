@@ -489,8 +489,15 @@ test("creates and edits a product directly in the inventory row", async ({
   await expect(row.locator(".inventory-quantity-cell")).toHaveText(["0", "4"]);
   await expect(row.locator(".inventory-quantity-cell input")).toHaveCount(0);
   await row.click();
+  await expect(row).toHaveClass(/order-row-active/);
+  await expect(row).toHaveCSS("background-color", "rgb(255, 249, 232)");
+  await expect(row.locator("td").first()).toHaveCSS(
+    "box-shadow",
+    /rgb\(228, 182, 0\)/,
+  );
   await expect(row.locator("input")).not.toHaveCount(0);
   await page.keyboard.press("Enter");
+  await expect(row).not.toHaveClass(/order-row-active/);
   await expect(row.locator("input")).toHaveCount(0);
   await row.click();
   await row.getByLabel("+ Disponibilità").click();
@@ -3770,7 +3777,12 @@ test("customer links from repair list and detail open the shared dialog", async 
   await expect(historyRow).toContainText("30/11/2099");
 
   await historyRow.click();
-  await expect(historyRow).not.toHaveClass(/order-row-active/);
+  await expect(historyRow).toHaveClass(/order-row-active/);
+  await expect(historyRow).toHaveCSS("background-color", "rgb(255, 249, 232)");
+  await expect(historyRow.locator("td").first()).toHaveCSS(
+    "box-shadow",
+    /rgb\(228, 182, 0\)/,
+  );
   await historyRow.locator(".status-dropdown-trigger").click();
   const menu = dialog.locator(".status-dropdown-menu");
   await expect(menu).toBeVisible();

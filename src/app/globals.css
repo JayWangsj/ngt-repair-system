@@ -5526,9 +5526,6 @@ summary.record-icon::-webkit-details-marker {
 .inventory-table tbody tr {
   cursor: pointer;
 }
-.inventory-table tbody tr.inventory-selected {
-  background: #f7faf9;
-}
 .inventory-table input,
 .inventory-table select {
   min-height: 32px;
@@ -5640,9 +5637,6 @@ summary.record-icon::-webkit-details-marker {
 .inventory-category-field .icon-button {
   margin-bottom: 1px;
 }
-.inventory-table tbody tr.order-row-active {
-  background: #fff9df;
-}
 .business-list-row {
   transform: translateY(0);
   transition:
@@ -5653,15 +5647,14 @@ summary.record-icon::-webkit-details-marker {
 .order-list-body > tr {
   cursor: pointer;
 }
-.business-list-row:hover:not(.order-row-active):not(.inventory-selected):not(
+.business-list-row:hover:not(.order-row-active):not(
     .order-row-hover-suppressed
   ) {
   background: #fff9e8;
   box-shadow: 0 2px 6px rgb(128 96 0 / 8%);
   transform: translateY(-1px);
 }
-.business-list-row:hover:not(.order-row-active):not(.inventory-selected)
-  > td:first-child {
+.business-list-row:hover:not(.order-row-active) > td:first-child {
   box-shadow: inset 2px 0 #e4b600;
 }
 .customer-device-row.business-list-row:hover,
@@ -5670,23 +5663,23 @@ summary.record-icon::-webkit-details-marker {
     inset 2px 0 #e4b600,
     0 2px 6px rgb(128 96 0 / 8%);
 }
-.order-list-body > tr.order-row-active {
+.business-list-row.order-row-active {
   background: #fff9e8;
   box-shadow: none;
   transform: translateY(0);
 }
-.order-list-body > tr.order-row-active > td {
+.business-list-row.order-row-active > td {
   box-shadow:
     inset 0 1px rgb(228 182 0 / 18%),
     inset 0 -1px rgb(228 182 0 / 18%);
 }
-.order-list-body > tr.order-row-active > td:first-child {
+.business-list-row.order-row-active > td:first-child {
   box-shadow:
     inset 2px 0 #e4b600,
     inset 0 1px rgb(228 182 0 / 18%),
     inset 0 -1px rgb(228 182 0 / 18%);
 }
-.order-list-body > tr.order-row-active > td:last-child {
+.business-list-row.order-row-active > td:last-child {
   box-shadow:
     inset -1px 0 rgb(228 182 0 / 18%),
     inset 0 1px rgb(228 182 0 / 18%),

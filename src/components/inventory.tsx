@@ -500,7 +500,7 @@ export function InventoryWorkspace({
                 return (
                   <tr
                     key={product.id}
-                    className={`business-list-row${selected ? " inventory-selected" : ""}`}
+                    className={`business-list-row${selected ? " order-row-active" : ""}`}
                     data-inventory-product={product.id}
                     tabIndex={selected ? 0 : undefined}
                     onClick={(event) => {

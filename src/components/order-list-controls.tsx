@@ -301,7 +301,7 @@ export function OrderListBody({
           <tr
             key={row.id}
             data-order-id={row.id}
-            className={`business-list-row ${active && !compact ? "order-row-active" : ""} ${suppressedHoverId === row.id ? "order-row-hover-suppressed" : ""} ${highlightedId === row.id ? "order-row-status-highlight" : ""}`.trim()}
+            className={`business-list-row ${active ? "order-row-active" : ""} ${suppressedHoverId === row.id ? "order-row-hover-suppressed" : ""} ${highlightedId === row.id ? "order-row-status-highlight" : ""}`.trim()}
             onClick={() => setActiveId(row.id)}
             onPointerLeave={() => {
               if (suppressedHoverId === row.id) setSuppressedHoverId("");

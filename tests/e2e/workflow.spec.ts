@@ -407,6 +407,11 @@ test("dashboard animates on entry and data changes while respecting reduced moti
     "width",
     "15",
   );
+  expect(
+    await dashboardActions.evaluateAll((links) =>
+      links.map((link) => getComputedStyle(link).textDecorationLine),
+    ),
+  ).toEqual(["none", "none", "none", "none"]);
   const firstDashboardAction = dashboardActions.first();
   expect(
     await firstDashboardAction

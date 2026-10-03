@@ -5611,7 +5611,7 @@ details summary {
   font-size: 13px;
 }
 .order-link,
-.section-heading > a:not(.button) {
+.section-heading > a:not(.button):not(.dashboard-action-link) {
   color: #715300;
   text-decoration: underline;
   text-underline-offset: 3px;

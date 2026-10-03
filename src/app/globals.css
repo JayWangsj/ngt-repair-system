@@ -2576,9 +2576,6 @@ details[open] > summary {
   color: #735400;
   font-weight: 700;
 }
-.dashboard-link-chevron {
-  font: inherit;
-}
 .dashboard-stats-trigger {
   border: 0;
   padding: 14px 0 0;
@@ -2722,7 +2719,7 @@ details[open] > summary {
   .dashboard-lists > section,
   .dashboard-action-link,
   .dashboard-action-link > .dashboard-link-label::after,
-  .dashboard-action-link .dashboard-link-chevron {
+  .dashboard-action-link svg {
     transition: none !important;
   }
 }
@@ -6169,8 +6166,6 @@ summary.record-icon::-webkit-details-marker {
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .dashboard-action-link > .dashboard-link-label::after {
-  height: 2px;
-  border-radius: 2px;
   opacity: 0;
   transition:
     opacity 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
@@ -6209,7 +6204,7 @@ summary.record-icon::-webkit-details-marker {
 .order-detail-card .order-customer-link svg,
 .retail-history-dialog .order-code-link svg,
 .customer-name .order-link svg,
-.dashboard-action-link .dashboard-link-chevron {
+.dashboard-action-link svg {
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .order-list-body .order-code-link:hover svg,
@@ -6222,8 +6217,8 @@ summary.record-icon::-webkit-details-marker {
 .retail-history-dialog .order-code-link:focus-visible svg,
 .customer-name .order-link:hover svg,
 .customer-name .order-link:focus-visible svg,
-.dashboard-action-link:hover .dashboard-link-chevron,
-.dashboard-action-link:focus-visible .dashboard-link-chevron {
+.dashboard-action-link:hover svg,
+.dashboard-action-link:focus-visible svg {
   transform: translateX(4px);
 }
 .table-panel tbody tr:has(.order-payment-values) {

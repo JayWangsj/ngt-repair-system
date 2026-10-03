@@ -402,8 +402,11 @@ test("dashboard animates on entry and data changes while respecting reduced moti
   await expect(page.locator(".payment-method-row").first()).toContainText("0%");
   const dashboardActions = page.locator(".dashboard-action-link");
   await expect(dashboardActions).toHaveCount(4);
-  await expect(dashboardActions).toContainText([">", ">", ">", ">"]);
-  await expect(dashboardActions.locator("svg")).toHaveCount(0);
+  await expect(dashboardActions.locator("svg")).toHaveCount(4);
+  await expect(dashboardActions.locator("svg").first()).toHaveAttribute(
+    "width",
+    "15",
+  );
   const firstDashboardAction = dashboardActions.first();
   expect(
     await firstDashboardAction
@@ -412,12 +415,12 @@ test("dashboard animates on entry and data changes while respecting reduced moti
         height: getComputedStyle(element, "::after").height,
         opacity: getComputedStyle(element, "::after").opacity,
       })),
-  ).toEqual({ height: "2px", opacity: "0" });
+  ).toEqual({ height: "1px", opacity: "0" });
   await firstDashboardAction.hover();
   await expect
     .poll(() =>
       firstDashboardAction
-        .locator(".dashboard-link-chevron")
+        .locator("svg")
         .evaluate((element) => getComputedStyle(element).transform),
     )
     .not.toBe("none");
@@ -430,7 +433,7 @@ test("dashboard animates on entry and data changes while respecting reduced moti
           opacity: getComputedStyle(element, "::after").opacity,
         })),
     )
-    .toEqual({ height: "2px", opacity: "1" });
+    .toEqual({ height: "1px", opacity: "1" });
   await firstDashboardAction.click();
   const statsDialog = page.getByRole("dialog", {
     name: "Andamento",
@@ -1454,6 +1457,11 @@ test("settings applies a manual business date and can return to system time", as
     "Data corrente aggiornata.",
   );
   await expect(dateSettings).toContainText("12/04/2031");
+
+  await page.goto("/");
+  await expect(
+    page.locator('.dashboard-date-filter input[type="date"]'),
+  ).toHaveValue("2031-04-12");
 
   await page.goto("/orders/new");
   await chooseBusinessOption(page, "Cerca cliente", "Cliente Playwright");

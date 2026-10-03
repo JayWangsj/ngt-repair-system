@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronRight } from "lucide-react";
 import { FormDialog } from "./forms";
 
 export function DashboardStatsDialog({
@@ -35,9 +36,7 @@ export function DashboardStatsDialog({
         onClick={() => setOpen(true)}
       >
         <span className="dashboard-link-label">{triggerLabel}</span>
-        <span className="dashboard-link-chevron" aria-hidden="true">
-          &gt;
-        </span>
+        <ChevronRight size={15} aria-hidden="true" />
       </button>
       {open && (
         <FormDialog title={title} subtitle={description} onClose={close}>

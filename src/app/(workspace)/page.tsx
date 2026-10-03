@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   AlertTriangle,
   ChartNoAxesColumnIncreasing,
+  ChevronRight,
   Clock3,
   Inbox,
   PackageCheck,
@@ -75,7 +76,7 @@ export default async function Dashboard({
   const today =
     requestedDay && /^\d{4}-\d{2}-\d{2}$/.test(requestedDay)
       ? requestedDay
-      : romeDay();
+      : businessToday;
   const active = orders.filter(
     (order) => !["COMPLETED", "CANCELLED"].includes(order.status),
   );
@@ -556,9 +557,7 @@ export default async function Dashboard({
             <h2>{it.recent}</h2>
             <Link className="dashboard-action-link" href="/orders">
               <span className="dashboard-link-label">{it.viewAll}</span>
-              <span className="dashboard-link-chevron" aria-hidden="true">
-                &gt;
-              </span>
+              <ChevronRight size={15} aria-hidden="true" />
             </Link>
           </div>
           {orders.slice(0, 5).map((order) => (
@@ -589,9 +588,7 @@ export default async function Dashboard({
             <h2>{it.dashboard.recentSales}</h2>
             <Link className="dashboard-action-link" href="/retail?view=sales">
               <span className="dashboard-link-label">{it.viewAll}</span>
-              <span className="dashboard-link-chevron" aria-hidden="true">
-                &gt;
-              </span>
+              <ChevronRight size={15} aria-hidden="true" />
             </Link>
           </div>
           {sales.map((sale) => (
@@ -620,9 +617,7 @@ export default async function Dashboard({
             <h2>{it.dashboard.hotProducts}</h2>
             <Link className="dashboard-action-link" href="/retail?view=sales">
               <span className="dashboard-link-label">{it.viewAll}</span>
-              <span className="dashboard-link-chevron" aria-hidden="true">
-                &gt;
-              </span>
+              <ChevronRight size={15} aria-hidden="true" />
             </Link>
           </div>
           {hotProducts.map((product, index) => (

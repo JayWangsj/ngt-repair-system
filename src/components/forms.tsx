@@ -3481,6 +3481,18 @@ export function PriceList({
       reveal.current = "";
     }
   }, [rules, creating]);
+  useEffect(() => {
+    function clearActiveRule(event: PointerEvent) {
+      if (
+        event.target instanceof Element &&
+        !event.target.closest(".price-rule-row")
+      ) {
+        setActiveRuleId("");
+      }
+    }
+    document.addEventListener("pointerdown", clearActiveRule);
+    return () => document.removeEventListener("pointerdown", clearActiveRule);
+  }, []);
   function toggle(key: string) {
     setExpanded((current) =>
       current.includes(key)

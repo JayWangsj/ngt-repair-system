@@ -3321,6 +3321,10 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
   await nextRow.click({ position: { x: 3, y: 3 } });
   await expect(nextRow).toHaveClass(/order-row-active/);
   await expect(row).not.toHaveClass(/order-row-active/);
+  await searchBox.click();
+  await expect(nextRow).not.toHaveClass(/order-row-active/);
+  await nextRow.click({ position: { x: 3, y: 3 } });
+  await expect(nextRow).toHaveClass(/order-row-active/);
   await expect(row.locator(".price-rule-header")).toHaveCount(0);
   await expect(page.locator(".price-rule-header").first()).toContainText(
     "Intervento",

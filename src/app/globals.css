@@ -4841,6 +4841,7 @@ details[open] > summary {
   background: #fff9df;
 }
 .rule-list {
+  width: min(100%, 720px);
   margin: 7px 0 12px;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -4937,7 +4938,7 @@ details[open] > summary {
 .price-batch-toolbar {
   justify-content: flex-start;
   flex-wrap: wrap;
-  margin: 12px 0;
+  margin: 0;
 }
 .price-batch-toolbar.is-active {
   padding: 9px 10px;
@@ -4947,6 +4948,15 @@ details[open] > summary {
 }
 .price-batch-toolbar.is-active .button-danger {
   margin-left: auto;
+}
+.price-list-controls {
+  align-items: center;
+}
+.price-list-controls > .grow {
+  min-width: 320px;
+}
+.price-list-controls > .price-batch-toolbar {
+  flex: 0 0 auto;
 }
 @media (max-width: 600px) {
   .price-rule-row {
@@ -4961,6 +4971,24 @@ details[open] > summary {
   }
   .price-rule-header.is-batch {
     grid-template-columns: 18px minmax(0, 1fr) 82px 36px;
+  }
+  .price-list-controls > .grow {
+    min-width: 100%;
+  }
+  .price-list-controls > .price-batch-toolbar {
+    flex: 1 1 100%;
+    width: 100%;
+    min-width: 0;
+  }
+  .price-batch-toolbar.is-active .inventory-selected-count {
+    flex: 1 0 100%;
+  }
+  .price-batch-toolbar.is-active .button {
+    flex: 1 1 130px;
+    white-space: normal;
+  }
+  .price-batch-toolbar.is-active .button-danger {
+    margin-left: 0;
   }
   .price-rule-row .button {
     padding: 6px;

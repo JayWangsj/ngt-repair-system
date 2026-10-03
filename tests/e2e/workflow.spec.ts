@@ -3246,6 +3246,7 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
   page,
 }) => {
   await page.goto("/prices");
+  await page.setViewportSize({ width: 1920, height: 1080 });
   await page.getByLabel("Cerca", { exact: true }).fill("iPhone 13");
   const rows = page.locator(".price-rule-row");
   await page.getByRole("button", { name: "Intervento", exact: true }).click();
@@ -3265,6 +3266,19 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
   await expect(createDialog).not.toBeVisible();
   await page.getByLabel("Cerca", { exact: true }).fill("iPhone 13");
   await expect(rows).toHaveCount(2);
+  const searchBox = page.getByLabel("Cerca", { exact: true });
+  const batchButton = page.getByRole("button", {
+    name: "Gestisci selezione",
+    exact: true,
+  });
+  const searchBoxPosition = await searchBox.boundingBox();
+  const batchButtonPosition = await batchButton.boundingBox();
+  expect(Math.abs(searchBoxPosition!.y - batchButtonPosition!.y)).toBeLessThan(
+    8,
+  );
+  expect(
+    (await page.locator(".rule-list").first().boundingBox())!.width,
+  ).toBeLessThanOrEqual(720);
   const row = rows.first();
   await expect(row).toBeVisible();
   await expect(page.getByRole("checkbox")).toHaveCount(0);
@@ -3278,6 +3292,7 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
   const pricePosition = await row
     .locator("button.inline-rule-suggested")
     .boundingBox();
+  expect(pricePosition!.x - projectPosition!.x).toBeLessThan(560);
   await page.mouse.move(0, 0);
   await expect(
     actions.getByRole("button", { name: "Modifica preventivo" }),

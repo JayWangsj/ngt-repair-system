@@ -3576,36 +3576,7 @@ export function PriceList({
           {it.newRule}
         </Button>
       </header>
-      <div
-        className={`catalog-toolbar price-batch-toolbar${batchMode ? " is-active" : ""}`}
-      >
-        <BatchControls
-          active={batchMode}
-          pending={pending}
-          selectedCount={selectedIds.length}
-          hasItems={visibleIds.length > 0}
-          manageLabel={it.batchManage}
-          selectedLabel={it.selectedPriceItems.replace(
-            "{count}",
-            String(selectedIds.length),
-          )}
-          selectAllLabel={it.selectAll}
-          showSelectAll={false}
-          deleteLabel={it.deleteSelected}
-          finishLabel={it.finishBatch}
-          onStart={() => {
-            setBatchMode(true);
-            setSelected([]);
-          }}
-          onSelectAll={() => setSelected(visibleIds)}
-          onDelete={() => remove(selectedIds)}
-          onFinish={() => {
-            setBatchMode(false);
-            setSelected([]);
-          }}
-        />
-      </div>
-      <div className="filters price-filters">
+      <div className="filters price-filters price-list-controls">
         <label className="grow">
           <span className="sr-only">{it.search}</span>
           <input
@@ -3618,6 +3589,35 @@ export function PriceList({
             }}
           />
         </label>
+        <div
+          className={`catalog-toolbar price-batch-toolbar${batchMode ? " is-active" : ""}`}
+        >
+          <BatchControls
+            active={batchMode}
+            pending={pending}
+            selectedCount={selectedIds.length}
+            hasItems={visibleIds.length > 0}
+            manageLabel={it.batchManage}
+            selectedLabel={it.selectedPriceItems.replace(
+              "{count}",
+              String(selectedIds.length),
+            )}
+            selectAllLabel={it.selectAll}
+            showSelectAll={false}
+            deleteLabel={it.deleteSelected}
+            finishLabel={it.finishBatch}
+            onStart={() => {
+              setBatchMode(true);
+              setSelected([]);
+            }}
+            onSelectAll={() => setSelected(visibleIds)}
+            onDelete={() => remove(selectedIds)}
+            onFinish={() => {
+              setBatchMode(false);
+              setSelected([]);
+            }}
+          />
+        </div>
       </div>
       {creating && (
         <FormDialog title={it.newRule} onClose={() => setCreating(null)}>

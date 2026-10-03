@@ -43,10 +43,7 @@ export function DashboardMotion({
     if (!element) return;
     element.classList.remove("dashboard-updating");
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const storageKey = "ngt-dashboard-animation";
-    if (sessionStorage.getItem(storageKey) === fingerprint) return;
     element.classList.add("dashboard-animating");
-    let completed = false;
     const counts = Array.from(
       element.querySelectorAll<HTMLElement>("[data-count]"),
     );
@@ -96,8 +93,6 @@ export function DashboardMotion({
       });
       if (raw < 1) frame = requestAnimationFrame(animate);
       else {
-        completed = true;
-        sessionStorage.setItem(storageKey, fingerprint);
         element.classList.remove("dashboard-animating");
       }
     };
@@ -121,8 +116,6 @@ export function DashboardMotion({
       cancelAnimationFrame(reveal);
       cancelAnimationFrame(frame);
       element.classList.remove("dashboard-animating", "dashboard-running");
-      if (!completed && sessionStorage.getItem(storageKey) === fingerprint)
-        sessionStorage.removeItem(storageKey);
     };
   }, [fingerprint, locale]);
 

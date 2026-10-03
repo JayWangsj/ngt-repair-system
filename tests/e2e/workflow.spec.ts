@@ -378,20 +378,13 @@ test("single operator opens every business page without login", async ({
   await expect(page).toHaveURL(/\/$/);
 });
 
-test("dashboard animates once per data snapshot and respects reduced motion", async ({
+test("dashboard animates on entry and data changes while respecting reduced motion", async ({
   page,
 }) => {
   await page.goto("/");
   const dashboard = page.getByTestId("dashboard-motion");
   await expect(dashboard).toBeVisible();
-  await expect
-    .poll(() =>
-      page.evaluate(() => sessionStorage.getItem("ngt-dashboard-animation")),
-    )
-    .not.toBeNull();
-  const fingerprint = await page.evaluate(() =>
-    sessionStorage.getItem("ngt-dashboard-animation"),
-  );
+  await expect(dashboard).toHaveClass(/dashboard-animating/);
   await expect(dashboard).not.toHaveClass(/dashboard-animating/, {
     timeout: 2000,
   });
@@ -403,14 +396,13 @@ test("dashboard animates once per data snapshot and respects reduced motion", as
 
   await page.goto("/orders");
   await page.goto("/");
-  await expect(page.getByTestId("dashboard-motion")).not.toHaveClass(
+  await expect(page.getByTestId("dashboard-motion")).toHaveClass(
     /dashboard-animating/,
   );
-  expect(
-    await page.evaluate(() =>
-      sessionStorage.getItem("ngt-dashboard-animation"),
-    ),
-  ).toBe(fingerprint);
+  await expect(page.getByTestId("dashboard-motion")).not.toHaveClass(
+    /dashboard-animating/,
+    { timeout: 2000 },
+  );
 
   await page.evaluate(() => {
     (window as Window & { dashboardMarker?: string }).dashboardMarker =
@@ -422,6 +414,9 @@ test("dashboard animates once per data snapshot and respects reduced motion", as
   await page.locator(".dashboard-date-filter button").click();
   await expect(dashboard).toHaveClass(/dashboard-updating/);
   await expect(page).toHaveURL(/day=2026-10-03/);
+  await expect(page.getByTestId("dashboard-motion")).toHaveClass(
+    /dashboard-animating/,
+  );
   expect(
     await page.evaluate(
       () => (window as Window & { dashboardMarker?: string }).dashboardMarker,
@@ -429,9 +424,6 @@ test("dashboard animates once per data snapshot and respects reduced motion", as
   ).toBe("preserved");
 
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.evaluate(() =>
-    sessionStorage.removeItem("ngt-dashboard-animation"),
-  );
   await page.reload();
   await expect(page.getByTestId("dashboard-motion")).not.toHaveClass(
     /dashboard-animating/,

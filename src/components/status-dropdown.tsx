@@ -29,6 +29,21 @@ import {
 
 type Option = { value: OrderStatus; label: string };
 
+async function submitStatus(
+  id: string,
+  input: unknown,
+  refresh: boolean,
+): Promise<Awaited<ReturnType<typeof statusAction>>> {
+  if (refresh) return statusAction(id, input);
+  const response = await fetch(`/api/work-orders/${id}/status`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mutation: "status", input }),
+  });
+  if (!response.ok) throw new Error("Status request failed");
+  return response.json();
+}
+
 function StatusSelect({
   value,
   label,
@@ -206,6 +221,20 @@ export function StatusDropdown({
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  useEffect(() => {
+    function sync(event: Event) {
+      const detail = (
+        event as CustomEvent<{
+          id: string;
+          snapshot: StatusMutationSnapshot;
+        }>
+      ).detail;
+      if (detail.id !== order.id) return;
+      setCurrentOrder((current) => ({ ...current, ...detail.snapshot }));
+    }
+    window.addEventListener("work-order-status-settled", sync);
+    return () => window.removeEventListener("work-order-status-settled", sync);
+  }, [order.id]);
   const choices = allowedTransitions(
     currentOrder.status,
     currentOrder.afterSalesOpen,
@@ -214,8 +243,14 @@ export function StatusDropdown({
     const nextOrder = { ...currentOrder, ...snapshot };
     setCurrentOrder(nextOrder);
     setError("");
+    window.dispatchEvent(
+      new CustomEvent("work-order-status-settled", {
+        detail: { id: order.id, snapshot },
+      }),
+    );
     onSettled?.(nextOrder);
     if (refreshOnSettled) router.refresh();
+    else router.prefetch(`/customers${window.location.search}`);
   }
   if (!active)
     return (
@@ -240,11 +275,15 @@ export function StatusDropdown({
           void (async () => {
             setPending(true);
             try {
-              const result = await statusAction(order.id, {
-                status: next,
-                note: "",
-                pickedUpBy: "",
-              });
+              const result = await submitStatus(
+                order.id,
+                {
+                  status: next,
+                  note: "",
+                  pickedUpBy: "",
+                },
+                refreshOnSettled,
+              );
               if (!result.ok) return setError(result.error);
               if (!result.data) return setError(it.connectionError);
               settled(result.data);
@@ -269,6 +308,7 @@ export function StatusDropdown({
         paid={currentOrder.paid}
         remaining={currentOrder.balance}
         customerName={currentOrder.customerName}
+        refreshOnSuccess={refreshOnSettled}
       />
       {cancelOpen && (
         <FormDialog
@@ -284,11 +324,15 @@ export function StatusDropdown({
               void (async () => {
                 setPending(true);
                 try {
-                  const result = await statusAction(order.id, {
-                    status: "CANCELLED",
-                    note: cancelReason,
-                    pickedUpBy: "",
-                  });
+                  const result = await submitStatus(
+                    order.id,
+                    {
+                      status: "CANCELLED",
+                      note: cancelReason,
+                      pickedUpBy: "",
+                    },
+                    refreshOnSettled,
+                  );
                   if (!result.ok) return setError(result.error);
                   if (!result.data) return setError(it.connectionError);
                   setCancelOpen(false);

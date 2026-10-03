@@ -3802,24 +3802,32 @@ test("customer links from repair list and detail open the shared dialog", async 
     "data-status-highlight-observed",
     "false",
   );
-  await page.evaluate(() => {
-    document.body.dataset.customerCloseLoadingObserved = "false";
-    new MutationObserver(() => {
-      if (document.querySelector('.standalone[role="status"]'))
-        document.body.dataset.customerCloseLoadingObserved = "true";
-    }).observe(document.body, { childList: true, subtree: true });
-  });
+  const loadingObserved = page.evaluate(
+    () =>
+      new Promise<boolean>((resolve) => {
+        let observed = Boolean(
+          document.querySelector('.standalone[role="status"]'),
+        );
+        const observer = new MutationObserver(() => {
+          if (document.querySelector('.standalone[role="status"]'))
+            observed = true;
+        });
+        observer.observe(document.documentElement, {
+          childList: true,
+          subtree: true,
+        });
+        window.setTimeout(() => {
+          observer.disconnect();
+          resolve(observed);
+        }, 700);
+      }),
+  );
   await dialog.getByRole("button", { name: "Chiudi", exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(
     page.locator(".detail-status .status-dropdown-trigger"),
   ).toContainText("Annullato");
-  await page.waitForTimeout(500);
-  expect(
-    await page.evaluate(
-      () => document.body.dataset.customerCloseLoadingObserved,
-    ),
-  ).toBe("false");
+  expect(await loadingObserved).toBe(false);
 });
 
 test("new product identifies the missing required field", async ({ page }) => {

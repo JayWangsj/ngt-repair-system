@@ -27,10 +27,11 @@ type Result<Data = undefined> =
 async function execute<Work extends { id?: string } | void, Data = undefined>(
   work: () => Promise<Work>,
   select?: (result: Work) => Data,
+  revalidate = true,
 ): Promise<Result<Data>> {
   try {
     const result = await work();
-    revalidatePath("/", "layout");
+    if (revalidate) revalidatePath("/", "layout");
     return {
       ok: true,
       id: result?.id,
@@ -192,18 +193,28 @@ export async function removeWorkOrderProductAction(id: string, lineId: string) {
   const actor = await requireActor();
   return execute(() => service.removeWorkOrderProduct(actor, id, lineId));
 }
-export async function checkoutWorkOrderAction(id: string, input: unknown) {
+export async function checkoutWorkOrderAction(
+  id: string,
+  input: unknown,
+  revalidate = true,
+) {
   const actor = await requireActor();
   return execute(
     () => service.checkoutWorkOrder(actor, id, input),
     statusMutationSnapshot,
+    revalidate,
   );
 }
-export async function statusAction(id: string, input: unknown) {
+export async function statusAction(
+  id: string,
+  input: unknown,
+  revalidate = true,
+) {
   const actor = await requireActor();
   return execute(
     () => service.changeStatus(actor, id, input),
     statusMutationSnapshot,
+    revalidate,
   );
 }
 export async function warrantyAction(id: string, input: unknown) {

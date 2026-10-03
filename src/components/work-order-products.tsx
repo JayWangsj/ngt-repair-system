@@ -32,6 +32,21 @@ type ProductOption = {
   reserved: number;
   available: number;
 };
+
+async function submitCheckout(
+  id: string,
+  input: unknown,
+  refresh: boolean,
+): Promise<Awaited<ReturnType<typeof checkoutWorkOrderAction>>> {
+  if (refresh) return checkoutWorkOrderAction(id, input);
+  const response = await fetch(`/api/work-orders/${id}/status`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mutation: "checkout", input }),
+  });
+  if (!response.ok) throw new Error("Checkout request failed");
+  return response.json();
+}
 type ProductLine = {
   id: string;
   productId: string;
@@ -212,6 +227,7 @@ export function WorkOrderCheckout({
   onClose,
   onSuccess,
   requireDelivery = false,
+  refreshOnSuccess = true,
 }: {
   orderId: string;
   due: number;
@@ -221,6 +237,7 @@ export function WorkOrderCheckout({
   onClose?: () => void;
   onSuccess?: (order: StatusMutationSnapshot) => void;
   requireDelivery?: boolean;
+  refreshOnSuccess?: boolean;
 }) {
   const it = useMessages();
   const router = useRouter();
@@ -258,14 +275,18 @@ export function WorkOrderCheckout({
     }
     setPending(true);
     try {
-      const result = await checkoutWorkOrderAction(orderId, {
-        requestId,
-        amount: submittedAmount,
-        method,
-        pickedUpBy: String(data.get("pickedUpBy") ?? ""),
-        pickedUpAt: new Date(String(data.get("pickedUpAt"))).toISOString(),
-        override: data.get("override") === "on",
-      });
+      const result = await submitCheckout(
+        orderId,
+        {
+          requestId,
+          amount: submittedAmount,
+          method,
+          pickedUpBy: String(data.get("pickedUpBy") ?? ""),
+          pickedUpAt: new Date(String(data.get("pickedUpAt"))).toISOString(),
+          override: data.get("override") === "on",
+        },
+        refreshOnSuccess,
+      );
       if (!result.ok) return setError(result.error);
       if (!result.data) return setError(it.connectionError);
       const delivered = submittedCents === remaining;
@@ -275,7 +296,8 @@ export function WorkOrderCheckout({
       }
       onClose?.();
       onSuccess?.(result.data);
-      router.refresh();
+      if (refreshOnSuccess) router.refresh();
+      else router.prefetch(`/customers${window.location.search}`);
     } catch {
       setError(it.connectionError);
     } finally {

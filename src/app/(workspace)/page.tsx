@@ -204,7 +204,6 @@ export default async function Dashboard({
           }).format(new Date(`${today}T12:00:00Z`))}
         </span>
         <input name="day" type="date" defaultValue={today} />
-        <button className="button button-outline">{it.filter}</button>
       </form>
       <div className="metrics dashboard-kpis">
         {metrics.map(

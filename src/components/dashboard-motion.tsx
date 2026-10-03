@@ -1,7 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, type FormEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 
 export function DashboardMotion({
   fingerprint,
@@ -16,12 +22,9 @@ export function DashboardMotion({
   const navigationTimer = useRef<ReturnType<typeof setTimeout>>(null);
   const router = useRouter();
 
-  function handleSubmit(event: FormEvent<HTMLDivElement>) {
-    const form = event.target as HTMLFormElement;
-    if (!form.matches(".dashboard-date-filter")) return;
-    event.preventDefault();
-    const day = String(new FormData(form).get("day") ?? "");
+  function navigateToDay(day: string) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
+    if (navigationTimer.current) clearTimeout(navigationTimer.current);
     const navigate = () => router.push(`/?day=${encodeURIComponent(day)}`);
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
       navigate();
@@ -29,6 +32,19 @@ export function DashboardMotion({
     }
     root.current?.classList.add("dashboard-updating");
     navigationTimer.current = setTimeout(navigate, 120);
+  }
+
+  function handleSubmit(event: FormEvent<HTMLDivElement>) {
+    const form = event.target as HTMLFormElement;
+    if (!form.matches(".dashboard-date-filter")) return;
+    event.preventDefault();
+    navigateToDay(String(new FormData(form).get("day") ?? ""));
+  }
+
+  function handleChange(event: ChangeEvent<HTMLDivElement>) {
+    const input = event.target as HTMLInputElement;
+    if (!input.matches('.dashboard-date-filter input[type="date"]')) return;
+    navigateToDay(input.value);
   }
 
   useEffect(
@@ -125,7 +141,12 @@ export function DashboardMotion({
   }, [fingerprint, locale]);
 
   return (
-    <div ref={root} data-testid="dashboard-motion" onSubmit={handleSubmit}>
+    <div
+      ref={root}
+      data-testid="dashboard-motion"
+      onChange={handleChange}
+      onSubmit={handleSubmit}
+    >
       {children}
     </div>
   );

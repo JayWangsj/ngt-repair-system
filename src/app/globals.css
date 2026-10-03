@@ -2213,10 +2213,6 @@ details[open] > summary {
 .dashboard-date-filter input {
   width: auto;
 }
-.dashboard-date-filter .button {
-  min-height: 40px;
-  padding: 8px 14px;
-}
 .dashboard-kpis .metric {
   position: relative;
   overflow: hidden;

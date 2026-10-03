@@ -411,7 +411,7 @@ test("dashboard animates on entry and data changes while respecting reduced moti
   await page
     .locator('.dashboard-date-filter input[type="date"]')
     .fill("2026-10-03");
-  await page.locator(".dashboard-date-filter button").click();
+  await expect(page.locator(".dashboard-date-filter button")).toHaveCount(0);
   await expect(dashboard).toHaveClass(/dashboard-updating/);
   await expect(page).toHaveURL(/day=2026-10-03/);
   await expect(page.getByTestId("dashboard-motion")).toHaveClass(

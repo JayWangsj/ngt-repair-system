@@ -14,6 +14,16 @@ export default async function Customers() {
       name: true,
       phone: true,
       phones: { select: { phone: true } },
+      devices: {
+        where: { deletedAt: null },
+        select: {
+          orders: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { createdAt: true },
+          },
+        },
+      },
       _count: { select: { devices: { where: { deletedAt: null } } } },
     },
     orderBy: { name: "asc" },
@@ -25,7 +35,16 @@ export default async function Customers() {
         description={it.customersDescription}
         actionNode={<NewCustomerDialog />}
       />
-      <CustomerList customers={customers} />
+      <CustomerList
+        customers={customers.map(({ devices, ...customer }) => ({
+          ...customer,
+          lastRepairAt:
+            devices
+              .flatMap((device) => device.orders)
+              .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
+              ?.createdAt.toISOString() ?? null,
+        }))}
+      />
     </>
   );
 }

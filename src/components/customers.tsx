@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Pencil, Plus, Smartphone, Trash2 } from "lucide-react";
 import { CustomerForm, DeviceForm, FormDialog } from "./forms";
 import { RecordIcon } from "./ui/record-icon";
 import { Button } from "./ui/button";
@@ -46,51 +46,33 @@ export function PhoneList({ customer }: { customer: Customer }) {
   );
 }
 
-function RecordActions({
-  customer,
-  device,
-  returnTo,
-  closeOnDelete = false,
-  disabled = false,
+function DeleteRecordDialog({
+  kind,
+  id,
+  name,
+  onClose,
+  onDeleted,
 }: {
-  customer?: Customer;
-  device?: Device;
-  returnTo?: string;
-  closeOnDelete?: boolean;
-  disabled?: boolean;
+  kind: "customer" | "device";
+  id: string;
+  name: string;
+  onClose: () => void;
+  onDeleted: () => void;
 }) {
   const it = useMessages();
   const { locale } = useLanguage();
-  const router = useRouter();
-  const [editing, setEditing] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const [saved, setSaved] = useState(false);
-  const title = device ? it.editDevice : it.editCustomer;
   async function remove() {
-    if (
-      !window.confirm(
-        device
-          ? it.deleteConfirm
-          : it.customerDeleteConfirm.replace("{count}", "1"),
-      )
-    )
-      return;
     setPending(true);
     setError("");
-    setSaved(false);
     try {
-      const result = device
-        ? await deleteDeviceAction(device.id)
-        : await deleteCustomerAction(customer!.id);
+      const result =
+        kind === "device"
+          ? await deleteDeviceAction(id)
+          : await deleteCustomerAction(id);
       if (!result.ok) setError(result.error ?? "Errore");
-      else {
-        if (!device && returnTo) {
-          if (closeOnDelete) router.back();
-          else router.push(returnTo);
-        }
-        router.refresh();
-      }
+      else onDeleted();
     } catch {
       setError("Connessione non disponibile. Riprova.");
     } finally {
@@ -98,62 +80,49 @@ function RecordActions({
     }
   }
   return (
-    <div className="record-actions">
-      <RecordIcon
-        kind="edit"
-        label={title}
-        disabled={pending || disabled}
-        onClick={() => {
-          setSaved(false);
-          setError("");
-          setEditing(true);
-        }}
-      />
-      <RecordIcon
-        kind="delete"
-        label={device ? it.deleteDevice : it.deleteCustomer}
-        disabled={pending}
-        onClick={remove}
-      />
-      {error && (
-        <p role="alert" className="message error">
-          {translateError(error, locale)}
+    <FormDialog
+      title={
+        kind === "customer"
+          ? it.deleteCustomerQuestion
+          : it.deleteDeviceQuestion
+      }
+      onClose={onClose}
+    >
+      <div className="confirm-delete-dialog" data-form-dialog-body>
+        <div className="confirm-delete-icon" aria-hidden="true">
+          <Trash2 size={22} />
+        </div>
+        <p>
+          {(kind === "customer"
+            ? it.deleteCustomerDescription
+            : it.deleteDeviceDescription
+          ).replace("{name}", name)}
         </p>
-      )}
-      {saved && (
-        <span role="status" className="record-saved">
-          {it.saved}
-        </span>
-      )}
-      {editing && (
-        <FormDialog title={title} onClose={() => setEditing(false)}>
-          {device ? (
-            <DeviceForm
-              device={device}
-              onSuccess={() => {
-                setEditing(false);
-                setSaved(true);
-              }}
-            />
-          ) : (
-            <CustomerForm
-              customer={customer}
-              onSuccess={() => {
-                setEditing(false);
-                setSaved(true);
-              }}
-            />
-          )}
-        </FormDialog>
-      )}
-    </div>
+        {error && (
+          <p role="alert" className="message error">
+            {translateError(error, locale)}
+          </p>
+        )}
+        <div className="dialog-actions">
+          <Button variant="outline" disabled={pending} onClick={onClose}>
+            {it.cancel}
+          </Button>
+          <Button variant="danger" disabled={pending} onClick={remove}>
+            {kind === "customer" ? it.deleteCustomer : it.deleteDevice}
+          </Button>
+        </div>
+      </div>
+    </FormDialog>
   );
 }
 
 export function CustomerList({
   customers,
 }: {
-  customers: (Customer & { _count: { devices: number } })[];
+  customers: (Customer & {
+    _count: { devices: number };
+    lastRepairAt: string | null;
+  })[];
 }) {
   const it = useMessages();
   const params = useSearchParams();
@@ -248,40 +217,43 @@ export function CustomerList({
             {it.clearSearch}
           </Button>
         )}
+        <div className="inventory-batch-controls customer-batch-toolbar">
+          <BatchControls
+            active={batchMode}
+            pending={pending}
+            selectedCount={selectedIds.length}
+            deleteDisabled={selectedIds.length > 500}
+            hasItems={shown.length > 0}
+            manageLabel={it.batchManage}
+            selectedLabel={it.inventory.selectedCount.replace(
+              "{count}",
+              String(selectedIds.length),
+            )}
+            selectAllLabel={it.selectAll}
+            showSelectAll={false}
+            deleteLabel={it.deleteCustomers}
+            finishLabel={it.finishBatch}
+            onStart={() => {
+              setBatchMode(true);
+              setSelected([]);
+            }}
+            onSelectAll={() =>
+              setSelected(shown.map((customer) => customer.id))
+            }
+            onDelete={removeSelected}
+            onFinish={() => {
+              setBatchMode(false);
+              setSelected([]);
+            }}
+          />
+          {batchMode && selectedIds.length > 500 && (
+            <span role="alert">{it.batchLimit}</span>
+          )}
+        </div>
       </form>
       <p className="customer-result-count" role="status">
         {shown.length} {it.customerResults}
       </p>
-      <div className="inventory-batch-controls customer-batch-toolbar">
-        <BatchControls
-          active={batchMode}
-          pending={pending}
-          selectedCount={selectedIds.length}
-          deleteDisabled={selectedIds.length > 500}
-          hasItems={shown.length > 0}
-          manageLabel={it.batchManage}
-          selectedLabel={it.inventory.selectedCount.replace(
-            "{count}",
-            String(selectedIds.length),
-          )}
-          selectAllLabel={it.selectAll}
-          deleteLabel={it.deleteCustomers}
-          finishLabel={it.finishBatch}
-          onStart={() => {
-            setBatchMode(true);
-            setSelected([]);
-          }}
-          onSelectAll={() => setSelected(shown.map((customer) => customer.id))}
-          onDelete={removeSelected}
-          onFinish={() => {
-            setBatchMode(false);
-            setSelected([]);
-          }}
-        />
-        {batchMode && selectedIds.length > 500 && (
-          <span role="alert">{it.batchLimit}</span>
-        )}
-      </div>
       {error && (
         <p className="message error" role="alert">
           {translateError(error, locale)}
@@ -294,13 +266,35 @@ export function CustomerList({
               <tr>
                 {batchMode && (
                   <th className="customer-selection">
-                    <span className="sr-only">{it.selectOption}</span>
+                    <input
+                      type="checkbox"
+                      aria-label={it.selectAll}
+                      disabled={pending || !shown.length}
+                      checked={
+                        shown.length > 0 && selectedIds.length === shown.length
+                      }
+                      ref={(element) => {
+                        if (element)
+                          element.indeterminate =
+                            selectedIds.length > 0 &&
+                            selectedIds.length < shown.length;
+                      }}
+                      onChange={(event) =>
+                        setSelected(
+                          event.target.checked
+                            ? shown.map((customer) => customer.id)
+                            : [],
+                        )
+                      }
+                    />
                   </th>
                 )}
                 <th className="customer-name-heading">{it.customer}</th>
                 <th className="customer-phone-heading">{it.phone}</th>
                 <th className="customer-device-heading">{it.devices}</th>
-                <th className="customer-actions-heading">{it.actionsLabel}</th>
+                <th className="customer-last-repair-heading">
+                  {it.lastRepairTime}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -349,8 +343,14 @@ export function CustomerList({
                       <span className="mobile-label">{it.devices}: </span>
                       {customer._count.devices}
                     </td>
-                    <td className="customer-row-actions">
-                      <RecordActions customer={customer} disabled={pending} />
+                    <td className="customer-last-repair">
+                      <span className="mobile-label">{it.lastRepairTime}:</span>
+                      {customer.lastRepairAt
+                        ? new Intl.DateTimeFormat(
+                            locale === "zh" ? "zh-CN" : "it-IT",
+                            { dateStyle: "medium", timeStyle: "short" },
+                          ).format(new Date(customer.lastRepairAt))
+                        : it.noRepairHistory}
                     </td>
                   </tr>
                 );
@@ -385,53 +385,158 @@ export function CustomerSummary({
   showHeading?: boolean;
   dialog?: boolean;
 }) {
+  const it = useMessages();
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   return (
-    <section className="panel padded customer-summary">
-      <div>
-        {showHeading && <h1>{customer.name}</h1>}
-        <PhoneList customer={customer} />
-      </div>
-      {!deleted && (
-        <RecordActions
+    <section
+      className={`panel padded customer-summary ${editing ? "is-editing" : ""}`}
+    >
+      {editing ? (
+        <CustomerForm
           customer={customer}
-          returnTo={customerListUrl(query)}
-          closeOnDelete={dialog}
+          onCancel={() => setEditing(false)}
+          onSuccess={() => setEditing(false)}
+        />
+      ) : (
+        <>
+          <div>
+            {showHeading && <h1>{customer.name}</h1>}
+            <PhoneList customer={customer} />
+          </div>
+          {!deleted && (
+            <div className="customer-summary-actions">
+              <Button variant="outline" onClick={() => setEditing(true)}>
+                <Pencil size={15} aria-hidden="true" />
+                {it.editCustomer}
+              </Button>
+              <Button
+                variant="outline"
+                className="button-danger"
+                onClick={() => setDeleting(true)}
+              >
+                <Trash2 size={15} aria-hidden="true" />
+                {it.deleteCustomer}
+              </Button>
+            </div>
+          )}
+        </>
+      )}
+      {deleting && (
+        <DeleteRecordDialog
+          kind="customer"
+          id={customer.id}
+          name={customer.name}
+          onClose={() => setDeleting(false)}
+          onDeleted={() => {
+            setDeleting(false);
+            if (dialog) router.back();
+            else router.push(customerListUrl(query));
+            router.refresh();
+          }}
         />
       )}
     </section>
   );
 }
 export function CustomerDevices({
+  customerId,
   devices,
   readOnly,
 }: {
+  customerId: string;
   devices: Device[];
   readOnly: boolean;
 }) {
   const it = useMessages();
+  const router = useRouter();
+  const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState("");
+  const [deleting, setDeleting] = useState<Device | null>(null);
   return (
-    <section className="panel customer-device-list">
-      {devices.length ? (
-        devices.map((device) => (
-          <article
-            className="customer-device-row business-list-row"
-            key={device.id}
-          >
-            <div>
-              <strong>
-                {device.brand} {device.model}
-              </strong>
-              {device.imei && (
-                <small>
-                  {it.imei}: {device.imei}
-                </small>
-              )}
-            </div>
-            {!readOnly && <RecordActions device={device} />}
+    <section className="customer-devices-section">
+      <div className="customer-section-heading">
+        <h2>
+          {it.devices} ({devices.length})
+        </h2>
+        {!readOnly && !creating && (
+          <Button variant="outline" onClick={() => setCreating(true)}>
+            <Plus size={15} aria-hidden="true" />
+            {it.newDevice}
+          </Button>
+        )}
+      </div>
+      <div className="panel customer-device-list">
+        {creating && (
+          <article className="customer-device-editor">
+            <DeviceForm
+              customerId={customerId}
+              onCancel={() => setCreating(false)}
+              onSuccess={() => setCreating(false)}
+            />
           </article>
-        ))
-      ) : (
-        <p className="empty">{it.noDevices}</p>
+        )}
+        {devices.length ? (
+          devices.map((device) => (
+            <article
+              className={`customer-device-row business-list-row ${editingId === device.id ? "is-editing" : ""}`}
+              key={device.id}
+            >
+              {editingId === device.id ? (
+                <DeviceForm
+                  device={device}
+                  onCancel={() => setEditingId("")}
+                  onSuccess={() => setEditingId("")}
+                />
+              ) : (
+                <>
+                  <div className="customer-device-icon" aria-hidden="true">
+                    <Smartphone size={20} />
+                  </div>
+                  <div>
+                    <strong>
+                      {device.brand} {device.model}
+                    </strong>
+                    {device.imei && (
+                      <small>
+                        {it.imei}: {device.imei}
+                      </small>
+                    )}
+                  </div>
+                  {!readOnly && (
+                    <div className="record-actions">
+                      <RecordIcon
+                        kind="edit"
+                        label={it.editDevice}
+                        onClick={() => setEditingId(device.id)}
+                      />
+                      <RecordIcon
+                        kind="delete"
+                        label={it.deleteDevice}
+                        onClick={() => setDeleting(device)}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+            </article>
+          ))
+        ) : creating ? null : (
+          <p className="empty">{it.noDevices}</p>
+        )}
+      </div>
+      {deleting && (
+        <DeleteRecordDialog
+          kind="device"
+          id={deleting.id}
+          name={`${deleting.brand} ${deleting.model}`}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => {
+            setDeleting(null);
+            router.refresh();
+          }}
+        />
       )}
     </section>
   );

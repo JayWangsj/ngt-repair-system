@@ -15,6 +15,7 @@ import {
   deleteCustomer,
   deleteCustomers,
   saveDevice,
+  createDevice,
   deleteDevice,
   deletePriceRules,
   hideFault,
@@ -1207,6 +1208,25 @@ describe("1.2 customer and catalog management", () => {
       where: { id: replacement.deviceId },
     });
     expect(replacementDevice.customerId).not.toBe(full.device.customerId);
+  });
+  it("adds a device to an active customer", async () => {
+    const customer = await saveCustomer(owner, null, {
+      name: "Device owner",
+      phone: "3331010101",
+      additionalPhones: [],
+    });
+    const added = await createDevice(owner, customer.id, {
+      category: "PHONE",
+      brand: "apple",
+      model: "iphone 15",
+      imei: "",
+    });
+    const device = await db.device.findUniqueOrThrow({
+      where: { id: added.id },
+    });
+    expect(device.customerId).toBe(customer.id);
+    expect(device.brand).toBe("Apple");
+    expect(device.model).toBe("iPhone 15");
   });
   it("deletes single and multiple quotes while preserving historical amounts", async () => {
     const order = await createOrder(owner, input());

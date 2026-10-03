@@ -290,6 +290,10 @@ export async function deviceAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(() => service.saveDevice(actor, id, input));
 }
+export async function createDeviceAction(customerId: string, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.createDevice(actor, customerId, input));
+}
 export async function deleteDeviceAction(id: string) {
   const actor = await requireActor();
   return execute(() => service.deleteDevice(actor, id));

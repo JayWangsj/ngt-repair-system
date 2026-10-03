@@ -12,6 +12,7 @@ export function BatchControls({
   manageLabel,
   selectedLabel,
   selectAllLabel,
+  showSelectAll = true,
   deleteLabel,
   finishLabel,
   onStart,
@@ -27,6 +28,7 @@ export function BatchControls({
   manageLabel: string;
   selectedLabel: string;
   selectAllLabel: string;
+  showSelectAll?: boolean;
   deleteLabel: string;
   finishLabel: string;
   onStart: () => void;
@@ -52,13 +54,15 @@ export function BatchControls({
       <span className="inventory-selected-count" role="status">
         {selectedLabel}
       </span>
-      <Button
-        variant="outline"
-        disabled={pending || !hasItems}
-        onClick={onSelectAll}
-      >
-        {selectAllLabel}
-      </Button>
+      {showSelectAll && (
+        <Button
+          variant="outline"
+          disabled={pending || !hasItems}
+          onClick={onSelectAll}
+        >
+          {selectAllLabel}
+        </Button>
+      )}
       <Button
         variant="outline"
         className="button-danger"

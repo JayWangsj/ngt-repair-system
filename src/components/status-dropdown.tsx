@@ -6,6 +6,7 @@ import {
   useEffect,
   useId,
   useLayoutEffect,
+  useCallback,
   useRef,
   useState,
   type KeyboardEvent,
@@ -42,6 +43,7 @@ function StatusSelect({
   onChange: (value: OrderStatus) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null);
   const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
   const trigger = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
@@ -54,16 +56,23 @@ function StatusSelect({
       ensureComfortableInteractionSpace(trigger.current, {
         spaceBelow: estimatedMenuHeight,
       });
+    setPortalHost(trigger.current?.closest("dialog") ?? document.body);
     setOpen(true);
   }
-  function place() {
+  const place = useCallback(() => {
     const rect = trigger.current?.getBoundingClientRect();
-    if (rect)
-      setPosition({ top: rect.bottom + 5, left: rect.left, width: rect.width });
-  }
+    if (rect) {
+      const below = rect.bottom + 5;
+      const top =
+        below + estimatedMenuHeight > window.innerHeight
+          ? Math.max(8, rect.top - estimatedMenuHeight - 5)
+          : below;
+      setPosition({ top, left: rect.left, width: rect.width });
+    }
+  }, [estimatedMenuHeight]);
   useLayoutEffect(() => {
     if (open) place();
-  }, [open]);
+  }, [open, place]);
   useEffect(() => {
     if (!open) return;
     function outside(event: PointerEvent) {
@@ -80,7 +89,7 @@ function StatusSelect({
       window.removeEventListener("resize", reposition);
       window.removeEventListener("scroll", reposition, true);
     };
-  }, [open]);
+  }, [open, place]);
   function keyboard(event: KeyboardEvent<HTMLButtonElement>) {
     if (!interactive) return;
     if (["ArrowDown", "Enter", " "].includes(event.key)) {
@@ -120,6 +129,7 @@ function StatusSelect({
         {interactive && <ChevronDown size={13} aria-hidden="true" />}
       </button>
       {open &&
+        portalHost &&
         createPortal(
           <div
             ref={menu}
@@ -137,6 +147,8 @@ function StatusSelect({
             onPointerDown={(event) => event.stopPropagation()}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
                 setOpen(false);
                 focusComfortably(trigger.current);
               }
@@ -159,7 +171,7 @@ function StatusSelect({
               </button>
             ))}
           </div>,
-          document.body,
+          portalHost,
         )}
     </span>
   );

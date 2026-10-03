@@ -45,13 +45,11 @@ export async function CustomerDetail({
         }}
         query={query}
         deleted={Boolean(customer.deletedAt)}
-        showHeading={!dialog}
+        showHeading
         dialog={dialog}
       />
-      <h2 className="spaced">
-        {it.devices} ({customer.devices.length})
-      </h2>
       <CustomerDevices
+        customerId={customer.id}
         devices={customer.devices.map((device) => ({
           id: device.id,
           category: device.category,
@@ -70,7 +68,7 @@ export async function CustomerDetail({
 
   if (dialog)
     return (
-      <CustomerDetailDialog title={customer.name}>
+      <CustomerDetailDialog title={it.customerDetails}>
         {content}
       </CustomerDetailDialog>
     );

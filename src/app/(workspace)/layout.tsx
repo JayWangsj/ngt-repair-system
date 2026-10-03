@@ -6,8 +6,10 @@ import { getBusinessDay } from "@/lib/business-date";
 export const dynamic = "force-dynamic";
 export default async function WorkspaceLayout({
   children,
+  modal,
 }: {
   children: React.ReactNode;
+  modal?: React.ReactNode;
 }) {
   await requireActor();
   const it = await getMessages();
@@ -23,6 +25,7 @@ export default async function WorkspaceLayout({
           </footer>
         </main>
       </div>
+      {modal}
     </BusinessDayProvider>
   );
 }

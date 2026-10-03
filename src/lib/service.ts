@@ -2571,6 +2571,30 @@ export async function saveDevice(actorInput: Actor, id: string, raw: unknown) {
     });
   });
 }
+export async function createDevice(
+  actorInput: Actor,
+  customerId: string,
+  raw: unknown,
+) {
+  const parsed = deviceInput.parse(raw);
+  const data = {
+    ...parsed,
+    brand: normalizeBrand(parsed.brand),
+    model: normalizeModel(parsed.model),
+  };
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    await tx.customer.findFirstOrThrow({
+      where: { id: customerId, deletedAt: null },
+      select: { id: true },
+    });
+    const device = await tx.device.create({
+      data: { customerId, ...data },
+    });
+    await audit(tx, actor, device.id, "DEVICE_CREATED", { after: data });
+    return { id: device.id };
+  });
+}
 export async function deleteDevice(actorInput: Actor, id: string) {
   return transact(async (tx) => {
     const actor = await currentActor(tx, actorInput);

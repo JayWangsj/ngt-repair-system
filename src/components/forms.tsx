@@ -78,6 +78,7 @@ import {
   ruleAction,
   updatePriceRuleFieldAction,
   customerAction,
+  createDeviceAction,
   hideFaultAction,
   deleteCustomerAction,
   deviceAction,
@@ -345,18 +346,35 @@ export function ProductForm({
     event.stopPropagation();
     const form = new FormData(event.currentTarget);
     const name = String(form.get("name") ?? "").trim();
+    const costPrice = String(form.get("costPrice") ?? "").trim();
+    const salePrice = String(form.get("salePrice") ?? "").trim();
+    const missing = [
+      !name ? it.inventory.product : "",
+      !category ? it.inventory.category : "",
+      !costPrice ? it.inventory.costPrice : "",
+      (mode === "retail" || usage !== "REPAIR") && !salePrice
+        ? it.inventory.salePrice
+        : "",
+    ].filter(Boolean);
+    if (missing.length) {
+      setError(
+        it.missingRequiredFields.replace(
+          "{fields}",
+          missing.join(locale === "zh" ? "、" : ", "),
+        ),
+      );
+      return;
+    }
     const initialStock = Number(form.get("initialStock") ?? 0);
+    setError("");
     startTransition(async () => {
       const result = await createProductAction({
         requestId: crypto.randomUUID(),
         name,
         category,
         usage: mode === "retail" ? "RETAIL" : usage,
-        costPrice: String(form.get("costPrice") ?? ""),
-        salePrice:
-          mode === "inventory" && usage === "REPAIR"
-            ? "0"
-            : String(form.get("salePrice") ?? ""),
+        costPrice,
+        salePrice: mode === "inventory" && usage === "REPAIR" ? "0" : salePrice,
         initialStock: String(initialStock),
         minStock: String(form.get("minStock") ?? "0"),
         favorite: form.get("favorite") === "on",
@@ -389,7 +407,12 @@ export function ProductForm({
     .filter((item) => mode === "inventory" || item.toLowerCase() !== "ricambi")
     .sort();
   return (
-    <form className="dialog-form" onSubmit={submit} aria-busy={pending}>
+    <form
+      className="dialog-form"
+      onSubmit={submit}
+      aria-busy={pending}
+      noValidate
+    >
       <div className="form-grid">
         <Field label={it.inventory.product}>
           <input
@@ -478,7 +501,9 @@ export function ProductForm({
         {it.inventory.favorite}
       </label>
       {error && (
-        <p className="message error">{translateError(error, locale)}</p>
+        <p className="message error" role="alert">
+          {translateError(error, locale)}
+        </p>
       )}
       <div className="dialog-actions">
         <Button
@@ -1915,6 +1940,7 @@ function ActionForm({
   children,
   submit,
   onSuccess,
+  onCancel,
   disabled = false,
   className = "",
 }: {
@@ -1922,11 +1948,13 @@ function ActionForm({
   children: ReactNode;
   submit: string;
   onSuccess?: () => void;
+  onCancel?: () => void;
   disabled?: boolean;
   className?: string;
 }) {
   const it = useMessages();
-  const closeDialog = useContext(FormCloseContext);
+  const dialogClose = useContext(FormCloseContext);
+  const closeDialog = onCancel ?? dialogClose;
   const registerAutoSave = useContext(FormAutoSaveContext);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -3233,8 +3261,10 @@ export function RuleForm({
 export function CustomerForm({
   customer,
   onSuccess,
+  onCancel,
 }: {
   onSuccess?: () => void;
+  onCancel?: () => void;
   customer?: {
     id: string;
     name: string;
@@ -3252,6 +3282,7 @@ export function CustomerForm({
     <ActionForm
       submit={it.save}
       onSuccess={onSuccess}
+      onCancel={onCancel}
       action={async (data) => {
         const result = await customerAction(customer?.id ?? null, {
           name: str(data, "name"),
@@ -3338,10 +3369,14 @@ export function DeleteRecord({
 }
 export function DeviceForm({
   device,
+  customerId,
   onSuccess,
+  onCancel,
 }: {
   onSuccess?: () => void;
-  device: {
+  onCancel?: () => void;
+  customerId?: string;
+  device?: {
     id: string;
     category: string;
     brand: string;
@@ -3352,17 +3387,21 @@ export function DeviceForm({
   const it = useMessages();
   const { locale } = useLanguage();
   const [category, setCategory] = useState<Category>(
-    device.category as Category,
+    (device?.category ?? "PHONE") as Category,
   );
-  const [brand, setBrand] = useState(device.brand);
-  const [model, setModel] = useState(device.model);
+  const [brand, setBrand] = useState(device?.brand ?? "");
+  const [model, setModel] = useState(device?.model ?? "");
   return (
     <ActionForm
       submit={it.save}
       onSuccess={onSuccess}
-      action={(data) =>
-        deviceAction(device.id, { ...Object.fromEntries(data), brand, model })
-      }
+      onCancel={onCancel}
+      action={(data) => {
+        const input = { ...Object.fromEntries(data), brand, model };
+        return device
+          ? deviceAction(device.id, input)
+          : createDeviceAction(customerId!, input);
+      }}
     >
       <Field label={it.deviceType}>
         <SimpleSelect
@@ -3400,7 +3439,7 @@ export function DeviceForm({
         required
       />
       <Field label={it.imei}>
-        <input name="imei" defaultValue={device.imei ?? ""} maxLength={30} />
+        <input name="imei" defaultValue={device?.imei ?? ""} maxLength={30} />
       </Field>
     </ActionForm>
   );
@@ -3746,6 +3785,7 @@ export function FormDialog({
       onCancel={(e) => {
         e.preventDefault();
         e.stopPropagation();
+        if (dialog.current?.querySelector(".status-dropdown-menu")) return;
         if (!busy()) onClose();
       }}
     >

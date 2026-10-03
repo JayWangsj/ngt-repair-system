@@ -4884,8 +4884,8 @@ details[open] > summary {
 .customer-table th.customer-device-heading {
   width: 12%;
 }
-.customer-table th.customer-actions-heading {
-  width: 112px;
+.customer-table th.customer-last-repair-heading {
+  width: 190px;
 }
 .customer-table td {
   vertical-align: middle;
@@ -4966,6 +4966,26 @@ details[open] > summary {
   justify-content: space-between;
   gap: 16px;
 }
+.customer-summary.is-editing {
+  display: block;
+}
+.customer-summary-actions,
+.customer-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.customer-summary-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.customer-section-heading {
+  margin: 22px 0 10px;
+}
+.customer-section-heading h2 {
+  margin: 0;
+}
 .customer-back {
   display: inline-block;
   margin-bottom: 14px;
@@ -4978,6 +4998,42 @@ details[open] > summary {
   align-items: center;
   gap: 16px;
   padding: 14px 20px;
+}
+.customer-device-row.is-editing,
+.customer-device-editor {
+  display: block;
+  padding: 16px 20px;
+  background: #fffaf0;
+}
+.customer-device-icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: #806000;
+  background: #fffdf5;
+}
+.customer-device-row > .customer-device-icon + div {
+  flex: 1;
+}
+.customer-summary .action-form,
+.customer-device-list .action-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.customer-summary .action-form > .phone-row,
+.customer-summary .action-form > .message,
+.customer-summary .action-form > .dialog-actions,
+.customer-device-list .action-form > .message,
+.customer-device-list .action-form > .dialog-actions {
+  grid-column: 1 / -1;
+}
+.customer-summary .action-form > .button:not(.dialog-actions .button) {
+  justify-self: start;
 }
 .customer-device-row + .customer-device-row {
   border-top: 1px solid var(--line);
@@ -5068,7 +5124,7 @@ details[open] > summary {
     grid-row: 3;
     align-self: center;
   }
-  .customer-table .customer-row-actions {
+  .customer-table .customer-last-repair {
     grid-column: 1 / -1;
     grid-row: 4;
   }
@@ -5088,6 +5144,20 @@ details[open] > summary {
   }
   .customer-search .grow {
     min-width: 0;
+  }
+  .customer-batch-toolbar {
+    margin-left: 0;
+  }
+  .customer-summary .action-form,
+  .customer-device-list .action-form {
+    grid-template-columns: 1fr;
+  }
+  .customer-summary .action-form > .phone-row,
+  .customer-summary .action-form > .message,
+  .customer-summary .action-form > .dialog-actions,
+  .customer-device-list .action-form > .message,
+  .customer-device-list .action-form > .dialog-actions {
+    grid-column: 1;
   }
   .customer-row-actions .record-actions {
     flex-wrap: wrap;
@@ -5223,7 +5293,7 @@ summary.record-icon::-webkit-details-marker {
 .customer-batch-toolbar {
   justify-content: flex-start;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin: 0 0 0 auto;
 }
 .customer-summary h1 {
   margin: 0 0 6px;
@@ -5765,7 +5835,7 @@ summary.record-icon::-webkit-details-marker {
 }
 .form-dialog:has(.customer-detail-dialog) {
   width: min(1000px, calc(100vw - 32px));
-  overflow: hidden;
+  overflow: visible;
 }
 .form-dialog:has(.customer-detail-dialog) > .customer-detail-dialog {
   max-height: calc(100dvh - 150px);
@@ -5774,9 +5844,37 @@ summary.record-icon::-webkit-details-marker {
 .customer-detail-dialog {
   display: grid;
 }
-.customer-detail-dialog .customer-summary .record-actions > .record-icon {
-  opacity: 1;
-  pointer-events: auto;
+.customer-detail-dialog .customer-summary {
+  padding: 0 0 18px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+}
+.customer-detail-dialog .customer-device-list,
+.customer-detail-dialog .table-panel {
+  border-radius: 9px;
+}
+.form-dialog:has(.confirm-delete-dialog) {
+  width: min(460px, calc(100vw - 32px));
+}
+.confirm-delete-dialog {
+  display: grid;
+  gap: 14px;
+}
+.confirm-delete-dialog p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.confirm-delete-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 50%;
+  color: #c62828;
+  background: #ffebee;
 }
 .form-dialog:has(.retail-history-dialog) > [data-form-dialog-body],
 .form-dialog:has(.retail-sale-dialog) > [data-form-dialog-body] {

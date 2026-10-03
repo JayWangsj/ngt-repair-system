@@ -215,8 +215,10 @@ export function OrderListBody({
   const highlightTimer = useRef<number | null>(null);
   useEffect(() => {
     function outside(event: PointerEvent) {
-      if ((event.target as Element).closest?.("[data-prevent-card-autosave]"))
-        return;
+      const protectedTarget = (event.target as Element).closest?.(
+        "[data-prevent-card-autosave]",
+      );
+      if (protectedTarget && protectedTarget.tagName !== "DIALOG") return;
       if (!body.current?.contains(event.target as Node))
         requestAnimationFrame(() => setActiveId(""));
     }
@@ -297,6 +299,14 @@ export function OrderListBody({
             data-order-id={row.id}
             className={`business-list-row ${active ? "order-row-active" : ""} ${highlightedId === row.id ? "order-row-status-highlight" : ""}`.trim()}
             onClick={() => setActiveId(row.id)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              const target = event.target;
+              if (!(target instanceof HTMLInputElement)) return;
+              event.preventDefault();
+              target.blur();
+              requestAnimationFrame(() => setActiveId(""));
+            }}
           >
             <td>
               <Link

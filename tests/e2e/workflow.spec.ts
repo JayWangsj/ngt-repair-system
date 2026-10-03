@@ -333,7 +333,6 @@ test("single operator opens every business page without login", async ({
     "/inventory",
     "/customers",
     "/prices",
-    "/reports",
     "/settings",
   ]) {
     await page.goto(path);
@@ -349,6 +348,14 @@ test("single operator opens every business page without login", async ({
   ).toHaveCount(0);
   await expect(
     page.getByRole("link", { name: "Statistiche dettagliate", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Statistiche dettagliate", exact: true }),
+  ).toBeVisible();
+  await page.goto("/reports");
+  await expect(page).toHaveURL(/\?stats=1/);
+  await expect(
+    page.getByRole("dialog", { name: "Andamento", exact: true }),
   ).toBeVisible();
   await page.goto("/settings");
   await expect(
@@ -398,6 +405,14 @@ test("dashboard animates on entry and data changes while respecting reduced moti
   await expect(dashboardActions).toContainText([">", ">", ">", ">"]);
   await expect(dashboardActions.locator("svg")).toHaveCount(0);
   const firstDashboardAction = dashboardActions.first();
+  expect(
+    await firstDashboardAction
+      .locator(".dashboard-link-label")
+      .evaluate((element) => ({
+        height: getComputedStyle(element, "::after").height,
+        opacity: getComputedStyle(element, "::after").opacity,
+      })),
+  ).toEqual({ height: "2px", opacity: "0" });
   await firstDashboardAction.hover();
   await expect
     .poll(() =>
@@ -406,6 +421,27 @@ test("dashboard animates on entry and data changes while respecting reduced moti
         .evaluate((element) => getComputedStyle(element).transform),
     )
     .not.toBe("none");
+  await expect
+    .poll(() =>
+      firstDashboardAction
+        .locator(".dashboard-link-label")
+        .evaluate((element) => ({
+          height: getComputedStyle(element, "::after").height,
+          opacity: getComputedStyle(element, "::after").opacity,
+        })),
+    )
+    .toEqual({ height: "2px", opacity: "1" });
+  await firstDashboardAction.click();
+  const statsDialog = page.getByRole("dialog", {
+    name: "Andamento",
+    exact: true,
+  });
+  await expect(statsDialog).toBeVisible();
+  await expect(statsDialog.getByText("Incassi del giorno")).toBeVisible();
+  await statsDialog
+    .getByRole("button", { name: "Chiudi", exact: true })
+    .click();
+  await expect(statsDialog).toHaveCount(0);
   await expect(page.locator(".attention-card")).toHaveCSS(
     "border-color",
     "rgb(239, 210, 124)",
@@ -445,6 +481,31 @@ test("dashboard animates on entry and data changes while respecting reduced moti
   await expect(page.getByTestId("dashboard-motion")).not.toHaveClass(
     /dashboard-animating/,
   );
+
+  await page.goto("/");
+  const attentionCard = page.locator(".attention-card");
+  await attentionCard.getByRole("link", { name: /Prodotti esauriti/ }).click();
+  await expect(page).toHaveURL(/status=OUT_OF_STOCK/);
+  await expect(
+    page.getByRole("button", { name: "Stato scorte", exact: true }),
+  ).toContainText("Esaurito");
+
+  await page.goto("/");
+  await attentionCard
+    .getByRole("link", { name: /Prodotti con scorta bassa/ })
+    .click();
+  await expect(page).toHaveURL(/status=LOW_STOCK/);
+  await expect(
+    page.getByRole("button", { name: "Stato scorte", exact: true }),
+  ).toContainText("Scorta bassa");
+
+  await page.goto("/");
+  await attentionCard.getByRole("link", { name: /In ritardo/ }).click();
+  await expect(page).toHaveURL(/attention=overdue/);
+  await expect(
+    page.getByRole("button", { name: "Priorità", exact: true }),
+  ).toContainText("In ritardo");
+  await expect(page.locator('input[name="month"]')).toHaveValue("");
 });
 
 test("creates and edits a product directly in the inventory row", async ({

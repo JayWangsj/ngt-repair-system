@@ -22,7 +22,9 @@ export default async function Orders({
   const q = query.q?.trim() ?? "";
   const month = /^\d{4}-\d{2}$/.test(query.month ?? "")
     ? query.month!
-    : romeDay().slice(0, 7);
+    : query.attention === "overdue" || query.attention === "unpaid"
+      ? ""
+      : romeDay().slice(0, 7);
   const orders = await db.workOrder.findMany({
     include: {
       device: { include: { customer: true } },
@@ -50,7 +52,7 @@ export default async function Orders({
   const filtered = orders.filter(
     (o) =>
       (!query.status || o.status === query.status) &&
-      romeDay(o.createdAt).startsWith(month) &&
+      (!month || romeDay(o.createdAt).startsWith(month)) &&
       (query.attention === "overdue"
         ? isOverdue(o, today)
         : query.attention === "unpaid"

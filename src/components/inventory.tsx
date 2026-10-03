@@ -247,16 +247,18 @@ function StockEditor({
 export function InventoryWorkspace({
   products,
   categories: categoryOptions,
+  initialStatus = "",
 }: {
   products: ProductView[];
   categories: CategoryView[];
+  initialStatus?: "" | ReturnType<typeof inventoryStatus>;
 }) {
   const it = useMessages();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [usage, setUsage] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(initialStatus);
   const [selectedId, setSelectedId] = useState("");
   const [batchMode, setBatchMode] = useState(false);
   const [checked, setChecked] = useState<string[]>([]);
@@ -388,7 +390,9 @@ export function InventoryWorkspace({
         />
         <SimpleSelect
           value={status}
-          onChange={setStatus}
+          onChange={(value) =>
+            setStatus(value as "" | ReturnType<typeof inventoryStatus>)
+          }
           placeholder={it.inventory.allStatuses}
           ariaLabel={it.inventory.status}
           options={[

@@ -26,7 +26,7 @@ export function OrderFilters({ initial }: { initial: FilterValues }) {
     const navigate = () => {
       const params = new URLSearchParams();
       if (next.q.trim()) params.set("q", next.q.trim());
-      params.set("month", next.month);
+      if (next.month) params.set("month", next.month);
       if (next.status) params.set("status", next.status);
       if (next.attention) params.set("attention", next.attention);
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });

@@ -17,9 +17,20 @@ import {
   type ProductView,
 } from "@/components/inventory";
 
-export default async function InventoryPage() {
+export default async function InventoryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string }>;
+}) {
   await requireActor();
   const it = await getMessages();
+  const requestedStatus = (await searchParams).status;
+  const initialStatus =
+    requestedStatus === "IN_STOCK" ||
+    requestedStatus === "LOW_STOCK" ||
+    requestedStatus === "OUT_OF_STOCK"
+      ? requestedStatus
+      : "";
   const [products, categories, movements, reservations] = await Promise.all([
     db.product.findMany({
       where: { enabled: true },
@@ -129,7 +140,11 @@ export default async function InventoryPage() {
           }))}
         />
       </div>
-      <InventoryWorkspace products={productViews} categories={categories} />
+      <InventoryWorkspace
+        products={productViews}
+        categories={categories}
+        initialStatus={initialStatus}
+      />
     </>
   );
 }

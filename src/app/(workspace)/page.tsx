@@ -12,6 +12,7 @@ import {
 import { db } from "@/lib/db";
 import {
   dateTime,
+  balance,
   cents,
   isOverdue,
   money,
@@ -26,10 +27,11 @@ import {
   summarizePayments,
 } from "@/lib/business-metrics";
 import { getLocale, getMessages } from "@/lib/i18n-server";
-import { Badge, PageHeader } from "@/components/common";
+import { Badge, OrderTable, PageHeader } from "@/components/common";
 import { requireActor } from "@/lib/session";
 import { DashboardMotion } from "@/components/dashboard-motion";
 import { getBusinessDay } from "@/lib/business-date";
+import { DashboardStatsDialog } from "@/components/dashboard-stats-dialog";
 
 function percentage(value: number, total: number) {
   return total > 0 ? Math.round((value / total) * 100) : 0;
@@ -44,7 +46,7 @@ function revenueTrend(current: number, previous: number) {
 export default async function Dashboard({
   searchParams,
 }: {
-  searchParams: Promise<{ day?: string }>;
+  searchParams: Promise<{ day?: string; stats?: string }>;
 }) {
   const it = await getMessages();
   const locale = await getLocale();
@@ -68,7 +70,8 @@ export default async function Dashboard({
     db.retailSale.findMany({ orderBy: { createdAt: "desc" }, take: 5 }),
     db.retailSaleItem.findMany({ include: { sale: true } }),
   ]);
-  const requestedDay = (await searchParams).day;
+  const query = await searchParams;
+  const requestedDay = query.day;
   const today =
     requestedDay && /^\d{4}-\d{2}-\d{2}$/.test(requestedDay)
       ? requestedDay
@@ -83,6 +86,15 @@ export default async function Dashboard({
   );
   const outOfStock = products.filter((product) => product.stockQuantity <= 0);
   const todayRevenue = summarizePayments(payments, today);
+  const unpaid = orders.filter(
+    (order) =>
+      order.status !== "CANCELLED" &&
+      balance(order.items, order.payments, order) > 0,
+  );
+  const openBalance = unpaid.reduce(
+    (sum, order) => sum + balance(order.items, order.payments, order),
+    0,
+  );
   const yesterdayRevenue = summarizePayments(
     payments,
     recentRomeDays(today, 2)[0],
@@ -417,17 +429,73 @@ export default async function Dashboard({
                 </small>
               </div>
             ))}
-            <Link
-              className="dashboard-detail-link dashboard-action-link"
-              href="/reports"
+            <DashboardStatsDialog
+              title={it.nav.reports}
+              description={`${it.reportDescription} ${today}`}
+              triggerLabel={it.dashboard.viewStats}
+              defaultOpen={query.stats === "1"}
+              closeHref={`/?day=${encodeURIComponent(today)}`}
             >
-              <span className="dashboard-link-label">
-                {it.dashboard.viewStats}
-              </span>
-              <span className="dashboard-link-chevron" aria-hidden="true">
-                &gt;
-              </span>
-            </Link>
+              <div className="dashboard-stats-dialog" data-form-dialog-body>
+                <div className="metrics dashboard-stats-metrics">
+                  <div className="metric">
+                    <span>{it.receivedOnDay}</span>
+                    <strong>{money(todayRevenue.total)}</strong>
+                  </div>
+                  <div className="metric">
+                    <span>{it.createdOnDay}</span>
+                    <strong>
+                      {
+                        orders.filter(
+                          (order) => romeDay(order.createdAt) === today,
+                        ).length
+                      }
+                    </strong>
+                  </div>
+                  <div className="metric">
+                    <span>{it.openBalance}</span>
+                    <strong>{money(openBalance)}</strong>
+                  </div>
+                </div>
+                <div className="dashboard-stats-grid">
+                  <section className="panel padded">
+                    <h2>{it.byMethod}</h2>
+                    {(["CASH", "CARD", "OTHER"] as const).map((method) => (
+                      <div className="stat-row" key={method}>
+                        <span>{it.methods[method]}</span>
+                        <strong>{money(todayRevenue.methods[method])}</strong>
+                      </div>
+                    ))}
+                    <div className="stat-row">
+                      <span>{it.dashboard.repairRevenue}</span>
+                      <strong>{money(todayRevenue.repair)}</strong>
+                    </div>
+                    <div className="stat-row">
+                      <span>{it.dashboard.retailRevenue}</span>
+                      <strong>{money(todayRevenue.retail)}</strong>
+                    </div>
+                  </section>
+                  <section className="panel padded">
+                    <h2>{it.workflow}</h2>
+                    {statuses.map((status) => (
+                      <div className="stat-row" key={status}>
+                        <span>{it.status[status]}</span>
+                        <strong>
+                          {
+                            orders.filter((order) => order.status === status)
+                              .length
+                          }
+                        </strong>
+                      </div>
+                    ))}
+                  </section>
+                </div>
+                <h2 className="spaced">{it.unpaid}</h2>
+                <section className="panel table-panel">
+                  <OrderTable orders={unpaid} />
+                </section>
+              </div>
+            </DashboardStatsDialog>
           </section>
         </div>
       )}

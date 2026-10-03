@@ -39,6 +39,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { Button } from "./ui/button";
+import { BatchControls } from "./ui/batch-controls";
 import { QuantityStepper } from "./ui/quantity-stepper";
 import { FormAutoSaveContext, FormCloseContext } from "./ui/form-close-context";
 import { useMessages, useLanguage } from "./language";
@@ -3486,8 +3487,32 @@ export function PriceList({
         : [...current, key],
     );
   }
-  const heading = (key: string, label: string, initial?: Partial<RuleView>) => (
-    <div className="catalog-toolbar price-tree-heading">
+  function updateSelection(ids: string[], checked: boolean) {
+    setSelected((current) =>
+      checked
+        ? [...new Set([...current, ...ids])]
+        : current.filter((id) => !ids.includes(id)),
+    );
+  }
+  const heading = (
+    key: string,
+    label: string,
+    ids: string[],
+    level: "brand" | "category" | "model",
+    initial?: Partial<RuleView>,
+  ) => (
+    <div
+      className={`catalog-toolbar price-tree-heading price-tree-heading-${level}`}
+    >
+      {batchMode && (
+        <PriceTreeCheckbox
+          label={`${it.selectOption} ${label}`}
+          ids={ids}
+          selected={selected}
+          disabled={pending}
+          onChange={updateSelection}
+        />
+      )}
       <button
         type="button"
         className="price-toggle"
@@ -3551,6 +3576,35 @@ export function PriceList({
           {it.newRule}
         </Button>
       </header>
+      <div
+        className={`catalog-toolbar price-batch-toolbar${batchMode ? " is-active" : ""}`}
+      >
+        <BatchControls
+          active={batchMode}
+          pending={pending}
+          selectedCount={selectedIds.length}
+          hasItems={visibleIds.length > 0}
+          manageLabel={it.batchManage}
+          selectedLabel={it.selectedPriceItems.replace(
+            "{count}",
+            String(selectedIds.length),
+          )}
+          selectAllLabel={it.selectAll}
+          showSelectAll={false}
+          deleteLabel={it.deleteSelected}
+          finishLabel={it.finishBatch}
+          onStart={() => {
+            setBatchMode(true);
+            setSelected([]);
+          }}
+          onSelectAll={() => setSelected(visibleIds)}
+          onDelete={() => remove(selectedIds)}
+          onFinish={() => {
+            setBatchMode(false);
+            setSelected([]);
+          }}
+        />
+      </div>
       <div className="filters price-filters">
         <label className="grow">
           <span className="sr-only">{it.search}</span>
@@ -3602,50 +3656,21 @@ export function PriceList({
         </FormDialog>
       )}
       <Message success={saved} />
-      <div className="catalog-toolbar price-batch-toolbar">
-        <Button
-          variant="outline"
-          disabled={pending}
-          aria-pressed={batchMode}
-          onClick={() => {
-            setBatchMode(!batchMode);
-            setSelected([]);
-          }}
-        >
-          {batchMode ? it.finishBatch : it.batchManage}
-        </Button>
-        {batchMode && (
-          <>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={
-                  visibleIds.length > 0 &&
-                  selectedIds.length === visibleIds.length
-                }
-                onChange={(event) =>
-                  setSelected(event.target.checked ? visibleIds : [])
-                }
-              />
-              {it.selectAll}
-            </label>
-            <Button
-              disabled={pending || !selectedIds.length}
-              variant="outline"
-              onClick={() => remove(selectedIds)}
-            >
-              <Trash2 size={18} aria-hidden="true" />
-              {it.deleteSelected} ({selectedIds.length})
-            </Button>
-          </>
-        )}
-      </div>
       <Message error={error} />
       <div className="price-groups">
         {groups.length === 0 && <p className="empty">{it.noPriceResults}</p>}
         {groups.map((brand) => (
           <section className="price-group" key={brand.key}>
-            {heading(brand.key, brand.brand || it.generic)}
+            {heading(
+              brand.key,
+              brand.brand || it.generic,
+              brand.categories.flatMap((category) =>
+                category.models.flatMap((model) =>
+                  model.rules.map((rule) => rule.id),
+                ),
+              ),
+              "brand",
+            )}
             <div
               id={"group-" + brand.key}
               hidden={!query.trim() && !expanded.includes(brand.key)}
@@ -3657,6 +3682,10 @@ export function PriceList({
                     categories[category.category as Category]?.[
                       locale === "zh" ? 1 : 0
                     ] ?? category.category,
+                    category.models.flatMap((model) =>
+                      model.rules.map((rule) => rule.id),
+                    ),
+                    "category",
                   )}
                   <div
                     id={"group-" + category.key}
@@ -3664,11 +3693,17 @@ export function PriceList({
                   >
                     {category.models.map((group) => (
                       <section className="price-tree-level" key={group.key}>
-                        {heading(group.key, group.model || it.generic, {
-                          brand: brand.brand,
-                          category: category.category,
-                          model: group.model,
-                        })}
+                        {heading(
+                          group.key,
+                          group.model || it.generic,
+                          group.rules.map((rule) => rule.id),
+                          "model",
+                          {
+                            brand: brand.brand,
+                            category: category.category,
+                            model: group.model,
+                          },
+                        )}
                         <div
                           id={"group-" + group.key}
                           hidden={
@@ -3676,8 +3711,19 @@ export function PriceList({
                           }
                         >
                           <div className="rule-list">
+                            <div
+                              className={`price-rule-header${batchMode ? " is-batch" : ""}`}
+                            >
+                              {batchMode && <span aria-hidden="true" />}
+                              <strong>{it.project}</strong>
+                              <strong>{it.quote}</strong>
+                              <span aria-hidden="true" />
+                            </div>
                             {group.rules.map((rule) => (
-                              <article className="price-rule-row" key={rule.id}>
+                              <article
+                                className={`price-rule-row${batchMode ? " is-batch" : ""}`}
+                                key={rule.id}
+                              >
                                 {batchMode && (
                                   <input
                                     type="checkbox"
@@ -3692,12 +3738,9 @@ export function PriceList({
                                     }
                                     checked={selected.includes(rule.id)}
                                     onChange={(event) =>
-                                      setSelected(
-                                        event.target.checked
-                                          ? [...selected, rule.id]
-                                          : selected.filter(
-                                              (id) => id !== rule.id,
-                                            ),
+                                      updateSelection(
+                                        [rule.id],
+                                        event.target.checked,
                                       )
                                     }
                                   />
@@ -3716,19 +3759,15 @@ export function PriceList({
                                   onError={setError}
                                   onSaved={() => setSaved(true)}
                                 />
-                                <span className="price-row-delete record-actions">
-                                  <RecordIcon
-                                    kind="edit"
-                                    label={it.editQuote}
-                                    disabled={pending}
-                                    onClick={() => setEditing(rule)}
-                                  />
-                                  <RecordIcon
-                                    kind="delete"
-                                    label={it.deleteRule}
-                                    disabled={pending}
-                                    onClick={() => remove([rule.id])}
-                                  />
+                                <span className="price-row-actions record-actions">
+                                  {!batchMode && (
+                                    <RecordIcon
+                                      kind="edit"
+                                      label={it.editQuote}
+                                      disabled={pending}
+                                      onClick={() => setEditing(rule)}
+                                    />
+                                  )}
                                 </span>
                               </article>
                             ))}
@@ -3744,6 +3783,39 @@ export function PriceList({
         ))}
       </div>
     </>
+  );
+}
+
+function PriceTreeCheckbox({
+  label,
+  ids,
+  selected,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  ids: string[];
+  selected: string[];
+  disabled: boolean;
+  onChange: (ids: string[], checked: boolean) => void;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const selectedCount = ids.filter((id) => selected.includes(id)).length;
+  const checked = ids.length > 0 && selectedCount === ids.length;
+  const indeterminate = selectedCount > 0 && !checked;
+  useEffect(() => {
+    if (input.current) input.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return (
+    <input
+      ref={input}
+      className="price-tree-checkbox"
+      type="checkbox"
+      aria-label={label}
+      checked={checked}
+      disabled={disabled || ids.length === 0}
+      onChange={(event) => onChange(ids, event.target.checked)}
+    />
   );
 }
 

@@ -93,6 +93,7 @@ export const it = {
   cancelDiscount: "Rimuovi sconto",
   deleteConfirm: "Eliminare? Le schede precedenti saranno conservate.",
   deleteSelected: "Elimina preventivi selezionati",
+  selectedPriceItems: "{count} interventi selezionati",
   selectAll: "Seleziona tutti",
   selectOption: "Seleziona",
   manualEntry: "Seleziona o scrivi un nuovo valore",

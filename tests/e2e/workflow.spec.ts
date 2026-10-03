@@ -2992,7 +2992,9 @@ test("quote tree supports contextual dialogs, search, editing and empty branch r
   await page
     .getByRole("button", { name: "Gestisci selezione", exact: true })
     .click();
-  await page.getByLabel("Seleziona tutti", { exact: true }).check();
+  await page
+    .getByRole("checkbox", { name: "Seleziona Watch Modal", exact: true })
+    .check();
   page.once("dialog", (d) => d.accept());
   await page
     .getByRole("button", { name: /Elimina preventivi selezionati/ })
@@ -3240,42 +3242,73 @@ test("hides managed faults without changing historical records", async ({
   ).toContainText("Disattivato");
 });
 
-test("compact price rows support direct icon actions and selection on mobile", async ({
+test("quote hierarchy supports stable hover editing and linked batch selection", async ({
   page,
 }) => {
   await page.goto("/prices");
   await page.getByLabel("Cerca", { exact: true }).fill("iPhone 13");
   const rows = page.locator(".price-rule-row");
+  await page.getByRole("button", { name: "Intervento", exact: true }).click();
+  const createDialog = page.getByRole("dialog");
+  await enterBusinessValue(
+    page,
+    "Intervento",
+    `Verifica selezione parziale ${Date.now()}`,
+    createDialog,
+  );
+  await createDialog
+    .getByLabel("Prezzo suggerito (€)", { exact: true })
+    .fill("35");
+  await createDialog
+    .getByRole("button", { name: "Salva", exact: true })
+    .click();
+  await expect(createDialog).not.toBeVisible();
+  await page.getByLabel("Cerca", { exact: true }).fill("iPhone 13");
+  await expect(rows).toHaveCount(2);
   const row = rows.first();
   await expect(row).toBeVisible();
   await expect(page.getByRole("checkbox")).toHaveCount(0);
   await expect(
     row.getByRole("button", { name: "Elimina preventivo", exact: true }),
-  ).toHaveCount(1);
-  await expect(row.locator(".price-row-delete")).toHaveCSS("opacity", "0");
+  ).toHaveCount(0);
+  const actions = row.locator(".price-row-actions");
+  const projectPosition = await row
+    .locator("button.inline-rule-project")
+    .boundingBox();
+  const pricePosition = await row
+    .locator("button.inline-rule-suggested")
+    .boundingBox();
+  await page.mouse.move(0, 0);
+  await expect(
+    actions.getByRole("button", { name: "Modifica preventivo" }),
+  ).toHaveCSS("opacity", "0");
   await row.hover();
-  await expect(row.locator(".price-row-delete")).toHaveCSS("opacity", "1");
+  await expect(row).toHaveCSS("background-color", "rgb(255, 249, 223)");
+  await expect(
+    actions.getByRole("button", { name: "Modifica preventivo" }),
+  ).toHaveCSS("opacity", "1");
+  expect(await row.locator("button.inline-rule-project").boundingBox()).toEqual(
+    projectPosition,
+  );
+  expect(
+    await row.locator("button.inline-rule-suggested").boundingBox(),
+  ).toEqual(pricePosition);
+  await expect(row.locator(".price-rule-header")).toHaveCount(0);
+  await expect(page.locator(".price-rule-header").first()).toContainText(
+    "Intervento",
+  );
+  await expect(page.locator(".price-rule-header").first()).toContainText(
+    "Preventivo",
+  );
   await expect(
     page.getByRole("button", { name: "Nuova regola", exact: true }),
   ).toHaveCount(1);
-  const longName =
-    "Sostituzione componente con descrizione molto lunga per verifica mobile";
-  await row.locator("button.inline-rule-project").click();
-  await row.locator("input.inline-rule-project").fill(longName);
-  await row.locator("input.inline-rule-project").press("Enter");
-  const changed = rows.filter({ hasText: longName });
-  await expect(changed.locator("button.inline-rule-project")).toHaveCount(1);
-  await changed.locator("button.inline-rule-suggested").click();
-  await changed.locator("input.inline-rule-suggested").fill("123.45");
-  await changed.locator("input.inline-rule-suggested").press("Enter");
+  const changed = row;
   await expect(page.getByLabel("Cerca", { exact: true })).toHaveValue(
     "iPhone 13",
   );
-  await expect(changed.locator("button.inline-rule-suggested")).toContainText(
-    "123,45",
-  );
   await expect(
-    changed.getByRole("button", { name: "Elimina preventivo", exact: true }),
+    changed.getByRole("button", { name: "Modifica preventivo", exact: true }),
   ).toBeVisible();
   await expect(
     changed.getByRole("button", { name: /^Altre azioni/ }),
@@ -3283,10 +3316,30 @@ test("compact price rows support direct icon actions and selection on mobile", a
   await page
     .getByRole("button", { name: "Gestisci selezione", exact: true })
     .click();
+  const modelSelection = page.getByRole("checkbox", {
+    name: "Seleziona iPhone 13",
+    exact: true,
+  });
+  const brandSelection = page.getByRole("checkbox", {
+    name: "Seleziona Apple",
+    exact: true,
+  });
   await changed.getByRole("checkbox").check();
-  await expect(
-    page.getByRole("button", { name: /Elimina preventivi selezionati/ }),
-  ).toContainText("(1)");
+  await expect(modelSelection).toHaveJSProperty("indeterminate", true);
+  await expect(brandSelection).toHaveJSProperty("indeterminate", true);
+  await expect(page.locator(".price-batch-toolbar")).toContainText(
+    "1 interventi selezionati",
+  );
+  await modelSelection.check();
+  expect(
+    await page
+      .locator('.price-rule-row > input[type="checkbox"]')
+      .evaluateAll((checkboxes) =>
+        checkboxes.every((checkbox) => (checkbox as HTMLInputElement).checked),
+      ),
+  ).toBe(true);
+  await expect(modelSelection).toBeChecked();
+  await expect(brandSelection).toBeChecked();
   await page
     .getByRole("button", { name: "Fine selezione", exact: true })
     .click();
@@ -3312,17 +3365,17 @@ test("compact price rows support direct icon actions and selection on mobile", a
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
-  await page.getByLabel("Seleziona tutti", { exact: true }).check();
+  await page
+    .getByRole("checkbox", { name: "Seleziona iPhone 13", exact: true })
+    .check();
   await page.getByLabel("Cerca", { exact: true }).fill("no-such-project");
   await expect(
     page.getByRole("button", { name: /Elimina preventivi selezionati/ }),
   ).toBeDisabled();
-  await expect(
-    page.getByLabel("Seleziona tutti", { exact: true }),
-  ).not.toBeChecked();
+  await expect(page.getByRole("checkbox")).toHaveCount(0);
 });
 
-test("price editor supports individual and batch deletion", async ({
+test("price editor keeps deletion inside batch management", async ({
   page,
 }) => {
   await page.goto("/prices");
@@ -3338,21 +3391,25 @@ test("price editor supports individual and batch deletion", async ({
     .locator(".price-rule-row")
     .filter({ hasText: "Da eliminare" });
   await expect(removable).toBeVisible();
-  page.once("dialog", (d) => d.accept());
   await removable.hover();
-  await removable
-    .getByRole("button", { name: "Elimina preventivo", exact: true })
-    .click();
-  await expect(removable).toHaveCount(0);
+  await expect(
+    removable.getByRole("button", {
+      name: "Elimina preventivo",
+      exact: true,
+    }),
+  ).toHaveCount(0);
   await page
     .getByRole("button", { name: "Gestisci selezione", exact: true })
     .click();
-  await page.getByLabel("Seleziona tutti", { exact: true }).check();
+  await removable.getByRole("checkbox").check();
+  await expect(page.locator(".price-batch-toolbar")).toContainText(
+    "1 interventi selezionati",
+  );
   page.once("dialog", (d) => d.accept());
   await page
     .getByRole("button", { name: /Elimina preventivi selezionati/ })
     .click();
-  await expect(page.locator(".rule-list > article")).toHaveCount(0);
+  await expect(removable).toHaveCount(0);
 });
 
 test("settings exports data and re-import skips existing records", async ({

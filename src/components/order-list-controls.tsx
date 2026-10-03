@@ -343,17 +343,19 @@ export function OrderListBody({
                 row={row}
                 active={active}
                 onSettled={(settled) => {
-                  previousRowPositions.current = new Map(
-                    Array.from(
-                      body.current?.querySelectorAll<HTMLTableRowElement>(
-                        "tr[data-order-id]",
-                      ) ?? [],
-                    ).map((element) => [
-                      element.dataset.orderId ?? "",
-                      element.getBoundingClientRect(),
-                    ]),
-                  );
-                  pendingStatusAnimation.current = row.id;
+                  if (!compact) {
+                    previousRowPositions.current = new Map(
+                      Array.from(
+                        body.current?.querySelectorAll<HTMLTableRowElement>(
+                          "tr[data-order-id]",
+                        ) ?? [],
+                      ).map((element) => [
+                        element.dataset.orderId ?? "",
+                        element.getBoundingClientRect(),
+                      ]),
+                    );
+                    pendingStatusAnimation.current = row.id;
+                  }
                   setSettledRows((current) => ({
                     ...current,
                     [row.id]: { before: sourceRow, after: settled },

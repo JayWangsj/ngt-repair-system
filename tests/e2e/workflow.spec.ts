@@ -3753,17 +3753,6 @@ test("customer links from repair list and detail open the shared dialog", async 
 
   const historyRow = dialog.locator(".order-list-body tr").first();
   await historyRow.click();
-  await historyRow.locator(".status-dropdown-trigger").click();
-  const menu = dialog.locator(".status-dropdown-menu");
-  await expect(menu).toBeVisible();
-  expect(
-    await menu.evaluate((element) => {
-      const box = element.getBoundingClientRect();
-      return box.top >= 0 && box.bottom <= window.innerHeight;
-    }),
-  ).toBe(true);
-  await page.keyboard.press("Escape");
-  await historyRow.click();
   const due = historyRow.getByLabel("Consegna prevista", { exact: true });
   await due.fill("2099-11-29");
   await due.press("Enter");
@@ -3779,6 +3768,36 @@ test("customer links from repair list and detail open the shared dialog", async 
     .click();
   await expect(dueByClick).toHaveCount(0);
   await expect(historyRow).toContainText("30/11/2099");
+
+  await historyRow.click();
+  await historyRow.locator(".status-dropdown-trigger").click();
+  const menu = dialog.locator(".status-dropdown-menu");
+  await expect(menu).toBeVisible();
+  expect(
+    await menu.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return box.top >= 0 && box.bottom <= window.innerHeight;
+    }),
+  ).toBe(true);
+  await historyRow.evaluate((element) => {
+    element.dataset.statusHighlightObserved = "false";
+    new MutationObserver(() => {
+      if (element.classList.contains("order-row-status-highlight"))
+        element.dataset.statusHighlightObserved = "true";
+    }).observe(element, { attributes: true, attributeFilter: ["class"] });
+  });
+  await menu.getByRole("option", { name: "Annullato", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Annulla scheda", exact: true })
+    .getByRole("button", { name: "Conferma annullamento", exact: true })
+    .click();
+  await expect(historyRow).not.toHaveClass(/order-row-active/);
+  await expect(historyRow.locator(".badge")).toContainText("Annullato");
+  await page.waitForTimeout(1500);
+  await expect(historyRow).toHaveAttribute(
+    "data-status-highlight-observed",
+    "false",
+  );
 });
 
 test("new product identifies the missing required field", async ({ page }) => {

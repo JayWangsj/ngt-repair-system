@@ -1,8 +1,8 @@
 import { db } from "@/lib/db";
 import { getMessages } from "@/lib/i18n-server";
 import { PageHeader, OrderTable } from "@/components/common";
-import { SimpleSelect } from "@/components/business-select";
-import { balance, isOverdue, romeDay, statuses } from "@/lib/domain";
+import { OrderFilters } from "@/components/order-filters";
+import { balance, isOverdue, romeDay } from "@/lib/domain";
 import { requireActor } from "@/lib/session";
 import { getBusinessDay } from "@/lib/business-date";
 export default async function Orders({
@@ -64,47 +64,14 @@ export default async function Orders({
         description={it.ordersDescription}
         action
       />
-      <form className="filters">
-        <label className="grow">
-          <span className="sr-only">{it.search}</span>
-          <input name="q" placeholder={it.orderSearch} defaultValue={q} />
-        </label>
-        <label>
-          <span className="sr-only">{it.month}</span>
-          <input name="month" type="month" defaultValue={month} />
-        </label>
-        <label>
-          <span className="sr-only">{it.statusLabel}</span>
-          <SimpleSelect
-            name="status"
-            defaultValue={query.status ?? ""}
-            placeholder={`${it.all} · ${it.statusLabel}`}
-            ariaLabel={it.statusLabel}
-            options={[
-              { value: "", label: `${it.all} · ${it.statusLabel}` },
-              ...statuses.map((status) => ({
-                value: status,
-                label: it.status[status],
-              })),
-            ]}
-          />
-        </label>
-        <label>
-          <span className="sr-only">{it.attention}</span>
-          <SimpleSelect
-            name="attention"
-            defaultValue={query.attention ?? ""}
-            placeholder={`${it.all} · ${it.attention}`}
-            ariaLabel={it.attention}
-            options={[
-              { value: "", label: `${it.all} · ${it.attention}` },
-              { value: "overdue", label: it.overdue },
-              { value: "unpaid", label: it.unpaid },
-            ]}
-          />
-        </label>
-        <button className="button button-outline">{it.filter}</button>
-      </form>
+      <OrderFilters
+        initial={{
+          q,
+          month,
+          status: query.status ?? "",
+          attention: query.attention ?? "",
+        }}
+      />
       <section className="panel table-panel">
         <OrderTable orders={filtered} />
       </section>

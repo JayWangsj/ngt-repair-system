@@ -653,8 +653,39 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await fillOrder(page, { manual: true });
   await save(page);
   await page.goto("/orders");
-  await expect(page.locator('input[name="month"]')).toHaveValue(
-    /^\d{4}-\d{2}$/,
+  const month = page.locator('input[name="month"]');
+  await expect(month).toHaveValue(/^\d{4}-\d{2}$/);
+  const currentMonth = await month.inputValue();
+  await expect(
+    page.getByRole("button", { name: "Filtra", exact: true }),
+  ).toHaveCount(0);
+  const search = page.getByPlaceholder("Numero, cliente, telefono o modello", {
+    exact: true,
+  });
+  const orderCode = await page.locator(".order-code-link").first().innerText();
+  await search.fill(orderCode);
+  await expect(page).toHaveURL(
+    (url) => url.searchParams.get("q") === orderCode,
+  );
+  await expect(page.locator("tbody tr")).toHaveCount(1);
+  await search.fill("");
+  await expect(page).toHaveURL((url) => !url.searchParams.has("q"));
+  await month.fill("2000-01");
+  await expect(page).toHaveURL(
+    (url) => url.searchParams.get("month") === "2000-01",
+  );
+  await expect(page.locator("tbody tr")).toHaveCount(0);
+  await month.fill(currentMonth);
+  await expect(page).toHaveURL(
+    (url) => url.searchParams.get("month") === currentMonth,
+  );
+  await chooseBusinessOption(page, "Stato", "In riparazione");
+  await expect(page).toHaveURL(
+    (url) => url.searchParams.get("status") === "REPAIRING",
+  );
+  await chooseBusinessOption(page, "Priorità", "Saldo aperto");
+  await expect(page).toHaveURL(
+    (url) => url.searchParams.get("attention") === "unpaid",
   );
   const row = page.locator("tbody tr").first();
   await row.hover();

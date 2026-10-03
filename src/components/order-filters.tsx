@@ -1,0 +1,99 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { statuses } from "@/lib/domain";
+import { SimpleSelect } from "./business-select";
+import { useMessages } from "./language";
+
+type FilterValues = {
+  q: string;
+  month: string;
+  status: string;
+  attention: string;
+};
+
+export function OrderFilters({ initial }: { initial: FilterValues }) {
+  const it = useMessages();
+  const router = useRouter();
+  const pathname = usePathname();
+  const timer = useRef<number | null>(null);
+  const [values, setValues] = useState(initial);
+
+  function apply(next: FilterValues, delay = 0) {
+    setValues(next);
+    if (timer.current) window.clearTimeout(timer.current);
+    const navigate = () => {
+      const params = new URLSearchParams();
+      if (next.q.trim()) params.set("q", next.q.trim());
+      params.set("month", next.month);
+      if (next.status) params.set("status", next.status);
+      if (next.attention) params.set("attention", next.attention);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    };
+    if (delay) timer.current = window.setTimeout(navigate, delay);
+    else navigate();
+  }
+
+  useEffect(
+    () => () => {
+      if (timer.current) window.clearTimeout(timer.current);
+    },
+    [],
+  );
+
+  return (
+    <div className="filters">
+      <label className="grow">
+        <span className="sr-only">{it.search}</span>
+        <input
+          name="q"
+          placeholder={it.orderSearch}
+          value={values.q}
+          onChange={(event) => apply({ ...values, q: event.target.value }, 250)}
+        />
+      </label>
+      <label>
+        <span className="sr-only">{it.month}</span>
+        <input
+          name="month"
+          type="month"
+          value={values.month}
+          onChange={(event) => apply({ ...values, month: event.target.value })}
+        />
+      </label>
+      <label>
+        <span className="sr-only">{it.statusLabel}</span>
+        <SimpleSelect
+          name="status"
+          value={values.status}
+          onChange={(status) => apply({ ...values, status })}
+          placeholder={`${it.all} · ${it.statusLabel}`}
+          ariaLabel={it.statusLabel}
+          options={[
+            { value: "", label: `${it.all} · ${it.statusLabel}` },
+            ...statuses.map((status) => ({
+              value: status,
+              label: it.status[status],
+            })),
+          ]}
+        />
+      </label>
+      <label>
+        <span className="sr-only">{it.attention}</span>
+        <SimpleSelect
+          name="attention"
+          value={values.attention}
+          onChange={(attention) => apply({ ...values, attention })}
+          placeholder={`${it.all} · ${it.attention}`}
+          ariaLabel={it.attention}
+          options={[
+            { value: "", label: `${it.all} · ${it.attention}` },
+            { value: "overdue", label: it.overdue },
+            { value: "unpaid", label: it.unpaid },
+          ]}
+        />
+      </label>
+    </div>
+  );
+}

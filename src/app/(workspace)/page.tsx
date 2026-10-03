@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
   AlertTriangle,
-  ArrowUpRight,
   ChartNoAxesColumnIncreasing,
   Clock3,
   Inbox,
@@ -418,9 +417,16 @@ export default async function Dashboard({
                 </small>
               </div>
             ))}
-            <Link className="dashboard-detail-link" href="/reports">
-              {it.dashboard.viewStats}
-              <ArrowUpRight size={15} />
+            <Link
+              className="dashboard-detail-link dashboard-action-link"
+              href="/reports"
+            >
+              <span className="dashboard-link-label">
+                {it.dashboard.viewStats}
+              </span>
+              <span className="dashboard-link-chevron" aria-hidden="true">
+                &gt;
+              </span>
             </Link>
           </section>
         </div>
@@ -480,9 +486,11 @@ export default async function Dashboard({
         <section className="panel padded dashboard-list-card">
           <div className="section-heading">
             <h2>{it.recent}</h2>
-            <Link href="/orders">
-              {it.viewAll}
-              <ArrowUpRight size={15} />
+            <Link className="dashboard-action-link" href="/orders">
+              <span className="dashboard-link-label">{it.viewAll}</span>
+              <span className="dashboard-link-chevron" aria-hidden="true">
+                &gt;
+              </span>
             </Link>
           </div>
           {orders.slice(0, 5).map((order) => (
@@ -511,9 +519,11 @@ export default async function Dashboard({
         <section className="panel padded dashboard-list-card">
           <div className="section-heading">
             <h2>{it.dashboard.recentSales}</h2>
-            <Link href="/retail?view=sales">
-              {it.viewAll}
-              <ArrowUpRight size={15} />
+            <Link className="dashboard-action-link" href="/retail?view=sales">
+              <span className="dashboard-link-label">{it.viewAll}</span>
+              <span className="dashboard-link-chevron" aria-hidden="true">
+                &gt;
+              </span>
             </Link>
           </div>
           {sales.map((sale) => (
@@ -540,9 +550,11 @@ export default async function Dashboard({
         <section className="panel padded dashboard-list-card">
           <div className="section-heading">
             <h2>{it.dashboard.hotProducts}</h2>
-            <Link href="/retail?view=sales">
-              {it.viewAll}
-              <ArrowUpRight size={15} />
+            <Link className="dashboard-action-link" href="/retail?view=sales">
+              <span className="dashboard-link-label">{it.viewAll}</span>
+              <span className="dashboard-link-chevron" aria-hidden="true">
+                &gt;
+              </span>
             </Link>
           </div>
           {hotProducts.map((product, index) => (

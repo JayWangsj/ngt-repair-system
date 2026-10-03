@@ -2576,6 +2576,9 @@ details[open] > summary {
   color: #735400;
   font-weight: 700;
 }
+.dashboard-link-chevron {
+  font: inherit;
+}
 .dashboard-workflow {
   margin-bottom: 18px;
 }
@@ -2586,6 +2589,14 @@ details[open] > summary {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+}
+.attention-card {
+  border-color: #efd27c;
+  background: linear-gradient(145deg, #fffef8 0%, #fff9e8 100%);
+  box-shadow: 0 10px 28px rgb(126 91 0 / 8%);
+}
+.attention-card .section-heading h2 {
+  color: #6d4d00;
 }
 .attention-card > a,
 .dashboard-list-row {
@@ -2603,6 +2614,15 @@ details[open] > summary {
 .dashboard-list-row > span {
   flex: 1;
   min-width: 0;
+}
+.attention-card > a {
+  margin-inline: -10px;
+  padding-inline: 10px;
+  border-radius: 8px;
+}
+.attention-card > a:hover,
+.attention-card > a:focus-visible {
+  background: rgb(245 189 39 / 10%);
 }
 .dashboard-list-row strong,
 .dashboard-list-row small {
@@ -2670,7 +2690,10 @@ details[open] > summary {
   .payment-method-row i,
   .dashboard-charts > section,
   .dashboard-workflow,
-  .dashboard-lists > section {
+  .dashboard-lists > section,
+  .dashboard-action-link,
+  .dashboard-action-link > .dashboard-link-label::after,
+  .dashboard-action-link .dashboard-link-chevron {
     transition: none !important;
   }
 }
@@ -5622,7 +5645,8 @@ summary.record-icon::-webkit-details-marker {
   background: #fff1f0;
 }
 .record-icon:focus-visible,
-.order-link:focus-visible {
+.order-link:focus-visible,
+.dashboard-action-link:focus-visible {
   outline: 2px solid #806000;
   outline-offset: 3px;
 }
@@ -6082,7 +6106,8 @@ summary.record-icon::-webkit-details-marker {
 .order-list-body .order-link,
 .order-detail-card .order-customer-link,
 .retail-history-dialog .order-code-link,
-.customer-name .order-link {
+.customer-name .order-link,
+.dashboard-action-link {
   position: relative;
   color: #715300;
   text-decoration: none;
@@ -6094,13 +6119,15 @@ summary.record-icon::-webkit-details-marker {
 .order-list-body .order-link > span,
 .order-detail-card .order-customer-link > span,
 .retail-history-dialog .order-code-link > span,
-.customer-name .order-link > span {
+.customer-name .order-link > span,
+.dashboard-action-link > .dashboard-link-label {
   position: relative;
 }
 .order-list-body .order-link > span::after,
 .order-detail-card .order-customer-link > span::after,
 .retail-history-dialog .order-code-link > span::after,
-.customer-name .order-link > span::after {
+.customer-name .order-link > span::after,
+.dashboard-action-link > .dashboard-link-label::after {
   position: absolute;
   right: 0;
   bottom: -2px;
@@ -6119,7 +6146,11 @@ summary.record-icon::-webkit-details-marker {
 .retail-history-dialog .order-code-link:hover,
 .retail-history-dialog .order-code-link:focus-visible,
 .customer-name .order-link:hover,
-.customer-name .order-link:focus-visible {
+.customer-name .order-link:focus-visible,
+.dashboard-action-link:hover,
+.dashboard-action-link:focus-visible,
+.section-heading .dashboard-action-link:hover,
+.section-heading .dashboard-action-link:focus-visible {
   color: #543e00;
   transform: none;
 }
@@ -6130,14 +6161,17 @@ summary.record-icon::-webkit-details-marker {
 .retail-history-dialog .order-code-link:hover > span::after,
 .retail-history-dialog .order-code-link:focus-visible > span::after,
 .customer-name .order-link:hover > span::after,
-.customer-name .order-link:focus-visible > span::after {
+.customer-name .order-link:focus-visible > span::after,
+.dashboard-action-link:hover > .dashboard-link-label::after,
+.dashboard-action-link:focus-visible > .dashboard-link-label::after {
   transform: scaleX(1);
 }
 .order-list-body .order-code-link svg,
 .order-list-body .order-customer-link svg,
 .order-detail-card .order-customer-link svg,
 .retail-history-dialog .order-code-link svg,
-.customer-name .order-link svg {
+.customer-name .order-link svg,
+.dashboard-action-link .dashboard-link-chevron {
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .order-list-body .order-code-link:hover svg,
@@ -6149,7 +6183,9 @@ summary.record-icon::-webkit-details-marker {
 .retail-history-dialog .order-code-link:hover svg,
 .retail-history-dialog .order-code-link:focus-visible svg,
 .customer-name .order-link:hover svg,
-.customer-name .order-link:focus-visible svg {
+.customer-name .order-link:focus-visible svg,
+.dashboard-action-link:hover .dashboard-link-chevron,
+.dashboard-action-link:focus-visible .dashboard-link-chevron {
   transform: translateX(4px);
 }
 .table-panel tbody tr:has(.order-payment-values) {

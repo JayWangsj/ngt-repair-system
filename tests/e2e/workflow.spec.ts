@@ -393,6 +393,23 @@ test("dashboard animates on entry and data changes while respecting reduced moti
   await expect(page.locator(".revenue-bar")).toHaveCount(0);
   await expect(page.locator(".payment-method-row")).toHaveCount(3);
   await expect(page.locator(".payment-method-row").first()).toContainText("0%");
+  const dashboardActions = page.locator(".dashboard-action-link");
+  await expect(dashboardActions).toHaveCount(4);
+  await expect(dashboardActions).toContainText([">", ">", ">", ">"]);
+  await expect(dashboardActions.locator("svg")).toHaveCount(0);
+  const firstDashboardAction = dashboardActions.first();
+  await firstDashboardAction.hover();
+  await expect
+    .poll(() =>
+      firstDashboardAction
+        .locator(".dashboard-link-chevron")
+        .evaluate((element) => getComputedStyle(element).transform),
+    )
+    .not.toBe("none");
+  await expect(page.locator(".attention-card")).toHaveCSS(
+    "border-color",
+    "rgb(239, 210, 124)",
+  );
 
   await page.goto("/orders");
   await page.goto("/");

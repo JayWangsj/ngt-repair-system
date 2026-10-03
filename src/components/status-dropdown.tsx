@@ -191,10 +191,12 @@ export function StatusDropdown({
   order,
   active = true,
   onSettled,
+  refreshOnSettled = true,
 }: {
   order: StatusDropdownOrder;
   active?: boolean;
   onSettled?: (order: StatusDropdownOrder) => void;
+  refreshOnSettled?: boolean;
 }) {
   const it = useMessages();
   const router = useRouter();
@@ -213,7 +215,7 @@ export function StatusDropdown({
     setCurrentOrder(nextOrder);
     setError("");
     onSettled?.(nextOrder);
-    router.refresh();
+    if (refreshOnSettled) router.refresh();
   }
   if (!active)
     return (

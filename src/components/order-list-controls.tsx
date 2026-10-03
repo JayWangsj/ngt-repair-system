@@ -37,6 +37,7 @@ function StatusControl({
   row,
   active,
   onSettled,
+  refreshOnSettled,
 }: {
   row: Pick<
     OrderListRow,
@@ -50,6 +51,7 @@ function StatusControl({
   >;
   active: boolean;
   onSettled?: (order: StatusDropdownOrder) => void;
+  refreshOnSettled?: boolean;
 }) {
   return (
     <StatusDropdown
@@ -57,6 +59,7 @@ function StatusControl({
       order={row}
       active={active}
       onSettled={onSettled}
+      refreshOnSettled={refreshOnSettled}
     />
   );
 }
@@ -208,6 +211,7 @@ export function OrderListBody({
     Record<string, { before: StatusDropdownOrder; after: StatusDropdownOrder }>
   >({});
   const [highlightedId, setHighlightedId] = useState("");
+  const [suppressedHoverId, setSuppressedHoverId] = useState("");
   const body = useRef<HTMLTableSectionElement>(null);
   const pendingStatusAnimation = useRef("");
   const previousRowPositions = useRef(new Map<string, DOMRect>());
@@ -297,8 +301,11 @@ export function OrderListBody({
           <tr
             key={row.id}
             data-order-id={row.id}
-            className={`business-list-row ${active ? "order-row-active" : ""} ${highlightedId === row.id ? "order-row-status-highlight" : ""}`.trim()}
+            className={`business-list-row ${active && !compact ? "order-row-active" : ""} ${suppressedHoverId === row.id ? "order-row-hover-suppressed" : ""} ${highlightedId === row.id ? "order-row-status-highlight" : ""}`.trim()}
             onClick={() => setActiveId(row.id)}
+            onPointerLeave={() => {
+              if (suppressedHoverId === row.id) setSuppressedHoverId("");
+            }}
             onKeyDown={(event) => {
               if (event.key !== "Enter") return;
               const target = event.target;
@@ -342,6 +349,7 @@ export function OrderListBody({
               <StatusControl
                 row={row}
                 active={active}
+                refreshOnSettled={!compact}
                 onSettled={(settled) => {
                   if (!compact) {
                     previousRowPositions.current = new Map(
@@ -360,6 +368,7 @@ export function OrderListBody({
                     ...current,
                     [row.id]: { before: sourceRow, after: settled },
                   }));
+                  if (compact) setSuppressedHoverId(row.id);
                   setActiveId("");
                 }}
               />

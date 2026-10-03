@@ -3770,6 +3770,7 @@ test("customer links from repair list and detail open the shared dialog", async 
   await expect(historyRow).toContainText("30/11/2099");
 
   await historyRow.click();
+  await expect(historyRow).not.toHaveClass(/order-row-active/);
   await historyRow.locator(".status-dropdown-trigger").click();
   const menu = dialog.locator(".status-dropdown-menu");
   await expect(menu).toBeVisible();
@@ -3792,12 +3793,33 @@ test("customer links from repair list and detail open the shared dialog", async 
     .getByRole("button", { name: "Conferma annullamento", exact: true })
     .click();
   await expect(historyRow).not.toHaveClass(/order-row-active/);
+  await expect(historyRow).toHaveClass(/order-row-hover-suppressed/);
   await expect(historyRow.locator(".badge")).toContainText("Annullato");
+  await historyRow.hover();
+  await expect(historyRow).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await page.waitForTimeout(1500);
   await expect(historyRow).toHaveAttribute(
     "data-status-highlight-observed",
     "false",
   );
+  await page.evaluate(() => {
+    document.body.dataset.customerCloseLoadingObserved = "false";
+    new MutationObserver(() => {
+      if (document.querySelector('.standalone[role="status"]'))
+        document.body.dataset.customerCloseLoadingObserved = "true";
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  await dialog.getByRole("button", { name: "Chiudi", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toContainText("Annullato");
+  await page.waitForTimeout(500);
+  expect(
+    await page.evaluate(
+      () => document.body.dataset.customerCloseLoadingObserved,
+    ),
+  ).toBe("false");
 });
 
 test("new product identifies the missing required field", async ({ page }) => {

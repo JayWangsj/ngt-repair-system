@@ -68,8 +68,8 @@ export function DashboardMotion({
       node.textContent =
         node.dataset.countType === "money" ? moneyFormat.format(0) : "0";
     });
-    bars.forEach((node) => (node.style.height = "0%"));
-    progress.forEach((node) => (node.style.width = "0%"));
+    bars.forEach((node) => (node.style.transform = "scaleY(0)"));
+    progress.forEach((node) => (node.style.transform = "scaleX(0)"));
     donutSegments.forEach((node) => {
       node.style.strokeDasharray = "0 100";
       node.style.strokeDashoffset = node.dataset.donutOffset ?? "0";
@@ -78,38 +78,43 @@ export function DashboardMotion({
     void element.offsetHeight;
 
     let frame = 0;
-    const start = performance.now() + 70;
-    const duration = 500;
+    const start = performance.now();
+    const animationDuration = 1150;
+    const progressAt = (elapsed: number, delay: number, duration: number) => {
+      const raw = Math.max(0, Math.min(1, (elapsed - delay) / duration));
+      return 1 - Math.pow(1 - raw, 3);
+    };
     const animate = (now: number) => {
-      const raw = Math.max(0, Math.min(1, (now - start) / duration));
-      const eased = 1 - Math.pow(1 - raw, 3);
+      const elapsed = now - start;
+      const countProgress = progressAt(elapsed, 70, 800);
       counts.forEach((node) => {
         const target = Number(node.dataset.count ?? 0);
-        const value = Math.round(target * eased);
+        const value = Math.round(target * countProgress);
         node.textContent =
           node.dataset.countType === "money"
             ? moneyFormat.format(value / 100)
             : integerFormat.format(value);
       });
-      if (raw < 1) frame = requestAnimationFrame(animate);
+      bars.forEach((node, index) => {
+        const barProgress = progressAt(elapsed, 180 + (index % 2) * 70, 850);
+        node.style.transform = `scaleY(${barProgress})`;
+      });
+      progress.forEach((node) => {
+        node.style.transform = `scaleX(${progressAt(elapsed, 380, 700)})`;
+      });
+      donutSegments.forEach((node, index) => {
+        const target = Number(node.dataset.donutSegment ?? 0);
+        const donutProgress = progressAt(elapsed, 260 + index * 60, 800);
+        const value = target * donutProgress;
+        node.style.strokeDasharray = `${value} ${100 - value}`;
+      });
+      if (elapsed < animationDuration) frame = requestAnimationFrame(animate);
       else {
         element.classList.remove("dashboard-animating");
       }
     };
     const reveal = requestAnimationFrame(() => {
       element.classList.add("dashboard-running");
-      bars.forEach((node, index) => {
-        node.style.transitionDelay = `${80 + (index % 2) * 55}ms`;
-        node.style.height = node.dataset.bar ?? "0%";
-      });
-      progress.forEach((node) => {
-        node.style.width = node.dataset.progress ?? "0%";
-      });
-      donutSegments.forEach((node, index) => {
-        const share = Number(node.dataset.donutSegment ?? 0);
-        node.style.transitionDelay = `${100 + index * 55}ms`;
-        node.style.strokeDasharray = `${share} ${100 - share}`;
-      });
       frame = requestAnimationFrame(animate);
     });
     return () => {

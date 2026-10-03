@@ -1225,6 +1225,26 @@ test("completes a retail sale and opens its immutable receipt", async ({
   await expect(page).toHaveURL(/\/retail$/);
 
   await page.goto("/");
+  await page.waitForTimeout(500);
+  const motionProgress = await page.evaluate(() => {
+    const bar = document.querySelector<HTMLElement>(
+      ".revenue-day:last-child .revenue-bar.retail",
+    );
+    const payment = document.querySelector<HTMLElement>(
+      ".payment-method-row:nth-of-type(2) i",
+    );
+    return {
+      bar: bar ? new DOMMatrixReadOnly(getComputedStyle(bar).transform).d : 1,
+      payment: payment
+        ? new DOMMatrixReadOnly(getComputedStyle(payment).transform).a
+        : 1,
+    };
+  });
+  expect(motionProgress.bar).toBeGreaterThan(0);
+  expect(motionProgress.bar).toBeLessThan(1);
+  expect(motionProgress.payment).toBeGreaterThan(0);
+  expect(motionProgress.payment).toBeLessThan(1);
+  await page.waitForTimeout(750);
   await expect(page.locator(".revenue-bar")).toHaveCount(14);
   const latestDay = page.locator(".revenue-day").last();
   await latestDay.hover();

@@ -2290,15 +2290,6 @@ details[open] > summary {
 .dashboard-kpis .metric:nth-child(6) {
   --dashboard-card-index: 5;
 }
-.dashboard-animating .revenue-bar {
-  transition: height 580ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.dashboard-animating .donut-segment {
-  transition: stroke-dasharray 600ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-.dashboard-animating .payment-method-row i {
-  transition: width 460ms cubic-bezier(0.22, 1, 0.36, 1) 180ms;
-}
 .dashboard-animating .dashboard-charts > section,
 .dashboard-animating .dashboard-workflow,
 .dashboard-animating .dashboard-lists > section {
@@ -2396,8 +2387,8 @@ details[open] > summary {
   width: min(25px, 38%);
   min-height: 0;
   border-radius: 6px 6px 2px 2px;
+  transform-origin: center bottom;
   transition:
-    height 580ms cubic-bezier(0.22, 1, 0.36, 1),
     filter var(--motion-base) var(--ease-ui),
     opacity var(--motion-base) var(--ease-ui);
 }
@@ -2500,7 +2491,6 @@ details[open] > summary {
   cursor: default;
   transform-origin: center;
   transition:
-    stroke-dasharray 600ms cubic-bezier(0.22, 1, 0.36, 1),
     stroke-width var(--motion-base) var(--ease-ui),
     filter var(--motion-base) var(--ease-ui);
 }
@@ -2565,9 +2555,8 @@ details[open] > summary {
   height: 100%;
   background: var(--dashboard-repair);
   border-radius: inherit;
-  transition:
-    width 460ms cubic-bezier(0.22, 1, 0.36, 1),
-    filter var(--motion-base) var(--ease-ui);
+  transform-origin: left center;
+  transition: filter var(--motion-base) var(--ease-ui);
 }
 .payment-method-row:nth-of-type(2) i {
   background: var(--dashboard-retail);

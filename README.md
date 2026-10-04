@@ -81,7 +81,11 @@ git push origin "v$version"
 
 GitHub Actions 会在 Windows 上生成包含 Node.js、正式构建、数据库运行时和迁移的私有 Release，工作室电脑不需安装 pnpm，也不需在 4 GB 内存上执行 Next.js 构建。
 
-工作室电脑首次安装 GitHub CLI 并登录有权访问私有仓库的账号，下载最新的 `ngt-studio-windows-*.zip`，解压后执行：
+工作室电脑首次安装时，从私有 Release 下载 `ngt-studio-windows-setup-v*.exe`，双击后按向导完成即可。安装程序会初始化本地数据库、配置登录 Windows 后自动启动、创建桌面快捷方式并打开系统。如需卸载，在 Windows“设置 → 应用 → 已安装的应用”中卸载“NGT 工作室管理系统”；后台任务和快捷方式会被移除，业务数据默认保留。
+
+如果 Windows 因安装程序未进行商业签名而显示 SmartScreen 提示，确认文件来自本仓库 Release 后，选择“更多信息”和“仍要运行”。
+
+仍可使用 ZIP 包手工安装：下载最新的 `ngt-studio-windows-v*.zip`，解压后执行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-windows-studio.ps1

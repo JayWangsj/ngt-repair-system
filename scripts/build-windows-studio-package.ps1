@@ -33,6 +33,9 @@ if (Test-Path -LiteralPath $copiedEnvironment) {
   Remove-Item -LiteralPath $copiedEnvironment -Force
 }
 Copy-Item -LiteralPath "prisma" -Destination (Join-Path $stage "prisma") -Recurse -Force
+$stageAssets = Join-Path $stage "assets"
+New-Item -ItemType Directory -Path $stageAssets -Force | Out-Null
+Copy-Item -LiteralPath "assets\ngt-studio.ico" -Destination $stageAssets -Force
 
 $runtimeScripts = @(
   "backup-windows-studio.ps1",
@@ -40,9 +43,11 @@ $runtimeScripts = @(
   "install-windows-studio.ps1",
   "start.mjs",
   "uninstall-windows-startup.ps1",
+  "uninstall-windows-studio.ps1",
   "update-windows-studio.ps1",
   "windows-db.mjs",
   "windows-service.ps1",
+  "windows-studio-launcher.vbs",
   "windows-studio-common.ps1"
 )
 $stageScripts = Join-Path $stage "scripts"

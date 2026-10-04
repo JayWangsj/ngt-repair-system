@@ -30,6 +30,10 @@ jobs:
         run: ./scripts/build-windows-studio-package.ps1
       - shell: powershell
         run: |
+          choco install innosetup --no-progress --yes
+          ./scripts/build-windows-studio-installer.ps1
+      - shell: powershell
+        run: |
           $assets = Get-ChildItem -LiteralPath dist -File | Select-Object -ExpandProperty FullName
           gh release create $env:GITHUB_REF_NAME @assets --verify-tag --generate-notes
         env:

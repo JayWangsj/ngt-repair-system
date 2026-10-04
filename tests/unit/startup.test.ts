@@ -20,6 +20,10 @@ describe("Windows persistent startup", () => {
       "utf8",
     );
     expect(installer).toContain("New-ScheduledTaskTrigger -AtLogOn");
+    expect(installer).toContain(
+      'New-ScheduledTaskAction -Execute "wscript.exe"',
+    );
+    expect(installer).toContain("//B //Nologo");
     expect(installer).toContain("Register-ScheduledTask");
     expect(installer).toContain("Start-ScheduledTask");
     expect(uninstaller).toContain("Unregister-ScheduledTask");
@@ -99,5 +103,51 @@ describe("Windows persistent startup", () => {
     expect(updater).toContain("Wait-NgtStudioHealth");
     expect(workflow).toContain('tags:\n      - "v*"');
     expect(workflow).toContain("gh release create");
+  });
+
+  it("builds a one-click per-user studio installer", async () => {
+    const definition = await readFile("installer/windows-studio.iss", "utf8");
+    const builder = await readFile(
+      "scripts/build-windows-studio-installer.ps1",
+      "utf8",
+    );
+    const packager = await readFile(
+      "scripts/build-windows-studio-package.ps1",
+      "utf8",
+    );
+    const workflow = await readFile(
+      ".github/workflows/windows-studio-release.yml",
+      "utf8",
+    );
+    const uninstaller = await readFile(
+      "scripts/uninstall-windows-studio.ps1",
+      "utf8",
+    );
+    const icon = await readFile("assets/ngt-studio.ico");
+    expect(definition).toContain("PrivilegesRequired=lowest");
+    expect(definition).toContain("install-windows-studio.ps1");
+    expect(definition).toContain("uninstall-windows-studio.ps1");
+    expect(definition).toContain("{autodesktop}");
+    expect(definition).toContain(
+      "SetupIconFile={#SourceDir}\\assets\\ngt-studio.ico",
+    );
+    expect(definition).toContain("UninstallDisplayIcon");
+    expect(definition).toContain("IconFilename");
+    expect(builder).toContain("ISCC.exe");
+    expect(builder).toContain("Get-FileHash");
+    expect(packager).toContain('"windows-studio-launcher.vbs"');
+    expect(packager).toContain('"assets\\ngt-studio.ico"');
+    expect(workflow).toContain("build-windows-studio-installer.ps1");
+    expect(uninstaller).toContain("Stop-NgtStudioProcesses");
+    expect(uninstaller).toContain("uninstall-windows-startup.ps1");
+    expect(uninstaller).not.toContain("data-store");
+    expect(icon.readUInt16LE(0)).toBe(0);
+    expect(icon.readUInt16LE(2)).toBe(1);
+    const iconCount = icon.readUInt16LE(4);
+    const iconSizes = Array.from({ length: iconCount }, (_, index) => {
+      const size = icon[6 + index * 16];
+      return size === 0 ? 256 : size;
+    });
+    expect(iconSizes).toEqual([16, 24, 32, 48, 64, 128, 256]);
   });
 });

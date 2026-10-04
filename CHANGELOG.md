@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.60 - 2026-10-04
+
+- Windows standalone 打包改用 Node.js 展开 pnpm 目录链接，避免 GitHub Runner 拒绝 PowerShell 或 Robocopy 访问 Junction。
+
 ## 1.11.59 - 2026-10-04
 
 - 修复 GitHub Windows Runner 无法使用 PowerShell 复制 pnpm 目录链接的问题，改用 Windows 原生目录复制完成 standalone 打包。

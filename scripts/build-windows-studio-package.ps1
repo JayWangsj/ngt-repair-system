@@ -27,9 +27,10 @@ if (Test-Path -LiteralPath $stage) {
 }
 New-Item -ItemType Directory -Path (Join-Path $stage ".next") -Force | Out-Null
 $standaloneDestination = Join-Path $stage ".next\standalone"
-& robocopy.exe $standaloneBuild $standaloneDestination /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP
-if ($LASTEXITCODE -ge 8) {
-  throw "Standalone build copy failed with exit code $LASTEXITCODE."
+& node (Join-Path $projectRoot "scripts\copy-directory-materialized.mjs") `
+  $standaloneBuild $standaloneDestination
+if ($LASTEXITCODE -ne 0) {
+  throw "Standalone build copy failed."
 }
 Copy-Item -LiteralPath (Join-Path $BuildDirectory "static") -Destination (Join-Path $stage ".next\static") -Recurse -Force
 $copiedEnvironment = Join-Path $stage ".next\standalone\.env"

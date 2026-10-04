@@ -75,6 +75,10 @@ describe("Windows persistent startup", () => {
       "scripts/build-windows-studio-package.ps1",
       "utf8",
     );
+    const materializedCopy = await readFile(
+      "scripts/copy-directory-materialized.mjs",
+      "utf8",
+    );
     expect(database).toContain("process.env.NGT_DATA_ROOT");
     expect(database).toContain('join(persistentRoot, "data")');
     expect(service).toContain('"studio.json"');
@@ -82,8 +86,8 @@ describe("Windows persistent startup", () => {
     expect(installer).toContain('"releases\\v" + $release.version');
     expect(installer).toContain('"--max-old-space-size=1536"');
     expect(packager).toContain("--config.node-linker=hoisted");
-    expect(packager).toContain("robocopy.exe");
-    expect(packager).toContain("$LASTEXITCODE -ge 8");
+    expect(packager).toContain('"scripts\\copy-directory-materialized.mjs"');
+    expect(materializedCopy).toContain("dereference: true");
     expect(packager).toContain('$runtimeDirectory "postgres"');
     expect(packager).toContain('".next\\standalone\\.env"');
     expect(packager).toContain("--frozen-lockfile");

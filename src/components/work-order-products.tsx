@@ -330,6 +330,7 @@ export function WorkOrderCheckout({
           <label>
             <span>{it.amount}</span>
             <input
+              className="payment-amount-input"
               name="amount"
               inputMode="decimal"
               value={amount}

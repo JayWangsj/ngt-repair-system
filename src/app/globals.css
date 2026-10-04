@@ -562,6 +562,9 @@ th {
   background: #fbfcfc;
   letter-spacing: 0.2px;
 }
+td {
+  text-align: left;
+}
 th,
 td {
   padding: 17px 20px;
@@ -593,6 +596,13 @@ td small {
 .numeric {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+.order-table {
+  min-width: 900px;
+  table-layout: fixed;
+}
+.order-table th:first-child {
+  width: 150px;
 }
 .badge {
   display: inline-flex;
@@ -1065,6 +1075,8 @@ textarea {
   color: var(--ink);
   font: inherit;
   font-weight: 650;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
   outline: none;
 }
 .quote-summary-price-field,
@@ -1417,6 +1429,10 @@ textarea {
 .checkout-summary dd {
   margin: 0;
 }
+.checkout-summary dd {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .checkout-summary > div:last-child {
   padding-top: 7px;
   border-top: 1px solid var(--line);
@@ -1676,18 +1692,33 @@ textarea {
 .payment-row {
   padding: 12px 0;
   border-bottom: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 3px 16px;
   font-size: 12px;
 }
+.payment-row strong {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: start;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .payment-row span {
+  grid-column: 1;
+  grid-row: 1;
   color: var(--muted);
   font-size: 11px;
 }
 .payment-row small {
+  grid-column: 1;
+  grid-row: 2;
   color: #899690;
   font-size: 10px;
+}
+.payment-amount-input {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .action-form {
   margin-top: 15px;
@@ -1791,6 +1822,10 @@ details[open] > summary {
 }
 .stat-row span {
   color: var(--muted);
+}
+.stat-row strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .login-page {
   min-height: 100vh;
@@ -2568,6 +2603,10 @@ details[open] > summary {
   color: var(--muted);
   text-align: right;
 }
+.payment-method-row > strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .dashboard-detail-link {
   display: inline-flex;
   align-items: center;
@@ -2658,6 +2697,11 @@ details[open] > summary {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.dashboard-list-row > strong {
+  margin-left: auto;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
 .dashboard-empty {
   min-height: 96px;
   margin: 0;
@@ -2711,6 +2755,19 @@ details[open] > summary {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="always"]) .dashboard-animating .dashboard-kpis .metric,
+  html:not([data-motion="always"])
+    .dashboard-animating
+    .dashboard-charts
+    > section,
+  html:not([data-motion="always"]) .dashboard-animating .dashboard-workflow,
+  html:not([data-motion="always"])
+    .dashboard-animating
+    .dashboard-lists
+    > section {
+    opacity: 1;
+    transform: none;
+  }
   html:not([data-motion="always"]) .dashboard-kpis .metric,
   html:not([data-motion="always"]) .revenue-bar,
   html:not([data-motion="always"]) .donut-segment,
@@ -2956,8 +3013,11 @@ details[open] > summary {
 }
 .selection-summary-value {
   display: grid;
-  justify-items: start;
+  justify-items: end;
   gap: 2px;
+}
+.selection-summary.selected-project-summary {
+  grid-template-columns: auto minmax(0, 1fr) 104px auto;
 }
 .selection-summary-value > small {
   color: var(--muted);
@@ -3720,6 +3780,11 @@ details[open] > summary {
 }
 .retail-cart-row > b {
   align-self: center;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.retail-cart-row > .number-stepper {
+  justify-self: end;
 }
 .retail-totals {
   padding: 15px 0;
@@ -4085,6 +4150,7 @@ details[open] > summary {
 }
 .quote-summary dd {
   margin: 0;
+  text-align: right;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -5201,7 +5267,7 @@ details[open] > summary {
   align-items: center;
   gap: 8px;
   min-height: 38px;
-  padding: 7px 8px 7px 16px;
+  padding: 7px 8px 7px 10px;
   border-bottom: 1px solid var(--line);
   background: #f7f8f7;
   font-size: 12px;
@@ -5209,6 +5275,9 @@ details[open] > summary {
 .price-rule-header.is-batch {
   grid-template-columns: 18px minmax(0, 1fr) 112px 36px;
   padding-left: 10px;
+}
+.price-rule-header strong {
+  padding-inline: 6px;
 }
 .price-rule-header strong:nth-last-child(2) {
   text-align: right;
@@ -5602,6 +5671,7 @@ details[open] > summary {
     grid-column: 1;
     grid-row: 3;
     align-self: center;
+    text-align: left;
   }
   .customer-table .customer-last-repair {
     grid-column: 1 / -1;
@@ -5972,6 +6042,7 @@ summary.record-icon::-webkit-details-marker {
 .inventory-table {
   min-width: 1380px;
   overflow-anchor: none;
+  table-layout: fixed;
 }
 .inventory-table th,
 .inventory-table td {
@@ -6010,18 +6081,25 @@ summary.record-icon::-webkit-details-marker {
   color: var(--muted);
 }
 .inventory-price-cell {
+  width: 82px;
   min-width: 82px;
 }
 .inventory-stepper-cell {
+  width: 118px;
   min-width: 118px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .inventory-quantity-cell {
+  width: 70px;
   min-width: 70px;
-  text-align: center;
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 .inventory-status-cell {
+  width: 80px;
   min-width: 80px;
+  text-align: center;
 }
 .inventory-table tbody tr {
   cursor: pointer;
@@ -6056,12 +6134,18 @@ summary.record-icon::-webkit-details-marker {
 }
 .number-stepper.is-table {
   width: max-content;
+  margin-left: auto;
   grid-template-columns: 32px 52px 32px;
 }
 .number-stepper.is-table button,
 .number-stepper.is-table input {
   min-height: 30px;
   padding: 3px;
+}
+.number-stepper.is-table input,
+.retail-cart-row .number-stepper input {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .inventory-table .price-input {
   width: 76px;
@@ -6312,6 +6396,22 @@ summary.record-icon::-webkit-details-marker {
   transform: scale(1);
   transform-origin: left center;
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.order-status-cell {
+  width: 140px;
+  text-align: center;
+}
+.order-status-cell > * {
+  width: max-content;
+  max-width: 100%;
+  margin-inline: auto;
+  transform-origin: center;
+}
+.order-due-cell {
+  width: 145px;
+}
+.order-payment-cell {
+  width: 185px;
 }
 .order-inline-edit-cell.numeric > * {
   transform-origin: right center;
@@ -6603,6 +6703,11 @@ summary.record-icon::-webkit-details-marker {
 }
 .movement-row > span {
   font-weight: 700;
+}
+.movement-row > span,
+.movement-row > b {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 .movement-positive {
   color: #27844a;

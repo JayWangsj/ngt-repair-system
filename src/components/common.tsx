@@ -94,15 +94,15 @@ export async function OrderTable({
     return compact ? <p className="compact-empty">{it.empty}</p> : <Empty />;
   return (
     <div className="table-scroll">
-      <table>
+      <table className="order-table">
         <thead>
           <tr>
             <th>{it.order}</th>
             {!hideCustomer && <th>{it.customer}</th>}
             <th>{it.device}</th>
-            <th>{it.statusLabel}</th>
-            <th>{it.dueDate}</th>
-            <th className="numeric">{it.payments}</th>
+            <th className="order-status-cell">{it.statusLabel}</th>
+            <th className="order-due-cell">{it.dueDate}</th>
+            <th className="numeric order-payment-cell">{it.payments}</th>
           </tr>
         </thead>
         <OrderListBody

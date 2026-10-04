@@ -1,5 +1,32 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 
+async function expectMatchingColumn(
+  header: Locator,
+  cell: Locator,
+  alignment: "left" | "right" | "center",
+) {
+  await expect(header).toHaveCSS("text-align", alignment);
+  await expect(cell).toHaveCSS("text-align", alignment);
+  const [headerMetrics, cellMetrics] = await Promise.all(
+    [header, cell].map((locator) =>
+      locator.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const style = getComputedStyle(element);
+        return {
+          x: box.x,
+          width: box.width,
+          paddingLeft: style.paddingLeft,
+          paddingRight: style.paddingRight,
+        };
+      }),
+    ),
+  );
+  expect(Math.abs(headerMetrics.x - cellMetrics.x)).toBeLessThan(1);
+  expect(Math.abs(headerMetrics.width - cellMetrics.width)).toBeLessThan(1);
+  expect(headerMetrics.paddingLeft).toBe(cellMetrics.paddingLeft);
+  expect(headerMetrics.paddingRight).toBe(cellMetrics.paddingRight);
+}
+
 async function chooseBusinessOption(
   page: Page,
   label: string,
@@ -541,6 +568,166 @@ test("dashboard animates on entry and data changes while respecting reduced moti
     page.getByRole("button", { name: "Priorità", exact: true }),
   ).toContainText("In ritardo");
   await expect(page.locator('input[name="month"]')).toHaveValue("");
+});
+
+test("dashboard hides its final state before client animation starts", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({ javaScriptEnabled: false });
+  const page = await context.newPage();
+  await page.goto("/");
+  await expect(page.getByTestId("dashboard-motion")).toHaveClass(
+    /dashboard-animating/,
+  );
+  await expect(page.locator(".dashboard-kpis .metric").first()).toHaveCSS(
+    "opacity",
+    "0",
+  );
+  await context.close();
+});
+
+test("table columns keep matching alignment and geometry while editing", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+
+  await fillOrder(page, { manual: true });
+  await openPayment(page);
+  await page
+    .getByLabel("Incasso alla creazione (€)", { exact: true })
+    .fill("20");
+  await save(page);
+  const paymentRow = page.locator(".payments-card .payment-row").first();
+  const paymentLayout = await paymentRow.evaluate((row) => {
+    const label = row.querySelector("span")!.getBoundingClientRect();
+    const amount = row.querySelector("strong")!.getBoundingClientRect();
+    return {
+      labelLeft: label.left,
+      amountRight: amount.right,
+      rowRight: row.getBoundingClientRect().right,
+    };
+  });
+  expect(paymentLayout.amountRight).toBeGreaterThan(paymentLayout.labelLeft);
+  expect(
+    Math.abs(paymentLayout.rowRight - paymentLayout.amountRight),
+  ).toBeLessThan(1);
+  await expect(page.locator(".payments-card .payment-amount-input")).toHaveCSS(
+    "text-align",
+    "right",
+  );
+
+  await page.goto("/orders");
+  const orderRow = page.locator(".order-list-body > tr").first();
+  await expect(orderRow).toBeVisible();
+  await expectMatchingColumn(
+    page.locator("th.order-status-cell"),
+    orderRow.locator("td.order-status-cell"),
+    "center",
+  );
+  await expectMatchingColumn(
+    page.locator("th.order-due-cell"),
+    orderRow.locator("td.order-due-cell"),
+    "left",
+  );
+  await expectMatchingColumn(
+    page.locator("th.order-payment-cell"),
+    orderRow.locator("td.order-payment-cell"),
+    "right",
+  );
+  const orderColumnsBefore = await orderRow
+    .locator("td.order-status-cell, td.order-due-cell, td.order-payment-cell")
+    .evaluateAll((cells) =>
+      cells.map((cell) => {
+        const box = cell.getBoundingClientRect();
+        return { x: box.x, width: box.width };
+      }),
+    );
+  await orderRow.click();
+  await expect(orderRow.locator(".status-dropdown-trigger")).toBeVisible();
+  const orderColumnsAfter = await orderRow
+    .locator("td.order-status-cell, td.order-due-cell, td.order-payment-cell")
+    .evaluateAll((cells) =>
+      cells.map((cell) => {
+        const box = cell.getBoundingClientRect();
+        return { x: box.x, width: box.width };
+      }),
+    );
+  orderColumnsBefore.forEach((column, index) => {
+    expect(Math.abs(column.x - orderColumnsAfter[index].x)).toBeLessThan(1);
+    expect(
+      Math.abs(column.width - orderColumnsAfter[index].width),
+    ).toBeLessThan(1);
+  });
+
+  await page.goto("/customers");
+  const customerRow = page.locator(".customer-table tbody tr").first();
+  await expectMatchingColumn(
+    page.locator("th.customer-device-heading"),
+    customerRow.locator("td.customer-device-count"),
+    "right",
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(customerRow.locator("td.customer-device-count")).toHaveCSS(
+    "text-align",
+    "left",
+  );
+  await page.setViewportSize({ width: 1920, height: 1080 });
+
+  await page.goto("/inventory");
+  const inventoryRow = page.locator(".inventory-table tbody tr").first();
+  await expect(inventoryRow).toBeVisible();
+  await expectMatchingColumn(
+    page.locator("th.inventory-stepper-cell").first(),
+    inventoryRow.locator("td.inventory-stepper-cell").first(),
+    "right",
+  );
+  await expectMatchingColumn(
+    page.locator("th.inventory-quantity-cell").first(),
+    inventoryRow.locator("td.inventory-quantity-cell").first(),
+    "right",
+  );
+  await expectMatchingColumn(
+    page.locator("th.inventory-status-cell"),
+    inventoryRow.locator("td.inventory-status-cell"),
+    "center",
+  );
+  const stockCellBefore = await inventoryRow
+    .locator("td.inventory-stepper-cell")
+    .first()
+    .boundingBox();
+  await inventoryRow.click();
+  const stockCell = inventoryRow.locator("td.inventory-stepper-cell").first();
+  await expect(stockCell.locator(".number-stepper")).toBeVisible();
+  const stockCellAfter = await stockCell.boundingBox();
+  expect(Math.abs(stockCellBefore!.x - stockCellAfter!.x)).toBeLessThan(1);
+  expect(Math.abs(stockCellBefore!.width - stockCellAfter!.width)).toBeLessThan(
+    1,
+  );
+  await expect(stockCell.locator(".number-stepper input")).toHaveCSS(
+    "text-align",
+    "right",
+  );
+
+  await page.goto("/prices");
+  await page.getByLabel("Cerca", { exact: true }).fill("iPhone 13");
+  const priceHeader = page.locator(".price-rule-header").first();
+  const priceRow = page.locator(".price-rule-row").first();
+  await expect(priceRow).toBeVisible();
+  await expectMatchingColumn(
+    priceHeader.locator("strong").nth(1),
+    priceRow.locator(".inline-rule-suggested"),
+    "right",
+  );
+  const readonlyPrice = await priceRow
+    .locator(".inline-rule-suggested")
+    .boundingBox();
+  await priceRow.click({ position: { x: 3, y: 3 } });
+  const priceInput = priceRow.locator("input.inline-rule-suggested");
+  await expect(priceInput).toBeVisible();
+  await expect(priceInput).toHaveCSS("text-align", "right");
+  const editingPrice = await priceInput.boundingBox();
+  expect(Math.abs(readonlyPrice!.x - editingPrice!.x)).toBeLessThan(1);
+  expect(Math.abs(readonlyPrice!.width - editingPrice!.width)).toBeLessThan(1);
 });
 
 test("settings can force interface animations when Windows reduces motion", async ({
@@ -1428,6 +1615,7 @@ test("completes a retail sale and opens its immutable receipt", async ({
     exact: true,
   });
   await expect(retailQuantity).toHaveValue("2");
+  await expect(retailQuantity).toHaveCSS("text-align", "right");
   await retailQuantity.fill("");
   await expect(retailQuantity).toHaveValue("");
   await retailQuantity.fill("5");
@@ -1465,6 +1653,17 @@ test("completes a retail sale and opens its immutable receipt", async ({
     .getByRole("button", { name: /^V-\d{8}\d{3}$/ })
     .first();
   await expect(saleNumber).toHaveClass(/order-code-link/);
+  const historyRow = saleNumber.locator("xpath=ancestor::tr");
+  await expectMatchingColumn(
+    historyDialog.locator("th").nth(2),
+    historyRow.locator("td").nth(2),
+    "right",
+  );
+  await expectMatchingColumn(
+    historyDialog.locator("th").nth(4),
+    historyRow.locator("td").nth(4),
+    "right",
+  );
   await saleNumber.click();
   await expect(page.getByRole("dialog")).toHaveCount(1);
   await expect(historyDialog).toContainText("Cavo USB-C Test");

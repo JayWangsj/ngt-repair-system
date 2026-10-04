@@ -345,7 +345,7 @@ export function OrderListBody({
                 {row.projects}
               </small>
             </td>
-            <td className="order-inline-edit-cell">
+            <td className="order-inline-edit-cell order-status-cell">
               <StatusControl
                 row={row}
                 active={active}
@@ -374,11 +374,11 @@ export function OrderListBody({
               />
             </td>
             <td
-              className={`order-inline-edit-cell${row.overdue ? " danger-text" : ""}`}
+              className={`order-inline-edit-cell order-due-cell${row.overdue ? " danger-text" : ""}`}
             >
               <DueDateControl key={row.dueDate} row={row} active={active} />
             </td>
-            <td className="numeric order-inline-edit-cell">
+            <td className="numeric order-inline-edit-cell order-payment-cell">
               <PaymentControl key={row.paid} row={row} active={active} />
             </td>
           </tr>

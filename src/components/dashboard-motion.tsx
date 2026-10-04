@@ -58,7 +58,11 @@ export function DashboardMotion({
   useEffect(() => {
     const element = root.current;
     if (!element) return;
-    element.classList.remove("dashboard-updating");
+    element.classList.remove(
+      "dashboard-animating",
+      "dashboard-running",
+      "dashboard-updating",
+    );
     if (prefersReducedMotion()) return;
     element.classList.add("dashboard-animating");
     const counts = Array.from(
@@ -144,6 +148,7 @@ export function DashboardMotion({
   return (
     <div
       ref={root}
+      className="dashboard-animating"
       data-testid="dashboard-motion"
       onChange={handleChange}
       onSubmit={handleSubmit}

@@ -54,7 +54,7 @@ export function RetailSalesHistory({
                 <tr>
                   <th>{it.retail.saleNumber}</th>
                   <th>{it.retail.date}</th>
-                  <th>{it.retail.quantity}</th>
+                  <th className="numeric">{it.retail.quantity}</th>
                   <th>{it.retail.paymentMethod}</th>
                   <th className="numeric">{it.retail.amount}</th>
                 </tr>
@@ -72,7 +72,7 @@ export function RetailSalesHistory({
                       </button>
                     </td>
                     <td>{sale.date}</td>
-                    <td>{sale.itemCount}</td>
+                    <td className="numeric">{sale.itemCount}</td>
                     <td>{sale.method ? it.methods[sale.method] : "—"}</td>
                     <td className="numeric">{money(sale.total)}</td>
                   </tr>

@@ -2143,6 +2143,7 @@ export function PaymentForm({
       <div className="form-grid">
         <Field label={it.amount}>
           <input
+            className="payment-amount-input"
             name="amount"
             inputMode="decimal"
             defaultValue={decimal(Math.max(0, remaining))}

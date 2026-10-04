@@ -291,7 +291,9 @@ export function CustomerList({
                 )}
                 <th className="customer-name-heading">{it.customer}</th>
                 <th className="customer-phone-heading">{it.phone}</th>
-                <th className="customer-device-heading">{it.devices}</th>
+                <th className="numeric customer-device-heading">
+                  {it.devices}
+                </th>
                 <th className="customer-last-repair-heading">
                   {it.lastRepairTime}
                 </th>
@@ -339,7 +341,7 @@ export function CustomerList({
                     <td className="customer-contact">
                       <PhoneList customer={customer} />
                     </td>
-                    <td className="customer-device-count">
+                    <td className="numeric customer-device-count">
                       <span className="mobile-label">{it.devices}: </span>
                       {customer._count.devices}
                     </td>

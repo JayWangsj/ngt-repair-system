@@ -1,6 +1,6 @@
 # NGT · 意大利手机维修店管理系统
 
-1.11.54：单店、单人使用的维修管理系统，无需登录。今日工作台以 6 项 KPI、黄蓝并列收入柱状图、收款环图、支付方式进度和紧凑业务摘要展示当日进度；总览日期框可整框点击，选择日期后立即在页内更新，每次进入总览或切换日期都会分层播放约 1.1 秒的数据动画，并遵循减少动效偏好；总览默认使用设置中的业务日期，关注事项会在目标页面自动筛选，详细统计在总览弹窗内查看。库存可按品牌、设备类型、全部或精确型号、维修用途级联筛选，筛选面板会根据视口空间完整显示，并直接展示报价表所需配件关系中的适配设备。报价表保留四级层级线、批量管理与整行编辑；维修单筛选自动生效，客户和设备可在弹窗内增改删。默认意大利语，可随时切换中文；欧元金额，Europe/Rome 时区。
+1.11.55：单店、单人使用的维修管理系统，无需登录。今日工作台以 6 项 KPI、黄蓝并列收入柱状图、收款环图、支付方式进度和紧凑业务摘要展示当日进度；总览日期框可整框点击，选择日期后立即在页内更新，每次进入总览或切换日期都会分层播放约 1.1 秒的数据动画，并遵循减少动效偏好；总览默认使用设置中的业务日期，关注事项会在目标页面自动筛选，详细统计在总览弹窗内查看。库存可按品牌、设备类型、全部或精确型号、维修用途级联筛选，筛选面板会根据视口空间完整显示，并直接展示报价表所需配件关系中的适配设备。报价表保留四级层级线、批量管理与整行编辑；维修单筛选自动生效，客户和设备可在弹窗内增改删。默认意大利语，可随时切换中文；欧元金额，Europe/Rome 时区。
 
 ## 已实现
 
@@ -65,6 +65,35 @@ powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-windows-startup.ps1
 ```
 
 桌面测试预览使用独立的 `127.0.0.1:55433/ngt_test`，不会与业务数据库共用 PostgreSQL 集群。安装 `scripts/install-windows-preview-startup.ps1` 后可通过 `http://127.0.0.1:3236/orders` 访问；测试连接配置保存在 `.local/test.env`。
+
+## 4 GB Windows 工作室安装与更新
+
+工作室版不使用 Docker，只运行一个 Next.js 正式服务和一个内嵌 PostgreSQL 进程。业务数据默认固定保存在 `%LOCALAPPDATA%\NGT\data-store`，与应用版本目录分离；更新或删除旧版应用不会删除业务数据。
+
+家里发布新版本时，先确保版本号、测试和 commit 已完成，然后推送同版本 tag：
+
+```powershell
+git push
+$version = (Get-Content .\package.json -Raw | ConvertFrom-Json).version
+git tag "v$version"
+git push origin "v$version"
+```
+
+GitHub Actions 会在 Windows 上生成包含 Node.js、正式构建、数据库运行时和迁移的私有 Release，工作室电脑不需安装 pnpm，也不需在 4 GB 内存上执行 Next.js 构建。
+
+工作室电脑首次安装 GitHub CLI 并登录有权访问私有仓库的账号，下载最新的 `ngt-studio-windows-*.zip`，解压后执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-windows-studio.ps1
+```
+
+安装后更新时，在当前工作室版本目录执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\update-windows-studio.ps1
+```
+
+更新程序会验证 Release SHA-256，停止应用，将停机数据库备份到 `%LOCALAPPDATA%\NGT\data-store\backups`，再迁移数据库并切换至新版本。如新版启动失败，会重新启动旧版并保留升级前备份。手工备份可执行 `scripts/backup-windows-studio.ps1`。
 
 ## Docker Compose
 

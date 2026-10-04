@@ -5,8 +5,20 @@ $stateDirectory = Join-Path $projectRoot ".local"
 New-Item -ItemType Directory -Path $stateDirectory -Force | Out-Null
 Set-Location -LiteralPath $projectRoot
 
+$studioConfigPath = Join-Path $stateDirectory "studio.json"
+if (Test-Path -LiteralPath $studioConfigPath) {
+  $studioConfig = Get-Content -LiteralPath $studioConfigPath -Raw | ConvertFrom-Json
+  if (-not $studioConfig.dataRoot) {
+    throw "Studio configuration is missing dataRoot."
+  }
+  $env:NGT_DATA_ROOT = [System.IO.Path]::GetFullPath([string]$studioConfig.dataRoot)
+}
+
+$releaseNode = Join-Path $projectRoot "runtime\node.exe"
 $bundledNode = Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe"
-if (Test-Path -LiteralPath $bundledNode) {
+if (Test-Path -LiteralPath $releaseNode) {
+  $nodeExecutable = $releaseNode
+} elseif (Test-Path -LiteralPath $bundledNode) {
   $nodeExecutable = $bundledNode
 } else {
   $nodeCommand = Get-Command node -ErrorAction Stop

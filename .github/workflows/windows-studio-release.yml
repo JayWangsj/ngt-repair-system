@@ -1,0 +1,36 @@
+name: Publish Windows studio release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install -g pnpm@11.19.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+        env:
+          DATABASE_URL: postgresql://ngt:release-only@127.0.0.1:55432/ngt?schema=public
+          AUTH_SECRET: release-only-secret
+          AUTH_URL: http://127.0.0.1:3000
+          AUTH_TRUST_HOST: "true"
+          NEXT_TELEMETRY_DISABLED: "1"
+          NODE_OPTIONS: --max-old-space-size=2048
+      - shell: powershell
+        run: ./scripts/build-windows-studio-package.ps1
+      - shell: powershell
+        run: |
+          $assets = Get-ChildItem -LiteralPath dist -File | Select-Object -ExpandProperty FullName
+          gh release create $env:GITHUB_REF_NAME @assets --verify-tag --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

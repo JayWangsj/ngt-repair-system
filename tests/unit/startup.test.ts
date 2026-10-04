@@ -59,4 +59,45 @@ describe("Windows persistent startup", () => {
     expect(launcher).toContain("shell.Run command, 0, False");
     expect(uninstaller).toContain("Unregister-ScheduledTask");
   });
+
+  it("keeps studio data outside versioned releases and packages updates at home", async () => {
+    const database = await readFile("scripts/windows-db.mjs", "utf8");
+    const service = await readFile("scripts/windows-service.ps1", "utf8");
+    const installer = await readFile(
+      "scripts/install-windows-studio.ps1",
+      "utf8",
+    );
+    const packager = await readFile(
+      "scripts/build-windows-studio-package.ps1",
+      "utf8",
+    );
+    expect(database).toContain("process.env.NGT_DATA_ROOT");
+    expect(database).toContain('join(persistentRoot, "data")');
+    expect(service).toContain('"studio.json"');
+    expect(service).toContain('"runtime\\node.exe"');
+    expect(installer).toContain('"releases\\v" + $release.version');
+    expect(installer).toContain('"--max-old-space-size=1536"');
+    expect(packager).toContain("--config.node-linker=hoisted");
+    expect(packager).toContain('$runtimeDirectory "postgres"');
+    expect(packager).toContain('".next\\standalone\\.env"');
+    expect(packager).toContain("--frozen-lockfile");
+    expect(packager).toContain("tar.exe -a -c");
+  });
+
+  it("backs up and verifies private releases before switching the studio", async () => {
+    const backup = await readFile("scripts/backup-windows-studio.ps1", "utf8");
+    const updater = await readFile("scripts/update-windows-studio.ps1", "utf8");
+    const workflow = await readFile(
+      ".github/workflows/windows-studio-release.yml",
+      "utf8",
+    );
+    expect(backup).toContain('"SHA256SUMS.txt"');
+    expect(backup).toContain("Stop-NgtStudioProcesses");
+    expect(updater).toContain('"release", "download"');
+    expect(updater).toContain("Get-FileHash");
+    expect(updater).toContain("backup-windows-studio.ps1");
+    expect(updater).toContain("Wait-NgtStudioHealth");
+    expect(workflow).toContain('tags:\n      - "v*"');
+    expect(workflow).toContain("gh release create");
+  });
 });

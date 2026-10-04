@@ -14,26 +14,38 @@ import { tmpdir } from "node:os";
 import { randomBytes, createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 const require = createRequire(import.meta.url);
-const embeddedRequire = createRequire(require.resolve("embedded-postgres"));
-const { Client } = embeddedRequire("pg");
-const native = resolve(
-  dirname(embeddedRequire.resolve("@embedded-postgres/windows-x64")),
-  "../native",
-);
+const { Client } = require("pg");
+const packagedNative = resolve("runtime/postgres");
+let native;
+try {
+  await access(join(packagedNative, "bin/postgres.exe"));
+  native = packagedNative;
+} catch {
+  const embeddedRequire = createRequire(require.resolve("embedded-postgres"));
+  native = resolve(
+    dirname(embeddedRequire.resolve("@embedded-postgres/windows-x64")),
+    "../native",
+  );
+}
 const workspace = resolve(".local");
 const cache = join(
   tmpdir(),
   `ngt-pg-${createHash("sha256").update(process.cwd()).digest("hex").slice(0, 10)}`,
 );
+const configuredDataRoot = process.env.NGT_DATA_ROOT?.trim();
+const persistentRoot = configuredDataRoot
+  ? resolve(configuredDataRoot)
+  : workspace;
 if (/[^\x00-\x7F]/.test(cache))
   throw new Error(
     "Set TEMP to an ASCII-only directory for the Windows PostgreSQL runtime.",
   );
 await mkdir(workspace, { recursive: true });
+await mkdir(persistentRoot, { recursive: true });
 let secrets;
 try {
   secrets = JSON.parse(
-    await readFile(join(workspace, "local-secrets.json"), "utf8"),
+    await readFile(join(persistentRoot, "local-secrets.json"), "utf8"),
   );
 } catch {
   secrets = {
@@ -41,7 +53,7 @@ try {
     authSecret: randomBytes(32).toString("hex"),
   };
   await writeFile(
-    join(workspace, "local-secrets.json"),
+    join(persistentRoot, "local-secrets.json"),
     JSON.stringify(secrets),
   );
 }
@@ -70,7 +82,9 @@ function run(exe, args) {
     );
   });
 }
-const dataDir = join(cache, "data");
+const dataDir = configuredDataRoot
+  ? join(persistentRoot, "data")
+  : join(cache, "data");
 try {
   await access(join(dataDir, "PG_VERSION"));
 } catch {
@@ -135,7 +149,11 @@ try {
 } catch (e) {
   if (e.code !== "EEXIST") throw e;
 }
-await writeFile(join(workspace, "database-location.txt"), cache);
+await writeFile(join(workspace, "database-location.txt"), dataDir);
+await writeFile(
+  join(workspace, "database-runtime-location.txt"),
+  join(cache, "runtime"),
+);
 console.log("Business PostgreSQL ready on 127.0.0.1:55432.");
 async function stop() {
   await run("pg_ctl.exe", ["-D", dataDir, "-m", "fast", "stop"]);

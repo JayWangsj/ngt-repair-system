@@ -141,9 +141,7 @@ describe("Windows persistent startup", () => {
     expect(definition).toContain("install-windows-studio.ps1");
     expect(definition).toContain("uninstall-windows-studio.ps1");
     expect(definition).toContain("{autodesktop}");
-    expect(definition).toContain(
-      "SetupIconFile={#IconPath}",
-    );
+    expect(definition).toContain("SetupIconFile={#IconPath}");
     expect(definition).toContain('Source: "{#ArchivePath}"');
     expect(definition).toContain("nocompression");
     expect(definition).not.toContain("recursesubdirs");

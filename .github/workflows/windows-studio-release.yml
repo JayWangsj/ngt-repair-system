@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: 24
       - run: npm install -g pnpm@11.19.0
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --frozen-lockfile --config.node-linker=hoisted --config.package-import-method=copy
       - run: pnpm build
         env:
           DATABASE_URL: postgresql://ngt:release-only@127.0.0.1:55432/ngt?schema=public

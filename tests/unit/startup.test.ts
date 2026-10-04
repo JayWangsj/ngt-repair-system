@@ -87,7 +87,8 @@ describe("Windows persistent startup", () => {
     expect(installer).toContain('"--max-old-space-size=1536"');
     expect(packager).toContain("--config.node-linker=hoisted");
     expect(packager).toContain('"scripts\\copy-directory-materialized.mjs"');
-    expect(materializedCopy).toContain("dereference: true");
+    expect(materializedCopy).toContain("lstat(sourcePath)");
+    expect(materializedCopy).toContain("readlink(sourcePath)");
     expect(packager).toContain('$runtimeDirectory "postgres"');
     expect(packager).toContain('".next\\standalone\\.env"');
     expect(packager).toContain("--frozen-lockfile");
@@ -108,6 +109,8 @@ describe("Windows persistent startup", () => {
     expect(updater).toContain("backup-windows-studio.ps1");
     expect(updater).toContain("Wait-NgtStudioHealth");
     expect(workflow).toContain('tags:\n      - "v*"');
+    expect(workflow).toContain("--config.node-linker=hoisted");
+    expect(workflow).toContain("--config.package-import-method=copy");
     expect(workflow).toContain("gh release create");
   });
 

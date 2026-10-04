@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.61 - 2026-10-04
+
+- GitHub Windows Runner 改用 hoisted、真实文件复制方式安装依赖，从源头避免 Next.js standalone 生成无法访问的 pnpm Junction。
+
 ## 1.11.60 - 2026-10-04
 
 - Windows standalone 打包改用 Node.js 展开 pnpm 目录链接，避免 GitHub Runner 拒绝 PowerShell 或 Robocopy 访问 Junction。

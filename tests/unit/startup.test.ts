@@ -82,6 +82,8 @@ describe("Windows persistent startup", () => {
     expect(installer).toContain('"releases\\v" + $release.version');
     expect(installer).toContain('"--max-old-space-size=1536"');
     expect(packager).toContain("--config.node-linker=hoisted");
+    expect(packager).toContain("robocopy.exe");
+    expect(packager).toContain("$LASTEXITCODE -ge 8");
     expect(packager).toContain('$runtimeDirectory "postgres"');
     expect(packager).toContain('".next\\standalone\\.env"');
     expect(packager).toContain("--frozen-lockfile");

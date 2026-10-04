@@ -26,7 +26,11 @@ if (Test-Path -LiteralPath $stage) {
   Remove-Item -LiteralPath $stage -Recurse -Force
 }
 New-Item -ItemType Directory -Path (Join-Path $stage ".next") -Force | Out-Null
-Copy-Item -LiteralPath $standaloneBuild -Destination (Join-Path $stage ".next\standalone") -Recurse -Force
+$standaloneDestination = Join-Path $stage ".next\standalone"
+& robocopy.exe $standaloneBuild $standaloneDestination /E /COPY:DAT /DCOPY:DAT /R:2 /W:1 /NFL /NDL /NJH /NJS /NP
+if ($LASTEXITCODE -ge 8) {
+  throw "Standalone build copy failed with exit code $LASTEXITCODE."
+}
 Copy-Item -LiteralPath (Join-Path $BuildDirectory "static") -Destination (Join-Path $stage ".next\static") -Recurse -Force
 $copiedEnvironment = Join-Path $stage ".next\standalone\.env"
 if (Test-Path -LiteralPath $copiedEnvironment) {

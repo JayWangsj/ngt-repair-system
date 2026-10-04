@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.59 - 2026-10-04
+
+- 修复 GitHub Windows Runner 无法使用 PowerShell 复制 pnpm 目录链接的问题，改用 Windows 原生目录复制完成 standalone 打包。
+
 ## 1.11.58 - 2026-10-04
 
 - 修复 Windows Release 工作流的 pnpm 锁文件不一致问题，恢复 GitHub Actions 的严格依赖安装和自动发布。

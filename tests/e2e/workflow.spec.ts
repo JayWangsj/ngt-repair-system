@@ -752,6 +752,7 @@ test("creates and edits a product directly in the inventory row", async ({
 test("filters inventory by compatible device and exposes compatibility", async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 1920, height: 900 });
   await page.goto("/inventory");
   const inventoryMain = page.locator(".inventory-main");
   const search = inventoryMain.getByLabel(
@@ -759,6 +760,12 @@ test("filters inventory by compatible device and exposes compatibility", async (
   );
   const battery = inventoryMain.getByRole("row", { name: /Batteria Test/ });
   const cable = inventoryMain.getByRole("row", { name: /Cavo USB-C Test/ });
+  const tableScroll = inventoryMain.locator(".inventory-table-scroll");
+  expect(
+    await tableScroll.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
   const filterControls = [
     search,
     inventoryMain.getByRole("button", { name: "Categoria", exact: true }),
@@ -804,6 +811,17 @@ test("filters inventory by compatible device and exposes compatibility", async (
   });
   await chooseBusinessOption(page, "Marca", "Apple", popover);
   await chooseBusinessOption(page, "Tipo dispositivo", "Telefono", popover);
+  expect(
+    await popover.evaluate(
+      (element) => element.parentElement === document.body,
+    ),
+  ).toBe(true);
+  const popoverBox = await popover.boundingBox();
+  const viewport = page.viewportSize();
+  expect(popoverBox!.y).toBeGreaterThanOrEqual(12);
+  expect(popoverBox!.y + popoverBox!.height).toBeLessThanOrEqual(
+    viewport!.height - 12,
+  );
   await expect(
     popover.getByRole("button", { name: "Modello", exact: true }),
   ).toContainText("Tutti i modelli");

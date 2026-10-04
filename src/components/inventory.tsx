@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
@@ -302,8 +310,10 @@ function DeviceCompatibilityFilter({
   const it = useMessages();
   const { locale } = useLanguage();
   const root = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(value);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
   const active = Object.values(value).some(Boolean);
   const brands = uniqueValues(
     compatibilities.map((compatibility) => compatibility.brand),
@@ -339,12 +349,45 @@ function DeviceCompatibilityFilter({
   useEffect(() => {
     if (!open) return;
     function outside(event: PointerEvent) {
-      if (event.target instanceof Node && !root.current?.contains(event.target))
-        setOpen(false);
+      if (!(event.target instanceof Node)) return;
+      if (
+        root.current?.contains(event.target) ||
+        panel.current?.contains(event.target)
+      )
+        return;
+      setOpen(false);
     }
     document.addEventListener("pointerdown", outside);
     return () => document.removeEventListener("pointerdown", outside);
   }, [open]);
+  useLayoutEffect(() => {
+    if (!open) return;
+    function place() {
+      const trigger = root.current?.getBoundingClientRect();
+      if (!trigger) return;
+      const width = panel.current?.offsetWidth ?? 290;
+      const height = panel.current?.offsetHeight ?? 0;
+      const edge = 12;
+      const gap = 10;
+      const below = trigger.bottom + gap;
+      const top =
+        below + height <= window.innerHeight - edge
+          ? below
+          : Math.max(edge, trigger.top - gap - height);
+      const left = Math.min(
+        Math.max(edge, trigger.left + trigger.width / 2 - width / 2),
+        window.innerWidth - width - edge,
+      );
+      setPosition({ top, left });
+    }
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open, draft.brand, draft.category, draft.model]);
 
   return (
     <div className="inventory-device-filter" ref={root}>
@@ -363,125 +406,131 @@ function DeviceCompatibilityFilter({
         <span>{it.inventory.compatibleDevices}</span>
         <ChevronDown size={15} aria-hidden="true" />
       </button>
-      {open && (
-        <div
-          className="inventory-device-popover"
-          role="dialog"
-          aria-label={it.inventory.compatibleDevices}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") setOpen(false);
-          }}
-        >
-          <div className="inventory-device-popover-heading">
-            <strong>{it.inventory.compatibleDevices}</strong>
-            <button
-              type="button"
-              className="icon-button"
-              aria-label={it.close}
-              onClick={() => setOpen(false)}
-            >
-              <X size={17} aria-hidden="true" />
-            </button>
-          </div>
-          <label>{it.brand}</label>
-          <SimpleSelect
-            value={draft.brand}
-            onChange={(brand) =>
-              setDraft({ brand, category: "", model: "", project: "" })
-            }
-            placeholder={it.inventory.allBrands}
-            ariaLabel={it.brand}
-            options={[
-              { value: "", label: it.inventory.allBrands },
-              ...brands.map((brand) => ({ value: brand, label: brand })),
-            ]}
-          />
-          {draft.brand && (
-            <>
-              <label>{it.deviceType}</label>
-              <SimpleSelect
-                value={draft.category}
-                onChange={(category) =>
-                  setDraft((current) => ({
-                    ...current,
-                    category,
-                    model: "",
-                    project: "",
-                  }))
-                }
-                placeholder={it.inventory.allDeviceTypes}
-                ariaLabel={it.deviceType}
-                options={[
-                  { value: "", label: it.inventory.allDeviceTypes },
-                  ...deviceTypes.map((category) => ({
-                    value: category,
-                    label: deviceTypeLabel(category),
-                  })),
-                ]}
-              />
-            </>
-          )}
-          {draft.category && (
-            <>
-              <label>{it.model}</label>
-              <SimpleSelect
-                value={draft.model}
-                onChange={(model) =>
-                  setDraft((current) => ({
-                    ...current,
-                    model,
-                    project: "",
-                  }))
-                }
-                placeholder={it.inventory.allModels}
-                ariaLabel={it.model}
-                options={[
-                  { value: "", label: it.inventory.allModels },
-                  ...models.map((model) => ({ value: model, label: model })),
-                ]}
-              />
-              <label>{it.inventory.repairUse}</label>
-              <SimpleSelect
-                value={draft.project}
-                onChange={(project) =>
-                  setDraft((current) => ({ ...current, project }))
-                }
-                placeholder={it.inventory.allRepairUses}
-                ariaLabel={it.inventory.repairUse}
-                options={[
-                  { value: "", label: it.inventory.allRepairUses },
-                  ...projects.map((project) => ({
-                    value: project,
-                    label: project,
-                  })),
-                ]}
-              />
-            </>
-          )}
-          <div className="inventory-device-popover-actions">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setDraft(emptyDeviceFilter);
-                onClear();
-                setOpen(false);
-              }}
-            >
-              {it.inventory.clearFilter}
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                onApply(draft);
-                setOpen(false);
-              }}
-            >
-              {it.inventory.applyFilter}
-            </Button>
-          </div>
-        </div>
-      )}
+      {open &&
+        createPortal(
+          <div
+            ref={panel}
+            className="inventory-device-popover"
+            role="dialog"
+            aria-label={it.inventory.compatibleDevices}
+            style={position}
+            data-prevent-card-autosave
+            onPointerDown={(event) => event.stopPropagation()}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setOpen(false);
+            }}
+          >
+            <div className="inventory-device-popover-heading">
+              <strong>{it.inventory.compatibleDevices}</strong>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label={it.close}
+                onClick={() => setOpen(false)}
+              >
+                <X size={17} aria-hidden="true" />
+              </button>
+            </div>
+            <label>{it.brand}</label>
+            <SimpleSelect
+              value={draft.brand}
+              onChange={(brand) =>
+                setDraft({ brand, category: "", model: "", project: "" })
+              }
+              placeholder={it.inventory.allBrands}
+              ariaLabel={it.brand}
+              options={[
+                { value: "", label: it.inventory.allBrands },
+                ...brands.map((brand) => ({ value: brand, label: brand })),
+              ]}
+            />
+            {draft.brand && (
+              <>
+                <label>{it.deviceType}</label>
+                <SimpleSelect
+                  value={draft.category}
+                  onChange={(category) =>
+                    setDraft((current) => ({
+                      ...current,
+                      category,
+                      model: "",
+                      project: "",
+                    }))
+                  }
+                  placeholder={it.inventory.allDeviceTypes}
+                  ariaLabel={it.deviceType}
+                  options={[
+                    { value: "", label: it.inventory.allDeviceTypes },
+                    ...deviceTypes.map((category) => ({
+                      value: category,
+                      label: deviceTypeLabel(category),
+                    })),
+                  ]}
+                />
+              </>
+            )}
+            {draft.category && (
+              <>
+                <label>{it.model}</label>
+                <SimpleSelect
+                  value={draft.model}
+                  onChange={(model) =>
+                    setDraft((current) => ({
+                      ...current,
+                      model,
+                      project: "",
+                    }))
+                  }
+                  placeholder={it.inventory.allModels}
+                  ariaLabel={it.model}
+                  options={[
+                    { value: "", label: it.inventory.allModels },
+                    ...models.map((model) => ({ value: model, label: model })),
+                  ]}
+                />
+                <label>{it.inventory.repairUse}</label>
+                <SimpleSelect
+                  value={draft.project}
+                  onChange={(project) =>
+                    setDraft((current) => ({ ...current, project }))
+                  }
+                  placeholder={it.inventory.allRepairUses}
+                  ariaLabel={it.inventory.repairUse}
+                  options={[
+                    { value: "", label: it.inventory.allRepairUses },
+                    ...projects.map((project) => ({
+                      value: project,
+                      label: project,
+                    })),
+                  ]}
+                />
+              </>
+            )}
+            <div className="inventory-device-popover-actions">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setDraft(emptyDeviceFilter);
+                  onClear();
+                  setOpen(false);
+                }}
+              >
+                {it.inventory.clearFilter}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  onApply(draft);
+                  setOpen(false);
+                }}
+              >
+                {it.inventory.applyFilter}
+              </Button>
+            </div>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
@@ -725,7 +774,7 @@ export function InventoryWorkspace({
       </div>
       {error && <p className="message error">{error}</p>}
       {filtered.length ? (
-        <div className="table-scroll">
+        <div className="table-scroll inventory-table-scroll">
           <table className="inventory-table">
             <thead>
               <tr>

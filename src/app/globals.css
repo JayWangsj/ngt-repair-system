@@ -5898,7 +5898,7 @@ summary.record-icon::-webkit-details-marker {
   overflow: hidden;
 }
 .inventory-table {
-  min-width: 1620px;
+  min-width: 1380px;
   overflow-anchor: none;
 }
 .inventory-table th,
@@ -5907,20 +5907,20 @@ summary.record-icon::-webkit-details-marker {
   padding-left: 14px;
 }
 .inventory-product-cell {
-  width: 22%;
-  min-width: 240px;
+  width: 20%;
+  min-width: 210px;
 }
 .inventory-category-cell {
-  width: 15%;
-  min-width: 180px;
+  width: 13%;
+  min-width: 150px;
 }
 .inventory-usage-cell {
-  width: 10%;
-  min-width: 145px;
+  width: 9%;
+  min-width: 110px;
 }
 .inventory-compatible-cell {
-  width: 18%;
-  min-width: 245px;
+  width: 17%;
+  min-width: 220px;
 }
 .inventory-compatibility-list {
   display: grid;
@@ -5938,18 +5938,18 @@ summary.record-icon::-webkit-details-marker {
   color: var(--muted);
 }
 .inventory-price-cell {
-  min-width: 95px;
+  min-width: 82px;
 }
 .inventory-stepper-cell {
-  min-width: 130px;
+  min-width: 118px;
 }
 .inventory-quantity-cell {
-  min-width: 82px;
+  min-width: 70px;
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
 .inventory-status-cell {
-  min-width: 88px;
+  min-width: 80px;
 }
 .inventory-table tbody tr {
   cursor: pointer;
@@ -6056,19 +6056,18 @@ summary.record-icon::-webkit-details-marker {
   box-shadow: 0 0 0 2px rgb(255 211 51 / 16%);
 }
 .inventory-device-popover {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% + 10px);
-  left: 50%;
+  position: fixed;
+  z-index: 120;
   display: grid;
   width: 290px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
   gap: 8px;
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 13px;
   background: var(--surface);
   box-shadow: 0 16px 38px rgb(35 39 47 / 16%);
-  transform: translateX(-50%);
 }
 .inventory-device-popover::before {
   content: "";

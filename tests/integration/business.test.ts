@@ -57,6 +57,7 @@ import {
 } from "@/lib/data-transfer";
 let owner: Actor;
 let staff: Actor;
+const testBusinessDay = "2026-10-01";
 function input(patch: Record<string, unknown> = {}) {
   return {
     requestId: randomUUID(),
@@ -67,7 +68,7 @@ function input(patch: Record<string, unknown> = {}) {
     series: "iPhone",
     model: "iPhone 13",
     fault: "Display rotto",
-    dueDate: "2026-10-01",
+    dueDate: testBusinessDay,
     items: [{ project: "Display", final: "100", adjustmentReason: "" }],
     deposit: "20",
     method: "CASH",
@@ -116,6 +117,13 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await db.businessClock.deleteMany();
+  await db.businessClock.create({
+    data: {
+      id: "default",
+      mode: "MANUAL",
+      manualDate: testBusinessDay,
+    },
+  });
   await db.auditLog.deleteMany();
   await db.paymentAllocation.deleteMany();
   await db.payment.deleteMany();

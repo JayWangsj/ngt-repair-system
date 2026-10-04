@@ -92,6 +92,13 @@ New-Item -ItemType Directory -Path $runtimeDirectory -Force | Out-Null
 Copy-Item -LiteralPath $nativeSource -Destination (Join-Path $runtimeDirectory "postgres") -Recurse -Force
 Copy-Item -LiteralPath (Get-Command node -ErrorAction Stop).Source `
   -Destination (Join-Path $runtimeDirectory "node.exe") -Force
+$githubCli = (Get-Command gh -ErrorAction Stop).Source
+Copy-Item -LiteralPath $githubCli `
+  -Destination (Join-Path $runtimeDirectory "gh.exe") -Force
+$licenseDirectory = Join-Path $stage "licenses"
+New-Item -ItemType Directory -Path $licenseDirectory -Force | Out-Null
+Copy-Item -LiteralPath "licenses\github-cli.txt" `
+  -Destination $licenseDirectory -Force
 
 @{
   version = $version

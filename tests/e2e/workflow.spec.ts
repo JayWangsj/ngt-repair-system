@@ -1625,6 +1625,69 @@ test("settings applies a manual business date and can return to system time", as
     "Data corrente aggiornata.",
   );
 });
+test("settings checks a private release and confirms before updating", async ({
+  page,
+}) => {
+  let updateStarted = false;
+  await page.route("**/api/system-update", async (route) => {
+    if (route.request().method() === "POST") {
+      updateStarted = true;
+      return route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({ started: true }),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        installed: true,
+        currentVersion: "1.11.57",
+        authRequired: false,
+        updateAvailable: true,
+        latestVersion: "1.11.58",
+      }),
+    });
+  });
+  await page.route("**/api/system-update/status", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "failed",
+        message: "Aggiornamento di prova interrotto.",
+      }),
+    }),
+  );
+
+  await page.goto("/settings");
+  const italianButton = page.getByRole("button", {
+    name: "Italiano",
+    exact: true,
+  });
+  if (await italianButton.isVisible()) await italianButton.click();
+  const updateCard = page.locator(".system-update-settings");
+  await updateCard
+    .getByRole("button", { name: "Controlla aggiornamenti", exact: true })
+    .click();
+  await expect(updateCard).toContainText("Nuova versione disponibile: 1.11.58");
+  await expect(updateCard).toContainText("Ultima versione: 1.11.58");
+
+  await updateCard
+    .getByRole("button", { name: "Aggiorna ora", exact: true })
+    .click();
+  const confirmation = page.getByRole("dialog");
+  await expect(confirmation).toContainText("Conferma aggiornamento");
+  await expect(confirmation).toContainText("1.11.58");
+  await confirmation
+    .getByRole("button", { name: "Aggiorna ora", exact: true })
+    .click();
+  await expect.poll(() => updateStarted).toBe(true);
+  await expect(updateCard.getByRole("alert")).toContainText(
+    "Aggiornamento di prova interrotto.",
+  );
+});
 test("manual quote saves automatically and rejects overpayment", async ({
   page,
 }) => {

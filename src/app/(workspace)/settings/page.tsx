@@ -3,6 +3,7 @@ import { SettingsTools } from "@/components/settings";
 import { getMessages } from "@/lib/i18n-server";
 import { db } from "@/lib/db";
 import { getBusinessClock, getBusinessDay } from "@/lib/business-date";
+import { appVersion } from "@/lib/version";
 
 export default async function SettingsPage() {
   const it = await getMessages();
@@ -29,6 +30,7 @@ export default async function SettingsPage() {
         description={it.settingsDescription}
       />
       <SettingsTools
+        currentVersion={appVersion}
         clock={clock}
         today={today}
         faultOptions={faults.map(({ _count, ...fault }) => ({

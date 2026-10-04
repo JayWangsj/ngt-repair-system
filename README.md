@@ -97,7 +97,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install-windows-studio.ps1
 powershell -ExecutionPolicy Bypass -File .\scripts\update-windows-studio.ps1
 ```
 
-更新程序会验证 Release SHA-256，停止应用，将停机数据库备份到 `%LOCALAPPDATA%\NGT\data-store\backups`，再迁移数据库并切换至新版本。如新版启动失败，会重新启动旧版并保留升级前备份。手工备份可执行 `scripts/backup-windows-studio.ps1`。
+也可在系统“设置 → 系统更新”中点击“检查更新”。首次会通过浏览器授权有私有仓库权限的 GitHub 账号；发现新版本后，只有用户确认才会开始更新。更新程序会验证 Release SHA-256，将停机数据库备份到 `%LOCALAPPDATA%\NGT\data-store\backups`，再迁移数据库并切换至新版本。如新版启动失败，会重新启动旧版并保留升级前备份。手工备份可执行 `scripts/backup-windows-studio.ps1`。
 
 ## Docker Compose
 

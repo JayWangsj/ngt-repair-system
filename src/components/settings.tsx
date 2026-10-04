@@ -1,22 +1,30 @@
 "use client";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarDays, Download, Upload, Trash2 } from "lucide-react";
+import {
+  CalendarDays,
+  Download,
+  RefreshCw,
+  Upload,
+  Trash2,
+} from "lucide-react";
 import { clearDataAction, updateBusinessClockAction } from "@/app/actions";
 import { LanguageSwitch, useMessages } from "./language";
 import { Button } from "./ui/button";
 import { DatePicker, SimpleSelect } from "./business-select";
-import { Field } from "./forms";
+import { Field, FormDialog } from "./forms";
 import {
   FaultCatalogManager,
   type FaultCatalogItem,
 } from "./fault-catalog-manager";
 
 export function SettingsTools({
+  currentVersion,
   faultOptions,
   clock,
   today,
 }: {
+  currentVersion: string;
   faultOptions: FaultCatalogItem[];
   clock: { mode: "SYSTEM" | "MANUAL"; manualDate: string };
   today: string;
@@ -30,6 +38,121 @@ export function SettingsTools({
   const [clockPending, setClockPending] = useState(false);
   const [dateMode, setDateMode] = useState(clock.mode);
   const [manualDate, setManualDate] = useState(clock.manualDate || today);
+  const [updatePending, setUpdatePending] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<{
+    installed: boolean;
+    currentVersion: string;
+    authRequired: boolean;
+    updateAvailable: boolean;
+    latestVersion?: string;
+  } | null>(null);
+  const [updateMessage, setUpdateMessage] = useState("");
+  const [updateError, setUpdateError] = useState("");
+  const [updateConfirmationOpen, setUpdateConfirmationOpen] = useState(false);
+
+  async function beginGitHubLogin() {
+    const response = await fetch("/api/system-update/auth", { method: "POST" });
+    if (!response.ok) throw new Error(it.updateLoginFailed);
+    setUpdateMessage(it.updateLoginOpened);
+  }
+
+  async function checkForUpdates() {
+    setUpdatePending(true);
+    setUpdateMessage("");
+    setUpdateError("");
+    try {
+      const response = await fetch("/api/system-update", { cache: "no-store" });
+      const result = (await response.json()) as {
+        installed?: boolean;
+        currentVersion?: string;
+        authRequired?: boolean;
+        updateAvailable?: boolean;
+        latestVersion?: string;
+      };
+      if (!response.ok) throw new Error(it.updateCheckFailed);
+      const info = {
+        installed: Boolean(result.installed),
+        currentVersion: result.currentVersion || currentVersion,
+        authRequired: Boolean(result.authRequired),
+        updateAvailable: Boolean(result.updateAvailable),
+        latestVersion: result.latestVersion,
+      };
+      setUpdateInfo(info);
+      if (!info.installed) {
+        setUpdateMessage(it.updateInstalledOnly);
+      } else if (info.authRequired) {
+        await beginGitHubLogin();
+      } else if (info.updateAvailable) {
+        setUpdateMessage(
+          it.updateAvailable.replace(
+            "{version}",
+            info.latestVersion || currentVersion,
+          ),
+        );
+      } else {
+        setUpdateMessage(it.updateCurrent);
+      }
+    } catch (cause) {
+      setUpdateError(
+        cause instanceof Error ? cause.message : it.updateCheckFailed,
+      );
+    } finally {
+      setUpdatePending(false);
+    }
+  }
+
+  async function monitorUpdate() {
+    for (let attempt = 0; attempt < 600; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 2000));
+      try {
+        const response = await fetch("/api/system-update/status", {
+          cache: "no-store",
+        });
+        if (!response.ok) continue;
+        const result = (await response.json()) as {
+          status?: string;
+          message?: string;
+        };
+        if (result.status === "failed") {
+          setUpdatePending(false);
+          setUpdateError(result.message || it.updateFailed);
+          return;
+        }
+        if (result.status === "complete") {
+          window.location.reload();
+          return;
+        }
+        if (result.status === "backing-up") {
+          setUpdateMessage(it.updateBackingUp);
+        } else if (result.status === "installing") {
+          setUpdateMessage(it.updateInstalling);
+        } else if (result.status === "downloading") {
+          setUpdateMessage(it.updateDownloading);
+        }
+      } catch {
+        // The local server is expected to be briefly unavailable while switching versions.
+      }
+    }
+    setUpdatePending(false);
+    setUpdateError(it.updateTimeout);
+  }
+
+  async function installUpdate() {
+    const latestVersion = updateInfo?.latestVersion;
+    if (!latestVersion) return;
+    setUpdateConfirmationOpen(false);
+    setUpdatePending(true);
+    setUpdateError("");
+    setUpdateMessage(it.updateStarting);
+    try {
+      const response = await fetch("/api/system-update", { method: "POST" });
+      if (!response.ok) throw new Error(it.updateFailed);
+      await monitorUpdate();
+    } catch (cause) {
+      setUpdatePending(false);
+      setUpdateError(cause instanceof Error ? cause.message : it.updateFailed);
+    }
+  }
 
   async function saveClock() {
     setClockPending(true);
@@ -195,6 +318,95 @@ export function SettingsTools({
             {clockPending ? it.saving : it.save}
           </Button>
         </div>
+      </section>
+      <section className="panel padded settings-card system-update-settings">
+        <div className="settings-card-title">
+          <RefreshCw size={19} aria-hidden="true" />
+          <h2>{it.systemUpdate}</h2>
+        </div>
+        <div className="settings-action">
+          <div>
+            <strong>
+              {it.currentVersion}:{" "}
+              {updateInfo?.currentVersion || currentVersion}
+            </strong>
+            <p>{it.systemUpdateHelp}</p>
+            {updateInfo?.latestVersion && (
+              <p>
+                {it.latestVersion}: {updateInfo.latestVersion}
+              </p>
+            )}
+          </div>
+          <div className="settings-update-actions">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={updatePending}
+              onClick={() => void checkForUpdates()}
+            >
+              <RefreshCw size={17} />
+              {updatePending ? it.checkingUpdates : it.checkForUpdates}
+            </Button>
+            {updateInfo?.updateAvailable && (
+              <Button
+                type="button"
+                disabled={updatePending}
+                onClick={() => setUpdateConfirmationOpen(true)}
+              >
+                <Download size={17} />
+                {it.updateNow}
+              </Button>
+            )}
+          </div>
+        </div>
+        {updateMessage && (
+          <p className="message success" role="status">
+            {updateMessage}
+          </p>
+        )}
+        {updateError && (
+          <p className="message error" role="alert">
+            {updateError}
+          </p>
+        )}
+        {updateConfirmationOpen && updateInfo?.latestVersion && (
+          <FormDialog
+            title={it.updateConfirmTitle}
+            onClose={() => setUpdateConfirmationOpen(false)}
+          >
+            <form
+              className="dialog-form confirm-update-dialog"
+              data-form-dialog-body
+              onSubmit={(event) => {
+                event.preventDefault();
+                void installUpdate();
+              }}
+            >
+              <div className="confirm-update-icon" aria-hidden="true">
+                <Download size={22} />
+              </div>
+              <p>
+                {it.updateConfirm.replace(
+                  "{version}",
+                  updateInfo.latestVersion,
+                )}
+              </p>
+              <div className="dialog-actions">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setUpdateConfirmationOpen(false)}
+                >
+                  {it.cancel}
+                </Button>
+                <Button type="submit">
+                  <Download size={17} />
+                  {it.updateNow}
+                </Button>
+              </div>
+            </form>
+          </FormDialog>
+        )}
       </section>
       <section className="panel padded settings-card">
         <h2>{it.faultCatalog}</h2>

@@ -29,6 +29,14 @@ function Get-NgtNodeExecutable {
   return (Get-Command node -ErrorAction Stop).Source
 }
 
+function Get-NgtGitHubCli {
+  $releaseCli = Join-Path $script:NgtProjectRoot "runtime\gh.exe"
+  if (Test-Path -LiteralPath $releaseCli) {
+    return $releaseCli
+  }
+  return (Get-Command gh -ErrorAction Stop).Source
+}
+
 function Set-NgtStudioEnvironment {
   $configPath = Join-Path $script:NgtStateDirectory "studio.json"
   if (-not (Test-Path -LiteralPath $configPath)) {

@@ -349,6 +349,34 @@ export const it = {
   manualDate: "Imposta manualmente",
   currentBusinessDate: "Data di lavoro attuale",
   businessDateSaved: "Data corrente aggiornata.",
+  systemUpdate: "Aggiornamento sistema",
+  systemUpdateHelp:
+    "Controlla le nuove versioni nel repository GitHub privato; i dati vengono salvati prima dell'aggiornamento.",
+  currentVersion: "Versione corrente",
+  latestVersion: "Ultima versione",
+  checkForUpdates: "Controlla aggiornamenti",
+  checkingUpdates: "Controllo…",
+  updateCurrent: "Il sistema è aggiornato.",
+  updateAvailable: "Nuova versione disponibile: {version}.",
+  updateInstalledOnly:
+    "L'aggiornamento automatico è disponibile solo nella versione installata per lo studio.",
+  updateLoginOpened:
+    "La pagina di autorizzazione GitHub è stata aperta e il codice temporaneo è stato copiato. Dopo l'accesso, controlla di nuovo gli aggiornamenti.",
+  updateLoginFailed: "Impossibile avviare l'autorizzazione GitHub.",
+  updateCheckFailed: "Impossibile controllare gli aggiornamenti. Riprova.",
+  updateNow: "Aggiorna ora",
+  updateConfirmTitle: "Conferma aggiornamento",
+  updateConfirm:
+    "Aggiornare alla versione {version}? I dati verranno salvati e la pagina sarà temporaneamente non disponibile.",
+  updateStarting: "Preparazione dell'aggiornamento. Non spegnere il computer…",
+  updateDownloading: "Download della nuova versione…",
+  updateBackingUp: "Backup dei dati in corso…",
+  updateInstalling:
+    "Installazione della nuova versione. La pagina tornerà disponibile automaticamente…",
+  updateFailed:
+    "Aggiornamento non riuscito. È stato tentato il ripristino della versione precedente.",
+  updateTimeout:
+    "Tempo di attesa scaduto. Riapri il sistema per verificarne lo stato.",
   dataManagement: "Dati",
   exportData: "Esporta dati",
   exportHelp: "Scarica un file compatibile con le versioni future.",

@@ -137,6 +137,8 @@ describe("Windows persistent startup", () => {
     expect(builder).toContain("Get-FileHash");
     expect(packager).toContain('"windows-studio-launcher.vbs"');
     expect(packager).toContain('"assets\\ngt-studio.ico"');
+    expect(packager).toContain('(Join-Path $runtimeDirectory "gh.exe")');
+    expect(packager).toContain('"licenses\\github-cli.txt"');
     expect(workflow).toContain("build-windows-studio-installer.ps1");
     expect(uninstaller).toContain("Stop-NgtStudioProcesses");
     expect(uninstaller).toContain("uninstall-windows-startup.ps1");

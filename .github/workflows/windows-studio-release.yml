@@ -6,14 +6,51 @@ on:
       - "v*"
 
 permissions:
+  actions: read
   contents: write
+
+concurrency:
+  group: windows-studio-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   package:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - name: Validate release version
+        shell: powershell
+        run: |
+          $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$version") {
+            throw "Tag $env:GITHUB_REF_NAME does not match package version $version."
+          }
+      - name: Wait for successful verification
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $deadline = (Get-Date).AddMinutes(35)
+          do {
+            $runs = gh run list --workflow ci.yml --commit $env:GITHUB_SHA --event push --limit 1 --json status,conclusion,url | ConvertFrom-Json
+            if ($runs.Count -gt 0) {
+              $run = $runs[0]
+              if ($run.status -eq "completed") {
+                if ($run.conclusion -ne "success") {
+                  throw "Verification failed: $($run.url)"
+                }
+                Write-Host "Verification succeeded: $($run.url)"
+                exit 0
+              }
+              Write-Host "Verification is $($run.status); waiting..."
+            } else {
+              Write-Host "Verification run is not available yet; waiting..."
+            }
+            Start-Sleep -Seconds 15
+          } while ((Get-Date) -lt $deadline)
+          throw "Timed out waiting for Verify MVP on commit $env:GITHUB_SHA."
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
       - run: npm install -g pnpm@11.19.0
@@ -35,6 +72,11 @@ jobs:
       - shell: powershell
         run: |
           $assets = Get-ChildItem -LiteralPath dist -File | Select-Object -ExpandProperty FullName
-          gh release create $env:GITHUB_REF_NAME @assets --verify-tag --generate-notes
+          gh release view $env:GITHUB_REF_NAME *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:GITHUB_REF_NAME @assets --clobber
+          } else {
+            gh release create $env:GITHUB_REF_NAME @assets --verify-tag --generate-notes
+          }
         env:
           GH_TOKEN: ${{ github.token }}

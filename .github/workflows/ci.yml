@@ -1,12 +1,24 @@
 name: Verify MVP
 on:
   push:
+    branches: [master]
+    paths-ignore:
+      - "**/*.md"
   pull_request:
+    branches: [master]
+    paths-ignore:
+      - "**/*.md"
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:18-alpine
@@ -25,8 +37,8 @@ jobs:
       AUTH_TRUST_HOST: "true"
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
       - run: npm install -g pnpm@11.19.0

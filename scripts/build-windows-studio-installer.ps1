@@ -16,20 +16,27 @@ $installerDefinition = Join-Path $projectRoot "installer\windows-studio.iss"
 if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot "studio-release.json"))) {
   throw "Studio package is missing. Run scripts/build-windows-studio-package.ps1 first."
 }
+if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot "assets\ngt-studio.ico"))) {
+  throw "Studio package icon is missing: $sourceRoot\assets\ngt-studio.ico"
+}
+if (-not (Test-Path -LiteralPath $installerDefinition)) {
+  throw "Installer definition is missing: $installerDefinition"
+}
 
 if (-not $CompilerPath) {
-  $compiler = Get-Command "iscc.exe" -ErrorAction SilentlyContinue
-  if ($compiler) {
-    $CompilerPath = $compiler.Source
-  } else {
-    $compilerCandidates = @(
-      (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe"),
-      "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
-      "C:\Program Files\Inno Setup 6\ISCC.exe"
-    )
-    $CompilerPath = $compilerCandidates | Where-Object {
-      Test-Path -LiteralPath $_
-    } | Select-Object -First 1
+  $compilerCandidates = @(
+    (Join-Path $env:LOCALAPPDATA "Programs\Inno Setup 6\ISCC.exe"),
+    "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+    "C:\Program Files\Inno Setup 6\ISCC.exe"
+  )
+  $CompilerPath = $compilerCandidates | Where-Object {
+    Test-Path -LiteralPath $_
+  } | Select-Object -First 1
+  if (-not $CompilerPath) {
+    $compiler = Get-Command "iscc.exe" -ErrorAction SilentlyContinue
+    if ($compiler) {
+      $CompilerPath = $compiler.Source
+    }
   }
 }
 if ((-not $CompilerPath) -or (-not (Test-Path -LiteralPath $CompilerPath))) {
@@ -37,6 +44,9 @@ if ((-not $CompilerPath) -or (-not (Test-Path -LiteralPath $CompilerPath))) {
 }
 
 New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
+Write-Output "Inno Setup compiler: $CompilerPath"
+Write-Output "Installer source: $sourceRoot"
+Write-Output "Installer output: $outputRoot"
 & $CompilerPath `
   ("/DAppVersion=" + $version) `
   ("/DSourceDir=" + $sourceRoot) `

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.11.62 - 2026-10-04
+
+- Windows 安装程序构建优先直接调用真实的 Inno Setup 编译器，避免 GitHub Runner 通过 Chocolatey 命令代理编译时错误解析安装资源路径。
+- 编译前验证安装定义和图标，并输出实际编译器、来源和输出路径，便于准确定位构建问题。
+
 ## 1.11.61 - 2026-10-04
 
 - GitHub Windows Runner 改用 hoisted、真实文件复制方式安装依赖，从源头避免 Next.js standalone 生成无法访问的 pnpm Junction。

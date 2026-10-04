@@ -143,6 +143,11 @@ describe("Windows persistent startup", () => {
     expect(definition).toContain("UninstallDisplayIcon");
     expect(definition).toContain("IconFilename");
     expect(builder).toContain("ISCC.exe");
+    expect(builder.indexOf("$compilerCandidates")).toBeLessThan(
+      builder.indexOf('Get-Command "iscc.exe"'),
+    );
+    expect(builder).toContain("Studio package icon is missing");
+    expect(builder).toContain("Inno Setup compiler:");
     expect(builder).toContain("Get-FileHash");
     expect(packager).toContain('"windows-studio-launcher.vbs"');
     expect(packager).toContain('"assets\\ngt-studio.ico"');

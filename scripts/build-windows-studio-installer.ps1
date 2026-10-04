@@ -1,6 +1,6 @@
 param(
-  [string]$SourceDirectory = ".local\studio-package",
   [string]$OutputDirectory = "dist",
+  [string]$ArchivePath,
   [string]$CompilerPath
 )
 $ErrorActionPreference = "Stop"
@@ -9,15 +9,26 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
 $package = Get-Content -LiteralPath "package.json" -Raw | ConvertFrom-Json
 $version = [string]$package.version
-$sourceRoot = [System.IO.Path]::GetFullPath((Join-Path $projectRoot $SourceDirectory))
 $outputRoot = [System.IO.Path]::GetFullPath((Join-Path $projectRoot $OutputDirectory))
 $installerDefinition = Join-Path $projectRoot "installer\windows-studio.iss"
+$bootstrapPath = Join-Path $projectRoot "scripts\install-windows-studio-bootstrap.ps1"
+$iconPath = Join-Path $projectRoot "assets\ngt-studio.ico"
+if (-not $ArchivePath) {
+  $ArchivePath = Join-Path $outputRoot ("ngt-studio-windows-v" + $version + ".zip")
+} elseif ([System.IO.Path]::IsPathRooted($ArchivePath)) {
+  $ArchivePath = [System.IO.Path]::GetFullPath($ArchivePath)
+} else {
+  $ArchivePath = [System.IO.Path]::GetFullPath((Join-Path $projectRoot $ArchivePath))
+}
 
-if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot "studio-release.json"))) {
+if (-not (Test-Path -LiteralPath $ArchivePath)) {
   throw "Studio package is missing. Run scripts/build-windows-studio-package.ps1 first."
 }
-if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot "assets\ngt-studio.ico"))) {
-  throw "Studio package icon is missing: $sourceRoot\assets\ngt-studio.ico"
+if (-not (Test-Path -LiteralPath $bootstrapPath)) {
+  throw "Studio installer bootstrap is missing: $bootstrapPath"
+}
+if (-not (Test-Path -LiteralPath $iconPath)) {
+  throw "Studio package icon is missing: $iconPath"
 }
 if (-not (Test-Path -LiteralPath $installerDefinition)) {
   throw "Installer definition is missing: $installerDefinition"
@@ -45,11 +56,13 @@ if ((-not $CompilerPath) -or (-not (Test-Path -LiteralPath $CompilerPath))) {
 
 New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
 Write-Output "Inno Setup compiler: $CompilerPath"
-Write-Output "Installer source: $sourceRoot"
+Write-Output "Installer archive: $ArchivePath"
 Write-Output "Installer output: $outputRoot"
 & $CompilerPath `
   ("/DAppVersion=" + $version) `
-  ("/DSourceDir=" + $sourceRoot) `
+  ("/DArchivePath=" + $ArchivePath) `
+  ("/DBootstrapPath=" + $bootstrapPath) `
+  ("/DIconPath=" + $iconPath) `
   ("/DOutputDir=" + $outputRoot) `
   $installerDefinition
 if ($LASTEXITCODE -ne 0) {

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.11.63 - 2026-10-04
+
+- Windows 安装程序改为封装已经生成并校验过的发布 ZIP，安装时再解压和初始化，避免 Inno Setup 递归扫描 Node.js 与 PostgreSQL 目录时发生路径解析失败。
+
 ## 1.11.62 - 2026-10-04
 
 - Windows 安装程序构建优先直接调用真实的 Inno Setup 编译器，避免 GitHub Runner 通过 Chocolatey 命令代理编译时错误解析安装资源路径。

@@ -1,8 +1,14 @@
 #ifndef AppVersion
   #error AppVersion is required
 #endif
-#ifndef SourceDir
-  #error SourceDir is required
+#ifndef ArchivePath
+  #error ArchivePath is required
+#endif
+#ifndef BootstrapPath
+  #error BootstrapPath is required
+#endif
+#ifndef IconPath
+  #error IconPath is required
 #endif
 #ifndef OutputDir
   #error OutputDir is required
@@ -21,7 +27,7 @@ DisableDirPage=yes
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}
 OutputBaseFilename=ngt-studio-windows-setup-v{#AppVersion}
-SetupIconFile={#SourceDir}\assets\ngt-studio.ico
+SetupIconFile={#IconPath}
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -37,7 +43,8 @@ UninstallDisplayIcon={app}\assets\ngt-studio.ico
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#ArchivePath}"; DestDir: "{app}"; DestName: "ngt-studio-package.zip"; Flags: ignoreversion nocompression
+Source: "{#BootstrapPath}"; DestDir: "{app}\scripts"; Flags: ignoreversion
 
 [Icons]
 Name: "{autodesktop}\NGT 工作室管理系统"; Filename: "{sys}\explorer.exe"; Parameters: "http://127.0.0.1:3000"; WorkingDir: "{app}"; IconFilename: "{app}\assets\ngt-studio.ico"
@@ -62,9 +69,10 @@ begin
   WizardForm.StatusLabel.Caption := '正在初始化数据库并启动系统…';
   PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
   Parameters := '-NoProfile -ExecutionPolicy Bypass -File "' +
-    ExpandConstant('{app}\scripts\install-windows-studio.ps1') +
+    ExpandConstant('{app}\scripts\install-windows-studio-bootstrap.ps1') +
+    '" -PackagePath "' + ExpandConstant('{app}\ngt-studio-package.zip') +
     '" -DataRoot "' + ExpandConstant('{localappdata}\NGT\data-store') +
-    '" -InstallRoot "' + ExpandConstant('{localappdata}\NGT') + '" -InPlace';
+    '" -InstallRoot "' + ExpandConstant('{localappdata}\NGT') + '"';
 
   if (not Exec(PowerShellPath, Parameters, ExpandConstant('{app}'),
     SW_HIDE, ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then

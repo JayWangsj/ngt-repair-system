@@ -120,6 +120,10 @@ describe("Windows persistent startup", () => {
       "scripts/build-windows-studio-installer.ps1",
       "utf8",
     );
+    const bootstrap = await readFile(
+      "scripts/install-windows-studio-bootstrap.ps1",
+      "utf8",
+    );
     const packager = await readFile(
       "scripts/build-windows-studio-package.ps1",
       "utf8",
@@ -138,15 +142,18 @@ describe("Windows persistent startup", () => {
     expect(definition).toContain("uninstall-windows-studio.ps1");
     expect(definition).toContain("{autodesktop}");
     expect(definition).toContain(
-      "SetupIconFile={#SourceDir}\\assets\\ngt-studio.ico",
+      "SetupIconFile={#IconPath}",
     );
+    expect(definition).toContain('Source: "{#ArchivePath}"');
+    expect(definition).toContain("nocompression");
+    expect(definition).not.toContain("recursesubdirs");
     expect(definition).toContain("UninstallDisplayIcon");
     expect(definition).toContain("IconFilename");
     expect(builder).toContain("ISCC.exe");
     expect(builder.indexOf("$compilerCandidates")).toBeLessThan(
       builder.indexOf('Get-Command "iscc.exe"'),
     );
-    expect(builder).toContain("Studio package icon is missing");
+    expect(builder).toContain("Studio installer bootstrap is missing");
     expect(builder).toContain("Inno Setup compiler:");
     expect(builder).toContain("Get-FileHash");
     expect(packager).toContain('"windows-studio-launcher.vbs"');
@@ -154,6 +161,10 @@ describe("Windows persistent startup", () => {
     expect(packager).toContain('(Join-Path $runtimeDirectory "gh.exe")');
     expect(packager).toContain('"licenses\\github-cli.txt"');
     expect(workflow).toContain("build-windows-studio-installer.ps1");
+    expect(bootstrap).toContain("Expand-Archive");
+    expect(bootstrap).toContain("Remove-Item -LiteralPath $PackagePath");
+    expect(bootstrap).toContain("install-windows-studio.ps1");
+    expect(bootstrap).toContain("-InPlace");
     expect(uninstaller).toContain("Stop-NgtStudioProcesses");
     expect(uninstaller).toContain("uninstall-windows-startup.ps1");
     expect(uninstaller).not.toContain("data-store");

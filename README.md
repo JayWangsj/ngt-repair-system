@@ -66,38 +66,38 @@ powershell -ExecutionPolicy Bypass -File .\scripts\uninstall-windows-startup.ps1
 
 桌面测试预览使用独立的 `127.0.0.1:55433/ngt_test`，不会与业务数据库共用 PostgreSQL 集群。安装 `scripts/install-windows-preview-startup.ps1` 后可通过 `http://127.0.0.1:3236/orders` 访问；测试连接配置保存在 `.local/test.env`。
 
-## 4 GB Windows 工作室安装与更新
+## Windows 工作室安装与更新
 
-工作室版不使用 Docker，只运行一个 Next.js 正式服务和一个内嵌 PostgreSQL 进程。业务数据默认固定保存在 `%LOCALAPPDATA%\NGT\data-store`，与应用版本目录分离；更新或删除旧版应用不会删除业务数据。
+### 1. 在家里发布新版
 
-家里发布新版本时，先确保版本号、测试和 commit 已完成，然后推送同版本 tag：
+完成开发、测试和 commit 后，推送代码及同版本标签：
 
 ```powershell
-git push
+git push origin master
 $version = (Get-Content .\package.json -Raw | ConvertFrom-Json).version
 git tag "v$version"
 git push origin "v$version"
 ```
 
-GitHub Actions 会在 Windows 上生成包含 Node.js、正式构建、数据库运行时和迁移的私有 Release，工作室电脑不需安装 pnpm，也不需在 4 GB 内存上执行 Next.js 构建。
+标签推送后，GitHub Actions 会自动创建私有 Release 和 Windows 安装包。
 
-工作室电脑首次安装时，从私有 Release 下载 `ngt-studio-windows-setup-v*.exe`，双击后按向导完成即可。安装程序会初始化本地数据库、配置登录 Windows 后自动启动、创建桌面快捷方式并打开系统。如需卸载，在 Windows“设置 → 应用 → 已安装的应用”中卸载“NGT 工作室管理系统”；后台任务和快捷方式会被移除，业务数据默认保留。
+### 2. 工作室首次安装
 
-如果 Windows 因安装程序未进行商业签名而显示 SmartScreen 提示，确认文件来自本仓库 Release 后，选择“更多信息”和“仍要运行”。
+1. 从 GitHub Release 下载 `ngt-studio-windows-setup-v*.exe`。
+2. 双击安装，完成后从桌面打开 NGT。
+3. 如果 SmartScreen 拦截，确认文件来自本仓库后，选择“更多信息 → 仍要运行”。
 
-仍可使用 ZIP 包手工安装：下载最新的 `ngt-studio-windows-v*.zip`，解压后执行：
+安装包已包含运行环境，4 GB 内存的工作室电脑无需安装 Node.js、pnpm、PostgreSQL 或 Docker。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-windows-studio.ps1
-```
+### 3. 日后更新
 
-安装后更新时，在当前工作室版本目录执行：
+进入 NGT 的“设置 → 系统更新”，依次点击“检查更新 → 现在更新”。首次检查需要在浏览器中登录有私有仓库权限的 GitHub 账号。
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\update-windows-studio.ps1
-```
+更新前会自动备份数据；更新失败时会尝试恢复旧版本。
 
-也可在系统“设置 → 系统更新”中点击“检查更新”。首次会通过浏览器授权有私有仓库权限的 GitHub 账号；发现新版本后，只有用户确认才会开始更新。更新程序会验证 Release SHA-256，将停机数据库备份到 `%LOCALAPPDATA%\NGT\data-store\backups`，再迁移数据库并切换至新版本。如新版启动失败，会重新启动旧版并保留升级前备份。手工备份可执行 `scripts/backup-windows-studio.ps1`。
+### 4. 卸载
+
+在 Windows“设置 → 应用 → 已安装的应用”中卸载“NGT 工作室管理系统”。快捷方式和后台启动任务会一并移除，业务数据默认保留在 `%LOCALAPPDATA%\NGT\data-store`。
 
 ## Docker Compose
 

@@ -44,6 +44,7 @@ import { QuantityStepper } from "./ui/quantity-stepper";
 import { FormAutoSaveContext, FormCloseContext } from "./ui/form-close-context";
 import { useMessages, useLanguage } from "./language";
 import { translateError } from "@/lib/i18n";
+import { prefersReducedMotion } from "@/lib/motion-preference";
 import {
   categories,
   brands,
@@ -2439,16 +2440,35 @@ export function WarrantyProgressPanel({
 }) {
   const it = useMessages();
   const [progress, setProgress] = useState(0);
+  const [displayedRemaining, setDisplayedRemaining] = useState(100);
   useEffect(() => {
     if (!warranty) return;
-    const delay = window.matchMedia("(prefers-reduced-motion: reduce)").matches
-      ? 0
-      : 100;
+    let frame = 0;
+    const reducedMotion = prefersReducedMotion();
     const timer = window.setTimeout(
-      () => setProgress(warranty.progress),
-      delay,
+      () => {
+        setProgress(warranty.progress);
+        if (reducedMotion) {
+          setDisplayedRemaining(warranty.remainingPercent);
+          return;
+        }
+        const start = performance.now();
+        const animateRemaining = (now: number) => {
+          const raw = Math.min(1, (now - start) / 700);
+          const eased = 1 - Math.pow(1 - raw, 3);
+          setDisplayedRemaining(
+            Math.round(100 + (warranty.remainingPercent - 100) * eased),
+          );
+          if (raw < 1) frame = requestAnimationFrame(animateRemaining);
+        };
+        frame = requestAnimationFrame(animateRemaining);
+      },
+      reducedMotion ? 0 : 100,
     );
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(timer);
+      cancelAnimationFrame(frame);
+    };
   }, [warranty]);
   if (!warranty)
     return (
@@ -2495,8 +2515,8 @@ export function WarrantyProgressPanel({
             {warranty.elapsedDays} / {warranty.totalDays} {it.warranty.days}{" "}
             {it.afterSales.used}
           </span>
-          <span>
-            {100 - progress}% {it.afterSales.remaining}
+          <span data-testid="warranty-remaining">
+            {displayedRemaining}% {it.afterSales.remaining}
           </span>
         </div>
         <div className="warranty-progress-track" aria-hidden="true">

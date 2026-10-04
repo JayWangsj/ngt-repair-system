@@ -543,6 +543,44 @@ test("dashboard animates on entry and data changes while respecting reduced moti
   await expect(page.locator('input[name="month"]')).toHaveValue("");
 });
 
+test("settings can force interface animations when Windows reduces motion", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/settings");
+  const motionSwitch = page.getByRole("switch", {
+    name: "Riproduci sempre le animazioni",
+  });
+  await expect(motionSwitch).toHaveAttribute("aria-checked", "false");
+
+  await motionSwitch.click();
+  await expect(motionSwitch).toHaveAttribute("aria-checked", "true");
+  await expect(page.locator("html")).toHaveAttribute("data-motion", "always");
+
+  await page.goto("/");
+  await expect(page.getByTestId("dashboard-motion")).toHaveClass(
+    /dashboard-animating/,
+  );
+  expect(
+    await page
+      .locator(".dashboard-action-link")
+      .first()
+      .evaluate((element) => getComputedStyle(element).transitionDuration),
+  ).not.toBe("0s");
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-motion", "always");
+  await page.goto("/settings");
+  await expect(motionSwitch).toHaveAttribute("aria-checked", "true");
+  await motionSwitch.click();
+  await expect(motionSwitch).toHaveAttribute("aria-checked", "false");
+
+  await page.goto("/");
+  await expect(page.getByTestId("dashboard-motion")).not.toHaveClass(
+    /dashboard-animating/,
+  );
+});
+
 test("creates and edits a product directly in the inventory row", async ({
   page,
 }) => {

@@ -298,6 +298,12 @@ export const zh: typeof it = {
   editProject: "查看／修改维修项目",
   settingsDescription: "管理语言、当前日期、数据备份和恢复。",
   language: "语言",
+  interfaceMotion: "界面动画",
+  alwaysPlayMotion: "始终播放界面动画",
+  motionPreferenceHelp:
+    "开启后忽略 Windows 的“减少动态效果”；关闭后遵循系统设置。",
+  motionAlways: "始终播放",
+  motionSystem: "跟随系统",
   businessDate: "当前日期",
   businessDateHelp: "自动跟随系统日期，或为业务操作手动设置当前日期。",
   dateMode: "日期模式",

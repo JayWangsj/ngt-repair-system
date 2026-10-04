@@ -341,6 +341,12 @@ export const it = {
   editProject: "Vedi / modifica intervento",
   settingsDescription: "Lingua, data di lavoro, backup e gestione dei dati.",
   language: "Lingua",
+  interfaceMotion: "Animazioni interfaccia",
+  alwaysPlayMotion: "Riproduci sempre le animazioni",
+  motionPreferenceHelp:
+    "Se attivo, ignora la riduzione delle animazioni di Windows; se disattivo, segue il sistema.",
+  motionAlways: "Sempre attive",
+  motionSystem: "Segui il sistema",
   businessDate: "Data corrente",
   businessDateHelp:
     "Segui automaticamente la data di sistema oppure imposta una data manuale per le attività operative.",

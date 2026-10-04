@@ -36,6 +36,7 @@ import {
 import { useBusinessDay } from "./business-date";
 import { uniqueOptions } from "@/lib/options";
 import { translateError } from "@/lib/i18n";
+import { prefersReducedMotion } from "@/lib/motion-preference";
 import {
   DatePicker,
   SearchableCombobox,
@@ -545,9 +546,7 @@ export function NewOrderWizard({
     );
     completed.current = values;
     if (completedIndex < 0 || completedIndex >= 2) return;
-    const reduced = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    ).matches;
+    const reduced = prefersReducedMotion();
     if (reduced) {
       setSelectedStep(completedIndex + 1);
       setExpandedStep(completedIndex + 1);

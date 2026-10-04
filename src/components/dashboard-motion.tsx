@@ -8,6 +8,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
+import { prefersReducedMotion } from "@/lib/motion-preference";
 
 export function DashboardMotion({
   fingerprint,
@@ -26,7 +27,7 @@ export function DashboardMotion({
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return;
     if (navigationTimer.current) clearTimeout(navigationTimer.current);
     const navigate = () => router.push(`/?day=${encodeURIComponent(day)}`);
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (prefersReducedMotion()) {
       navigate();
       return;
     }
@@ -58,7 +59,7 @@ export function DashboardMotion({
     const element = root.current;
     if (!element) return;
     element.classList.remove("dashboard-updating");
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (prefersReducedMotion()) return;
     element.classList.add("dashboard-animating");
     const counts = Array.from(
       element.querySelectorAll<HTMLElement>("[data-count]"),

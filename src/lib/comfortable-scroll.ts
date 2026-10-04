@@ -1,3 +1,5 @@
+import { prefersReducedMotion } from "./motion-preference";
+
 export type ComfortableScrollPlan = {
   top: number;
   behavior: ScrollBehavior;
@@ -72,9 +74,7 @@ export function ensureComfortableInteractionSpace(
 ) {
   const rect = element.getBoundingClientRect();
   const container = scrollContainer(element);
-  const reducedMotion = window.matchMedia(
-    "(prefers-reduced-motion: reduce)",
-  ).matches;
+  const reducedMotion = prefersReducedMotion();
   if (container) {
     const viewport = container.getBoundingClientRect();
     const plan = planComfortableScroll({

@@ -2711,16 +2711,18 @@ details[open] > summary {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .dashboard-kpis .metric,
-  .revenue-bar,
-  .donut-segment,
-  .payment-method-row i,
-  .dashboard-charts > section,
-  .dashboard-workflow,
-  .dashboard-lists > section,
-  .dashboard-action-link,
-  .dashboard-action-link > .dashboard-link-label::after,
-  .dashboard-action-link svg {
+  html:not([data-motion="always"]) .dashboard-kpis .metric,
+  html:not([data-motion="always"]) .revenue-bar,
+  html:not([data-motion="always"]) .donut-segment,
+  html:not([data-motion="always"]) .payment-method-row i,
+  html:not([data-motion="always"]) .dashboard-charts > section,
+  html:not([data-motion="always"]) .dashboard-workflow,
+  html:not([data-motion="always"]) .dashboard-lists > section,
+  html:not([data-motion="always"]) .dashboard-action-link,
+  html:not([data-motion="always"])
+    .dashboard-action-link
+    > .dashboard-link-label::after,
+  html:not([data-motion="always"]) .dashboard-action-link svg {
     transition: none !important;
   }
 }
@@ -3509,14 +3511,14 @@ details[open] > summary {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .new-order-back,
-  .order-step-card,
-  .order-step-collapse,
-  .order-step-chevron {
+  html:not([data-motion="always"]) .new-order-back,
+  html:not([data-motion="always"]) .order-step-card,
+  html:not([data-motion="always"]) .order-step-collapse,
+  html:not([data-motion="always"]) .order-step-chevron {
     transition: none;
   }
-  .new-order-back:hover,
-  .order-step-card:hover {
+  html:not([data-motion="always"]) .new-order-back:hover,
+  html:not([data-motion="always"]) .order-step-card:hover {
     transform: none;
   }
 }
@@ -4275,6 +4277,58 @@ details[open] > summary {
   justify-content: flex-end;
   gap: 10px;
 }
+.motion-setting-control {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 12px;
+}
+.motion-setting-control > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.motion-switch {
+  position: relative;
+  width: 46px;
+  height: 26px;
+  border: 1px solid #cfd4d1;
+  border-radius: 999px;
+  padding: 0;
+  background: #e5e8e6;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease;
+}
+.motion-switch > span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(29 42 35 / 24%);
+  transition: transform 180ms ease;
+}
+.motion-switch[aria-checked="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.motion-switch[aria-checked="true"] > span {
+  transform: translateX(20px);
+}
+.motion-switch:focus-visible {
+  outline: 3px solid rgb(191 128 20 / 24%);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="always"]) .motion-switch,
+  html:not([data-motion="always"]) .motion-switch > span {
+    transition: none;
+  }
+}
 .system-update-settings .settings-action {
   padding-bottom: 0;
 }
@@ -4293,6 +4347,9 @@ details[open] > summary {
   }
   .settings-update-actions {
     display: grid;
+  }
+  .motion-setting-control {
+    justify-content: space-between;
   }
 }
 
@@ -4348,9 +4405,9 @@ details[open] > summary {
   padding-right: 2px;
 }
 @media (prefers-reduced-motion: reduce) {
-  .wizard-progressive-reveal,
-  .quote-progressive-reveal,
-  .inspection-progressive-reveal {
+  html:not([data-motion="always"]) .wizard-progressive-reveal,
+  html:not([data-motion="always"]) .quote-progressive-reveal,
+  html:not([data-motion="always"]) .inspection-progressive-reveal {
     animation: none;
   }
 }
@@ -5098,13 +5155,13 @@ details[open] > summary {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .business-select-panel,
-  .business-select-create,
-  .business-combobox-chevron svg {
+  html:not([data-motion="always"]) .business-select-panel,
+  html:not([data-motion="always"]) .business-select-create,
+  html:not([data-motion="always"]) .business-combobox-chevron svg {
     animation: none;
     transition: none;
   }
-  .warranty-progress-track span {
+  html:not([data-motion="always"]) .warranty-progress-track span {
     transition: none;
   }
 }
@@ -5762,8 +5819,9 @@ summary.record-icon::-webkit-details-marker {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .order-link:not(.order-code-link):not(.order-customer-link),
-  .customer-name .order-link {
+  html:not([data-motion="always"])
+    .order-link:not(.order-code-link):not(.order-customer-link),
+  html:not([data-motion="always"]) .customer-name .order-link {
     transition: none;
     transform: none !important;
   }
@@ -6616,20 +6674,30 @@ summary.record-icon::-webkit-details-marker {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .inventory-history-arrow {
+  html:not([data-motion="always"]) .inventory-history-arrow {
     transition:
       color 180ms ease-out 260ms,
       transform 180ms ease-out 260ms;
   }
-  .inventory-history-title-underline {
+  html:not([data-motion="always"]) .inventory-history-title-underline {
     transition: transform 260ms ease-out;
   }
-  .inventory-history-card:hover .inventory-history-border-flow rect,
-  .inventory-history-card:focus-visible .inventory-history-border-flow rect {
+  html:not([data-motion="always"])
+    .inventory-history-card:hover
+    .inventory-history-border-flow
+    rect,
+  html:not([data-motion="always"])
+    .inventory-history-card:focus-visible
+    .inventory-history-border-flow
+    rect {
     animation-duration: 1400ms;
   }
-  .inventory-history-card:hover .inventory-history-arrow,
-  .inventory-history-card:focus-visible .inventory-history-arrow {
+  html:not([data-motion="always"])
+    .inventory-history-card:hover
+    .inventory-history-arrow,
+  html:not([data-motion="always"])
+    .inventory-history-card:focus-visible
+    .inventory-history-arrow {
     transform: translateX(8px);
   }
 }

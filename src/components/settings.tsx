@@ -1,10 +1,11 @@
 "use client";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarDays,
   Download,
   RefreshCw,
+  Sparkles,
   Upload,
   Trash2,
 } from "lucide-react";
@@ -17,6 +18,10 @@ import {
   FaultCatalogManager,
   type FaultCatalogItem,
 } from "./fault-catalog-manager";
+import {
+  isAlwaysMotionEnabled,
+  setAlwaysMotionEnabled,
+} from "@/lib/motion-preference";
 
 export function SettingsTools({
   currentVersion,
@@ -49,6 +54,19 @@ export function SettingsTools({
   const [updateMessage, setUpdateMessage] = useState("");
   const [updateError, setUpdateError] = useState("");
   const [updateConfirmationOpen, setUpdateConfirmationOpen] = useState(false);
+  const [alwaysMotion, setAlwaysMotion] = useState(false);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      setAlwaysMotion(isAlwaysMotionEnabled());
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  function changeMotionPreference(enabled: boolean) {
+    setAlwaysMotionEnabled(enabled);
+    setAlwaysMotion(enabled);
+  }
 
   async function beginGitHubLogin() {
     const response = await fetch("/api/system-update/auth", { method: "POST" });
@@ -276,6 +294,31 @@ export function SettingsTools({
       <section className="panel padded settings-card">
         <h2>{it.language}</h2>
         <LanguageSwitch />
+      </section>
+      <section className="panel padded settings-card motion-settings">
+        <div className="settings-card-title">
+          <Sparkles size={19} aria-hidden="true" />
+          <h2>{it.interfaceMotion}</h2>
+        </div>
+        <div className="settings-action">
+          <div>
+            <strong>{it.alwaysPlayMotion}</strong>
+            <p>{it.motionPreferenceHelp}</p>
+          </div>
+          <div className="motion-setting-control">
+            <span>{alwaysMotion ? it.motionAlways : it.motionSystem}</span>
+            <button
+              type="button"
+              className="motion-switch"
+              role="switch"
+              aria-checked={alwaysMotion}
+              aria-label={it.alwaysPlayMotion}
+              onClick={() => changeMotionPreference(!alwaysMotion)}
+            >
+              <span aria-hidden="true" />
+            </button>
+          </div>
+        </div>
       </section>
       <section className="panel padded settings-card business-date-settings">
         <div className="settings-card-title">

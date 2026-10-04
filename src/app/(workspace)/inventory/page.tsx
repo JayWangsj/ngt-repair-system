@@ -34,6 +34,23 @@ export default async function InventoryPage({
   const [products, categories, movements, reservations] = await Promise.all([
     db.product.findMany({
       where: { enabled: true },
+      include: {
+        requiredByRules: {
+          where: { enabled: true },
+          select: {
+            brand: true,
+            category: true,
+            model: true,
+            project: true,
+          },
+          orderBy: [
+            { brand: "asc" },
+            { category: "asc" },
+            { model: "asc" },
+            { project: "asc" },
+          ],
+        },
+      },
       orderBy: [{ favorite: "desc" }, { name: "asc" }],
     }),
     db.inventoryCategory.findMany({
@@ -69,6 +86,16 @@ export default async function InventoryPage({
     minStock: product.minStock,
     favorite: product.favorite,
     enabled: product.enabled,
+    compatibilities: [
+      ...new Map(
+        product.requiredByRules.map((rule) => [
+          [rule.brand, rule.category, rule.model, rule.project]
+            .map((value) => value.trim().toLocaleLowerCase())
+            .join("\u0000"),
+          rule,
+        ]),
+      ).values(),
+    ],
   }));
   const enabled = productViews.filter((product) => product.enabled);
   const metrics = [

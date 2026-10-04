@@ -1,6 +1,6 @@
 {
   "name": "ngt-riparazioni",
-  "version": "1.11.51",
+  "version": "1.11.52",
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1",

@@ -2,10 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, PackageOpen, Plus, Star } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronDown,
+  PackageOpen,
+  Plus,
+  Smartphone,
+  Star,
+  X,
+} from "lucide-react";
 import { deleteProductsAction, updateProductAction } from "@/app/actions";
+import { categories as deviceCategories, type Category } from "@/lib/catalog";
 import { decimal, inventoryStatus, money } from "@/lib/domain";
-import { useMessages } from "./language";
+import { useLanguage, useMessages } from "./language";
 import { FormDialog, ProductForm, type CategoryView } from "./forms";
 import {
   DatePicker,
@@ -37,7 +46,42 @@ export type ProductView = {
   minStock: number;
   favorite: boolean;
   enabled: boolean;
+  compatibilities: ProductCompatibility[];
 };
+
+type ProductCompatibility = {
+  brand: string;
+  category: string;
+  model: string;
+  project: string;
+};
+
+type DeviceFilter = {
+  brand: string;
+  category: string;
+  model: string;
+  project: string;
+};
+
+const emptyDeviceFilter: DeviceFilter = {
+  brand: "",
+  category: "",
+  model: "",
+  project: "",
+};
+
+function uniqueValues(values: string[]) {
+  return [
+    ...new Map(
+      values
+        .map((value) => value.trim())
+        .filter(Boolean)
+        .map((value) => [value.toLocaleLowerCase(), value]),
+    ).values(),
+  ].sort((left, right) =>
+    left.localeCompare(right, undefined, { numeric: true }),
+  );
+}
 
 type InventoryMovementView = {
   id: string;
@@ -244,6 +288,204 @@ function StockEditor({
   );
 }
 
+function DeviceCompatibilityFilter({
+  compatibilities,
+  value,
+  onApply,
+  onClear,
+}: {
+  compatibilities: ProductCompatibility[];
+  value: DeviceFilter;
+  onApply: (value: DeviceFilter) => void;
+  onClear: () => void;
+}) {
+  const it = useMessages();
+  const { locale } = useLanguage();
+  const root = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const active = Object.values(value).some(Boolean);
+  const brands = uniqueValues(
+    compatibilities.map((compatibility) => compatibility.brand),
+  );
+  const deviceTypes = uniqueValues(
+    compatibilities
+      .filter((compatibility) => compatibility.brand === draft.brand)
+      .map((compatibility) => compatibility.category),
+  );
+  const models = uniqueValues(
+    compatibilities
+      .filter(
+        (compatibility) =>
+          compatibility.brand === draft.brand &&
+          compatibility.category === draft.category,
+      )
+      .map((compatibility) => compatibility.model),
+  );
+  const projects = uniqueValues(
+    compatibilities
+      .filter(
+        (compatibility) =>
+          compatibility.brand === draft.brand &&
+          compatibility.category === draft.category &&
+          (!draft.model || compatibility.model === draft.model),
+      )
+      .map((compatibility) => compatibility.project),
+  );
+  const deviceTypeLabel = (category: string) =>
+    deviceCategories[category as Category]?.[locale === "zh" ? 1 : 0] ??
+    category;
+
+  useEffect(() => {
+    if (!open) return;
+    function outside(event: PointerEvent) {
+      if (event.target instanceof Node && !root.current?.contains(event.target))
+        setOpen(false);
+    }
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, [open]);
+
+  return (
+    <div className="inventory-device-filter" ref={root}>
+      <button
+        type="button"
+        className={`inventory-device-filter-trigger${active ? " is-active" : ""}`}
+        aria-label={it.inventory.compatibleDevices}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        onClick={() => {
+          setDraft(value);
+          setOpen((current) => !current);
+        }}
+      >
+        <Smartphone size={16} aria-hidden="true" />
+        <span>{it.inventory.compatibleDevices}</span>
+        <ChevronDown size={15} aria-hidden="true" />
+      </button>
+      {open && (
+        <div
+          className="inventory-device-popover"
+          role="dialog"
+          aria-label={it.inventory.compatibleDevices}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setOpen(false);
+          }}
+        >
+          <div className="inventory-device-popover-heading">
+            <strong>{it.inventory.compatibleDevices}</strong>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label={it.close}
+              onClick={() => setOpen(false)}
+            >
+              <X size={17} aria-hidden="true" />
+            </button>
+          </div>
+          <label>{it.brand}</label>
+          <SimpleSelect
+            value={draft.brand}
+            onChange={(brand) =>
+              setDraft({ brand, category: "", model: "", project: "" })
+            }
+            placeholder={it.inventory.allBrands}
+            ariaLabel={it.brand}
+            options={[
+              { value: "", label: it.inventory.allBrands },
+              ...brands.map((brand) => ({ value: brand, label: brand })),
+            ]}
+          />
+          {draft.brand && (
+            <>
+              <label>{it.deviceType}</label>
+              <SimpleSelect
+                value={draft.category}
+                onChange={(category) =>
+                  setDraft((current) => ({
+                    ...current,
+                    category,
+                    model: "",
+                    project: "",
+                  }))
+                }
+                placeholder={it.inventory.allDeviceTypes}
+                ariaLabel={it.deviceType}
+                options={[
+                  { value: "", label: it.inventory.allDeviceTypes },
+                  ...deviceTypes.map((category) => ({
+                    value: category,
+                    label: deviceTypeLabel(category),
+                  })),
+                ]}
+              />
+            </>
+          )}
+          {draft.category && (
+            <>
+              <label>{it.model}</label>
+              <SimpleSelect
+                value={draft.model}
+                onChange={(model) =>
+                  setDraft((current) => ({
+                    ...current,
+                    model,
+                    project: "",
+                  }))
+                }
+                placeholder={it.inventory.allModels}
+                ariaLabel={it.model}
+                options={[
+                  { value: "", label: it.inventory.allModels },
+                  ...models.map((model) => ({ value: model, label: model })),
+                ]}
+              />
+              <label>{it.inventory.repairUse}</label>
+              <SimpleSelect
+                value={draft.project}
+                onChange={(project) =>
+                  setDraft((current) => ({ ...current, project }))
+                }
+                placeholder={it.inventory.allRepairUses}
+                ariaLabel={it.inventory.repairUse}
+                options={[
+                  { value: "", label: it.inventory.allRepairUses },
+                  ...projects.map((project) => ({
+                    value: project,
+                    label: project,
+                  })),
+                ]}
+              />
+            </>
+          )}
+          <div className="inventory-device-popover-actions">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setDraft(emptyDeviceFilter);
+                onClear();
+                setOpen(false);
+              }}
+            >
+              {it.inventory.clearFilter}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                onApply(draft);
+                setOpen(false);
+              }}
+            >
+              {it.inventory.applyFilter}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function InventoryWorkspace({
   products,
   categories: categoryOptions,
@@ -254,11 +496,13 @@ export function InventoryWorkspace({
   initialStatus?: "" | ReturnType<typeof inventoryStatus>;
 }) {
   const it = useMessages();
+  const { locale } = useLanguage();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [usage, setUsage] = useState("");
   const [status, setStatus] = useState(initialStatus);
+  const [deviceFilter, setDeviceFilter] = useState(emptyDeviceFilter);
   const [selectedId, setSelectedId] = useState("");
   const [batchMode, setBatchMode] = useState(false);
   const [checked, setChecked] = useState<string[]>([]);
@@ -270,6 +514,10 @@ export function InventoryWorkspace({
     () => [...new Set(products.map((product) => product.category))].sort(),
     [products],
   );
+  const compatibilities = useMemo(
+    () => products.flatMap((product) => product.compatibilities),
+    [products],
+  );
   const filtered = useMemo(
     () =>
       products.filter((product) => {
@@ -278,17 +526,55 @@ export function InventoryWorkspace({
           product.stockQuantity,
           product.minStock,
         );
+        const compatibilityText = product.compatibilities
+          .flatMap((compatibility) => [
+            compatibility.brand,
+            compatibility.model,
+            compatibility.project,
+          ])
+          .join(" ")
+          .toLocaleLowerCase();
+        const matchesDevice =
+          !Object.values(deviceFilter).some(Boolean) ||
+          product.compatibilities.some(
+            (compatibility) =>
+              (!deviceFilter.brand ||
+                compatibility.brand === deviceFilter.brand) &&
+              (!deviceFilter.category ||
+                compatibility.category === deviceFilter.category) &&
+              (!deviceFilter.model ||
+                compatibility.model === deviceFilter.model) &&
+              (!deviceFilter.project ||
+                compatibility.project === deviceFilter.project),
+          );
         return (
           (!normalized ||
             product.name.toLocaleLowerCase().includes(normalized) ||
-            product.category.toLocaleLowerCase().includes(normalized)) &&
+            product.category.toLocaleLowerCase().includes(normalized) ||
+            compatibilityText.includes(normalized)) &&
           (!category || product.category === category) &&
           (!usage || product.usage === usage) &&
-          (!status || productStatus === status)
+          (!status || productStatus === status) &&
+          matchesDevice
         );
       }),
-    [products, query, category, usage, status],
+    [products, query, category, usage, status, deviceFilter],
   );
+  const deviceTypeLabel = (category: string) =>
+    deviceCategories[category as Category]?.[locale === "zh" ? 1 : 0] ??
+    category;
+  const compatibilityPaths = (product: ProductView) =>
+    uniqueValues(
+      product.compatibilities
+        .filter((compatibility) => compatibility.brand)
+        .map((compatibility) =>
+          [
+            compatibility.brand,
+            deviceTypeLabel(compatibility.category),
+            compatibility.model || it.inventory.allModels,
+          ].join(" / "),
+        ),
+    );
   const usageLabel = (value: ProductView["usage"]) =>
     value === "RETAIL" ? it.inventory.retail : it.inventory.repair;
   const statusLabel = (value: ReturnType<typeof inventoryStatus>) =>
@@ -388,6 +674,12 @@ export function InventoryWorkspace({
             { value: "REPAIR", label: it.inventory.repair },
           ]}
         />
+        <DeviceCompatibilityFilter
+          compatibilities={compatibilities}
+          value={deviceFilter}
+          onApply={setDeviceFilter}
+          onClear={() => setDeviceFilter(emptyDeviceFilter)}
+        />
         <SimpleSelect
           value={status}
           onChange={(value) =>
@@ -476,6 +768,9 @@ export function InventoryWorkspace({
                   {it.inventory.category}
                 </th>
                 <th className="inventory-usage-cell">{it.inventory.usage}</th>
+                <th className="inventory-compatible-cell">
+                  {it.inventory.compatibleDevices}
+                </th>
                 <th className="numeric inventory-price-cell">
                   {it.inventory.costPrice}
                 </th>
@@ -632,6 +927,19 @@ export function InventoryWorkspace({
                         />
                       ) : (
                         usageLabel(product.usage)
+                      )}
+                    </td>
+                    <td className="inventory-compatible-cell">
+                      {compatibilityPaths(product).length ? (
+                        <span className="inventory-compatibility-list">
+                          {compatibilityPaths(product).map((path) => (
+                            <span key={path}>{path}</span>
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="inventory-universal">
+                          {it.inventory.universal}
+                        </span>
                       )}
                     </td>
                     <td className="numeric inventory-price-cell">

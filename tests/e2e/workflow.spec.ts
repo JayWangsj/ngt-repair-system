@@ -528,7 +528,9 @@ test("creates and edits a product directly in the inventory row", async ({
   await expect(inventoryMain.locator(".inventory-batch-toolbar")).toHaveCount(
     0,
   );
-  const searchBox = inventoryMain.getByLabel("Cerca prodotto o categoria");
+  const searchBox = inventoryMain.getByLabel(
+    "Cerca prodotto, ricambio, marca o modello",
+  );
   const manageBatch = batchControls.getByRole("button", {
     name: "Gestisci selezione",
     exact: true,
@@ -542,9 +544,9 @@ test("creates and edits a product directly in the inventory row", async ({
   ).toBeLessThan(2);
   const repairPartRow = page.getByRole("row", { name: /Batteria Test/ });
   await expect(repairPartRow).toContainText("Riparazione");
-  await expect(repairPartRow.locator("td").nth(4)).toHaveText("—");
+  await expect(repairPartRow.locator("td").nth(5)).toHaveText("—");
   await repairPartRow.click();
-  await expect(repairPartRow.locator("td").nth(4).locator("input")).toHaveCount(
+  await expect(repairPartRow.locator("td").nth(5).locator("input")).toHaveCount(
     0,
   );
   await page.getByRole("heading", { name: "Magazzino" }).click();
@@ -745,6 +747,89 @@ test("creates and edits a product directly in the inventory row", async ({
     .click();
   await expect(inventoryMain.locator('input[type="checkbox"]')).toHaveCount(0);
   await expect(batchControls).not.toContainText("selezionati");
+});
+
+test("filters inventory by compatible device and exposes compatibility", async ({
+  page,
+}) => {
+  await page.goto("/inventory");
+  const inventoryMain = page.locator(".inventory-main");
+  const search = inventoryMain.getByLabel(
+    "Cerca prodotto, ricambio, marca o modello",
+  );
+  const battery = inventoryMain.getByRole("row", { name: /Batteria Test/ });
+  const cable = inventoryMain.getByRole("row", { name: /Cavo USB-C Test/ });
+  const filterControls = [
+    search,
+    inventoryMain.getByRole("button", { name: "Categoria", exact: true }),
+    inventoryMain.getByRole("button", { name: "Utilizzo", exact: true }),
+    inventoryMain.getByRole("button", {
+      name: "Dispositivi compatibili",
+      exact: true,
+    }),
+    inventoryMain.getByRole("button", { name: "Stato scorte", exact: true }),
+    inventoryMain.getByRole("button", {
+      name: "Gestisci selezione",
+      exact: true,
+    }),
+  ];
+  const filterBoxes = await Promise.all(
+    filterControls.map((control) => control.boundingBox()),
+  );
+  expect(
+    Math.max(...filterBoxes.map((box) => box!.y)) -
+      Math.min(...filterBoxes.map((box) => box!.y)),
+  ).toBeLessThan(2);
+  expect(filterBoxes.map((box) => box!.x)).toEqual(
+    [...filterBoxes].map((box) => box!.x).sort((left, right) => left - right),
+  );
+
+  await expect(battery).toContainText("Apple / Telefono / iPhone 14");
+  await expect(cable).toContainText("Universale");
+
+  await search.fill("Apple");
+  await expect(battery).toBeVisible();
+  await expect(cable).toHaveCount(0);
+  await search.fill("iPhone 14");
+  await expect(battery).toBeVisible();
+  await search.fill("");
+
+  const trigger = inventoryMain.getByRole("button", {
+    name: "Dispositivi compatibili",
+    exact: true,
+  });
+  await trigger.click();
+  let popover = page.getByRole("dialog", {
+    name: "Dispositivi compatibili",
+  });
+  await chooseBusinessOption(page, "Marca", "Apple", popover);
+  await chooseBusinessOption(page, "Tipo dispositivo", "Telefono", popover);
+  await expect(
+    popover.getByRole("button", { name: "Modello", exact: true }),
+  ).toContainText("Tutti i modelli");
+  await chooseBusinessOption(
+    page,
+    "Ricambio / intervento",
+    "sostituzione batteria",
+    popover,
+  );
+  await popover.getByRole("button", { name: "Applica", exact: true }).click();
+
+  await expect(trigger).toHaveClass(/is-active/);
+  await expect(battery).toBeVisible();
+  await expect(cable).toHaveCount(0);
+
+  await trigger.click();
+  popover = page.getByRole("dialog", { name: "Dispositivi compatibili" });
+  await chooseBusinessOption(page, "Modello", "iPhone 14", popover);
+  await popover.getByRole("button", { name: "Applica", exact: true }).click();
+  await expect(battery).toBeVisible();
+
+  await trigger.click();
+  popover = page.getByRole("dialog", { name: "Dispositivi compatibili" });
+  await popover.getByRole("button", { name: "Cancella", exact: true }).click();
+  await expect(trigger).not.toHaveClass(/is-active/);
+  await expect(cable).toBeVisible();
 });
 
 test("repair list exposes month, status, due-date and payment controls", async ({

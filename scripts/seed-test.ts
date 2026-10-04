@@ -128,6 +128,19 @@ async function main() {
       update: {},
     });
     const created = await db.product.create({ data: product });
+    if (product.name === "Batteria Test")
+      await db.priceRule.create({
+        data: {
+          category: "PHONE",
+          brand: "Apple",
+          model: "iPhone 14",
+          project: "sostituzione batteria",
+          suggested: "120",
+          minutes: 60,
+          enabled: true,
+          requiredProductId: created.id,
+        },
+      });
     if (product.stockQuantity > 0)
       await db.inventoryMovement.create({
         data: {

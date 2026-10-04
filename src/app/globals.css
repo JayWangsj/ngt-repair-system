@@ -2212,6 +2212,7 @@ details[open] > summary {
 }
 .dashboard-date-filter input {
   width: auto;
+  cursor: pointer;
 }
 .dashboard-kpis .metric {
   position: relative;

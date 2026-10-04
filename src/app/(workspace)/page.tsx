@@ -33,6 +33,7 @@ import { requireActor } from "@/lib/session";
 import { DashboardMotion } from "@/components/dashboard-motion";
 import { getBusinessDay } from "@/lib/business-date";
 import { DashboardStatsDialog } from "@/components/dashboard-stats-dialog";
+import { DatePicker } from "@/components/business-select";
 
 function percentage(value: number, total: number) {
   return total > 0 ? Math.round((value / total) * 100) : 0;
@@ -215,7 +216,7 @@ export default async function Dashboard({
             timeZone: "Europe/Rome",
           }).format(new Date(`${today}T12:00:00Z`))}
         </span>
-        <input name="day" type="date" defaultValue={today} />
+        <DatePicker name="day" defaultValue={today} />
       </form>
       <div className="metrics dashboard-kpis">
         {metrics.map(

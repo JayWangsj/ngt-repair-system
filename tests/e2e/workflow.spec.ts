@@ -469,9 +469,36 @@ test("dashboard animates on entry and data changes while respecting reduced moti
     (window as Window & { dashboardMarker?: string }).dashboardMarker =
       "preserved";
   });
-  await page
-    .locator('.dashboard-date-filter input[type="date"]')
-    .fill("2026-10-03");
+  const dashboardDate = page.locator(
+    '.dashboard-date-filter input[type="date"]',
+  );
+  await page.evaluate(() => {
+    const input = document.querySelector<HTMLInputElement>(
+      '.dashboard-date-filter input[type="date"]',
+    );
+    if (!input) return;
+    Object.defineProperty(input, "showPicker", {
+      value: () => {
+        (
+          window as Window & { dashboardDatePickerOpened?: number }
+        ).dashboardDatePickerOpened =
+          ((window as Window & { dashboardDatePickerOpened?: number })
+            .dashboardDatePickerOpened ?? 0) + 1;
+      },
+    });
+  });
+  const dateBox = await dashboardDate.boundingBox();
+  await dashboardDate.click({
+    position: { x: 8, y: dateBox!.height / 2 },
+  });
+  expect(
+    await page.evaluate(
+      () =>
+        (window as Window & { dashboardDatePickerOpened?: number })
+          .dashboardDatePickerOpened,
+    ),
+  ).toBe(1);
+  await dashboardDate.fill("2026-10-03");
   await expect(page.locator(".dashboard-date-filter button")).toHaveCount(0);
   await expect(dashboard).toHaveClass(/dashboard-updating/);
   await expect(page).toHaveURL(/day=2026-10-03/);

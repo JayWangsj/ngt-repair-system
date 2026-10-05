@@ -126,6 +126,19 @@ describe("Windows persistent startup", () => {
     expect(workflow).toContain("--config.node-linker=hoisted");
     expect(workflow).toContain("--config.package-import-method=copy");
     expect(workflow).toContain("gh release create");
+    expect(workflow).toContain("package-manager-cache: false");
+    expect(workflow).toContain("pnpm/action-setup@v4");
+    expect(workflow).not.toContain("npm install -g pnpm");
+  });
+
+  it("installs pnpm before setup-node enables its cache", async () => {
+    const workflow = await readFile(".github/workflows/ci.yml", "utf8");
+    expect(workflow).toContain("pnpm/action-setup@v4");
+    expect(workflow.indexOf("pnpm/action-setup@v4")).toBeLessThan(
+      workflow.indexOf("actions/setup-node@v5"),
+    );
+    expect(workflow).toContain("cache: pnpm");
+    expect(workflow).not.toContain("npm install -g pnpm");
   });
 
   it("builds a one-click per-user studio installer", async () => {

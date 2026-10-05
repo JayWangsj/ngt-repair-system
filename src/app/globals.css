@@ -2753,6 +2753,22 @@ details[open] > summary {
   .dashboard-stats-grid {
     grid-template-columns: 1fr;
   }
+  .revenue-day:nth-child(-n + 3) .revenue-tooltip {
+    right: auto;
+    left: 0;
+    transform: translate(0, 5px);
+  }
+  .revenue-day:nth-child(n + 5) .revenue-tooltip {
+    right: 0;
+    left: auto;
+    transform: translate(0, 5px);
+  }
+  .revenue-day:nth-child(-n + 3):hover .revenue-tooltip,
+  .revenue-day:nth-child(-n + 3):focus-visible .revenue-tooltip,
+  .revenue-day:nth-child(n + 5):hover .revenue-tooltip,
+  .revenue-day:nth-child(n + 5):focus-visible .revenue-tooltip {
+    transform: translate(0, 0);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   html:not([data-motion="always"]) .dashboard-animating .dashboard-kpis .metric,

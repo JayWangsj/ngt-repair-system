@@ -152,6 +152,7 @@ describe("Windows persistent startup", () => {
     );
     const icon = await readFile("assets/ngt-studio.ico");
     expect(definition).toContain("PrivilegesRequired=lowest");
+    expect(definition).toContain("UsePreviousAppDir=no");
     expect(definition).toContain("install-windows-studio.ps1");
     expect(definition).toContain("uninstall-windows-studio.ps1");
     expect(definition).toContain("{autodesktop}");

@@ -23,6 +23,7 @@ AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher=NGT
 DefaultDirName={localappdata}\NGT\releases\v{#AppVersion}
+UsePreviousAppDir=no
 DisableDirPage=yes
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}

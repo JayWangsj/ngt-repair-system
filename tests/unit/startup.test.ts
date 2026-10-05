@@ -126,6 +126,9 @@ describe("Windows persistent startup", () => {
     expect(workflow).toContain("--config.node-linker=hoisted");
     expect(workflow).toContain("--config.package-import-method=copy");
     expect(workflow).toContain("gh release create");
+    expect(workflow).toContain('$ErrorActionPreference = "SilentlyContinue"');
+    expect(workflow).toContain("$releaseExists = $LASTEXITCODE -eq 0");
+    expect(workflow).toContain("if ($releaseExists)");
     expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain("pnpm/action-setup@v4");
     expect(workflow).not.toContain("npm install -g pnpm");

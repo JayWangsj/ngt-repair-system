@@ -63,9 +63,11 @@ function Wait-NgtPort([int]$Port, [bool]$Open) {
 }
 
 function Stop-NgtStudioProcesses {
-  $task = Get-ScheduledTask -TaskName $script:NgtTaskName -ErrorAction SilentlyContinue
-  if ($task) {
-    Stop-ScheduledTask -TaskName $script:NgtTaskName -ErrorAction SilentlyContinue
+  if (Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue) {
+    $task = Get-ScheduledTask -TaskName $script:NgtTaskName -ErrorAction SilentlyContinue
+    if ($task) {
+      Stop-ScheduledTask -TaskName $script:NgtTaskName -ErrorAction SilentlyContinue
+    }
   }
 
   $applicationConnections = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
@@ -97,15 +99,31 @@ function Start-NgtStudioDatabase {
   }
   New-Item -ItemType Directory -Path $script:NgtStateDirectory -Force | Out-Null
   $nodeExecutable = Get-NgtNodeExecutable
+  $errorLog = Join-Path $script:NgtStateDirectory "studio-database.error.log"
   $process = Start-Process -FilePath $nodeExecutable `
     -ArgumentList "scripts/windows-db.mjs" `
     -WorkingDirectory $script:NgtProjectRoot `
     -RedirectStandardOutput (Join-Path $script:NgtStateDirectory "studio-database.log") `
-    -RedirectStandardError (Join-Path $script:NgtStateDirectory "studio-database.error.log") `
+    -RedirectStandardError $errorLog `
     -WindowStyle Hidden -PassThru
   Set-Content -LiteralPath (Join-Path $script:NgtStateDirectory "database.pid") `
     -Value $process.Id -Encoding ascii
-  Wait-NgtPort -Port 55432 -Open $true
+  for ($attempt = 0; $attempt -lt 120; $attempt++) {
+    if ([bool](Get-NetTCPConnection -LocalPort 55432 -State Listen -ErrorAction SilentlyContinue)) {
+      return
+    }
+    if ($process.HasExited) {
+      $details = if (Test-Path -LiteralPath $errorLog) {
+        (Get-Content -LiteralPath $errorLog -Raw).Trim()
+      }
+      if ($details) {
+        throw "Database initialization failed: $details"
+      }
+      throw "Database initialization failed with exit code $($process.ExitCode)."
+    }
+    Start-Sleep -Milliseconds 250
+  }
+  throw "Database did not open port 55432 in time."
 }
 
 function Start-NgtStudioTask {

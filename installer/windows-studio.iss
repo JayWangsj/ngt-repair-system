@@ -47,11 +47,11 @@ Source: "{#ArchivePath}"; DestDir: "{app}"; DestName: "ngt-studio-package.zip"; 
 Source: "{#BootstrapPath}"; DestDir: "{app}\scripts"; Flags: ignoreversion
 
 [Icons]
-Name: "{autodesktop}\NGT 工作室管理系统"; Filename: "{sys}\explorer.exe"; Parameters: "http://127.0.0.1:3000"; WorkingDir: "{app}"; IconFilename: "{app}\assets\ngt-studio.ico"
-Name: "{autoprograms}\NGT 工作室管理系统"; Filename: "{sys}\explorer.exe"; Parameters: "http://127.0.0.1:3000"; WorkingDir: "{app}"; IconFilename: "{app}\assets\ngt-studio.ico"
+Name: "{autodesktop}\NGT 工作室管理系统"; Filename: "http://127.0.0.1:3000"; WorkingDir: "{app}"; IconFilename: "{app}\assets\ngt-studio.ico"
+Name: "{autoprograms}\NGT 工作室管理系统"; Filename: "http://127.0.0.1:3000"; WorkingDir: "{app}"; IconFilename: "{app}\assets\ngt-studio.ico"
 
 [Run]
-Filename: "{sys}\explorer.exe"; Parameters: "http://127.0.0.1:3000"; Description: "打开 NGT 工作室管理系统"; Flags: postinstall nowait skipifsilent
+Filename: "http://127.0.0.1:3000"; Description: "打开 NGT 工作室管理系统"; Flags: shellexec postinstall nowait skipifsilent
 
 [UninstallRun]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\scripts\uninstall-windows-studio.ps1"""; Flags: runhidden waituntilterminated; RunOnceId: "StopNgtStudio"
@@ -72,12 +72,14 @@ begin
     ExpandConstant('{app}\scripts\install-windows-studio-bootstrap.ps1') +
     '" -PackagePath "' + ExpandConstant('{app}\ngt-studio-package.zip') +
     '" -DataRoot "' + ExpandConstant('{localappdata}\NGT\data-store') +
-    '" -InstallRoot "' + ExpandConstant('{localappdata}\NGT') + '"';
+    '" -InstallRoot "' + ExpandConstant('{localappdata}\NGT') +
+    '" -LogPath "' + ExpandConstant('{localappdata}\NGT\install.log') + '"';
 
   if (not Exec(PowerShellPath, Parameters, ExpandConstant('{app}'),
     SW_HIDE, ewWaitUntilTerminated, ResultCode)) or (ResultCode <> 0) then
   begin
-    MsgBox('安装文件已复制，但系统初始化失败。请保留安装目录并联系管理员。',
+    MsgBox('系统初始化失败。详细原因已保存到：' + #13#10 +
+      ExpandConstant('{localappdata}\NGT\install.log'),
       mbError, MB_OK);
     RaiseException('系统初始化失败，退出代码：' + IntToStr(ResultCode));
   end;

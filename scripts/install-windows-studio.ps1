@@ -58,6 +58,7 @@ if ($isRelease) {
   Invoke-NgtCommand "pnpm" @("install", "--frozen-lockfile")
 }
 
+Stop-NgtStudioProcesses
 Start-NgtStudioDatabase
 try {
   if ($isRelease) {

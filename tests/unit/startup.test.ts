@@ -21,12 +21,17 @@ describe("Windows persistent startup", () => {
     );
     expect(installer).toContain("New-ScheduledTaskTrigger -AtLogOn");
     expect(installer).toContain(
-      'New-ScheduledTaskAction -Execute "wscript.exe"',
+      "New-ScheduledTaskAction -Execute $wscriptPath",
     );
     expect(installer).toContain("//B //Nologo");
     expect(installer).toContain("Register-ScheduledTask");
     expect(installer).toContain("Start-ScheduledTask");
+    expect(installer).toContain(
+      "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+    );
+    expect(installer).toContain("Start-Process -FilePath $wscriptPath");
     expect(uninstaller).toContain("Unregister-ScheduledTask");
+    expect(uninstaller).toContain("Remove-ItemProperty");
   });
 
   it("keeps the isolated test preview on a fixed restart-safe port", async () => {
@@ -81,6 +86,15 @@ describe("Windows persistent startup", () => {
     );
     expect(database).toContain("process.env.NGT_DATA_ROOT");
     expect(database).toContain('join(persistentRoot, "data")');
+    expect(installer).toContain("Stop-NgtStudioProcesses");
+    expect(installer.indexOf("Stop-NgtStudioProcesses")).toBeLessThan(
+      installer.indexOf("Start-NgtStudioDatabase"),
+    );
+    expect(installer).toContain("Start-NgtStudioDatabase");
+    expect(installer).toContain("Wait-NgtStudioHealth");
+    const common = await readFile("scripts/windows-studio-common.ps1", "utf8");
+    expect(common).toContain("$process.HasExited");
+    expect(common).toContain("studio-database.error.log");
     expect(service).toContain('"studio.json"');
     expect(service).toContain('"runtime\\node.exe"');
     expect(installer).toContain('"releases\\v" + $release.version');
@@ -147,6 +161,11 @@ describe("Windows persistent startup", () => {
     expect(definition).not.toContain("recursesubdirs");
     expect(definition).toContain("UninstallDisplayIcon");
     expect(definition).toContain("IconFilename");
+    expect(definition).toContain('Filename: "http://127.0.0.1:3000"');
+    expect(definition).toContain(
+      "Flags: shellexec postinstall nowait skipifsilent",
+    );
+    expect(definition).not.toContain("{sys}\\explorer.exe");
     expect(builder).toContain("ISCC.exe");
     expect(builder.indexOf("$compilerCandidates")).toBeLessThan(
       builder.indexOf('Get-Command "iscc.exe"'),
@@ -163,6 +182,8 @@ describe("Windows persistent startup", () => {
     expect(bootstrap).toContain("Remove-Item -LiteralPath $PackagePath");
     expect(bootstrap).toContain("install-windows-studio.ps1");
     expect(bootstrap).toContain("-InPlace");
+    expect(bootstrap).toContain("Start-Transcript");
+    expect(definition).toContain("install.log");
     expect(uninstaller).toContain("Stop-NgtStudioProcesses");
     expect(uninstaller).toContain("uninstall-windows-startup.ps1");
     expect(uninstaller).not.toContain("data-store");

@@ -6101,6 +6101,16 @@ summary.record-icon::-webkit-details-marker {
   min-width: 80px;
   text-align: center;
 }
+.inventory-table th.inventory-status-cell,
+.inventory-table td.inventory-status-cell {
+  padding-right: 6px;
+  padding-left: 6px;
+}
+.inventory-status-cell .stock-badge {
+  padding-right: 4px;
+  padding-left: 4px;
+  font-size: 11px;
+}
 .inventory-table tbody tr {
   cursor: pointer;
 }

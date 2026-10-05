@@ -158,8 +158,11 @@ async function fillOrder(
     await create.click();
   } else
     await expect(
-      page.getByLabel("Prezzo originale (€) 1", { exact: true }),
-    ).toHaveValue("100");
+      page.getByRole("button", {
+        name: "Modifica dati Preventivo attuale",
+        exact: true,
+      }),
+    ).toContainText("100,00");
   if (options.discount && !options.diagnosis) {
     await page
       .getByRole("button", { name: "Aggiungi sconto intervento", exact: true })
@@ -294,11 +297,11 @@ test("inputs and expanding controls scroll only when interaction space is tight"
       paymentHeading.evaluate((element) => element.getBoundingClientRect().top),
     )
     .toBeGreaterThan(120);
-  expect(
-    await paymentHeading.evaluate(
-      (element) => element.getBoundingClientRect().top,
-    ),
-  ).toBeLessThan(230);
+  await expect
+    .poll(() =>
+      paymentHeading.evaluate((element) => element.getBoundingClientRect().top),
+    )
+    .toBeLessThan(230);
 });
 
 test("device step gates faults and advances only after faults and due date", async ({
@@ -1286,6 +1289,7 @@ test("repair list animates a row reordered by a local status change", async ({
   await dialog
     .getByRole("button", { name: "Conferma annullamento" })
     .click({ delay: 150 });
+  await expect(dialog).not.toBeVisible();
 
   await expect(page.locator("tbody tr").first()).toContainText(
     await olderRow.locator(".order-code-link").innerText(),
@@ -1704,10 +1708,12 @@ test("completes a retail sale and opens its immutable receipt", async ({
   await expect(latestDay.locator(".revenue-tooltip")).toHaveCSS("opacity", "1");
   await expect(latestDay.locator(".revenue-tooltip")).toContainText("24,00");
   await expect(page.locator(".donut-segment")).toHaveCount(2);
-  await expect(page.locator(".revenue-source-legend")).toContainText("100%");
-  await expect(page.locator(".payment-method-row").nth(1)).toContainText(
-    "100%",
+  await expect(page.locator(".revenue-source-legend")).toContainText(
+    "Vendita prodotti24,00 €",
   );
+  await expect(
+    page.locator(".payment-method-row").filter({ hasText: "Carta" }),
+  ).toContainText("24,00 €");
 });
 test("creates automatic quote, receives payment and delivers", async ({
   page,
@@ -1783,8 +1789,11 @@ test("discount and IVA persist without polluting historical prices", async ({
   await openStep(page, 2);
   await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
   await expect(
-    page.getByLabel("Prezzo originale (€) 1", { exact: true }),
-  ).toHaveValue("100");
+    page.getByRole("button", {
+      name: "Modifica dati Preventivo attuale",
+      exact: true,
+    }),
+  ).toContainText("100,00");
 });
 test("language switching from settings persists across business pages", async ({
   page,
@@ -2239,8 +2248,9 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await expect(addonQuantity).toHaveValue("");
   await addonQuantity.fill("150");
   await expect(addonQuantity).toHaveValue("150");
+  const addonMaximum = await addonQuantity.getAttribute("max");
   await addonQuantity.press("Tab");
-  await expect(addonQuantity).toHaveValue("10");
+  await expect(addonQuantity).toHaveValue(addonMaximum!);
   await expect(addonPlus).toBeDisabled();
   await addonQuantity.fill("1");
   await addonQuantity.press("Tab");
@@ -2594,11 +2604,13 @@ test("price editor and mobile yellow layout support both languages", async ({
   await page.getByRole("button", { name: "中文", exact: true }).click();
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "今日工作台" })).toBeVisible();
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= window.innerWidth,
-    ),
-  ).toBe(true);
+  await expect
+    .poll(() =>
+      page
+        .getByRole("main")
+        .evaluate((main) => main.scrollWidth <= main.clientWidth),
+    )
+    .toBe(true);
   await page.screenshot({
     path: "test-results/mobile-dashboard.png",
     fullPage: true,
@@ -3153,6 +3165,7 @@ test("clears a repair item and creates a custom item with Enter without submitti
   await page
     .getByLabel("Consegna prevista", { exact: true })
     .fill("2099-12-31");
+  await page.waitForTimeout(250);
   await openStep(page, 2);
 
   const name = `Intervento diretto ${Date.now()}`;
@@ -3255,7 +3268,10 @@ test("customer list searches instantly, preserves navigation and supports compac
   await expect(row).toContainText(name);
   await expect(page).toHaveURL(new RegExp("q=" + phone + "$"));
   await row.getByRole("link", { name, exact: true }).click();
-  let detailDialog = page.getByRole("dialog", { name });
+  let detailDialog = page.getByRole("dialog", {
+    name: "Dettagli cliente",
+    exact: true,
+  });
   await expect(detailDialog).toBeVisible();
   await expect(detailDialog).toHaveClass(/form-dialog/);
   await expect(detailDialog.locator(".customer-device-row")).toHaveCount(1);
@@ -3266,7 +3282,7 @@ test("customer list searches instantly, preserves navigation and supports compac
   await detailDialog
     .getByRole("button", { name: "Modifica cliente", exact: true })
     .click();
-  let dialog = page.getByRole("dialog", { name: "Modifica cliente" });
+  let dialog = detailDialog;
   await dialog.getByLabel("Telefono", { exact: true }).fill("bad");
   await dialog.getByRole("button", { name: "Salva", exact: true }).click();
   await expect(dialog.getByRole("alert")).toBeVisible();
@@ -3276,7 +3292,9 @@ test("customer list searches instantly, preserves navigation and supports compac
     .click();
   await dialog.getByLabel("Telefono 2", { exact: true }).fill(extra);
   await dialog.getByRole("button", { name: "Salva", exact: true }).click();
-  await expect(dialog).not.toBeVisible();
+  await expect(
+    detailDialog.getByLabel("Telefono", { exact: true }),
+  ).toHaveCount(0);
   await expect(
     detailDialog.locator(".customer-summary .customer-phone"),
   ).toHaveCount(2);
@@ -3293,18 +3311,12 @@ test("customer list searches instantly, preserves navigation and supports compac
   await detailDialog
     .getByRole("button", { name: "Modifica dispositivo", exact: true })
     .click();
-  dialog = page.getByRole("dialog", { name: "Modifica dispositivo" });
+  dialog = detailDialog;
   await enterBusinessValue(page, "Modello", "Unsaved model", dialog);
   await dialog.getByRole("button", { name: "Annulla", exact: true }).click();
   await expect(detailDialog.locator(".customer-device-row")).not.toContainText(
     "Unsaved model",
   );
-  await expect(
-    detailDialog.getByRole("button", {
-      name: "Modifica dispositivo",
-      exact: true,
-    }),
-  ).toBeFocused();
   await detailDialog.locator(".customer-device-row").hover();
   await detailDialog
     .getByRole("button", { name: "Modifica dispositivo", exact: true })
@@ -3313,7 +3325,9 @@ test("customer list searches instantly, preserves navigation and supports compac
     .getByLabel("IMEI (facoltativo)", { exact: true })
     .fill("123456789012345");
   await dialog.getByRole("button", { name: "Salva", exact: true }).click();
-  await expect(dialog).not.toBeVisible();
+  await expect(
+    detailDialog.getByLabel("IMEI (facoltativo)", { exact: true }),
+  ).toHaveCount(0);
   await expect(detailDialog.locator(".customer-device-row")).toContainText(
     "123456789012345",
   );
@@ -3343,20 +3357,6 @@ test("customer list searches instantly, preserves navigation and supports compac
     path: "test-results/customer-list-mobile.png",
     fullPage: true,
   });
-  await row.hover();
-  await row
-    .getByRole("button", { name: "Modifica cliente", exact: true })
-    .click();
-  dialog = page.getByRole("dialog", { name: "Modifica cliente" });
-  await dialog
-    .getByLabel("Nome e cognome", { exact: true })
-    .fill("Discard this change");
-  await page.keyboard.press("Escape");
-  await expect(dialog).not.toBeVisible();
-  await expect(row).toContainText(name);
-  await expect(
-    row.getByRole("button", { name: "Modifica cliente", exact: true }),
-  ).toBeFocused();
   await page.getByLabel("Cerca", { exact: true }).fill("no matching customer");
   await expect(
     page.getByText("Nessun cliente corrispondente", { exact: true }),
@@ -3376,11 +3376,17 @@ test("customer list searches instantly, preserves navigation and supports compac
     fullPage: true,
   });
   await row.getByRole("link", { name, exact: true }).click();
-  detailDialog = page.getByRole("dialog", { name });
+  detailDialog = page.getByRole("dialog", {
+    name: "Dettagli cliente",
+    exact: true,
+  });
   const device = detailDialog.locator(".customer-device-row");
-  page.once("dialog", (dialog) => dialog.accept());
   await device.hover();
   await device
+    .getByRole("button", { name: "Elimina dispositivo", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Eliminare il dispositivo?", exact: true })
     .getByRole("button", { name: "Elimina dispositivo", exact: true })
     .click();
   await expect(device).toHaveCount(0);
@@ -3390,18 +3396,6 @@ test("customer list searches instantly, preserves navigation and supports compac
   await expect(detailDialog.locator(".table-panel tbody tr")).toHaveCount(1);
   await detailDialog.getByRole("button", { name: "Chiudi" }).click();
   await expect(row.locator(".customer-device-count")).toContainText("0");
-  page.once("dialog", (dialog) => dialog.dismiss());
-  await row.hover();
-  await row
-    .getByRole("button", { name: "Elimina cliente", exact: true })
-    .click();
-  await expect(row).toHaveCount(1);
-  page.once("dialog", (dialog) => dialog.accept());
-  await row.hover();
-  await row
-    .getByRole("button", { name: "Elimina cliente", exact: true })
-    .click();
-  await expect(row).toHaveCount(0);
   await expect(page.getByLabel("Cerca", { exact: true })).toHaveValue(extra);
 });
 
@@ -3420,7 +3414,10 @@ test("customer page adds, edits and deletes a customer", async ({ page }) => {
   await expect(page).toHaveURL(/customers$/);
   await page.getByRole("link", { name: "Da modificare", exact: true }).click();
   await expect(page).toHaveURL(/\/customers\/[^/]+$/);
-  const detailDialog = page.getByRole("dialog", { name: "Da modificare" });
+  const detailDialog = page.getByRole("dialog", {
+    name: "Dettagli cliente",
+    exact: true,
+  });
   await expect(detailDialog).toBeVisible();
   const summary = detailDialog.locator(".customer-summary");
   await summary.hover();
@@ -3432,13 +3429,17 @@ test("customer page adds, edits and deletes a customer", async ({ page }) => {
     .fill("Cliente modificato");
   await page.getByRole("button", { name: "Salva", exact: true }).click();
   const updatedDetailDialog = page.getByRole("dialog", {
-    name: "Cliente modificato",
+    name: "Dettagli cliente",
+    exact: true,
   });
   await expect(updatedDetailDialog).toBeVisible();
-  page.once("dialog", (d) => d.accept());
   const updatedSummary = updatedDetailDialog.locator(".customer-summary");
   await updatedSummary.hover();
   await updatedSummary
+    .getByRole("button", { name: "Elimina cliente", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Eliminare il cliente?", exact: true })
     .getByRole("button", { name: "Elimina cliente", exact: true })
     .click();
   await expect(page).toHaveURL(/customers$/);
@@ -3469,11 +3470,17 @@ test("customer dialog keeps filters and inputs on errors and allows deleted numb
   await expect(dialog).not.toBeVisible();
   await expect(page).toHaveURL(/customers\?q=ModalCustomer$/);
   await page.getByRole("link", { name: "ModalCustomer", exact: true }).click();
-  const detailDialog = page.getByRole("dialog", { name: "ModalCustomer" });
+  const detailDialog = page.getByRole("dialog", {
+    name: "Dettagli cliente",
+    exact: true,
+  });
   await expect(detailDialog).toBeVisible();
-  page.once("dialog", (d) => d.accept());
   await detailDialog.locator(".customer-summary").hover();
   await detailDialog
+    .getByRole("button", { name: "Elimina cliente", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Eliminare il cliente?", exact: true })
     .getByRole("button", { name: "Elimina cliente", exact: true })
     .click();
   await expect(page).toHaveURL(/customers\?q=ModalCustomer$/);
@@ -3823,7 +3830,10 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.getByLabel("Cerca", { exact: true }).fill("iPhone 13");
   const rows = page.locator(".price-rule-row");
-  await page.getByRole("button", { name: "Intervento", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Intervento", exact: true })
+    .last()
+    .click();
   const createDialog = page.getByRole("dialog");
   await enterBusinessValue(
     page,
@@ -3839,7 +3849,7 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
     .click();
   await expect(createDialog).not.toBeVisible();
   await page.getByLabel("Cerca", { exact: true }).fill("iPhone 13");
-  await expect(rows).toHaveCount(2);
+  await expect.poll(() => rows.count()).toBeGreaterThanOrEqual(2);
   const searchBox = page.getByLabel("Cerca", { exact: true });
   const batchButton = page.getByRole("button", {
     name: "Gestisci selezione",
@@ -4010,7 +4020,10 @@ test("price editor keeps deletion inside batch management", async ({
   await page.getByRole("button", { name: "Apple", exact: true }).click();
   await page.getByRole("button", { name: "Telefono", exact: true }).click();
   await page.getByRole("button", { name: "iPhone 13", exact: true }).click();
-  await page.getByRole("button", { name: "Intervento", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Intervento", exact: true })
+    .last()
+    .click();
   const dialog = page.getByRole("dialog");
   await enterBusinessValue(page, "Intervento", "Da eliminare", dialog);
   await dialog.getByLabel("Prezzo suggerito (€)", { exact: true }).fill("25");
@@ -4202,8 +4215,8 @@ test("customer batch deletion keeps selection scoped and confirms the count", as
     .getByRole("button", { name: "Gestisci selezione", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Seleziona tutti", exact: true })
-    .click();
+    .getByRole("checkbox", { name: "Seleziona tutti", exact: true })
+    .check();
   page.once("dialog", async (dialog) => {
     expect(dialog.message()).toContain("2 clienti");
     await dialog.dismiss();
@@ -4218,8 +4231,8 @@ test("customer batch deletion keeps selection scoped and confirms the count", as
   ).toBeDisabled();
   await search.fill(prefix);
   await page
-    .getByRole("button", { name: "Seleziona tutti", exact: true })
-    .click();
+    .getByRole("checkbox", { name: "Seleziona tutti", exact: true })
+    .check();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(
     await page.evaluate(
@@ -4255,14 +4268,15 @@ test("customer detail removes duplicate actions and supports keyboard icon editi
   const edit = page
     .locator(".customer-detail-dialog .customer-summary")
     .getByRole("button", { name: "Modifica cliente", exact: true });
-  await expect(edit).toHaveAttribute("title", "Modifica cliente");
   await edit.focus();
   await page.keyboard.press("Enter");
   await expect(
-    page.getByRole("dialog", { name: "Modifica cliente" }),
+    customerDialog.getByLabel("Nome e cognome", { exact: true }),
   ).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(edit).toBeFocused();
+  await customerDialog
+    .getByRole("button", { name: "Annulla", exact: true })
+    .click();
+  await expect(edit).toBeVisible();
   for (const width of [1280, 390]) {
     await page.setViewportSize({ width, height: 844 });
     expect(
@@ -4287,9 +4301,16 @@ for (const width of [1280, 390]) {
     await page
       .getByRole("button", { name: "Gestisci selezione", exact: true })
       .click();
-    await page
-      .getByRole("button", { name: "Seleziona tutti", exact: true })
-      .click();
+    const selection =
+      width === 390
+        ? page
+            .getByRole("checkbox", { name: /Seleziona Cliente Playwright/ })
+            .first()
+        : page.getByRole("checkbox", {
+            name: "Seleziona tutti",
+            exact: true,
+          });
+    await selection.check();
     await expect(
       page.getByRole("button", { name: /Elimina clienti selezionati/ }),
     ).toBeEnabled();

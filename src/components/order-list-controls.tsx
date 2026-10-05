@@ -222,7 +222,12 @@ export function OrderListBody({
       const protectedTarget = (event.target as Element).closest?.(
         "[data-prevent-card-autosave]",
       );
-      if (protectedTarget && protectedTarget.tagName !== "DIALOG") return;
+      if (
+        protectedTarget &&
+        (protectedTarget.tagName !== "DIALOG" ||
+          !protectedTarget.contains(body.current))
+      )
+        return;
       if (!body.current?.contains(event.target as Node))
         requestAnimationFrame(() => setActiveId(""));
     }

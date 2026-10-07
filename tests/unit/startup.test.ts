@@ -108,6 +108,10 @@ describe("Windows persistent startup", () => {
     expect(common).toContain("Get-CimInstance Win32_Process");
     expect(common).toContain('"windows-service.ps1"');
     expect(common).toContain("$stateDirectories");
+    expect(common).toContain(
+      "$databaseKey = [System.IO.Path]::GetFullPath($data)",
+    );
+    expect(common).toContain('$ErrorActionPreference = "SilentlyContinue"');
     expect(installer).toContain('"releases\\v" + $release.version');
     expect(installer).toContain('"--max-old-space-size=1536"');
     expect(packager).toContain("--config.node-linker=hoisted");

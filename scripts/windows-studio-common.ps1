@@ -109,16 +109,25 @@ function Stop-NgtStudioProcesses {
 
   $stoppedDatabases = @{}
   foreach ($stateDirectory in $stateDirectories) {
+    if (-not [bool](Get-NetTCPConnection -LocalPort 55432 -State Listen -ErrorAction SilentlyContinue)) {
+      break
+    }
     $runtimeFile = Join-Path $stateDirectory "database-runtime-location.txt"
     $dataFile = Join-Path $stateDirectory "database-location.txt"
     if ((Test-Path -LiteralPath $runtimeFile) -and (Test-Path -LiteralPath $dataFile)) {
       $runtime = (Get-Content -LiteralPath $runtimeFile -Raw).Trim()
       $data = (Get-Content -LiteralPath $dataFile -Raw).Trim()
-      $databaseKey = $runtime + "|" + $data
+      $databaseKey = [System.IO.Path]::GetFullPath($data).TrimEnd("\").ToLowerInvariant()
       $pgCtl = Join-Path $runtime "bin\pg_ctl.exe"
       if (-not $stoppedDatabases.ContainsKey($databaseKey) -and (Test-Path -LiteralPath $pgCtl) -and (Test-Path -LiteralPath $data)) {
         $stoppedDatabases[$databaseKey] = $true
-        & $pgCtl -D $data -m fast stop 2>$null
+        $previousErrorActionPreference = $ErrorActionPreference
+        $ErrorActionPreference = "SilentlyContinue"
+        try {
+          & $pgCtl -D $data -m fast stop 2>$null
+        } finally {
+          $ErrorActionPreference = $previousErrorActionPreference
+        }
       }
     }
   }

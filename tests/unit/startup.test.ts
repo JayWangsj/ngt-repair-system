@@ -154,6 +154,7 @@ describe("Windows persistent startup", () => {
     expect(packager).toContain('".next\\standalone\\.env"');
     expect(packager).toContain("--frozen-lockfile");
     expect(packager).toContain("tar.exe -a -c");
+    expect(packager).toContain('$env:GITHUB_REF_TYPE -eq "tag"');
   });
 
   it("backs up and verifies private releases before switching the studio", async () => {
@@ -206,6 +207,12 @@ describe("Windows persistent startup", () => {
     );
     expect(workflow).toContain("cache: pnpm");
     expect(workflow).not.toContain("npm install -g pnpm");
+    expect(workflow).toContain("windows-studio-smoke:");
+    expect(workflow).toContain("./scripts/build-windows-studio-package.ps1");
+    expect(workflow).toContain("./scripts/test-windows-studio-package.ps1");
+    expect(
+      workflow.indexOf("build-windows-studio-package.ps1"),
+    ).toBeLessThan(workflow.indexOf("test-windows-studio-package.ps1"));
   });
 
   it("builds a one-click per-user studio installer", async () => {

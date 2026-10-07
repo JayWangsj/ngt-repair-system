@@ -16,7 +16,7 @@ $version = $package.version
 $commitOutput = git rev-parse HEAD
 if (($LASTEXITCODE -ne 0) -or (-not $commitOutput)) { throw "Unable to read the Git commit." }
 $commit = ($commitOutput | Out-String).Trim()
-if ($env:GITHUB_REF_NAME -and ($env:GITHUB_REF_NAME -ne ("v" + $version))) {
+if (($env:GITHUB_REF_TYPE -eq "tag") -and ($env:GITHUB_REF_NAME -ne ("v" + $version))) {
   throw "Git tag $env:GITHUB_REF_NAME does not match package version v$version."
 }
 

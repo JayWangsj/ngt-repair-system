@@ -65,3 +65,30 @@ jobs:
             test-results/
       - name: Validate container build
         run: docker build --target runner -t ngt-mvp:ci .
+
+  windows-studio-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+          run_install: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --config.node-linker=hoisted --config.package-import-method=copy
+      - run: pnpm build
+        env:
+          DATABASE_URL: postgresql://ngt:ci-only@127.0.0.1:55432/ngt?schema=public
+          AUTH_SECRET: ci-only-secret-for-studio-smoke
+          AUTH_URL: http://127.0.0.1:3000
+          AUTH_TRUST_HOST: "true"
+          NEXT_TELEMETRY_DISABLED: "1"
+          NODE_OPTIONS: --max-old-space-size=2048
+      - shell: powershell
+        run: ./scripts/build-windows-studio-package.ps1
+      - shell: powershell
+        run: ./scripts/test-windows-studio-package.ps1

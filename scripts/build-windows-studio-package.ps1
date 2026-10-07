@@ -46,6 +46,20 @@ $requiredSwcHelper = ".next\standalone\node_modules\@swc\helpers\esm\_interop_re
 if (-not (Test-Path -LiteralPath (Join-Path $stage $requiredSwcHelper))) {
   throw "The standalone @swc/helpers runtime is incomplete."
 }
+$nextEnvironmentSource = Join-Path $projectRoot "node_modules\@next\env"
+$nextEnvironmentDestination = Join-Path $standaloneDestination "node_modules\@next\env"
+if (-not (Test-Path -LiteralPath $nextEnvironmentSource)) {
+  throw "The @next/env runtime is missing."
+}
+& node (Join-Path $projectRoot "scripts\copy-directory-materialized.mjs") `
+  $nextEnvironmentSource $nextEnvironmentDestination
+if ($LASTEXITCODE -ne 0) {
+  throw "The @next/env runtime copy failed."
+}
+$requiredNextEnvironment = ".next\standalone\node_modules\@next\env\dist\index.js"
+if (-not (Test-Path -LiteralPath (Join-Path $stage $requiredNextEnvironment))) {
+  throw "The standalone @next/env runtime is incomplete."
+}
 Copy-Item -LiteralPath (Join-Path $BuildDirectory "static") -Destination (Join-Path $stage ".next\static") -Recurse -Force
 $copiedEnvironment = Join-Path $stage ".next\standalone\.env"
 if (Test-Path -LiteralPath $copiedEnvironment) {
@@ -171,10 +185,14 @@ try {
   Pop-Location
 }
 $requiredArchiveEntry = $requiredSwcHelper.Replace("\", "/")
+$requiredNextEnvironmentEntry = $requiredNextEnvironment.Replace("\", "/")
 $archiveEntries = & tar.exe -tf $archive
 if ($LASTEXITCODE -ne 0) { throw "Studio archive verification failed." }
 if (-not ($archiveEntries | Where-Object { $_ -like ("*" + $requiredArchiveEntry) })) {
   throw "Studio archive is missing the @swc/helpers runtime."
+}
+if (-not ($archiveEntries | Where-Object { $_ -like ("*" + $requiredNextEnvironmentEntry) })) {
+  throw "Studio archive is missing the @next/env runtime."
 }
 $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
 Set-Content -LiteralPath ($archive + ".sha256") -Value ("$hash  " + (Split-Path $archive -Leaf)) -Encoding ascii

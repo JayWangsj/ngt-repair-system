@@ -121,6 +121,13 @@ describe("Windows persistent startup", () => {
     expect(packager).toContain(
       "Studio archive is missing the @swc/helpers runtime.",
     );
+    expect(packager).toContain('"node_modules\\@next\\env"');
+    expect(packager).toContain(
+      '".next\\standalone\\node_modules\\@next\\env\\dist\\index.js"',
+    );
+    expect(packager).toContain(
+      "Studio archive is missing the @next/env runtime.",
+    );
     expect(materializedCopy).toContain("lstat(sourcePath)");
     expect(materializedCopy).toContain("readlink(sourcePath)");
     expect(packager).toContain('$runtimeDirectory "postgres"');

@@ -7,6 +7,7 @@ import {
   writeFile,
   access,
   unlink,
+  rename,
 } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, resolve, join } from "node:path";
@@ -72,28 +73,56 @@ function run(exe, args) {
       windowsHide: true,
       stdio: "pipe",
     });
+    let output = "";
     let error = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk;
+    });
     child.stderr.on("data", (chunk) => {
       error += chunk;
     });
     child.on("error", reject);
-    child.on("close", (code) =>
-      code === 0 ? resolve() : reject(new Error(error)),
-    );
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(
+        new Error(
+          [`${exe} exited with code ${code}.`, output.trim(), error.trim()]
+            .filter(Boolean)
+            .join("\n"),
+        ),
+      );
+    });
   });
 }
 const dataDir = configuredDataRoot
   ? join(persistentRoot, "data")
   : join(cache, "data");
+let initialized = false;
 try {
   await access(join(dataDir, "PG_VERSION"));
-} catch {
+  initialized = true;
+} catch (error) {
+  if (error.code !== "ENOENT") throw error;
+}
+if (!initialized) {
+  try {
+    await access(dataDir);
+    const incompleteDataDir = `${dataDir}.incomplete-${Date.now()}`;
+    await rename(dataDir, incompleteDataDir);
+    console.warn(`Preserved incomplete database at ${incompleteDataDir}.`);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  const initializingDataDir = `${dataDir}.initializing-${process.pid}`;
   const passwordFile = join(cache, "init-password");
   await writeFile(passwordFile, secrets.password);
   try {
     await run("initdb.exe", [
       "-D",
-      dataDir,
+      initializingDataDir,
       "-U",
       "ngt",
       "--auth=scram-sha-256",
@@ -101,6 +130,7 @@ try {
       "--encoding=UTF8",
       `--pwfile=${passwordFile}`,
     ]);
+    await rename(initializingDataDir, dataDir);
   } finally {
     await unlink(passwordFile);
   }

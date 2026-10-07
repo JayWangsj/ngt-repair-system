@@ -86,6 +86,9 @@ describe("Windows persistent startup", () => {
       "utf8",
     );
     expect(database).toContain("process.env.NGT_DATA_ROOT");
+    expect(database).toContain("Preserved incomplete database");
+    expect(database).toContain("initializingDataDir");
+    expect(database).toContain("output.trim()");
     expect(packageJson.dependencies["embedded-postgres"]).toBe(
       "17.10.0-beta.17",
     );

@@ -60,6 +60,28 @@ $requiredNextEnvironment = ".next\standalone\node_modules\@next\env\dist\index.j
 if (-not (Test-Path -LiteralPath (Join-Path $stage $requiredNextEnvironment))) {
   throw "The standalone @next/env runtime is incomplete."
 }
+$prismaClientSource = Join-Path $projectRoot "node_modules\.prisma\client"
+if (-not (Test-Path -LiteralPath (Join-Path $prismaClientSource "default.js"))) {
+  throw "The generated Prisma client is missing."
+}
+$prismaClientDestinations = @(
+  (Join-Path $standaloneDestination "node_modules\.prisma\client")
+)
+$nestedRuntimeModules = Join-Path $standaloneDestination (Join-Path $BuildDirectory "node_modules")
+if (Test-Path -LiteralPath (Join-Path $nestedRuntimeModules "@prisma")) {
+  $prismaClientDestinations += (Join-Path $nestedRuntimeModules ".prisma\client")
+}
+foreach ($prismaClientDestination in $prismaClientDestinations) {
+  & node (Join-Path $projectRoot "scripts\copy-directory-materialized.mjs") `
+    $prismaClientSource $prismaClientDestination
+  if ($LASTEXITCODE -ne 0) {
+    throw "The generated Prisma client copy failed."
+  }
+}
+$requiredPrismaClient = ".next\standalone\node_modules\.prisma\client\default.js"
+if (-not (Test-Path -LiteralPath (Join-Path $stage $requiredPrismaClient))) {
+  throw "The standalone Prisma client is incomplete."
+}
 Copy-Item -LiteralPath (Join-Path $BuildDirectory "static") -Destination (Join-Path $stage ".next\static") -Recurse -Force
 $copiedEnvironment = Join-Path $stage ".next\standalone\.env"
 if (Test-Path -LiteralPath $copiedEnvironment) {
@@ -186,6 +208,7 @@ try {
 }
 $requiredArchiveEntry = $requiredSwcHelper.Replace("\", "/")
 $requiredNextEnvironmentEntry = $requiredNextEnvironment.Replace("\", "/")
+$requiredPrismaClientEntry = $requiredPrismaClient.Replace("\", "/")
 $archiveEntries = & tar.exe -tf $archive
 if ($LASTEXITCODE -ne 0) { throw "Studio archive verification failed." }
 if (-not ($archiveEntries | Where-Object { $_ -like ("*" + $requiredArchiveEntry) })) {
@@ -193,6 +216,9 @@ if (-not ($archiveEntries | Where-Object { $_ -like ("*" + $requiredArchiveEntry
 }
 if (-not ($archiveEntries | Where-Object { $_ -like ("*" + $requiredNextEnvironmentEntry) })) {
   throw "Studio archive is missing the @next/env runtime."
+}
+if (-not ($archiveEntries | Where-Object { $_ -like ("*" + $requiredPrismaClientEntry) })) {
+  throw "Studio archive is missing the generated Prisma client."
 }
 $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
 Set-Content -LiteralPath ($archive + ".sha256") -Value ("$hash  " + (Split-Path $archive -Leaf)) -Encoding ascii

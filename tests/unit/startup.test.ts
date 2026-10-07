@@ -128,6 +128,13 @@ describe("Windows persistent startup", () => {
     expect(packager).toContain(
       "Studio archive is missing the @next/env runtime.",
     );
+    expect(packager).toContain('"node_modules\\.prisma\\client"');
+    expect(packager).toContain(
+      '".next\\standalone\\node_modules\\.prisma\\client\\default.js"',
+    );
+    expect(packager).toContain(
+      "Studio archive is missing the generated Prisma client.",
+    );
     expect(materializedCopy).toContain("lstat(sourcePath)");
     expect(materializedCopy).toContain("readlink(sourcePath)");
     expect(packager).toContain('$runtimeDirectory "postgres"');
@@ -149,6 +156,10 @@ describe("Windows persistent startup", () => {
       ".github/workflows/windows-studio-release.yml",
       "utf8",
     );
+    const packageSmokeTest = await readFile(
+      "scripts/test-windows-studio-package.ps1",
+      "utf8",
+    );
     expect(backup).toContain('"SHA256SUMS.txt"');
     expect(backup).toContain("Stop-NgtStudioProcesses");
     expect(updater).toContain('"release", "download"');
@@ -165,6 +176,19 @@ describe("Windows persistent startup", () => {
     expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain("pnpm/action-setup@v4");
     expect(workflow).not.toContain("npm install -g pnpm");
+    expect(workflow).toContain("./scripts/test-windows-studio-package.ps1");
+    expect(workflow.indexOf("build-windows-studio-package.ps1")).toBeLessThan(
+      workflow.indexOf("test-windows-studio-package.ps1"),
+    );
+    expect(workflow.indexOf("test-windows-studio-package.ps1")).toBeLessThan(
+      workflow.indexOf("build-windows-studio-installer.ps1"),
+    );
+    expect(packageSmokeTest).toContain("Start-NgtStudioDatabase");
+    expect(packageSmokeTest).toContain('"migrate", "deploy"');
+    expect(packageSmokeTest).toContain("Wait-NgtStudioHealth");
+    expect(packageSmokeTest).toContain("Write-SmokeLogs");
+    expect(packageSmokeTest).toContain("-Tail 200");
+    expect(packageSmokeTest).toContain("Stop-NgtStudioProcesses");
   });
 
   it("installs pnpm before setup-node enables its cache", async () => {

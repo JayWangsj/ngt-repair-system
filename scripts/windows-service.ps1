@@ -3,6 +3,7 @@ $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $stateDirectory = Join-Path $projectRoot ".local"
 New-Item -ItemType Directory -Path $stateDirectory -Force | Out-Null
+Set-Content -LiteralPath (Join-Path $stateDirectory "supervisor.pid") -Value $PID -Encoding ascii
 Set-Location -LiteralPath $projectRoot
 
 $studioConfigPath = Join-Path $stateDirectory "studio.json"

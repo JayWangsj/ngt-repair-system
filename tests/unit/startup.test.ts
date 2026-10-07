@@ -104,6 +104,10 @@ describe("Windows persistent startup", () => {
     expect(common).toContain("studio-database.error.log");
     expect(service).toContain('"studio.json"');
     expect(service).toContain('"runtime\\node.exe"');
+    expect(service).toContain('"supervisor.pid"');
+    expect(common).toContain("Get-CimInstance Win32_Process");
+    expect(common).toContain('"windows-service.ps1"');
+    expect(common).toContain("$stateDirectories");
     expect(installer).toContain('"releases\\v" + $release.version');
     expect(installer).toContain('"--max-old-space-size=1536"');
     expect(packager).toContain("--config.node-linker=hoisted");

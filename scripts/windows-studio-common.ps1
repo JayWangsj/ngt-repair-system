@@ -70,6 +70,35 @@ function Stop-NgtStudioProcesses {
     }
   }
 
+  $stateDirectories = @($script:NgtStateDirectory)
+  $releaseParent = Split-Path -Parent $script:NgtProjectRoot
+  if ((Split-Path -Leaf $releaseParent) -eq "releases") {
+    $stateDirectories += @(Get-ChildItem -LiteralPath $releaseParent -Directory -ErrorAction SilentlyContinue |
+      ForEach-Object { Join-Path $_.FullName ".local" } |
+      Where-Object { Test-Path -LiteralPath $_ })
+  }
+  $stateDirectories = @($stateDirectories | Select-Object -Unique)
+
+  foreach ($stateDirectory in $stateDirectories) {
+    $supervisorFile = Join-Path $stateDirectory "supervisor.pid"
+    if (Test-Path -LiteralPath $supervisorFile) {
+      [int]$supervisorId = 0
+      $supervisorText = (Get-Content -LiteralPath $supervisorFile -Raw).Trim()
+      if ([int]::TryParse($supervisorText, [ref]$supervisorId)) {
+        Stop-Process -Id $supervisorId -Force -ErrorAction SilentlyContinue
+      }
+    }
+  }
+  if (Get-Command Get-CimInstance -ErrorAction SilentlyContinue) {
+    Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+      Where-Object {
+        $_.CommandLine -and
+        ($_.CommandLine.IndexOf($releaseParent, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) -and
+        ($_.CommandLine.IndexOf("windows-service.ps1", [System.StringComparison]::OrdinalIgnoreCase) -ge 0)
+      } |
+      ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  }
+
   $applicationConnections = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue
   foreach ($processId in @($applicationConnections | Select-Object -ExpandProperty OwningProcess -Unique)) {
     $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
@@ -78,14 +107,19 @@ function Stop-NgtStudioProcesses {
     }
   }
 
-  $runtimeFile = Join-Path $script:NgtStateDirectory "database-runtime-location.txt"
-  $dataFile = Join-Path $script:NgtStateDirectory "database-location.txt"
-  if ((Test-Path -LiteralPath $runtimeFile) -and (Test-Path -LiteralPath $dataFile)) {
-    $runtime = (Get-Content -LiteralPath $runtimeFile -Raw).Trim()
-    $data = (Get-Content -LiteralPath $dataFile -Raw).Trim()
-    $pgCtl = Join-Path $runtime "bin\pg_ctl.exe"
-    if ((Test-Path -LiteralPath $pgCtl) -and (Test-Path -LiteralPath $data)) {
-      & $pgCtl -D $data -m fast stop 2>$null
+  $stoppedDatabases = @{}
+  foreach ($stateDirectory in $stateDirectories) {
+    $runtimeFile = Join-Path $stateDirectory "database-runtime-location.txt"
+    $dataFile = Join-Path $stateDirectory "database-location.txt"
+    if ((Test-Path -LiteralPath $runtimeFile) -and (Test-Path -LiteralPath $dataFile)) {
+      $runtime = (Get-Content -LiteralPath $runtimeFile -Raw).Trim()
+      $data = (Get-Content -LiteralPath $dataFile -Raw).Trim()
+      $databaseKey = $runtime + "|" + $data
+      $pgCtl = Join-Path $runtime "bin\pg_ctl.exe"
+      if (-not $stoppedDatabases.ContainsKey($databaseKey) -and (Test-Path -LiteralPath $pgCtl) -and (Test-Path -LiteralPath $data)) {
+        $stoppedDatabases[$databaseKey] = $true
+        & $pgCtl -D $data -m fast stop 2>$null
+      }
     }
   }
 

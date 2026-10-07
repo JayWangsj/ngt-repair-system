@@ -94,7 +94,40 @@ if (-not $nativePackage) {
 $nativeSource = Join-Path $nativePackage.FullName "node_modules\@embedded-postgres\windows-x64\native"
 $runtimeDirectory = Join-Path $stage "runtime"
 New-Item -ItemType Directory -Path $runtimeDirectory -Force | Out-Null
-Copy-Item -LiteralPath $nativeSource -Destination (Join-Path $runtimeDirectory "postgres") -Recurse -Force
+$postgresRuntime = Join-Path $runtimeDirectory "postgres"
+Copy-Item -LiteralPath $nativeSource -Destination $postgresRuntime -Recurse -Force
+
+$vcRuntimeCandidates = @()
+if ($env:VCToolsRedistDir) {
+  $vcRuntimeCandidates += (Join-Path $env:VCToolsRedistDir "x64\Microsoft.VC143.CRT")
+}
+$vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+if (Test-Path -LiteralPath $vswhere) {
+  $installations = & $vswhere -products * -format json | ConvertFrom-Json
+  foreach ($installation in $installations) {
+    $redistRoot = Join-Path $installation.installationPath "VC\Redist\MSVC"
+    if (Test-Path -LiteralPath $redistRoot) {
+      $vcRuntimeCandidates += @(Get-ChildItem -LiteralPath $redistRoot -Directory |
+        Sort-Object Name -Descending |
+        ForEach-Object { Join-Path $_.FullName "x64\Microsoft.VC143.CRT" })
+    }
+  }
+}
+$vcRuntime = $vcRuntimeCandidates |
+  Where-Object { Test-Path -LiteralPath $_ } |
+  Select-Object -First 1
+if (-not $vcRuntime) {
+  throw "Microsoft Visual C++ x64 application-local runtime is missing."
+}
+$postgresBin = Join-Path $postgresRuntime "bin"
+Get-ChildItem -LiteralPath $vcRuntime -File -Filter "*.dll" | ForEach-Object {
+  Copy-Item -LiteralPath $_.FullName -Destination $postgresBin -Force
+}
+foreach ($runtimeName in @("msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll")) {
+  if (-not (Test-Path -LiteralPath (Join-Path $postgresBin $runtimeName))) {
+    throw "Microsoft Visual C++ runtime file is missing: $runtimeName"
+  }
+}
 Copy-Item -LiteralPath (Get-Command node -ErrorAction Stop).Source `
   -Destination (Join-Path $runtimeDirectory "node.exe") -Force
 $githubCli = (Get-Command gh -ErrorAction Stop).Source

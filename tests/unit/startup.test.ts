@@ -111,6 +111,12 @@ describe("Windows persistent startup", () => {
     expect(materializedCopy).toContain("lstat(sourcePath)");
     expect(materializedCopy).toContain("readlink(sourcePath)");
     expect(packager).toContain('$runtimeDirectory "postgres"');
+    expect(packager).toContain("VCToolsRedistDir");
+    expect(packager).toContain("$vcRuntimeCandidates += (Join-Path");
+    expect(packager).toContain("vswhere.exe");
+    expect(packager).toContain('"msvcp140.dll"');
+    expect(packager).toContain('"vcruntime140.dll"');
+    expect(packager).toContain('"vcruntime140_1.dll"');
     expect(packager).toContain('".next\\standalone\\.env"');
     expect(packager).toContain("--frozen-lockfile");
     expect(packager).toContain("tar.exe -a -c");

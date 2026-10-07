@@ -70,6 +70,7 @@ describe("Windows persistent startup", () => {
   });
 
   it("keeps studio data outside versioned releases and packages updates at home", async () => {
+    const packageJson = JSON.parse(await readFile("package.json", "utf8"));
     const database = await readFile("scripts/windows-db.mjs", "utf8");
     const service = await readFile("scripts/windows-service.ps1", "utf8");
     const installer = await readFile(
@@ -85,6 +86,9 @@ describe("Windows persistent startup", () => {
       "utf8",
     );
     expect(database).toContain("process.env.NGT_DATA_ROOT");
+    expect(packageJson.dependencies["embedded-postgres"]).toBe(
+      "17.10.0-beta.17",
+    );
     expect(database).toContain('join(persistentRoot, "data")');
     expect(installer).toContain("Stop-NgtStudioProcesses");
     expect(installer.indexOf("Stop-NgtStudioProcesses")).toBeLessThan(

@@ -142,11 +142,12 @@ function Start-NgtStudioDatabase {
   }
   New-Item -ItemType Directory -Path $script:NgtStateDirectory -Force | Out-Null
   $nodeExecutable = Get-NgtNodeExecutable
+  $outputLog = Join-Path $script:NgtStateDirectory "studio-database.log"
   $errorLog = Join-Path $script:NgtStateDirectory "studio-database.error.log"
   $process = Start-Process -FilePath $nodeExecutable `
     -ArgumentList "scripts/windows-db.mjs" `
     -WorkingDirectory $script:NgtProjectRoot `
-    -RedirectStandardOutput (Join-Path $script:NgtStateDirectory "studio-database.log") `
+    -RedirectStandardOutput $outputLog `
     -RedirectStandardError $errorLog `
     -WindowStyle Hidden -PassThru
   Set-Content -LiteralPath (Join-Path $script:NgtStateDirectory "database.pid") `
@@ -156,11 +157,13 @@ function Start-NgtStudioDatabase {
       return
     }
     if ($process.HasExited) {
-      $details = if (Test-Path -LiteralPath $errorLog) {
-        (Get-Content -LiteralPath $errorLog -Raw).Trim()
+      $process.WaitForExit()
+      $details = @($outputLog, $errorLog) | ForEach-Object {
+        $content = Get-Content -LiteralPath $_ -Raw -ErrorAction SilentlyContinue
+        if ($content) { $content.Trim() }
       }
       if ($details) {
-        throw "Database initialization failed: $details"
+        throw "Database initialization failed with exit code $($process.ExitCode):`n$($details -join "`n")"
       }
       throw "Database initialization failed with exit code $($process.ExitCode)."
     }

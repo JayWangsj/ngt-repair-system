@@ -102,6 +102,13 @@ describe("Windows persistent startup", () => {
     const common = await readFile("scripts/windows-studio-common.ps1", "utf8");
     expect(common).toContain("$process.HasExited");
     expect(common).toContain("studio-database.error.log");
+    expect(common).toContain("studio-database.log");
+    expect(common).toContain("$process.WaitForExit()");
+    expect(common).toContain("if ($content) { $content.Trim() }");
+    expect(common).toContain("$details -join");
+    expect(common).not.toContain(
+      "(Get-Content -LiteralPath $errorLog -Raw).Trim()",
+    );
     expect(service).toContain('"studio.json"');
     expect(service).toContain('"runtime\\node.exe"');
     expect(service).toContain('"supervisor.pid"');

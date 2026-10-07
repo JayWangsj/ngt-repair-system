@@ -108,6 +108,11 @@ describe("Windows persistent startup", () => {
     expect(installer).toContain('"--max-old-space-size=1536"');
     expect(packager).toContain("--config.node-linker=hoisted");
     expect(packager).toContain('"scripts\\copy-directory-materialized.mjs"');
+    expect(packager).toContain('"node_modules\\@swc\\helpers"');
+    expect(packager).toContain("_interop_require_default.js");
+    expect(packager).toContain(
+      "Studio archive is missing the @swc/helpers runtime.",
+    );
     expect(materializedCopy).toContain("lstat(sourcePath)");
     expect(materializedCopy).toContain("readlink(sourcePath)");
     expect(packager).toContain('$runtimeDirectory "postgres"');

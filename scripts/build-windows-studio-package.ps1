@@ -32,6 +32,20 @@ $standaloneDestination = Join-Path $stage ".next\standalone"
 if ($LASTEXITCODE -ne 0) {
   throw "Standalone build copy failed."
 }
+$swcHelpersSource = Join-Path $projectRoot "node_modules\@swc\helpers"
+$swcHelpersDestination = Join-Path $standaloneDestination "node_modules\@swc\helpers"
+if (-not (Test-Path -LiteralPath $swcHelpersSource)) {
+  throw "The @swc/helpers runtime is missing."
+}
+& node (Join-Path $projectRoot "scripts\copy-directory-materialized.mjs") `
+  $swcHelpersSource $swcHelpersDestination
+if ($LASTEXITCODE -ne 0) {
+  throw "The @swc/helpers runtime copy failed."
+}
+$requiredSwcHelper = ".next\standalone\node_modules\@swc\helpers\esm\_interop_require_default.js"
+if (-not (Test-Path -LiteralPath (Join-Path $stage $requiredSwcHelper))) {
+  throw "The standalone @swc/helpers runtime is incomplete."
+}
 Copy-Item -LiteralPath (Join-Path $BuildDirectory "static") -Destination (Join-Path $stage ".next\static") -Recurse -Force
 $copiedEnvironment = Join-Path $stage ".next\standalone\.env"
 if (Test-Path -LiteralPath $copiedEnvironment) {
@@ -155,6 +169,12 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "Studio archive creation failed." }
 } finally {
   Pop-Location
+}
+$requiredArchiveEntry = $requiredSwcHelper.Replace("\", "/")
+$archiveEntries = & tar.exe -tf $archive
+if ($LASTEXITCODE -ne 0) { throw "Studio archive verification failed." }
+if (-not ($archiveEntries | Where-Object { $_ -like ("*" + $requiredArchiveEntry) })) {
+  throw "Studio archive is missing the @swc/helpers runtime."
 }
 $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
 Set-Content -LiteralPath ($archive + ".sha256") -Value ("$hash  " + (Split-Path $archive -Leaf)) -Encoding ascii

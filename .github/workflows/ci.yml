@@ -67,7 +67,7 @@ jobs:
         run: docker build --target runner -t ngt-mvp:ci .
 
   windows-studio-smoke:
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5

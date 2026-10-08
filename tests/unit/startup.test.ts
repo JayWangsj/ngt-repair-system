@@ -175,6 +175,7 @@ describe("Windows persistent startup", () => {
     expect(updater).toContain("backup-windows-studio.ps1");
     expect(updater).toContain("Wait-NgtStudioHealth");
     expect(workflow).toContain('tags:\n      - "v*"');
+    expect(workflow).toContain("runs-on: windows-2022");
     expect(workflow).toContain("--config.node-linker=hoisted");
     expect(workflow).toContain("--config.package-import-method=copy");
     expect(workflow).toContain("gh release create");
@@ -208,11 +209,12 @@ describe("Windows persistent startup", () => {
     expect(workflow).toContain("cache: pnpm");
     expect(workflow).not.toContain("npm install -g pnpm");
     expect(workflow).toContain("windows-studio-smoke:");
+    expect(workflow).toContain("runs-on: windows-2022");
     expect(workflow).toContain("./scripts/build-windows-studio-package.ps1");
     expect(workflow).toContain("./scripts/test-windows-studio-package.ps1");
-    expect(
-      workflow.indexOf("build-windows-studio-package.ps1"),
-    ).toBeLessThan(workflow.indexOf("test-windows-studio-package.ps1"));
+    expect(workflow.indexOf("build-windows-studio-package.ps1")).toBeLessThan(
+      workflow.indexOf("test-windows-studio-package.ps1"),
+    );
   });
 
   it("builds a one-click per-user studio installer", async () => {

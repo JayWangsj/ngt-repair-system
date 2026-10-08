@@ -60,7 +60,11 @@ $requiredNextEnvironment = ".next\standalone\node_modules\@next\env\dist\index.j
 if (-not (Test-Path -LiteralPath (Join-Path $stage $requiredNextEnvironment))) {
   throw "The standalone @next/env runtime is incomplete."
 }
-$prismaClientSource = Join-Path $projectRoot "node_modules\.prisma\client"
+$prismaClientSourceOutput = & node -e "const path = require('node:path'); console.log(path.dirname(require.resolve('.prisma/client/default', { paths: [path.dirname(require.resolve('@prisma/client'))] })));"
+if (($LASTEXITCODE -ne 0) -or (-not $prismaClientSourceOutput)) {
+  throw "Unable to resolve the generated Prisma client."
+}
+$prismaClientSource = [System.IO.Path]::GetFullPath(($prismaClientSourceOutput | Out-String).Trim())
 if (-not (Test-Path -LiteralPath (Join-Path $prismaClientSource "default.js"))) {
   throw "The generated Prisma client is missing."
 }

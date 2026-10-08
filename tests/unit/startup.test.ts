@@ -138,6 +138,8 @@ describe("Windows persistent startup", () => {
       "Studio archive is missing the @next/env runtime.",
     );
     expect(packager).toContain('"node_modules\\.prisma\\client"');
+    expect(packager).toContain("require.resolve('.prisma/client/default'");
+    expect(packager).toContain("$prismaClientSourceOutput");
     expect(packager).toContain(
       '".next\\standalone\\node_modules\\.prisma\\client\\default.js"',
     );
@@ -199,6 +201,7 @@ describe("Windows persistent startup", () => {
     expect(packageSmokeTest).toContain("[switch]$IntegrityOnly");
     expect(packageSmokeTest).toContain('"initdb.exe"');
     expect(packageSmokeTest).toContain("require('pg')");
+    expect(packageSmokeTest).toContain("new PrismaClient()");
     expect(packageSmokeTest).toContain(
       '".next\\standalone\\node_modules\\.prisma\\client\\default.js"',
     );

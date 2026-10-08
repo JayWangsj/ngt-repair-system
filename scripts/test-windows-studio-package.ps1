@@ -53,6 +53,22 @@ try {
         throw "Studio package is missing runtime file: $requiredPath"
       }
     }
+    Push-Location -LiteralPath (Join-Path $releaseRoot ".next\standalone")
+    $previousPrismaPackage = $env:NGT_PRISMA_PACKAGE
+    $env:NGT_PRISMA_PACKAGE = "@prisma/client"
+    try {
+      Invoke-NgtCommand $nodeExecutable @(
+        "-e",
+        'const { PrismaClient } = require(process.env.NGT_PRISMA_PACKAGE); const db = new PrismaClient(); db.$disconnect();'
+      )
+    } finally {
+      if ($null -eq $previousPrismaPackage) {
+        Remove-Item Env:\NGT_PRISMA_PACKAGE -ErrorAction SilentlyContinue
+      } else {
+        $env:NGT_PRISMA_PACKAGE = $previousPrismaPackage
+      }
+      Pop-Location
+    }
 
     $postgresBin = Join-Path $releaseRoot "runtime\postgres\bin"
     foreach ($executable in @("postgres.exe", "pg_ctl.exe")) {

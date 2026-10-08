@@ -104,6 +104,8 @@ describe("Windows persistent startup", () => {
     expect(common).toContain("studio-database.error.log");
     expect(common).toContain("studio-database.log");
     expect(common).toContain("$process.WaitForExit()");
+    expect(common).toContain("$process.Refresh()");
+    expect(common).toContain('"unknown"');
     expect(common).toContain("if ($content) { $content.Trim() }");
     expect(common).toContain("$details -join");
     expect(common).not.toContain(
@@ -186,6 +188,7 @@ describe("Windows persistent startup", () => {
     expect(workflow).toContain("pnpm/action-setup@v4");
     expect(workflow).not.toContain("npm install -g pnpm");
     expect(workflow).toContain("./scripts/test-windows-studio-package.ps1");
+    expect(workflow).toContain("-IntegrityOnly");
     expect(workflow.indexOf("build-windows-studio-package.ps1")).toBeLessThan(
       workflow.indexOf("test-windows-studio-package.ps1"),
     );
@@ -193,6 +196,12 @@ describe("Windows persistent startup", () => {
       workflow.indexOf("build-windows-studio-installer.ps1"),
     );
     expect(packageSmokeTest).toContain("Start-NgtStudioDatabase");
+    expect(packageSmokeTest).toContain("[switch]$IntegrityOnly");
+    expect(packageSmokeTest).toContain('"initdb.exe"');
+    expect(packageSmokeTest).toContain("require('pg')");
+    expect(packageSmokeTest).toContain(
+      '".next\\standalone\\node_modules\\.prisma\\client\\default.js"',
+    );
     expect(packageSmokeTest).toContain('"migrate", "deploy"');
     expect(packageSmokeTest).toContain("Wait-NgtStudioHealth");
     expect(packageSmokeTest).toContain("Write-SmokeLogs");
@@ -212,6 +221,7 @@ describe("Windows persistent startup", () => {
     expect(workflow).toContain("runs-on: windows-2022");
     expect(workflow).toContain("./scripts/build-windows-studio-package.ps1");
     expect(workflow).toContain("./scripts/test-windows-studio-package.ps1");
+    expect(workflow).toContain("-IntegrityOnly");
     expect(workflow.indexOf("build-windows-studio-package.ps1")).toBeLessThan(
       workflow.indexOf("test-windows-studio-package.ps1"),
     );

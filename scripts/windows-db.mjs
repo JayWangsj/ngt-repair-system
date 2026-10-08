@@ -145,11 +145,20 @@ postgres.on("error", (error) => {
   process.exit(1);
 });
 let ready = false;
+let postgresError = "";
 postgres.stderr.on("data", (chunk) => {
-  if (String(chunk).includes("FATAL")) console.error(String(chunk));
+  postgresError += String(chunk);
 });
-postgres.on("exit", (code) => {
-  if (!ready || code) process.exit(code || 1);
+postgres.on("exit", (code, signal) => {
+  if (!ready || code) {
+    const details = [
+      `postgres.exe exited with code ${code ?? "unknown"}${signal ? ` and signal ${signal}` : ""}.`,
+      postgresError.trim(),
+    ]
+      .filter(Boolean)
+      .join("\n");
+    process.stderr.write(`${details}\n`, () => process.exit(code || 1));
+  }
 });
 const connection = `postgresql://ngt:${secrets.password}@127.0.0.1:55432/`;
 for (let attempt = 0; attempt < 100; attempt++) {

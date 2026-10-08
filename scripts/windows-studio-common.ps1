@@ -158,14 +158,16 @@ function Start-NgtStudioDatabase {
     }
     if ($process.HasExited) {
       $process.WaitForExit()
+      $process.Refresh()
+      $exitCode = if ($null -eq $process.ExitCode) { "unknown" } else { [string]$process.ExitCode }
       $details = @($outputLog, $errorLog) | ForEach-Object {
         $content = Get-Content -LiteralPath $_ -Raw -ErrorAction SilentlyContinue
         if ($content) { $content.Trim() }
       }
       if ($details) {
-        throw "Database initialization failed with exit code $($process.ExitCode):`n$($details -join "`n")"
+        throw "Database initialization failed with exit code ${exitCode}:`n$($details -join "`n")"
       }
-      throw "Database initialization failed with exit code $($process.ExitCode)."
+      throw "Database initialization failed with exit code ${exitCode}."
     }
     Start-Sleep -Milliseconds 250
   }

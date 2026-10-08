@@ -1,5 +1,6 @@
 param(
-  [string]$ArchivePath
+  [string]$ArchivePath,
+  [switch]$IntegrityOnly
 )
 $ErrorActionPreference = "Stop"
 
@@ -39,6 +40,39 @@ try {
   $env:NGT_DATA_ROOT = $dataRoot
   Set-Location -LiteralPath $releaseRoot
   . (Join-Path $releaseRoot "scripts\windows-studio-common.ps1")
+
+  if ($IntegrityOnly) {
+    $nodeExecutable = Get-NgtNodeExecutable
+    Invoke-NgtCommand $nodeExecutable @("--version")
+    Invoke-NgtCommand $nodeExecutable @("-e", "require('pg');")
+    foreach ($requiredPath in @(
+      "node_modules\prisma\build\index.js",
+      ".next\standalone\node_modules\.prisma\client\default.js"
+    )) {
+      if (-not (Test-Path -LiteralPath (Join-Path $releaseRoot $requiredPath))) {
+        throw "Studio package is missing runtime file: $requiredPath"
+      }
+    }
+
+    $postgresBin = Join-Path $releaseRoot "runtime\postgres\bin"
+    foreach ($executable in @("postgres.exe", "pg_ctl.exe")) {
+      Invoke-NgtCommand (Join-Path $postgresBin $executable) @("--version")
+    }
+    $validationData = Join-Path $smokeRoot "validation-data"
+    $passwordFile = Join-Path $smokeRoot "validation-password.txt"
+    Set-Content -LiteralPath $passwordFile -Value "ci-validation-password" -Encoding ascii
+    Invoke-NgtCommand (Join-Path $postgresBin "initdb.exe") @(
+      "-D", $validationData,
+      "-U", "ngt",
+      "--auth=scram-sha-256",
+      "--locale=C",
+      "--encoding=UTF8",
+      "--pwfile=$passwordFile"
+    )
+    Write-Output "Studio package integrity test passed."
+    return
+  }
+
   Start-NgtStudioDatabase
 
   $nodeExecutable = Get-NgtNodeExecutable

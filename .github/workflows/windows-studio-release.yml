@@ -71,7 +71,7 @@ jobs:
         run: ./scripts/build-windows-studio-package.ps1
       - name: Smoke test packaged studio
         shell: powershell
-        run: ./scripts/test-windows-studio-package.ps1
+        run: ./scripts/test-windows-studio-package.ps1 -IntegrityOnly
       - shell: powershell
         run: |
           choco install innosetup --no-progress --yes

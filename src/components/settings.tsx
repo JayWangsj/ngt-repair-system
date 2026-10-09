@@ -46,6 +46,10 @@ export function SettingsTools({
   const [clockPending, setClockPending] = useState(false);
   const [dateMode, setDateMode] = useState(clock.mode);
   const [manualDate, setManualDate] = useState(clock.manualDate || today);
+  const [savedClock, setSavedClock] = useState({
+    mode: clock.mode,
+    manualDate: clock.manualDate || today,
+  });
   const [updatePending, setUpdatePending] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<{
     installed: boolean;
@@ -176,6 +180,7 @@ export function SettingsTools({
   }
 
   async function saveClock() {
+    if (clockPending || !clockChanged) return;
     setClockPending(true);
     setMessage("");
     setError("");
@@ -183,11 +188,19 @@ export function SettingsTools({
       mode: dateMode,
       manualDate,
     });
-    setClockPending(false);
-    if (!result.ok) return setError(result.error);
+    if (!result.ok) {
+      setClockPending(false);
+      return setError(result.error);
+    }
+    setSavedClock({ mode: dateMode, manualDate });
     setMessage(it.businessDateSaved);
     router.refresh();
+    setClockPending(false);
   }
+
+  const clockChanged =
+    dateMode !== savedClock.mode ||
+    (dateMode === "MANUAL" && manualDate !== savedClock.manualDate);
 
   async function exportFile() {
     setPending(true);
@@ -360,10 +373,14 @@ export function SettingsTools({
           <Button
             type="button"
             className="settings-date-save"
-            disabled={clockPending || (dateMode === "MANUAL" && !manualDate)}
+            disabled={
+              clockPending ||
+              !clockChanged ||
+              (dateMode === "MANUAL" && !manualDate)
+            }
             onClick={() => void saveClock()}
           >
-            {clockPending ? it.saving : it.save}
+            {it.save}
           </Button>
         </div>
       </section>

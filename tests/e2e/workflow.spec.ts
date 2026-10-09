@@ -1937,6 +1937,7 @@ test("settings applies a manual business date and can return to system time", as
     name: "Salva",
     exact: true,
   });
+  await expect(saveClock).toBeEnabled();
   const boxesBefore = await Promise.all([
     modeSelect.boundingBox(),
     manualDate.boundingBox(),
@@ -1948,20 +1949,20 @@ test("settings applies a manual business date and can return to system time", as
     await route.continue();
   });
   await saveClock.click();
-  const savingClock = dateSettings.getByRole("button", {
-    name: "Salvataggio…",
-    exact: true,
-  });
-  await expect(savingClock).toBeDisabled();
+  await expect(saveClock).toBeDisabled();
+  await expect(dateSettings.getByText("Salvataggio…")).toHaveCount(0);
   const boxesDuring = await Promise.all([
     modeSelect.boundingBox(),
     manualDate.boundingBox(),
-    savingClock.boundingBox(),
+    saveClock.boundingBox(),
   ]);
-  await expect(page.getByRole("status")).toContainText(
-    "Data corrente aggiornata.",
-  );
+  await expect(
+    page.locator(".message.success", {
+      hasText: "Data corrente aggiornata.",
+    }),
+  ).toBeVisible();
   await expect(dateSettings).toContainText("12/04/2031");
+  await expect(saveClock).toBeDisabled();
   const boxesAfter = await Promise.all([
     modeSelect.boundingBox(),
     manualDate.boundingBox(),
@@ -1997,18 +1998,27 @@ test("settings applies a manual business date and can return to system time", as
 
   await page.goto("/settings");
   const resetSettings = page.locator(".business-date-settings");
+  await expect(
+    resetSettings.getByRole("button", { name: "Salva", exact: true }),
+  ).toBeDisabled();
   await chooseBusinessOption(
     page,
     "Modalità data",
     "Segui la data di sistema",
     resetSettings,
   );
-  await resetSettings
-    .getByRole("button", { name: "Salva", exact: true })
-    .click();
-  await expect(page.getByRole("status")).toContainText(
-    "Data corrente aggiornata.",
-  );
+  const resetClock = resetSettings.getByRole("button", {
+    name: "Salva",
+    exact: true,
+  });
+  await expect(resetClock).toBeEnabled();
+  await resetClock.click();
+  await expect(
+    page.locator(".message.success", {
+      hasText: "Data corrente aggiornata.",
+    }),
+  ).toBeVisible();
+  await expect(resetClock).toBeDisabled();
 });
 test("settings checks a private release and confirms before updating", async ({
   page,

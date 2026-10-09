@@ -1273,6 +1273,11 @@ test("repair list animates a row reordered by a local status change", async ({
   expect(initialOrder.indexOf(olderOrderPath)).toBeGreaterThan(
     initialOrder.indexOf(newerOrderPath),
   );
+  await page
+    .locator("tbody tr")
+    .first()
+    .evaluate((element) => (element.style.height = "520px"));
+  await olderRow.scrollIntoViewIfNeeded();
   await olderRow.click();
   await olderRow.locator(".status-dropdown-trigger").click();
   await page
@@ -1284,7 +1289,6 @@ test("repair list animates a row reordered by a local status change", async ({
   await page.evaluate(() => {
     document.body.style.minHeight = "2000px";
     document.body.style.overflow = "auto";
-    window.scrollTo(0, 500);
   });
   await page.evaluate((changedHref) => {
     document.body.dataset.orderAnimationMax = "0";
@@ -1295,9 +1299,13 @@ test("repair list animates a row reordered by a local status change", async ({
     document.body.dataset.changedOrderAirborneObserved = "false";
     document.body.dataset.changedOrderScaleObserved = "false";
     document.body.dataset.changedOrderDescentObserved = "false";
+    document.body.dataset.changedOrderCameraObserved = "false";
+    document.body.dataset.changedOrderVisibleDuringGlide = "false";
+    document.body.dataset.changedOrderAlignedBeforeRemoval = "false";
     document.body.dataset.changedOrderOuterShadowObserved = "false";
     document.body.dataset.changedOrderMovingStyleObserved = "false";
     document.body.dataset.unexpectedOrderOverflowObserved = "false";
+    document.body.dataset.orderAnimationInitialScroll = String(window.scrollY);
     const started = performance.now();
     const sample = () => {
       let maximum = Number(document.body.dataset.orderAnimationMax ?? "0");
@@ -1314,7 +1322,33 @@ test("repair list animates a row reordered by a local status change", async ({
           );
         const animation = floating.getAnimations()[0];
         const duration = animation?.effect?.getTiming().duration;
+        const currentTime = Number(animation?.currentTime ?? 0);
         const frames = (animation?.effect as KeyframeEffect)?.getKeyframes();
+        const floatingRect = floating.getBoundingClientRect();
+        if (
+          currentTime >= 350 &&
+          currentTime <= 950 &&
+          floatingRect.bottom > 0 &&
+          floatingRect.top < window.innerHeight
+        )
+          document.body.dataset.changedOrderVisibleDuringGlide = "true";
+        if (
+          Math.abs(
+            window.scrollY -
+              Number(document.body.dataset.orderAnimationInitialScroll),
+          ) > 5
+        )
+          document.body.dataset.changedOrderCameraObserved = "true";
+        const changedRow = document
+          .querySelector(`a[href="${changedHref}"]`)
+          ?.closest("tr");
+        if (
+          currentTime >= 1100 &&
+          changedRow &&
+          Math.abs(changedRow.getBoundingClientRect().top - floatingRect.top) <
+            6
+        )
+          document.body.dataset.changedOrderAlignedBeforeRemoval = "true";
         if (duration === 1130 && frames?.length === 5) {
           const [startFrame, liftFrame, holdFrame, glideFrame, landFrame] =
             frames;
@@ -1331,7 +1365,7 @@ test("repair list animates a row reordered by a local status change", async ({
           if (
             liftFrame?.transform === holdFrame?.transform &&
             glideFrame?.transform &&
-            new DOMMatrixReadOnly(String(glideFrame.transform)).m42 <= -29
+            new DOMMatrixReadOnly(String(glideFrame.transform)).m11 >= 1.019
           )
             document.body.dataset.changedOrderAirborneObserved = "true";
           if (
@@ -1480,6 +1514,18 @@ test("repair list animates a row reordered by a local status change", async ({
     "true",
   );
   await expect(page.locator("body")).toHaveAttribute(
+    "data-changed-order-camera-observed",
+    "true",
+  );
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-changed-order-visible-during-glide",
+    "true",
+  );
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-changed-order-aligned-before-removal",
+    "true",
+  );
+  await expect(page.locator("body")).toHaveAttribute(
     "data-changed-order-outer-shadow-observed",
     "true",
   );
@@ -1513,10 +1559,31 @@ test("repair list animates a row reordered by a local status change", async ({
   await expect(olderRow).not.toHaveClass(/order-row-status-highlight/, {
     timeout: 2000,
   });
-  expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+  expect(await page.evaluate(() => window.scrollY)).toBeLessThan(scrollBefore);
+  await expect(olderRow).toBeInViewport();
 
   await page.reload();
   await expect(olderRow).not.toHaveClass(/order-row-status-highlight/);
+
+  const nearbyRow = page.locator(`tbody tr:has(a[href="${newerOrderPath}"])`);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await nearbyRow.click();
+  await nearbyRow.locator(".status-dropdown-trigger").click();
+  await page
+    .locator(".status-dropdown-menu")
+    .getByRole("option", { name: "Annullato", exact: true })
+    .click();
+  const nearbyDialog = page.getByRole("dialog", { name: "Annulla scheda" });
+  await expect(nearbyDialog).toBeVisible();
+  const nearbyScrollBefore = await page.evaluate(() => window.scrollY);
+  await nearbyDialog
+    .getByRole("button", { name: "Conferma annullamento" })
+    .click({ delay: 150 });
+  await expect(nearbyRow).toHaveClass(/order-row-status-moving/);
+  await expect(nearbyRow).toHaveClass(/order-row-status-highlight/, {
+    timeout: 1400,
+  });
+  expect(await page.evaluate(() => window.scrollY)).toBe(nearbyScrollBefore);
 });
 test("repair list delivery uses the shared checkout and refreshes the row", async ({
   page,

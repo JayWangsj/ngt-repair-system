@@ -221,7 +221,8 @@ export function OrderListBody({
   const body = useRef<HTMLTableSectionElement>(null);
   const pendingStatusAnimation = useRef("");
   const previousRowPositions = useRef(new Map<string, DOMRect>());
-  const lockedScrollPosition = useRef<{ x: number; y: number } | null>(null);
+  const motionScrollStart = useRef<{ x: number; y: number } | null>(null);
+  const motionScrollFrame = useRef<number | null>(null);
   const floatingRow = useRef<HTMLTableElement | null>(null);
   const landingTimer = useRef<number | null>(null);
   const highlightTimer = useRef<number | null>(null);
@@ -257,6 +258,8 @@ export function OrderListBody({
     () => () => {
       if (landingTimer.current) window.clearTimeout(landingTimer.current);
       if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+      if (motionScrollFrame.current)
+        window.cancelAnimationFrame(motionScrollFrame.current);
       floatingRow.current?.remove();
     },
     [],
@@ -280,12 +283,44 @@ export function OrderListBody({
     const glideOffset = travelDuration / total;
     const displacedHoldOffset = (motion.rise + motion.hold) / travelDuration;
     const previousTarget = previousRowPositions.current.get(changedId);
+    const scrollStart = motionScrollStart.current ?? {
+      x: window.scrollX,
+      y: window.scrollY,
+    };
+    if (motionScrollFrame.current) {
+      window.cancelAnimationFrame(motionScrollFrame.current);
+      motionScrollFrame.current = null;
+    }
+    window.scrollTo({
+      left: scrollStart.x,
+      top: scrollStart.y,
+      behavior: "auto",
+    });
     const currentTarget = target.getBoundingClientRect();
+    const targetDocumentTop = currentTarget.top + scrollStart.y;
+    const desiredTargetTop = previousTarget
+      ? Math.min(Math.max(96, previousTarget.top), window.innerHeight * 0.38)
+      : currentTarget.top;
+    const maximumScroll = Math.max(
+      0,
+      document.documentElement.scrollHeight - window.innerHeight,
+    );
+    const targetScrollY =
+      currentTarget.top < 64 || currentTarget.bottom > window.innerHeight - 64
+        ? Math.min(
+            maximumScroll,
+            Math.max(0, targetDocumentTop - desiredTargetTop),
+          )
+        : scrollStart.y;
+    const finalTargetTop = targetDocumentTop - targetScrollY;
     const targetDelta = previousTarget
+      ? finalTargetTop - previousTarget.top
+      : 0;
+    const layoutDelta = previousTarget
       ? currentTarget.top - previousTarget.top
       : 0;
     target.classList.add("order-row-status-moving");
-    if (previousTarget && Math.abs(targetDelta) >= 1) {
+    if (previousTarget && Math.abs(layoutDelta) >= 1) {
       floatingRow.current?.remove();
       const table = document.createElement("table");
       const floatingBody = document.createElement("tbody");
@@ -361,6 +396,30 @@ export function OrderListBody({
         ],
         { duration: total, easing: "linear", fill: "both" },
       );
+      if (Math.abs(targetScrollY - scrollStart.y) >= 1) {
+        const glideStartsAt = performance.now() + motion.rise + motion.hold;
+        const scrollDistance = targetScrollY - scrollStart.y;
+        const follow = (now: number) => {
+          if (now < glideStartsAt) {
+            motionScrollFrame.current = window.requestAnimationFrame(follow);
+            return;
+          }
+          const progress = Math.min(
+            1,
+            Math.max(0, (now - glideStartsAt) / motion.glide),
+          );
+          const eased = 1 - Math.pow(1 - progress, 3);
+          window.scrollTo({
+            left: scrollStart.x,
+            top: scrollStart.y + scrollDistance * eased,
+            behavior: "auto",
+          });
+          if (progress < 1)
+            motionScrollFrame.current = window.requestAnimationFrame(follow);
+          else motionScrollFrame.current = null;
+        };
+        motionScrollFrame.current = window.requestAnimationFrame(follow);
+      }
     }
     elements.forEach((element) => {
       const previous = previousRowPositions.current.get(
@@ -434,33 +493,22 @@ export function OrderListBody({
     });
     if (landingTimer.current) window.clearTimeout(landingTimer.current);
     if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
-    const lockedScroll = lockedScrollPosition.current;
-    if (lockedScroll) {
-      window.scrollTo({
-        left: lockedScroll.x,
-        top: lockedScroll.y,
-        behavior: "auto",
-      });
-      requestAnimationFrame(() =>
-        window.scrollTo({
-          left: lockedScroll.x,
-          top: lockedScroll.y,
-          behavior: "auto",
-        }),
-      );
-    }
     landingTimer.current = window.setTimeout(() => {
-      floatingRow.current?.remove();
-      floatingRow.current = null;
-      target.classList.remove("order-row-floating-placeholder");
-      target.classList.add("order-row-status-highlight");
-      target.classList.remove("order-row-status-moving");
-      lockedScrollPosition.current = null;
-      setHighlightedId(changedId);
-      highlightTimer.current = window.setTimeout(
-        () => setHighlightedId(""),
-        1500,
-      );
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          floatingRow.current?.remove();
+          floatingRow.current = null;
+          target.classList.remove("order-row-floating-placeholder");
+          target.classList.add("order-row-status-highlight");
+          target.classList.remove("order-row-status-moving");
+          motionScrollStart.current = null;
+          setHighlightedId(changedId);
+          highlightTimer.current = window.setTimeout(
+            () => setHighlightedId(""),
+            1500,
+          );
+        });
+      });
     }, total);
   }, [rows]);
   return (
@@ -532,7 +580,7 @@ export function OrderListBody({
                 refreshOnSettled={!compact}
                 onSettled={(settled) => {
                   if (!compact) {
-                    lockedScrollPosition.current = {
+                    motionScrollStart.current = {
                       x: window.scrollX,
                       y: window.scrollY,
                     };

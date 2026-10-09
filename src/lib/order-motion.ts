@@ -24,6 +24,9 @@ export const defaultOrderMotionSettings: OrderMotionSettings = {
 
 export const orderMotionStorageKey = "ngt-order-motion";
 export const orderMotionChangeEvent = "ngt-order-motion-change";
+export const orderViewportFollowStorageKey = "ngt-order-motion-follow-viewport";
+export const orderViewportFollowChangeEvent =
+  "ngt-order-motion-follow-viewport-change";
 
 const limits: Record<
   keyof OrderMotionSettings,
@@ -81,5 +84,18 @@ export function resetOrderMotionSettings() {
     new CustomEvent(orderMotionChangeEvent, {
       detail: defaultOrderMotionSettings,
     }),
+  );
+}
+
+export function readOrderViewportFollow() {
+  if (typeof window === "undefined") return true;
+  return window.localStorage.getItem(orderViewportFollowStorageKey) !== "off";
+}
+
+export function writeOrderViewportFollow(enabled: boolean) {
+  if (enabled) window.localStorage.removeItem(orderViewportFollowStorageKey);
+  else window.localStorage.setItem(orderViewportFollowStorageKey, "off");
+  window.dispatchEvent(
+    new CustomEvent(orderViewportFollowChangeEvent, { detail: enabled }),
   );
 }

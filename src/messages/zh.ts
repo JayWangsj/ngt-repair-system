@@ -304,6 +304,11 @@ export const zh: typeof it = {
     "开启后忽略 Windows 的“减少动态效果”；关闭后遵循系统设置。",
   motionAlways: "始终播放",
   motionSystem: "跟随系统",
+  followRepairRowMotion: "维修单换位时跟随视角",
+  followRepairRowMotionHelp:
+    "开启后，目标行移出屏幕时视角会随悬浮行移动；关闭后页面位置保持不变。",
+  motionFollowOn: "跟随视角",
+  motionFollowOff: "固定视角",
   testTools: "测试工具",
   testToolsHelp:
     "仅在隔离测试系统中可用，测试批次保留在备注和内部数据中以便识别。",

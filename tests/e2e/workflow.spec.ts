@@ -1565,25 +1565,45 @@ test("repair list animates a row reordered by a local status change", async ({
   await page.reload();
   await expect(olderRow).not.toHaveClass(/order-row-status-highlight/);
 
-  const nearbyRow = page.locator(`tbody tr:has(a[href="${newerOrderPath}"])`);
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await nearbyRow.click();
-  await nearbyRow.locator(".status-dropdown-trigger").click();
+  await page.goto("/settings");
+  const viewportFollowSwitch = page.getByRole("switch", {
+    name: "Segui lo spostamento della riparazione",
+  });
+  await expect(viewportFollowSwitch).toHaveAttribute("aria-checked", "true");
+  await viewportFollowSwitch.click();
+  await expect(viewportFollowSwitch).toHaveAttribute("aria-checked", "false");
+  await page.reload();
+  await expect(viewportFollowSwitch).toHaveAttribute("aria-checked", "false");
+
+  await page.goto("/orders");
+  const fixedViewportRow = page.locator(
+    `tbody tr:has(a[href="${newerOrderPath}"])`,
+  );
+  await page
+    .locator("tbody tr")
+    .first()
+    .evaluate((element) => (element.style.height = "520px"));
+  await fixedViewportRow.scrollIntoViewIfNeeded();
+  await fixedViewportRow.click();
+  await fixedViewportRow.locator(".status-dropdown-trigger").click();
   await page
     .locator(".status-dropdown-menu")
     .getByRole("option", { name: "Annullato", exact: true })
     .click();
-  const nearbyDialog = page.getByRole("dialog", { name: "Annulla scheda" });
-  await expect(nearbyDialog).toBeVisible();
-  const nearbyScrollBefore = await page.evaluate(() => window.scrollY);
-  await nearbyDialog
+  const fixedViewportDialog = page.getByRole("dialog", {
+    name: "Annulla scheda",
+  });
+  await expect(fixedViewportDialog).toBeVisible();
+  const fixedViewportScroll = await page.evaluate(() => window.scrollY);
+  await fixedViewportDialog
     .getByRole("button", { name: "Conferma annullamento" })
     .click({ delay: 150 });
-  await expect(nearbyRow).toHaveClass(/order-row-status-moving/);
-  await expect(nearbyRow).toHaveClass(/order-row-status-highlight/, {
+  await expect(fixedViewportRow).toHaveClass(/order-row-status-moving/);
+  await expect(page.locator(".order-floating-table")).toBeVisible();
+  await expect(fixedViewportRow).toHaveClass(/order-row-status-highlight/, {
     timeout: 1400,
   });
-  expect(await page.evaluate(() => window.scrollY)).toBe(nearbyScrollBefore);
+  expect(await page.evaluate(() => window.scrollY)).toBe(fixedViewportScroll);
 });
 test("repair list delivery uses the shared checkout and refreshes the row", async ({
   page,

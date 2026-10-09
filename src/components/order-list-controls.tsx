@@ -16,7 +16,9 @@ import {
   defaultOrderMotionSettings,
   normalizeOrderMotionSettings,
   orderMotionChangeEvent,
+  orderViewportFollowChangeEvent,
   readOrderMotionSettings,
+  readOrderViewportFollow,
 } from "@/lib/order-motion";
 import { useBusinessDay } from "./business-date";
 import { useMessages } from "./language";
@@ -227,6 +229,7 @@ export function OrderListBody({
   const landingTimer = useRef<number | null>(null);
   const highlightTimer = useRef<number | null>(null);
   const motionSettings = useRef(defaultOrderMotionSettings);
+  const followViewport = useRef(true);
   useEffect(() => {
     function outside(event: PointerEvent) {
       const protectedTarget = (event.target as Element).closest?.(
@@ -246,13 +249,27 @@ export function OrderListBody({
   }, []);
   useEffect(() => {
     motionSettings.current = readOrderMotionSettings();
+    followViewport.current = readOrderViewportFollow();
     function update(event: Event) {
       motionSettings.current = normalizeOrderMotionSettings(
         (event as CustomEvent).detail,
       );
     }
+    function updateViewportFollow(event: Event) {
+      followViewport.current = Boolean((event as CustomEvent).detail);
+    }
     window.addEventListener(orderMotionChangeEvent, update);
-    return () => window.removeEventListener(orderMotionChangeEvent, update);
+    window.addEventListener(
+      orderViewportFollowChangeEvent,
+      updateViewportFollow,
+    );
+    return () => {
+      window.removeEventListener(orderMotionChangeEvent, update);
+      window.removeEventListener(
+        orderViewportFollowChangeEvent,
+        updateViewportFollow,
+      );
+    };
   }, []);
   useEffect(
     () => () => {
@@ -306,7 +323,8 @@ export function OrderListBody({
       document.documentElement.scrollHeight - window.innerHeight,
     );
     const targetScrollY =
-      currentTarget.top < 64 || currentTarget.bottom > window.innerHeight - 64
+      followViewport.current &&
+      (currentTarget.top < 64 || currentTarget.bottom > window.innerHeight - 64)
         ? Math.min(
             maximumScroll,
             Math.max(0, targetDocumentTop - desiredTargetTop),

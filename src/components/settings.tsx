@@ -23,6 +23,10 @@ import {
   setAlwaysMotionEnabled,
 } from "@/lib/motion-preference";
 import { TestTools } from "./test-tools";
+import {
+  readOrderViewportFollow,
+  writeOrderViewportFollow,
+} from "@/lib/order-motion";
 
 export function SettingsTools({
   currentVersion,
@@ -62,10 +66,12 @@ export function SettingsTools({
   const [updateError, setUpdateError] = useState("");
   const [updateConfirmationOpen, setUpdateConfirmationOpen] = useState(false);
   const [alwaysMotion, setAlwaysMotion] = useState(false);
+  const [followOrderMotion, setFollowOrderMotion] = useState(true);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setAlwaysMotion(isAlwaysMotionEnabled());
+      setFollowOrderMotion(readOrderViewportFollow());
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
@@ -73,6 +79,11 @@ export function SettingsTools({
   function changeMotionPreference(enabled: boolean) {
     setAlwaysMotionEnabled(enabled);
     setAlwaysMotion(enabled);
+  }
+
+  function changeOrderMotionFollow(enabled: boolean) {
+    writeOrderViewportFollow(enabled);
+    setFollowOrderMotion(enabled);
   }
 
   async function beginGitHubLogin() {
@@ -330,6 +341,27 @@ export function SettingsTools({
               aria-checked={alwaysMotion}
               aria-label={it.alwaysPlayMotion}
               onClick={() => changeMotionPreference(!alwaysMotion)}
+            >
+              <span aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+        <div className="settings-action">
+          <div>
+            <strong>{it.followRepairRowMotion}</strong>
+            <p>{it.followRepairRowMotionHelp}</p>
+          </div>
+          <div className="motion-setting-control">
+            <span>
+              {followOrderMotion ? it.motionFollowOn : it.motionFollowOff}
+            </span>
+            <button
+              type="button"
+              className="motion-switch"
+              role="switch"
+              aria-checked={followOrderMotion}
+              aria-label={it.followRepairRowMotion}
+              onClick={() => changeOrderMotionFollow(!followOrderMotion)}
             >
               <span aria-hidden="true" />
             </button>

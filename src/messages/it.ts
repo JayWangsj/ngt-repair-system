@@ -347,6 +347,11 @@ export const it = {
     "Se attivo, ignora la riduzione delle animazioni di Windows; se disattivo, segue il sistema.",
   motionAlways: "Sempre attive",
   motionSystem: "Segui il sistema",
+  followRepairRowMotion: "Segui lo spostamento della riparazione",
+  followRepairRowMotionHelp:
+    "Se attivo, la vista segue la riga quando la destinazione è fuori schermo; se disattivo, la pagina resta ferma.",
+  motionFollowOn: "Segui la riga",
+  motionFollowOff: "Vista fissa",
   testTools: "Strumenti di test",
   testToolsHelp:
     "Disponibili solo nel sistema di prova isolato. Il lotto demo resta identificabile nelle note e nei dati tecnici.",

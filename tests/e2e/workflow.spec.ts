@@ -1272,6 +1272,8 @@ test("repair list animates a row reordered by a local status change", async ({
     document.body.dataset.displacedOrderAnimationObserved = "false";
     document.body.dataset.displacedOrderHoldObserved = "false";
     document.body.dataset.changedOrderLiftObserved = "false";
+    document.body.dataset.changedOrderAirborneObserved = "false";
+    document.body.dataset.changedOrderOuterShadowObserved = "false";
     document.body.dataset.changedOrderMovingStyleObserved = "false";
     document.body.dataset.unexpectedOrderOverflowObserved = "false";
     const started = performance.now();
@@ -1306,29 +1308,37 @@ test("repair list animates a row reordered by a local status change", async ({
           }
           for (const animation of cell.getAnimations()) {
             const duration = animation.effect?.getTiming().duration;
-            if (changed && duration === 900) {
-              document.body.dataset.changedOrderAnimationObserved = "true";
-              const frames = (
-                animation.effect as KeyframeEffect
-              ).getKeyframes();
+            const frames = (animation.effect as KeyframeEffect).getKeyframes();
+            if (changed && duration === 980) {
               const startFrame = frames.find((frame) => frame.offset === 0);
               const liftFrame = frames.find((frame) => frame.offset === 0.18);
+              const glideFrame = frames.find((frame) => frame.offset === 0.84);
+              if (startFrame?.transform)
+                document.body.dataset.changedOrderAnimationObserved = "true";
               if (
                 startFrame?.transform &&
                 liftFrame?.transform &&
                 new DOMMatrixReadOnly(String(startFrame.transform)).m42 -
                   new DOMMatrixReadOnly(String(liftFrame.transform)).m42 >=
-                  15
+                  21
               )
                 document.body.dataset.changedOrderLiftObserved = "true";
+              if (
+                glideFrame?.transform &&
+                new DOMMatrixReadOnly(String(glideFrame.transform)).m42 <= -21
+              )
+                document.body.dataset.changedOrderAirborneObserved = "true";
+              if (
+                frames.some((frame) =>
+                  String(frame.boxShadow).includes("16px 24px -12px"),
+                )
+              )
+                document.body.dataset.changedOrderOuterShadowObserved = "true";
             }
-            if (!changed && duration === 720) {
+            if (!changed && duration === 820) {
               document.body.dataset.displacedOrderAnimationObserved = "true";
-              const frames = (
-                animation.effect as KeyframeEffect
-              ).getKeyframes();
               const startFrame = frames.find((frame) => frame.offset === 0);
-              const holdFrame = frames.find((frame) => frame.offset === 0.39);
+              const holdFrame = frames.find((frame) => frame.offset === 0.37);
               if (
                 startFrame?.transform &&
                 holdFrame?.transform === startFrame.transform
@@ -1367,6 +1377,14 @@ test("repair list animates a row reordered by a local status change", async ({
     "true",
   );
   await expect(page.locator("body")).toHaveAttribute(
+    "data-changed-order-airborne-observed",
+    "true",
+  );
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-changed-order-outer-shadow-observed",
+    "true",
+  );
+  await expect(page.locator("body")).toHaveAttribute(
     "data-changed-order-moving-style-observed",
     "true",
   );
@@ -1380,7 +1398,7 @@ test("repair list animates a row reordered by a local status change", async ({
     ),
   ).toBeGreaterThan(1);
   await expect(olderRow).toHaveClass(/order-row-status-highlight/, {
-    timeout: 1000,
+    timeout: 1400,
   });
   await expect(olderRow).not.toHaveClass(/order-row-status-highlight/, {
     timeout: 2000,

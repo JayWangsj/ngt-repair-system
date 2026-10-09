@@ -270,26 +270,26 @@ export function OrderListBody({
                   offset: 0,
                 },
                 {
-                  transform: `translateY(${delta - 16}px)`,
+                  transform: `translateY(${delta - 22}px)`,
                   offset: 0.18,
                 },
                 {
-                  transform: `translateY(${delta - 16}px)`,
+                  transform: `translateY(${delta - 22}px)`,
                   offset: 0.31,
                 },
                 {
-                  transform: `translateY(${delta * 0.12}px)`,
+                  transform: "translateY(-22px)",
                   offset: 0.84,
                 },
                 { transform: "translateY(0)", offset: 1 },
               ]
             : [
                 { transform: `translateY(${delta}px)`, offset: 0 },
-                { transform: `translateY(${delta}px)`, offset: 0.39 },
+                { transform: `translateY(${delta}px)`, offset: 0.37 },
                 { transform: "translateY(0)", offset: 1 },
               ],
           {
-            duration: changed ? 900 : 720,
+            duration: changed ? 980 : 820,
             easing: changed ? "cubic-bezier(0.22, 1, 0.36, 1)" : "ease-out",
           },
         ),
@@ -304,7 +304,7 @@ export function OrderListBody({
         () => setHighlightedId(""),
         1500,
       );
-    }, 900);
+    }, 980);
   }, [rows]);
   return (
     <tbody className="order-list-body" ref={body}>

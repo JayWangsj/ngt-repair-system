@@ -6522,14 +6522,8 @@ summary.record-icon::-webkit-details-marker {
 }
 @keyframes order-row-status-highlight {
   0%,
-  36% {
-    background-color: #ffed9d;
-  }
-  50% {
-    background-color: #fff9e8;
-  }
-  62% {
-    background-color: #ffe689;
+  34% {
+    background-color: #fff5ca;
   }
   100% {
     background-color: transparent;

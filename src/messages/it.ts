@@ -349,15 +349,15 @@ export const it = {
   motionSystem: "Segui il sistema",
   testTools: "Strumenti di test",
   testToolsHelp:
-    "Disponibili solo nel sistema di prova isolato. I dati generati sono contrassegnati chiaramente come TEST.",
+    "Disponibili solo nel sistema di prova isolato. Il lotto demo resta identificabile nelle note e nei dati tecnici.",
   generateTestData: "Genera dati di test",
   generateTestDataHelp:
-    "Aggiunge clienti, prodotti, scorte e schede collegate senza cancellare gli altri dati di prova.",
+    "Aggiunge clienti, prodotti, prezzi, scorte e schede realistiche collegate senza cancellare gli altri dati di prova.",
   generatingTestData: "Generazione…",
   testDataSize: "Quantità dati di test",
   testOrders: "schede",
   testDataCreated:
-    "Creati {customers} clienti, {products} prodotti e {orders} schede di test.",
+    "Creati {customers} clienti, {products} prodotti, {priceRules} preventivi e {orders} schede di test.",
   openRepairList: "Apri elenco riparazioni",
   repairMotionTuning: "Movimento cambio posizione",
   repairMotionTuningHelp:

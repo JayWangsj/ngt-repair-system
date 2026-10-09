@@ -305,15 +305,16 @@ export const zh: typeof it = {
   motionAlways: "始终播放",
   motionSystem: "跟随系统",
   testTools: "测试工具",
-  testToolsHelp: "仅在隔离测试系统中可用，生成的数据均带有明确的 TEST 标记。",
+  testToolsHelp:
+    "仅在隔离测试系统中可用，测试批次保留在备注和内部数据中以便识别。",
   generateTestData: "生成测试数据",
   generateTestDataHelp:
-    "追加相互关联的客户、商品、库存和维修单，不会清空其他测试记录。",
+    "追加模拟真实情况并相互关联的客户、商品、报价、库存和维修单，不会清空其他测试记录。",
   generatingTestData: "生成中…",
   testDataSize: "测试数据数量",
   testOrders: "条维修单",
   testDataCreated:
-    "已生成 {customers} 位客户、{products} 件商品和 {orders} 条维修单。",
+    "已生成 {customers} 位客户、{products} 件商品、{priceRules} 条报价和 {orders} 条维修单。",
   openRepairList: "打开维修单列表",
   repairMotionTuning: "维修单换位动画",
   repairMotionTuningHelp:

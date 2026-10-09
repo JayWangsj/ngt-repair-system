@@ -1413,6 +1413,17 @@ test("repair list animates a row reordered by a local status change", async ({
   await expect(olderRow).toHaveClass(/order-row-status-highlight/, {
     timeout: 1400,
   });
+  expect(
+    await olderRow.evaluate((element) =>
+      element
+        .getAnimations()
+        .flatMap((animation) =>
+          (animation.effect as KeyframeEffect).getKeyframes(),
+        )
+        .map((frame) => frame.backgroundColor)
+        .filter(Boolean),
+    ),
+  ).toEqual(["rgb(255, 245, 202)", "rgb(255, 245, 202)", "rgba(0, 0, 0, 0)"]);
   await expect(olderRow).not.toHaveClass(/order-row-status-highlight/, {
     timeout: 2000,
   });
@@ -4822,13 +4833,40 @@ test("test tools generate linked data and persist repair motion tuning", async (
     .getByRole("button", { name: "Genera dati di test", exact: true })
     .click();
   await expect(tools.locator(".message.success")).toContainText(
-    "Creati 50 clienti, 10 prodotti e 50 schede di test.",
+    "Creati 50 clienti, 10 prodotti, 20 preventivi e 50 schede di test.",
   );
   await tools
     .getByRole("button", { name: "Apri elenco riparazioni", exact: true })
     .click();
   await expect(page).toHaveURL(/\/orders/);
-  await expect(
-    page.locator(".order-code-link").filter({ hasText: "TEST-" }),
-  ).toHaveCount(50);
+  const generatedRows = page.locator(
+    '.order-list-body tr:has(.order-customer-link[href*="TEST-"])',
+  );
+  await expect(generatedRows).toHaveCount(50);
+  const codes = await generatedRows
+    .locator(".order-code-link span")
+    .allTextContents();
+  expect(codes.every((code) => /^R-\d{11}$/.test(code.trim()))).toBe(true);
+  const customers = await generatedRows
+    .locator(".order-customer-link span")
+    .allTextContents();
+  expect(customers.every((name) => !name.includes("TEST"))).toBe(true);
+
+  await page.goto("/prices");
+  await page.getByLabel("Cerca", { exact: true }).fill("iPhone 15 Pro Max");
+  await expect(page.locator(".price-rule-row")).toHaveCount(4);
+  await expect(page.locator(".price-rule-row").first()).not.toContainText(
+    "TEST",
+  );
+
+  await page.goto("/inventory");
+  await page
+    .getByLabel("Cerca prodotto, ricambio, marca o modello", { exact: true })
+    .fill("Cover silicone MagSafe iPhone 15 Pro Max");
+  const product = page.locator(".inventory-table tbody tr").first();
+  await expect(product).toContainText(
+    "Cover silicone MagSafe iPhone 15 Pro Max",
+  );
+  await expect(product).toContainText("7,50 €");
+  await expect(product).toContainText("19,90 €");
 });

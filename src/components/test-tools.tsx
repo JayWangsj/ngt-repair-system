@@ -74,6 +74,7 @@ export function TestTools() {
       it.testDataCreated
         .replace("{customers}", String(result.data.customers))
         .replace("{products}", String(result.data.products))
+        .replace("{priceRules}", String(result.data.priceRules))
         .replace("{orders}", String(result.data.orders)),
     );
     router.refresh();

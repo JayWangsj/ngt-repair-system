@@ -349,6 +349,7 @@ export function OrderListBody({
     if (landingTimer.current) window.clearTimeout(landingTimer.current);
     if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
     landingTimer.current = window.setTimeout(() => {
+      target.classList.add("order-row-status-highlight");
       target.classList.remove("order-row-status-moving");
       setHighlightedId(changedId);
       highlightTimer.current = window.setTimeout(

@@ -1369,6 +1369,10 @@ test("repair list animates a row reordered by a local status change", async ({
     .getByRole("button", { name: "Conferma annullamento" })
     .click({ delay: 150 });
   await expect(dialog).not.toBeVisible();
+  await expect(olderRow).toHaveClass(/order-row-status-moving/);
+  await olderRow.hover();
+  await expect(olderRow).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+  await expect(olderRow).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
 
   await expect(page.locator("tbody tr").first()).toContainText(
     await olderRow.locator(".order-code-link").innerText(),

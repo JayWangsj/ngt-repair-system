@@ -12,7 +12,7 @@ export type OrderMotionSettings = {
 
 export const defaultOrderMotionSettings: OrderMotionSettings = {
   lift: 32,
-  rise: 320,
+  rise: 400,
   hold: 130,
   glide: 600,
   land: 240,

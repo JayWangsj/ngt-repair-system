@@ -1245,7 +1245,7 @@ test("repair list animates a row reordered by a local status change", async ({
       "ngt-order-motion",
       JSON.stringify({
         lift: 30,
-        rise: 280,
+        rise: 360,
         hold: 150,
         glide: 600,
         land: 180,
@@ -1310,7 +1310,7 @@ test("repair list animates a row reordered by a local status change", async ({
     document.body.dataset.displacedOrderHoldObserved = "false";
     document.body.dataset.changedOrderLiftObserved = "false";
     document.body.dataset.changedOrderAirborneObserved = "false";
-    document.body.dataset.changedOrderScaleObserved = "false";
+    document.body.dataset.changedOrderScaleStable = "false";
     document.body.dataset.changedOrderDescentObserved = "false";
     document.body.dataset.changedOrderLandingScaleStable = "false";
     document.body.dataset.changedOrderHandoffObserved = "false";
@@ -1387,7 +1387,7 @@ test("repair list animates a row reordered by a local status change", async ({
             6
         )
           document.body.dataset.changedOrderAlignedBeforeRemoval = "true";
-        if (duration === 1210 && frames?.length === 5) {
+        if (duration === 1290 && frames?.length === 5) {
           const [startFrame, liftFrame, holdFrame, glideFrame, landFrame] =
             frames;
           if (startFrame?.transform)
@@ -1407,10 +1407,13 @@ test("repair list animates a row reordered by a local status change", async ({
           )
             document.body.dataset.changedOrderAirborneObserved = "true";
           if (
-            liftFrame?.transform &&
-            new DOMMatrixReadOnly(String(liftFrame.transform)).m11 >= 1.019
+            frames.every(
+              (frame) =>
+                frame.transform &&
+                new DOMMatrixReadOnly(String(frame.transform)).m11 === 1,
+            )
           )
-            document.body.dataset.changedOrderScaleObserved = "true";
+            document.body.dataset.changedOrderScaleStable = "true";
           if (
             glideFrame?.transform &&
             landFrame?.transform &&
@@ -1480,7 +1483,7 @@ test("repair list animates a row reordered by a local status change", async ({
           for (const animation of cell.getAnimations()) {
             const duration = animation.effect?.getTiming().duration;
             const frames = (animation.effect as KeyframeEffect).getKeyframes();
-            if (changed && duration === 1210) {
+            if (changed && duration === 1290) {
               const [startFrame, liftFrame, , glideFrame] = frames;
               if (startFrame?.transform)
                 document.body.dataset.changedOrderAnimationObserved = "true";
@@ -1504,7 +1507,7 @@ test("repair list animates a row reordered by a local status change", async ({
               )
                 document.body.dataset.changedOrderOuterShadowObserved = "true";
             }
-            if (!changed && duration === 1030) {
+            if (!changed && duration === 1110) {
               document.body.dataset.displacedOrderAnimationObserved = "true";
               const [startFrame, holdFrame] = frames;
               if (
@@ -1557,7 +1560,7 @@ test("repair list animates a row reordered by a local status change", async ({
     "true",
   );
   await expect(page.locator("body")).toHaveAttribute(
-    "data-changed-order-scale-observed",
+    "data-changed-order-scale-stable",
     "true",
   );
   await expect(page.locator("body")).toHaveAttribute(

@@ -377,7 +377,6 @@ export function OrderListBody({
       floatingRow.current = table;
       target.classList.add("order-row-floating-placeholder");
 
-      const scale = 1.02;
       const restingShadow = "0 2px 5px -3px rgb(74 54 0 / 20%)";
       const floatingShadow = `0 ${motion.shadowY}px ${motion.shadowBlur}px ${motion.shadowSpread}px rgb(74 54 0 / ${motion.shadowOpacity}%)`;
       const landedShadow = "0 0 0 0 rgb(74 54 0 / 0%)";
@@ -390,13 +389,13 @@ export function OrderListBody({
             easing: "cubic-bezier(0.16, 1, 0.3, 1)",
           },
           {
-            transform: `translateY(-${motion.lift}px) scale(${scale})`,
+            transform: `translateY(-${motion.lift}px) scale(1)`,
             boxShadow: floatingShadow,
             offset: liftOffset,
             easing: "linear",
           },
           {
-            transform: `translateY(-${motion.lift}px) scale(${scale})`,
+            transform: `translateY(-${motion.lift}px) scale(1)`,
             boxShadow: floatingShadow,
             offset: holdOffset,
             easing: "cubic-bezier(0.2, 0.75, 0.25, 1)",

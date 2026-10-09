@@ -2503,11 +2503,47 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     .click();
   const reworkStatus = page.locator(".detail-status .status-dropdown-trigger");
   await expect(reworkStatus).toHaveText(/In riparazione post-vendita/);
+  expect(
+    await reworkStatus.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
   await expect(reworkStatus).toHaveCSS("color", "rgb(190, 24, 93)");
   await expect(reworkStatus).toHaveCSS(
     "background-color",
     "rgb(252, 231, 243)",
   );
+  const listPage = await page.context().newPage();
+  await listPage.goto("/orders");
+  const reworkRow = listPage.locator(
+    `tbody tr:has(a[href="${new URL(page.url()).pathname}"])`,
+  );
+  await expect(reworkRow).toBeVisible();
+  expect(
+    await listPage
+      .locator(".table-scroll")
+      .evaluate((element) => element.scrollWidth <= element.clientWidth),
+  ).toBe(true);
+  const reworkBadge = reworkRow.locator(".badge");
+  await expect(reworkBadge).toContainText("In riparazione post-vendita");
+  expect(
+    await reworkBadge.evaluate(
+      (element) =>
+        element.scrollWidth <= element.clientWidth &&
+        element.scrollHeight <= element.clientHeight,
+    ),
+  ).toBe(true);
+  await reworkRow.click();
+  const reworkListTrigger = reworkRow.locator(".status-dropdown-trigger");
+  await expect(reworkListTrigger).toContainText("In riparazione post-vendita");
+  expect(
+    await reworkListTrigger.evaluate(
+      (element) =>
+        element.scrollWidth <= element.clientWidth &&
+        element.scrollHeight <= element.clientHeight,
+    ),
+  ).toBe(true);
+  await listPage.close();
   await expect(warranty.locator(".order-card-heading")).toHaveAttribute(
     "aria-expanded",
     "true",

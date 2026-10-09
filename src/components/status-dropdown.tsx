@@ -140,7 +140,7 @@ function StatusSelect({
         onKeyDown={keyboard}
       >
         <span className="status-dropdown-dot" aria-hidden="true" />
-        <span>{label}</span>
+        <span className="status-dropdown-label">{label}</span>
         {interactive && <ChevronDown size={13} aria-hidden="true" />}
       </button>
       {open &&
@@ -255,8 +255,8 @@ export function StatusDropdown({
   if (!active)
     return (
       <span className={`badge status-${currentOrder.status.toLowerCase()}`}>
-        <span />
-        {it.status[currentOrder.status]}
+        <span className="badge-dot" aria-hidden="true" />
+        <span className="badge-label">{it.status[currentOrder.status]}</span>
       </span>
     );
   return (

@@ -59,8 +59,8 @@ export async function Badge({ status }: { status: OrderStatus }) {
   const it = await getMessages();
   return (
     <span className={`badge status-${status.toLowerCase()}`}>
-      <span />
-      {it.status[status]}
+      <span className="badge-dot" aria-hidden="true" />
+      <span className="badge-label">{it.status[status]}</span>
     </span>
   );
 }

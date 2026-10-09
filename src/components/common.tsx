@@ -93,7 +93,7 @@ export async function OrderTable({
   if (!orders.length)
     return compact ? <p className="compact-empty">{it.empty}</p> : <Empty />;
   return (
-    <div className="table-scroll">
+    <div className="table-scroll order-table-scroll">
       <table className="order-table">
         <thead>
           <tr>

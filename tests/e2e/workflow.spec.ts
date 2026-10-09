@@ -1270,8 +1270,10 @@ test("repair list animates a row reordered by a local status change", async ({
     document.body.dataset.orderAnimationMax = "0";
     document.body.dataset.changedOrderAnimationObserved = "false";
     document.body.dataset.displacedOrderAnimationObserved = "false";
+    document.body.dataset.displacedOrderHoldObserved = "false";
     document.body.dataset.changedOrderLiftObserved = "false";
     document.body.dataset.changedOrderMovingStyleObserved = "false";
+    document.body.dataset.unexpectedOrderOverflowObserved = "false";
     const started = performance.now();
     const sample = () => {
       let maximum = Number(document.body.dataset.orderAnimationMax ?? "0");
@@ -1287,31 +1289,52 @@ test("repair list animates a row reordered by a local status change", async ({
           const changed = cell
             .closest("tr")
             ?.querySelector(`a[href="${changedHref}"]`);
-          if (
+          const moving =
             changed &&
-            cell.closest("tr")?.classList.contains("order-row-status-moving")
-          )
+            cell.closest("tr")?.classList.contains("order-row-status-moving");
+          if (moving) {
             document.body.dataset.changedOrderMovingStyleObserved = "true";
+            const scroll = document.querySelector<HTMLElement>(
+              ".order-table-scroll",
+            );
+            if (
+              scroll &&
+              (getComputedStyle(scroll).overflowY !== "hidden" ||
+                scroll.scrollWidth > scroll.clientWidth + 1)
+            )
+              document.body.dataset.unexpectedOrderOverflowObserved = "true";
+          }
           for (const animation of cell.getAnimations()) {
             const duration = animation.effect?.getTiming().duration;
-            if (changed && duration === 760) {
+            if (changed && duration === 900) {
               document.body.dataset.changedOrderAnimationObserved = "true";
               const frames = (
                 animation.effect as KeyframeEffect
               ).getKeyframes();
               const startFrame = frames.find((frame) => frame.offset === 0);
-              const liftFrame = frames.find((frame) => frame.offset === 0.16);
+              const liftFrame = frames.find((frame) => frame.offset === 0.18);
               if (
                 startFrame?.transform &&
                 liftFrame?.transform &&
                 new DOMMatrixReadOnly(String(startFrame.transform)).m42 -
                   new DOMMatrixReadOnly(String(liftFrame.transform)).m42 >=
-                  9
+                  15
               )
                 document.body.dataset.changedOrderLiftObserved = "true";
             }
-            if (!changed && duration === 440)
+            if (!changed && duration === 720) {
               document.body.dataset.displacedOrderAnimationObserved = "true";
+              const frames = (
+                animation.effect as KeyframeEffect
+              ).getKeyframes();
+              const startFrame = frames.find((frame) => frame.offset === 0);
+              const holdFrame = frames.find((frame) => frame.offset === 0.39);
+              if (
+                startFrame?.transform &&
+                holdFrame?.transform === startFrame.transform
+              )
+                document.body.dataset.displacedOrderHoldObserved = "true";
+            }
           }
         });
       document.body.dataset.orderAnimationMax = String(maximum);
@@ -1336,12 +1359,20 @@ test("repair list animates a row reordered by a local status change", async ({
     "true",
   );
   await expect(page.locator("body")).toHaveAttribute(
+    "data-displaced-order-hold-observed",
+    "true",
+  );
+  await expect(page.locator("body")).toHaveAttribute(
     "data-changed-order-lift-observed",
     "true",
   );
   await expect(page.locator("body")).toHaveAttribute(
     "data-changed-order-moving-style-observed",
     "true",
+  );
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-unexpected-order-overflow-observed",
+    "false",
   );
   expect(
     await page.evaluate(() =>

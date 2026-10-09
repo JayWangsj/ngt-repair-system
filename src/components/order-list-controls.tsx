@@ -370,7 +370,7 @@ export function OrderListBody({
         top: `${previousTarget.top}px`,
         left: `${previousTarget.left}px`,
         width: `${previousTarget.width}px`,
-        height: `${previousTarget.height}px`,
+        height: `${currentTarget.height}px`,
       });
       table.append(floatingBody);
       document.body.append(table);
@@ -559,7 +559,7 @@ export function OrderListBody({
           setHighlightedId(changedId);
           if (floating) {
             const handoff = floating.animate([{ opacity: 1 }, { opacity: 0 }], {
-              duration: 180,
+              duration: 420,
               easing: "ease-out",
               fill: "forwards",
             });

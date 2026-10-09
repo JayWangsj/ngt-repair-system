@@ -12,7 +12,7 @@ export type OrderMotionSettings = {
 
 export const defaultOrderMotionSettings: OrderMotionSettings = {
   lift: 32,
-  rise: 400,
+  rise: 600,
   hold: 130,
   glide: 600,
   land: 240,
@@ -33,7 +33,7 @@ const limits: Record<
   { minimum: number; maximum: number }
 > = {
   lift: { minimum: 8, maximum: 40 },
-  rise: { minimum: 80, maximum: 400 },
+  rise: { minimum: 80, maximum: 800 },
   hold: { minimum: 0, maximum: 500 },
   glide: { minimum: 200, maximum: 1200 },
   land: { minimum: 80, maximum: 400 },

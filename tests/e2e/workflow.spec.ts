@@ -1245,7 +1245,7 @@ test("repair list animates a row reordered by a local status change", async ({
       "ngt-order-motion",
       JSON.stringify({
         lift: 30,
-        rise: 360,
+        rise: 560,
         hold: 150,
         glide: 600,
         land: 180,
@@ -1314,6 +1314,7 @@ test("repair list animates a row reordered by a local status change", async ({
     document.body.dataset.changedOrderDescentObserved = "false";
     document.body.dataset.changedOrderLandingScaleStable = "false";
     document.body.dataset.changedOrderHandoffObserved = "false";
+    document.body.dataset.changedOrderMaximumHeightDifference = "0";
     document.body.dataset.changedOrderCameraObserved = "false";
     document.body.dataset.changedOrderVisibleDuringGlide = "false";
     document.body.dataset.changedOrderAlignedBeforeRemoval = "false";
@@ -1373,6 +1374,19 @@ test("repair list animates a row reordered by a local status change", async ({
         const changedRow = document
           .querySelector(`a[href="${changedHref}"]`)
           ?.closest("tr");
+        if (changedRow) {
+          document.body.dataset.changedOrderMaximumHeightDifference = String(
+            Math.max(
+              Number(
+                document.body.dataset.changedOrderMaximumHeightDifference ??
+                  "0",
+              ),
+              Math.abs(
+                floatingRect.height - changedRow.getBoundingClientRect().height,
+              ),
+            ),
+          );
+        }
         if (
           changedRow &&
           !changedRow.classList.contains("order-row-floating-placeholder") &&
@@ -1387,7 +1401,7 @@ test("repair list animates a row reordered by a local status change", async ({
             6
         )
           document.body.dataset.changedOrderAlignedBeforeRemoval = "true";
-        if (duration === 1290 && frames?.length === 5) {
+        if (duration === 1490 && frames?.length === 5) {
           const [startFrame, liftFrame, holdFrame, glideFrame, landFrame] =
             frames;
           if (startFrame?.transform)
@@ -1483,7 +1497,7 @@ test("repair list animates a row reordered by a local status change", async ({
           for (const animation of cell.getAnimations()) {
             const duration = animation.effect?.getTiming().duration;
             const frames = (animation.effect as KeyframeEffect).getKeyframes();
-            if (changed && duration === 1290) {
+            if (changed && duration === 1490) {
               const [startFrame, liftFrame, , glideFrame] = frames;
               if (startFrame?.transform)
                 document.body.dataset.changedOrderAnimationObserved = "true";
@@ -1507,7 +1521,7 @@ test("repair list animates a row reordered by a local status change", async ({
               )
                 document.body.dataset.changedOrderOuterShadowObserved = "true";
             }
-            if (!changed && duration === 1110) {
+            if (!changed && duration === 1310) {
               document.body.dataset.displacedOrderAnimationObserved = "true";
               const [startFrame, holdFrame] = frames;
               if (
@@ -1575,6 +1589,13 @@ test("repair list animates a row reordered by a local status change", async ({
     "data-changed-order-handoff-observed",
     "true",
   );
+  expect(
+    Number(
+      await page
+        .locator("body")
+        .getAttribute("data-changed-order-maximum-height-difference"),
+    ),
+  ).toBeLessThan(0.5);
   await expect(page.locator("body")).toHaveAttribute(
     "data-changed-order-camera-observed",
     "true",
@@ -1613,7 +1634,7 @@ test("repair list animates a row reordered by a local status change", async ({
     ),
   ).toBeGreaterThan(1);
   await expect(olderRow).toHaveClass(/order-row-status-highlight/, {
-    timeout: 1400,
+    timeout: 2000,
   });
   expect(
     await olderRow.evaluate((element) =>
@@ -1671,7 +1692,7 @@ test("repair list animates a row reordered by a local status change", async ({
   await expect(fixedViewportRow).toHaveClass(/order-row-status-moving/);
   await expect(page.locator(".order-floating-table")).toBeVisible();
   await expect(fixedViewportRow).toHaveClass(/order-row-status-highlight/, {
-    timeout: 1400,
+    timeout: 2000,
   });
   expect(await page.evaluate(() => window.scrollY)).toBe(fixedViewportScroll);
 });

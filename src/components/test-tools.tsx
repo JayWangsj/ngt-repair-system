@@ -25,7 +25,7 @@ const motionControls: {
   unit: "px" | "ms" | "%";
 }[] = [
   { key: "lift", minimum: 8, maximum: 40, step: 1, unit: "px" },
-  { key: "rise", minimum: 80, maximum: 400, step: 10, unit: "ms" },
+  { key: "rise", minimum: 80, maximum: 800, step: 10, unit: "ms" },
   { key: "hold", minimum: 0, maximum: 500, step: 10, unit: "ms" },
   { key: "glide", minimum: 200, maximum: 1200, step: 20, unit: "ms" },
   { key: "land", minimum: 80, maximum: 400, step: 10, unit: "ms" },

@@ -28,12 +28,18 @@ describe("test tools", () => {
   });
 
   it("keeps animation parameters inside safe limits", () => {
-    expect(defaultOrderMotionSettings.rise).toBe(400);
+    expect(defaultOrderMotionSettings.rise).toBe(600);
     expect(
-      normalizeOrderMotionSettings({ lift: 200, hold: -10, glide: 640 }),
+      normalizeOrderMotionSettings({
+        lift: 200,
+        rise: 1000,
+        hold: -10,
+        glide: 640,
+      }),
     ).toEqual({
       ...defaultOrderMotionSettings,
       lift: 40,
+      rise: 800,
       hold: 0,
       glide: 640,
     });

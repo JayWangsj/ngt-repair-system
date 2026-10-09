@@ -215,7 +215,6 @@ export function OrderListBody({
   const body = useRef<HTMLTableSectionElement>(null);
   const pendingStatusAnimation = useRef("");
   const previousRowPositions = useRef(new Map<string, DOMRect>());
-  const highlightStartTimer = useRef<number | null>(null);
   const highlightTimer = useRef<number | null>(null);
   useEffect(() => {
     function outside(event: PointerEvent) {
@@ -236,8 +235,6 @@ export function OrderListBody({
   }, []);
   useEffect(
     () => () => {
-      if (highlightStartTimer.current)
-        window.clearTimeout(highlightStartTimer.current);
       if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
     },
     [],
@@ -253,7 +250,6 @@ export function OrderListBody({
     );
     pendingStatusAnimation.current = "";
     if (!target) return;
-    let moved = false;
     elements.forEach((element) => {
       const previous = previousRowPositions.current.get(
         element.dataset.orderId ?? "",
@@ -261,31 +257,34 @@ export function OrderListBody({
       if (!previous) return;
       const delta = previous.top - element.getBoundingClientRect().top;
       if (Math.abs(delta) < 1) return;
-      moved = true;
-      element
-        .querySelectorAll<HTMLTableCellElement>("td")
-        .forEach((cell) =>
-          cell.animate(
-            [
-              { transform: `translateY(${delta}px)` },
-              { transform: "translateY(0)" },
-            ],
-            { duration: 360, easing: "ease-out" },
-          ),
-        );
+      const changed = element === target;
+      element.querySelectorAll<HTMLTableCellElement>("td").forEach((cell) =>
+        cell.animate(
+          changed
+            ? [
+                { transform: `translateY(${delta}px)`, offset: 0 },
+                {
+                  transform: `translateY(${delta * 0.12}px)`,
+                  offset: 0.82,
+                },
+                { transform: "translateY(0)", offset: 1 },
+              ]
+            : [
+                { transform: `translateY(${delta}px)` },
+                { transform: "translateY(0)" },
+              ],
+          {
+            duration: changed ? 540 : 400,
+            easing: changed ? "cubic-bezier(0.22, 1, 0.36, 1)" : "ease-out",
+          },
+        ),
+      );
     });
-    if (highlightStartTimer.current)
-      window.clearTimeout(highlightStartTimer.current);
-    highlightStartTimer.current = window.setTimeout(
-      () => {
-        setHighlightedId(changedId);
-        if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
-        highlightTimer.current = window.setTimeout(
-          () => setHighlightedId(""),
-          1300,
-        );
-      },
-      moved ? 360 : 0,
+    setHighlightedId(changedId);
+    if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+    highlightTimer.current = window.setTimeout(
+      () => setHighlightedId(""),
+      1500,
     );
   }, [rows]);
   return (

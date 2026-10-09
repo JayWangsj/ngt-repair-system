@@ -1266,8 +1266,10 @@ test("repair list animates a row reordered by a local status change", async ({
     .getByRole("option", { name: "Annullato", exact: true })
     .click();
   const dialog = page.getByRole("dialog", { name: "Annulla scheda" });
-  await page.evaluate(() => {
+  await page.evaluate((changedHref) => {
     document.body.dataset.orderAnimationMax = "0";
+    document.body.dataset.changedOrderAnimationObserved = "false";
+    document.body.dataset.displacedOrderAnimationObserved = "false";
     const started = performance.now();
     const sample = () => {
       let maximum = Number(document.body.dataset.orderAnimationMax ?? "0");
@@ -1280,12 +1282,22 @@ test("repair list animates a row reordered by a local status change", async ({
             maximum,
             Math.abs(new DOMMatrixReadOnly(transform).m42),
           );
+          const changed = cell
+            .closest("tr")
+            ?.querySelector(`a[href="${changedHref}"]`);
+          for (const animation of cell.getAnimations()) {
+            const duration = animation.effect?.getTiming().duration;
+            if (changed && duration === 540)
+              document.body.dataset.changedOrderAnimationObserved = "true";
+            if (!changed && duration === 400)
+              document.body.dataset.displacedOrderAnimationObserved = "true";
+          }
         });
       document.body.dataset.orderAnimationMax = String(maximum);
       if (performance.now() - started < 5000) requestAnimationFrame(sample);
     };
     requestAnimationFrame(sample);
-  });
+  }, olderOrderPath);
   await dialog
     .getByRole("button", { name: "Conferma annullamento" })
     .click({ delay: 150 });
@@ -1294,21 +1306,14 @@ test("repair list animates a row reordered by a local status change", async ({
   await expect(page.locator("tbody tr").first()).toContainText(
     await olderRow.locator(".order-code-link").innerText(),
   );
-  await expect
-    .poll(() =>
-      page
-        .locator("tbody td")
-        .evaluateAll((cells) =>
-          cells.some((cell) =>
-            cell
-              .getAnimations()
-              .some(
-                (animation) => animation.effect?.getTiming().duration === 360,
-              ),
-          ),
-        ),
-    )
-    .toBe(true);
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-changed-order-animation-observed",
+    "true",
+  );
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-displaced-order-animation-observed",
+    "true",
+  );
   expect(
     await page.evaluate(() =>
       Number(document.body.dataset.orderAnimationMax ?? "0"),
@@ -1831,13 +1836,56 @@ test("settings applies a manual business date and can return to system time", as
   await dateSettings
     .getByLabel("Imposta manualmente", { exact: true })
     .fill("2031-04-12");
-  await dateSettings
-    .getByRole("button", { name: "Salva", exact: true })
-    .click();
+  const modeSelect = dateSettings.getByRole("button", {
+    name: "Modalità data",
+  });
+  const manualDate = dateSettings.getByLabel("Imposta manualmente", {
+    exact: true,
+  });
+  const saveClock = dateSettings.getByRole("button", {
+    name: "Salva",
+    exact: true,
+  });
+  const boxesBefore = await Promise.all([
+    modeSelect.boundingBox(),
+    manualDate.boundingBox(),
+    saveClock.boundingBox(),
+  ]);
+  await page.route("**/settings", async (route) => {
+    if (route.request().method() === "POST")
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    await route.continue();
+  });
+  await saveClock.click();
+  const savingClock = dateSettings.getByRole("button", {
+    name: "Salvataggio…",
+    exact: true,
+  });
+  await expect(savingClock).toBeDisabled();
+  const boxesDuring = await Promise.all([
+    modeSelect.boundingBox(),
+    manualDate.boundingBox(),
+    savingClock.boundingBox(),
+  ]);
   await expect(page.getByRole("status")).toContainText(
     "Data corrente aggiornata.",
   );
   await expect(dateSettings).toContainText("12/04/2031");
+  const boxesAfter = await Promise.all([
+    modeSelect.boundingBox(),
+    manualDate.boundingBox(),
+    saveClock.boundingBox(),
+  ]);
+  for (let index = 0; index < boxesBefore.length; index += 1) {
+    expect(boxesBefore[index]).not.toBeNull();
+    expect(boxesDuring[index]).not.toBeNull();
+    expect(boxesAfter[index]).not.toBeNull();
+    expect(boxesDuring[index]!.x).toBeCloseTo(boxesBefore[index]!.x, 0);
+    expect(boxesDuring[index]!.width).toBeCloseTo(boxesBefore[index]!.width, 0);
+    expect(boxesAfter[index]!.x).toBeCloseTo(boxesBefore[index]!.x, 0);
+    expect(boxesAfter[index]!.width).toBeCloseTo(boxesBefore[index]!.width, 0);
+  }
+  await page.unroute("**/settings");
 
   await page.goto("/");
   await expect(

@@ -355,6 +355,7 @@ export function SettingsTools({
           </div>
           <Button
             type="button"
+            className="settings-date-save"
             disabled={clockPending || (dateMode === "MANUAL" && !manualDate)}
             onClick={() => void saveClock()}
           >

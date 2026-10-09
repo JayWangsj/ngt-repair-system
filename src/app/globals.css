@@ -4336,6 +4336,12 @@ details[open] > summary {
 .business-date-current strong {
   font-size: 15px;
 }
+.settings-date-save,
+.settings-date-save:hover,
+.settings-date-save:active {
+  transform: none;
+  min-width: 128px;
+}
 .settings-action {
   display: flex;
   align-items: center;
@@ -6408,15 +6414,28 @@ summary.record-icon::-webkit-details-marker {
 }
 @keyframes order-row-status-highlight {
   0%,
-  61.5% {
-    background-color: #fff3b8;
+  36% {
+    background-color: #ffed9d;
+  }
+  50% {
+    background-color: #fff9e8;
+  }
+  62% {
+    background-color: #ffe689;
   }
   100% {
     background-color: transparent;
   }
 }
 .order-list-body > tr.order-row-status-highlight {
-  animation: order-row-status-highlight 1300ms ease-out both;
+  animation: order-row-status-highlight 1500ms ease-out both;
+}
+.order-list-body > tr.order-row-status-highlight > td {
+  position: relative;
+  z-index: 1;
+}
+.order-list-body > tr.order-row-status-highlight > td:first-child {
+  box-shadow: inset 3px 0 #d7aa00;
 }
 .order-inline-edit-cell > * {
   transform: scale(1);

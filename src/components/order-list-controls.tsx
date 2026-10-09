@@ -380,6 +380,7 @@ export function OrderListBody({
       const scale = 1.02;
       const restingShadow = "0 2px 5px -3px rgb(74 54 0 / 20%)";
       const floatingShadow = `0 ${motion.shadowY}px ${motion.shadowBlur}px ${motion.shadowSpread}px rgb(74 54 0 / ${motion.shadowOpacity}%)`;
+      const landedShadow = "0 0 0 0 rgb(74 54 0 / 0%)";
       table.animate(
         [
           {
@@ -408,12 +409,49 @@ export function OrderListBody({
           },
           {
             transform: `translateY(${targetDelta}px) scale(1)`,
-            boxShadow: restingShadow,
+            boxShadow: landedShadow,
             offset: 1,
           },
         ],
         { duration: total, easing: "linear", fill: "both" },
       );
+      clonedCells.forEach((cell, index) => {
+        const floatingEdge =
+          index === 0 ? "inset 4px 0 #d7aa00" : "inset 0 0 transparent";
+        const landedEdge =
+          index === 0 ? "inset 3px 0 #d7aa00" : "inset 0 0 transparent";
+        cell.animate(
+          [
+            {
+              backgroundColor: "#fff8dc",
+              boxShadow: floatingEdge,
+              offset: 0,
+            },
+            {
+              backgroundColor: "#fff1b2",
+              boxShadow: floatingEdge,
+              offset: liftOffset,
+            },
+            {
+              backgroundColor: "#fff1b2",
+              boxShadow: floatingEdge,
+              offset: holdOffset,
+            },
+            {
+              backgroundColor: "#fff1b2",
+              boxShadow: floatingEdge,
+              offset: glideOffset,
+              easing: "cubic-bezier(0.4, 0, 0.2, 1)",
+            },
+            {
+              backgroundColor: "#fff5ca",
+              boxShadow: landedEdge,
+              offset: 1,
+            },
+          ],
+          { duration: total, easing: "linear", fill: "both" },
+        );
+      });
       if (Math.abs(targetScrollY - scrollStart.y) >= 1) {
         const glideStartsAt = performance.now() + motion.rise + motion.hold;
         const scrollDistance = targetScrollY - scrollStart.y;

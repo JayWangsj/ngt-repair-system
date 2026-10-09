@@ -1302,6 +1302,8 @@ test("repair list animates a row reordered by a local status change", async ({
     document.body.dataset.changedOrderCameraObserved = "false";
     document.body.dataset.changedOrderVisibleDuringGlide = "false";
     document.body.dataset.changedOrderAlignedBeforeRemoval = "false";
+    document.body.dataset.changedOrderLandingColorObserved = "false";
+    document.body.dataset.changedOrderLandingShadowObserved = "false";
     document.body.dataset.changedOrderOuterShadowObserved = "false";
     document.body.dataset.changedOrderMovingStyleObserved = "false";
     document.body.dataset.unexpectedOrderOverflowObserved = "false";
@@ -1324,6 +1326,20 @@ test("repair list animates a row reordered by a local status change", async ({
         const duration = animation?.effect?.getTiming().duration;
         const currentTime = Number(animation?.currentTime ?? 0);
         const frames = (animation?.effect as KeyframeEffect)?.getKeyframes();
+        const landingCellAnimation = floating
+          .querySelector("td")
+          ?.getAnimations()[0];
+        const landingCellFrames = (
+          landingCellAnimation?.effect as KeyframeEffect | undefined
+        )?.getKeyframes();
+        const finalCellFrame = landingCellFrames?.at(-1);
+        if (
+          finalCellFrame &&
+          ["#fff5ca", "rgb(255, 245, 202)"].includes(
+            String(finalCellFrame.backgroundColor),
+          )
+        )
+          document.body.dataset.changedOrderLandingColorObserved = "true";
         const floatingRect = floating.getBoundingClientRect();
         if (
           currentTime >= 350 &&
@@ -1388,6 +1404,11 @@ test("repair list animates a row reordered by a local status change", async ({
             )
           )
             document.body.dataset.changedOrderOuterShadowObserved = "true";
+          if (
+            String(landFrame?.boxShadow).includes("rgba(74, 54, 0, 0)") ||
+            String(landFrame?.boxShadow).includes("/ 0%)")
+          )
+            document.body.dataset.changedOrderLandingShadowObserved = "true";
         }
         const scroll = document.querySelector<HTMLElement>(
           ".order-table-scroll",
@@ -1523,6 +1544,14 @@ test("repair list animates a row reordered by a local status change", async ({
   );
   await expect(page.locator("body")).toHaveAttribute(
     "data-changed-order-aligned-before-removal",
+    "true",
+  );
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-changed-order-landing-color-observed",
+    "true",
+  );
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-changed-order-landing-shadow-observed",
     "true",
   );
   await expect(page.locator("body")).toHaveAttribute(

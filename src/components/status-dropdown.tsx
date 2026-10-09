@@ -301,6 +301,7 @@ export function StatusDropdown({
       <WorkOrderCheckoutDialog
         open={checkoutOpen}
         onClose={() => setCheckoutOpen(false)}
+        restoreFocusComfortably={false}
         onSuccess={settled}
         requireDelivery
         orderId={order.id}
@@ -315,6 +316,7 @@ export function StatusDropdown({
           title={it.cancelOrder}
           subtitle={it.cancelOrderWarning}
           onClose={() => setCancelOpen(false)}
+          restoreFocusComfortably={false}
         >
           <form
             className="dialog-form"

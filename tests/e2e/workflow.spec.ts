@@ -1273,8 +1273,6 @@ test("repair list animates a row reordered by a local status change", async ({
   expect(initialOrder.indexOf(olderOrderPath)).toBeGreaterThan(
     initialOrder.indexOf(newerOrderPath),
   );
-  const scrollBefore = await page.evaluate(() => window.scrollY);
-
   await olderRow.click();
   await olderRow.locator(".status-dropdown-trigger").click();
   await page
@@ -1282,6 +1280,12 @@ test("repair list animates a row reordered by a local status change", async ({
     .getByRole("option", { name: "Annullato", exact: true })
     .click();
   const dialog = page.getByRole("dialog", { name: "Annulla scheda" });
+  await expect(dialog).toBeVisible();
+  await page.evaluate(() => {
+    document.body.style.minHeight = "2000px";
+    document.body.style.overflow = "auto";
+    window.scrollTo(0, 500);
+  });
   await page.evaluate((changedHref) => {
     document.body.dataset.orderAnimationMax = "0";
     document.body.dataset.changedOrderAnimationObserved = "false";
@@ -1289,12 +1293,78 @@ test("repair list animates a row reordered by a local status change", async ({
     document.body.dataset.displacedOrderHoldObserved = "false";
     document.body.dataset.changedOrderLiftObserved = "false";
     document.body.dataset.changedOrderAirborneObserved = "false";
+    document.body.dataset.changedOrderScaleObserved = "false";
+    document.body.dataset.changedOrderDescentObserved = "false";
     document.body.dataset.changedOrderOuterShadowObserved = "false";
     document.body.dataset.changedOrderMovingStyleObserved = "false";
     document.body.dataset.unexpectedOrderOverflowObserved = "false";
     const started = performance.now();
     const sample = () => {
       let maximum = Number(document.body.dataset.orderAnimationMax ?? "0");
+      const floating = document.querySelector<HTMLElement>(
+        `.order-floating-table[data-floating-order-id]`,
+      );
+      if (floating) {
+        document.body.dataset.changedOrderMovingStyleObserved = "true";
+        const transform = getComputedStyle(floating).transform;
+        if (transform !== "none")
+          maximum = Math.max(
+            maximum,
+            Math.abs(new DOMMatrixReadOnly(transform).m42),
+          );
+        const animation = floating.getAnimations()[0];
+        const duration = animation?.effect?.getTiming().duration;
+        const frames = (animation?.effect as KeyframeEffect)?.getKeyframes();
+        if (duration === 1130 && frames?.length === 5) {
+          const [startFrame, liftFrame, holdFrame, glideFrame, landFrame] =
+            frames;
+          if (startFrame?.transform)
+            document.body.dataset.changedOrderAnimationObserved = "true";
+          if (
+            startFrame?.transform &&
+            liftFrame?.transform &&
+            new DOMMatrixReadOnly(String(startFrame.transform)).m42 -
+              new DOMMatrixReadOnly(String(liftFrame.transform)).m42 >=
+              29
+          )
+            document.body.dataset.changedOrderLiftObserved = "true";
+          if (
+            liftFrame?.transform === holdFrame?.transform &&
+            glideFrame?.transform &&
+            new DOMMatrixReadOnly(String(glideFrame.transform)).m42 <= -29
+          )
+            document.body.dataset.changedOrderAirborneObserved = "true";
+          if (
+            liftFrame?.transform &&
+            new DOMMatrixReadOnly(String(liftFrame.transform)).m11 >= 1.019
+          )
+            document.body.dataset.changedOrderScaleObserved = "true";
+          if (
+            glideFrame?.transform &&
+            landFrame?.transform &&
+            new DOMMatrixReadOnly(String(landFrame.transform)).m42 -
+              new DOMMatrixReadOnly(String(glideFrame.transform)).m42 >=
+              29 &&
+            new DOMMatrixReadOnly(String(landFrame.transform)).m11 === 1
+          )
+            document.body.dataset.changedOrderDescentObserved = "true";
+          if (
+            frames.some((frame) =>
+              String(frame.boxShadow).includes("18px 30px -14px"),
+            )
+          )
+            document.body.dataset.changedOrderOuterShadowObserved = "true";
+        }
+        const scroll = document.querySelector<HTMLElement>(
+          ".order-table-scroll",
+        );
+        if (
+          scroll &&
+          (getComputedStyle(scroll).overflowY !== "hidden" ||
+            scroll.scrollWidth > scroll.clientWidth + 1)
+        )
+          document.body.dataset.unexpectedOrderOverflowObserved = "true";
+      }
       document
         .querySelectorAll(".order-list-body > tr > td")
         .forEach((cell) => {
@@ -1365,14 +1435,18 @@ test("repair list animates a row reordered by a local status change", async ({
     };
     requestAnimationFrame(sample);
   }, olderOrderPath);
+  const scrollBefore = await page.evaluate(() => window.scrollY);
+  expect(scrollBefore).toBeGreaterThan(0);
   await dialog
     .getByRole("button", { name: "Conferma annullamento" })
     .click({ delay: 150 });
   await expect(dialog).not.toBeVisible();
   await expect(olderRow).toHaveClass(/order-row-status-moving/);
-  await olderRow.hover();
-  await expect(olderRow).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
-  await expect(olderRow).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(
+    page.locator(
+      `.order-floating-table[data-floating-order-id]:has-text("${await olderRow.locator(".order-code-link").innerText()}")`,
+    ),
+  ).toBeVisible();
 
   await expect(page.locator("tbody tr").first()).toContainText(
     await olderRow.locator(".order-code-link").innerText(),
@@ -1395,6 +1469,14 @@ test("repair list animates a row reordered by a local status change", async ({
   );
   await expect(page.locator("body")).toHaveAttribute(
     "data-changed-order-airborne-observed",
+    "true",
+  );
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-changed-order-scale-observed",
+    "true",
+  );
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-changed-order-descent-observed",
     "true",
   );
   await expect(page.locator("body")).toHaveAttribute(

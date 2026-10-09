@@ -118,3 +118,9 @@ export function focusComfortably(
     ensureComfortableInteractionSpace(element, options),
   );
 }
+
+export function focusWithoutScrolling(element: HTMLElement | null) {
+  if (!element) return;
+  element.dataset.skipComfortableScrollOnce = "true";
+  element.focus({ preventScroll: true });
+}

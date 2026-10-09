@@ -397,10 +397,12 @@ export function WorkOrderCheckout({
 export function WorkOrderCheckoutDialog({
   open,
   onClose,
+  restoreFocusComfortably,
   ...props
 }: Omit<Parameters<typeof WorkOrderCheckout>[0], "onClose"> & {
   open: boolean;
   onClose: () => void;
+  restoreFocusComfortably?: boolean;
 }) {
   const it = useMessages();
   if (!open) return null;
@@ -412,6 +414,7 @@ export function WorkOrderCheckoutDialog({
           : it.orderProducts.confirmDelivery
       }
       onClose={onClose}
+      restoreFocusComfortably={restoreFocusComfortably}
     >
       <WorkOrderCheckout {...props} onClose={onClose} />
     </FormDialog>

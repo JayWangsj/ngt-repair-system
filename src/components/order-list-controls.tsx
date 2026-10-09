@@ -221,6 +221,8 @@ export function OrderListBody({
   const body = useRef<HTMLTableSectionElement>(null);
   const pendingStatusAnimation = useRef("");
   const previousRowPositions = useRef(new Map<string, DOMRect>());
+  const lockedScrollPosition = useRef<{ x: number; y: number } | null>(null);
+  const floatingRow = useRef<HTMLTableElement | null>(null);
   const landingTimer = useRef<number | null>(null);
   const highlightTimer = useRef<number | null>(null);
   const motionSettings = useRef(defaultOrderMotionSettings);
@@ -255,6 +257,7 @@ export function OrderListBody({
     () => () => {
       if (landingTimer.current) window.clearTimeout(landingTimer.current);
       if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+      floatingRow.current?.remove();
     },
     [],
   );
@@ -276,7 +279,89 @@ export function OrderListBody({
     const holdOffset = (motion.rise + motion.hold) / total;
     const glideOffset = travelDuration / total;
     const displacedHoldOffset = (motion.rise + motion.hold) / travelDuration;
+    const previousTarget = previousRowPositions.current.get(changedId);
+    const currentTarget = target.getBoundingClientRect();
+    const targetDelta = previousTarget
+      ? currentTarget.top - previousTarget.top
+      : 0;
     target.classList.add("order-row-status-moving");
+    if (previousTarget && Math.abs(targetDelta) >= 1) {
+      floatingRow.current?.remove();
+      const table = document.createElement("table");
+      const floatingBody = document.createElement("tbody");
+      const clone = target.cloneNode(true) as HTMLTableRowElement;
+      const sourceCells = Array.from(
+        target.querySelectorAll<HTMLTableCellElement>("td"),
+      );
+      const clonedCells = Array.from(
+        clone.querySelectorAll<HTMLTableCellElement>("td"),
+      );
+      clone.removeAttribute("data-order-id");
+      clone.classList.add("order-row-floating");
+      clone
+        .querySelectorAll<HTMLElement>("[id]")
+        .forEach((element) => element.removeAttribute("id"));
+      clone
+        .querySelectorAll<HTMLAnchorElement>("a[href]")
+        .forEach((element) => element.removeAttribute("href"));
+      clonedCells.forEach((cell, index) => {
+        const width = sourceCells[index]?.getBoundingClientRect().width;
+        if (width) cell.style.width = `${width}px`;
+      });
+      floatingBody.className = "order-list-body";
+      floatingBody.append(clone);
+      table.className = "order-table order-floating-table";
+      table.setAttribute("aria-hidden", "true");
+      table.dataset.floatingOrderId = changedId;
+      Object.assign(table.style, {
+        top: `${previousTarget.top}px`,
+        left: `${previousTarget.left}px`,
+        width: `${previousTarget.width}px`,
+        height: `${previousTarget.height}px`,
+      });
+      table.append(floatingBody);
+      document.body.append(table);
+      floatingRow.current = table;
+      target.classList.add("order-row-floating-placeholder");
+
+      const scale = 1.02;
+      const restingShadow = "0 2px 5px -3px rgb(74 54 0 / 20%)";
+      const floatingShadow = `0 ${motion.shadowY}px ${motion.shadowBlur}px ${motion.shadowSpread}px rgb(74 54 0 / ${motion.shadowOpacity}%)`;
+      table.animate(
+        [
+          {
+            transform: "translateY(0) scale(1)",
+            boxShadow: restingShadow,
+            offset: 0,
+            easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+          },
+          {
+            transform: `translateY(-${motion.lift}px) scale(${scale})`,
+            boxShadow: floatingShadow,
+            offset: liftOffset,
+            easing: "linear",
+          },
+          {
+            transform: `translateY(-${motion.lift}px) scale(${scale})`,
+            boxShadow: floatingShadow,
+            offset: holdOffset,
+            easing: "cubic-bezier(0.2, 0.75, 0.25, 1)",
+          },
+          {
+            transform: `translateY(${targetDelta - motion.lift}px) scale(${scale})`,
+            boxShadow: floatingShadow,
+            offset: glideOffset,
+            easing: "cubic-bezier(0.4, 0, 0.2, 1)",
+          },
+          {
+            transform: `translateY(${targetDelta}px) scale(1)`,
+            boxShadow: restingShadow,
+            offset: 1,
+          },
+        ],
+        { duration: total, easing: "linear", fill: "both" },
+      );
+    }
     elements.forEach((element) => {
       const previous = previousRowPositions.current.get(
         element.dataset.orderId ?? "",
@@ -285,6 +370,7 @@ export function OrderListBody({
       const delta = previous.top - element.getBoundingClientRect().top;
       if (Math.abs(delta) < 1) return;
       const changed = element === target;
+      if (changed && floatingRow.current) return;
       const cells = Array.from(
         element.querySelectorAll<HTMLTableCellElement>("td"),
       );
@@ -348,9 +434,28 @@ export function OrderListBody({
     });
     if (landingTimer.current) window.clearTimeout(landingTimer.current);
     if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+    const lockedScroll = lockedScrollPosition.current;
+    if (lockedScroll) {
+      window.scrollTo({
+        left: lockedScroll.x,
+        top: lockedScroll.y,
+        behavior: "auto",
+      });
+      requestAnimationFrame(() =>
+        window.scrollTo({
+          left: lockedScroll.x,
+          top: lockedScroll.y,
+          behavior: "auto",
+        }),
+      );
+    }
     landingTimer.current = window.setTimeout(() => {
+      floatingRow.current?.remove();
+      floatingRow.current = null;
+      target.classList.remove("order-row-floating-placeholder");
       target.classList.add("order-row-status-highlight");
       target.classList.remove("order-row-status-moving");
+      lockedScrollPosition.current = null;
       setHighlightedId(changedId);
       highlightTimer.current = window.setTimeout(
         () => setHighlightedId(""),
@@ -427,6 +532,10 @@ export function OrderListBody({
                 refreshOnSettled={!compact}
                 onSettled={(settled) => {
                   if (!compact) {
+                    lockedScrollPosition.current = {
+                      x: window.scrollX,
+                      y: window.scrollY,
+                    };
                     previousRowPositions.current = new Map(
                       Array.from(
                         body.current?.querySelectorAll<HTMLTableRowElement>(

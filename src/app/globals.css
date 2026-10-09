@@ -6529,6 +6529,24 @@ summary.record-icon::-webkit-details-marker {
   transform: translateY(0);
   transition: none;
 }
+.order-floating-table {
+  position: fixed;
+  z-index: 100;
+  margin: 0;
+  table-layout: fixed;
+  pointer-events: none;
+  transform-origin: center;
+  will-change: transform, box-shadow;
+}
+.order-floating-table .order-row-floating > td {
+  background: #fff1b2;
+}
+.order-floating-table .order-row-floating > td:first-child {
+  box-shadow: inset 4px 0 #d7aa00;
+}
+.order-list-body > tr.order-row-floating-placeholder > td {
+  visibility: hidden;
+}
 @keyframes order-row-status-highlight {
   0%,
   34% {

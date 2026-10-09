@@ -11,15 +11,15 @@ export type OrderMotionSettings = {
 };
 
 export const defaultOrderMotionSettings: OrderMotionSettings = {
-  lift: 22,
-  rise: 180,
-  hold: 120,
-  glide: 520,
-  land: 160,
-  shadowY: 16,
-  shadowBlur: 24,
+  lift: 32,
+  rise: 240,
+  hold: 130,
+  glide: 600,
+  land: 240,
+  shadowY: 20,
+  shadowBlur: 32,
   shadowSpread: -12,
-  shadowOpacity: 42,
+  shadowOpacity: 48,
 };
 
 export const orderMotionStorageKey = "ngt-order-motion";

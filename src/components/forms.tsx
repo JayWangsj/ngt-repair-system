@@ -93,7 +93,10 @@ import {
   createProductAction,
   deleteInventoryCategoryAction,
 } from "@/app/actions";
-import { focusComfortably } from "@/lib/comfortable-scroll";
+import {
+  focusComfortably,
+  focusWithoutScrolling,
+} from "@/lib/comfortable-scroll";
 
 export type RuleView = {
   id: string;
@@ -3904,11 +3907,13 @@ export function FormDialog({
   title,
   subtitle,
   onClose,
+  restoreFocusComfortably = true,
   children,
 }: {
   title: ReactNode;
   subtitle?: string;
   onClose: () => void;
+  restoreFocusComfortably?: boolean;
   children: ReactNode;
 }) {
   const it = useMessages();
@@ -3925,9 +3930,10 @@ export function FormDialog({
     return () => {
       element?.close();
       document.body.style.overflow = overflow;
-      focusComfortably(previous);
+      if (restoreFocusComfortably) focusComfortably(previous);
+      else focusWithoutScrolling(previous);
     };
-  }, []);
+  }, [restoreFocusComfortably]);
   if (typeof document === "undefined") return null;
   return createPortal(
     <dialog

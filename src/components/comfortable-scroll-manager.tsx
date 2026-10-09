@@ -17,6 +17,10 @@ export function ComfortableScrollManager() {
     function focus(event: FocusEvent) {
       const target = event.target;
       if (!(target instanceof HTMLElement)) return;
+      if (target.dataset.skipComfortableScrollOnce === "true") {
+        delete target.dataset.skipComfortableScrollOnce;
+        return;
+      }
       if (
         pointerTarget &&
         (target === pointerTarget ||

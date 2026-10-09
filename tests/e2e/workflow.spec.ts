@@ -1279,6 +1279,19 @@ test("repair list animates a row reordered by a local status change", async ({
     .evaluate((element) => (element.style.height = "520px"));
   await olderRow.scrollIntoViewIfNeeded();
   await olderRow.click();
+  await page.waitForTimeout(220);
+  expect(
+    await olderRow
+      .locator(".order-inline-edit-cell > *")
+      .evaluateAll((elements) =>
+        elements.every((element) => {
+          const transform = new DOMMatrixReadOnly(
+            getComputedStyle(element).transform,
+          );
+          return Math.abs(transform.m11 - 1) < 0.001;
+        }),
+      ),
+  ).toBe(true);
   await olderRow.locator(".status-dropdown-trigger").click();
   await page
     .locator(".status-dropdown-menu")

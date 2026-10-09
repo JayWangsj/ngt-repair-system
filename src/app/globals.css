@@ -6590,9 +6590,6 @@ summary.record-icon::-webkit-details-marker {
 .order-inline-edit-cell.numeric > * {
   transform-origin: right center;
 }
-.order-row-active > .order-inline-edit-cell > * {
-  transform: scale(1.015);
-}
 .order-list-body .order-link,
 .order-detail-card .order-customer-link,
 .retail-history-dialog .order-code-link,

@@ -552,13 +552,28 @@ export function OrderListBody({
     landingTimer.current = window.setTimeout(() => {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          floatingRow.current?.remove();
-          floatingRow.current = null;
+          const floating = floatingRow.current;
           target.classList.remove("order-row-floating-placeholder");
           target.classList.add("order-row-status-highlight");
           target.classList.remove("order-row-status-moving");
           motionScrollStart.current = null;
           setHighlightedId(changedId);
+          if (floating) {
+            const handoff = floating.animate([{ opacity: 1 }, { opacity: 0 }], {
+              duration: 180,
+              easing: "ease-out",
+              fill: "forwards",
+            });
+            handoff.addEventListener(
+              "finish",
+              () => {
+                floating.remove();
+                if (floatingRow.current === floating)
+                  floatingRow.current = null;
+              },
+              { once: true },
+            );
+          }
           highlightTimer.current = window.setTimeout(
             () => setHighlightedId(""),
             1500,

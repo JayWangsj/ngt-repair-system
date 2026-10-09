@@ -215,6 +215,7 @@ export function OrderListBody({
   const body = useRef<HTMLTableSectionElement>(null);
   const pendingStatusAnimation = useRef("");
   const previousRowPositions = useRef(new Map<string, DOMRect>());
+  const landingTimer = useRef<number | null>(null);
   const highlightTimer = useRef<number | null>(null);
   useEffect(() => {
     function outside(event: PointerEvent) {
@@ -235,6 +236,7 @@ export function OrderListBody({
   }, []);
   useEffect(
     () => () => {
+      if (landingTimer.current) window.clearTimeout(landingTimer.current);
       if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
     },
     [],
@@ -250,6 +252,7 @@ export function OrderListBody({
     );
     pendingStatusAnimation.current = "";
     if (!target) return;
+    target.classList.add("order-row-status-moving");
     elements.forEach((element) => {
       const previous = previousRowPositions.current.get(
         element.dataset.orderId ?? "",
@@ -262,30 +265,45 @@ export function OrderListBody({
         cell.animate(
           changed
             ? [
-                { transform: `translateY(${delta}px)`, offset: 0 },
                 {
-                  transform: `translateY(${delta * 0.12}px)`,
-                  offset: 0.82,
+                  transform: `translateY(${delta}px) scale(1)`,
+                  offset: 0,
                 },
-                { transform: "translateY(0)", offset: 1 },
+                {
+                  transform: `translateY(${delta - 10}px) scale(1.012)`,
+                  offset: 0.16,
+                },
+                {
+                  transform: `translateY(${delta - 10}px) scale(1.012)`,
+                  offset: 0.3,
+                },
+                {
+                  transform: `translateY(${delta * 0.12}px) scale(1.004)`,
+                  offset: 0.84,
+                },
+                { transform: "translateY(0) scale(1)", offset: 1 },
               ]
             : [
                 { transform: `translateY(${delta}px)` },
                 { transform: "translateY(0)" },
               ],
           {
-            duration: changed ? 540 : 400,
+            duration: changed ? 760 : 440,
             easing: changed ? "cubic-bezier(0.22, 1, 0.36, 1)" : "ease-out",
           },
         ),
       );
     });
-    setHighlightedId(changedId);
+    if (landingTimer.current) window.clearTimeout(landingTimer.current);
     if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
-    highlightTimer.current = window.setTimeout(
-      () => setHighlightedId(""),
-      1500,
-    );
+    landingTimer.current = window.setTimeout(() => {
+      target.classList.remove("order-row-status-moving");
+      setHighlightedId(changedId);
+      highlightTimer.current = window.setTimeout(
+        () => setHighlightedId(""),
+        1500,
+      );
+    }, 760);
   }, [rows]);
   return (
     <tbody className="order-list-body" ref={body}>

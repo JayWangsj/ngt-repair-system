@@ -1270,6 +1270,8 @@ test("repair list animates a row reordered by a local status change", async ({
     document.body.dataset.orderAnimationMax = "0";
     document.body.dataset.changedOrderAnimationObserved = "false";
     document.body.dataset.displacedOrderAnimationObserved = "false";
+    document.body.dataset.changedOrderLiftObserved = "false";
+    document.body.dataset.changedOrderMovingStyleObserved = "false";
     const started = performance.now();
     const sample = () => {
       let maximum = Number(document.body.dataset.orderAnimationMax ?? "0");
@@ -1285,11 +1287,30 @@ test("repair list animates a row reordered by a local status change", async ({
           const changed = cell
             .closest("tr")
             ?.querySelector(`a[href="${changedHref}"]`);
+          if (
+            changed &&
+            cell.closest("tr")?.classList.contains("order-row-status-moving")
+          )
+            document.body.dataset.changedOrderMovingStyleObserved = "true";
           for (const animation of cell.getAnimations()) {
             const duration = animation.effect?.getTiming().duration;
-            if (changed && duration === 540)
+            if (changed && duration === 760) {
               document.body.dataset.changedOrderAnimationObserved = "true";
-            if (!changed && duration === 400)
+              const frames = (
+                animation.effect as KeyframeEffect
+              ).getKeyframes();
+              const startFrame = frames.find((frame) => frame.offset === 0);
+              const liftFrame = frames.find((frame) => frame.offset === 0.16);
+              if (
+                startFrame?.transform &&
+                liftFrame?.transform &&
+                new DOMMatrixReadOnly(String(startFrame.transform)).m42 -
+                  new DOMMatrixReadOnly(String(liftFrame.transform)).m42 >=
+                  9
+              )
+                document.body.dataset.changedOrderLiftObserved = "true";
+            }
+            if (!changed && duration === 440)
               document.body.dataset.displacedOrderAnimationObserved = "true";
           }
         });
@@ -1312,6 +1333,14 @@ test("repair list animates a row reordered by a local status change", async ({
   );
   await expect(page.locator("body")).toHaveAttribute(
     "data-displaced-order-animation-observed",
+    "true",
+  );
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-changed-order-lift-observed",
+    "true",
+  );
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-changed-order-moving-style-observed",
     "true",
   );
   expect(

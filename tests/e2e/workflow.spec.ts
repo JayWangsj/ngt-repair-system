@@ -1240,6 +1240,22 @@ test("repair list exposes month, status, due-date and payment controls", async (
 test("repair list animates a row reordered by a local status change", async ({
   page,
 }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem(
+      "ngt-order-motion",
+      JSON.stringify({
+        lift: 30,
+        rise: 200,
+        hold: 150,
+        glide: 600,
+        land: 180,
+        shadowY: 18,
+        shadowBlur: 30,
+        shadowSpread: -14,
+        shadowOpacity: 55,
+      }),
+    );
+  });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await fillOrder(page, { manual: true });
   await save(page);
@@ -1309,10 +1325,8 @@ test("repair list animates a row reordered by a local status change", async ({
           for (const animation of cell.getAnimations()) {
             const duration = animation.effect?.getTiming().duration;
             const frames = (animation.effect as KeyframeEffect).getKeyframes();
-            if (changed && duration === 980) {
-              const startFrame = frames.find((frame) => frame.offset === 0);
-              const liftFrame = frames.find((frame) => frame.offset === 0.18);
-              const glideFrame = frames.find((frame) => frame.offset === 0.84);
+            if (changed && duration === 1130) {
+              const [startFrame, liftFrame, , glideFrame] = frames;
               if (startFrame?.transform)
                 document.body.dataset.changedOrderAnimationObserved = "true";
               if (
@@ -1320,25 +1334,24 @@ test("repair list animates a row reordered by a local status change", async ({
                 liftFrame?.transform &&
                 new DOMMatrixReadOnly(String(startFrame.transform)).m42 -
                   new DOMMatrixReadOnly(String(liftFrame.transform)).m42 >=
-                  21
+                  29
               )
                 document.body.dataset.changedOrderLiftObserved = "true";
               if (
                 glideFrame?.transform &&
-                new DOMMatrixReadOnly(String(glideFrame.transform)).m42 <= -21
+                new DOMMatrixReadOnly(String(glideFrame.transform)).m42 <= -29
               )
                 document.body.dataset.changedOrderAirborneObserved = "true";
               if (
                 frames.some((frame) =>
-                  String(frame.boxShadow).includes("16px 24px -12px"),
+                  String(frame.boxShadow).includes("18px 30px -14px"),
                 )
               )
                 document.body.dataset.changedOrderOuterShadowObserved = "true";
             }
-            if (!changed && duration === 820) {
+            if (!changed && duration === 950) {
               document.body.dataset.displacedOrderAnimationObserved = "true";
-              const startFrame = frames.find((frame) => frame.offset === 0);
-              const holdFrame = frames.find((frame) => frame.offset === 0.37);
+              const [startFrame, holdFrame] = frames;
               if (
                 startFrame?.transform &&
                 holdFrame?.transform === startFrame.transform
@@ -4754,4 +4767,58 @@ test("new product identifies the missing required field", async ({ page }) => {
     .getByRole("button", { name: "Salva prodotto", exact: true })
     .click();
   await expect(dialog.getByRole("alert")).toContainText("Categoria");
+});
+
+test("test tools generate linked data and persist repair motion tuning", async ({
+  page,
+}) => {
+  await page.goto("/settings");
+  const tools = page.locator(".test-tools-settings");
+  await expect(
+    tools.getByRole("heading", { name: "Strumenti di test" }),
+  ).toBeVisible();
+  await expect(tools).toContainText("ngt_test");
+  expect(
+    await tools.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth + 1,
+    ),
+  ).toBe(true);
+
+  const lift = tools
+    .locator(".test-motion-control")
+    .filter({ hasText: "Altezza sollevamento" })
+    .locator('input[type="range"]');
+  const glide = tools
+    .locator(".test-motion-control")
+    .filter({ hasText: "Tempo di scorrimento" })
+    .locator('input[type="range"]');
+  const shadow = tools
+    .locator(".test-motion-control")
+    .filter({ hasText: "Intensità ombra" })
+    .locator('input[type="range"]');
+  await lift.fill("32");
+  await glide.fill("680");
+  await shadow.fill("58");
+  await expect(lift).toHaveValue("32");
+  await expect(glide).toHaveValue("680");
+  await expect(shadow).toHaveValue("58");
+  await page.reload();
+  await expect(lift).toHaveValue("32");
+  await expect(glide).toHaveValue("680");
+  await expect(shadow).toHaveValue("58");
+
+  await chooseBusinessOption(page, "Quantità dati di test", "50 schede", tools);
+  await tools
+    .getByRole("button", { name: "Genera dati di test", exact: true })
+    .click();
+  await expect(tools.locator(".message.success")).toContainText(
+    "Creati 50 clienti, 10 prodotti e 50 schede di test.",
+  );
+  await tools
+    .getByRole("button", { name: "Apri elenco riparazioni", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/orders/);
+  await expect(
+    page.locator(".order-code-link").filter({ hasText: "TEST-" }),
+  ).toHaveCount(50);
 });

@@ -347,6 +347,34 @@ export const it = {
     "Se attivo, ignora la riduzione delle animazioni di Windows; se disattivo, segue il sistema.",
   motionAlways: "Sempre attive",
   motionSystem: "Segui il sistema",
+  testTools: "Strumenti di test",
+  testToolsHelp:
+    "Disponibili solo nel sistema di prova isolato. I dati generati sono contrassegnati chiaramente come TEST.",
+  generateTestData: "Genera dati di test",
+  generateTestDataHelp:
+    "Aggiunge clienti, prodotti, scorte e schede collegate senza cancellare gli altri dati di prova.",
+  generatingTestData: "Generazione…",
+  testDataSize: "Quantità dati di test",
+  testOrders: "schede",
+  testDataCreated:
+    "Creati {customers} clienti, {products} prodotti e {orders} schede di test.",
+  openRepairList: "Apri elenco riparazioni",
+  repairMotionTuning: "Movimento cambio posizione",
+  repairMotionTuningHelp:
+    "Le modifiche vengono salvate in questo browser e applicate al prossimo cambio di stato nell'elenco riparazioni.",
+  totalDuration: "Durata totale",
+  restoreDefaults: "Ripristina valori",
+  orderMotion: {
+    lift: "Altezza sollevamento",
+    rise: "Tempo di sollevamento",
+    hold: "Tempo sospeso",
+    glide: "Tempo di scorrimento",
+    land: "Tempo di appoggio",
+    shadowY: "Distanza ombra",
+    shadowBlur: "Morbidezza ombra",
+    shadowSpread: "Estensione ombra",
+    shadowOpacity: "Intensità ombra",
+  },
   businessDate: "Data corrente",
   businessDateHelp:
     "Segui automaticamente la data di sistema oppure imposta una data manuale per le attività operative.",

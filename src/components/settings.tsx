@@ -22,14 +22,17 @@ import {
   isAlwaysMotionEnabled,
   setAlwaysMotionEnabled,
 } from "@/lib/motion-preference";
+import { TestTools } from "./test-tools";
 
 export function SettingsTools({
   currentVersion,
+  testToolsEnabled,
   faultOptions,
   clock,
   today,
 }: {
   currentVersion: string;
+  testToolsEnabled: boolean;
   faultOptions: FaultCatalogItem[];
   clock: { mode: "SYSTEM" | "MANUAL"; manualDate: string };
   today: string;
@@ -320,6 +323,7 @@ export function SettingsTools({
           </div>
         </div>
       </section>
+      {testToolsEnabled && <TestTools />}
       <section className="panel padded settings-card business-date-settings">
         <div className="settings-card-title">
           <CalendarDays size={19} aria-hidden="true" />

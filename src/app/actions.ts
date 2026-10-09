@@ -22,6 +22,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { phoneInput } from "@/lib/validation";
 import { clearBusinessData } from "@/lib/data-transfer";
+import { generateTestData } from "@/lib/test-tools";
 type Result<Data = undefined> =
   { ok: true; id?: string; data?: Data } | { ok: false; error: string };
 async function execute<Work extends { id?: string } | void, Data = undefined>(
@@ -332,4 +333,14 @@ export async function restoreFaultAction(category: string, name: string) {
 export async function clearDataAction() {
   const actor = await requireActor();
   return execute(() => clearBusinessData(actor));
+}
+
+export async function generateTestDataAction(count: 10 | 50 | 100) {
+  const actor = await requireActor();
+  if (![10, 50, 100].includes(count))
+    return { ok: false as const, error: "Quantità di test non valida." };
+  return execute(
+    () => generateTestData(actor, count),
+    ({ customers, products, orders }) => ({ customers, products, orders }),
+  );
 }

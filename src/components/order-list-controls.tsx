@@ -12,6 +12,12 @@ import {
 import { useRouter } from "next/navigation";
 import { setPaidTotalAction, updateDueDateAction } from "@/app/actions";
 import { dateOnly, decimal, money, type OrderStatus } from "@/lib/domain";
+import {
+  defaultOrderMotionSettings,
+  normalizeOrderMotionSettings,
+  orderMotionChangeEvent,
+  readOrderMotionSettings,
+} from "@/lib/order-motion";
 import { useBusinessDay } from "./business-date";
 import { useMessages } from "./language";
 import { StatusDropdown, type StatusDropdownOrder } from "./status-dropdown";
@@ -217,6 +223,7 @@ export function OrderListBody({
   const previousRowPositions = useRef(new Map<string, DOMRect>());
   const landingTimer = useRef<number | null>(null);
   const highlightTimer = useRef<number | null>(null);
+  const motionSettings = useRef(defaultOrderMotionSettings);
   useEffect(() => {
     function outside(event: PointerEvent) {
       const protectedTarget = (event.target as Element).closest?.(
@@ -233,6 +240,16 @@ export function OrderListBody({
     }
     document.addEventListener("pointerdown", outside);
     return () => document.removeEventListener("pointerdown", outside);
+  }, []);
+  useEffect(() => {
+    motionSettings.current = readOrderMotionSettings();
+    function update(event: Event) {
+      motionSettings.current = normalizeOrderMotionSettings(
+        (event as CustomEvent).detail,
+      );
+    }
+    window.addEventListener(orderMotionChangeEvent, update);
+    return () => window.removeEventListener(orderMotionChangeEvent, update);
   }, []);
   useEffect(
     () => () => {
@@ -252,6 +269,13 @@ export function OrderListBody({
     );
     pendingStatusAnimation.current = "";
     if (!target) return;
+    const motion = motionSettings.current;
+    const total = motion.rise + motion.hold + motion.glide + motion.land;
+    const travelDuration = motion.rise + motion.hold + motion.glide;
+    const liftOffset = motion.rise / total;
+    const holdOffset = (motion.rise + motion.hold) / total;
+    const glideOffset = travelDuration / total;
+    const displacedHoldOffset = (motion.rise + motion.hold) / travelDuration;
     target.classList.add("order-row-status-moving");
     elements.forEach((element) => {
       const previous = previousRowPositions.current.get(
@@ -261,39 +285,66 @@ export function OrderListBody({
       const delta = previous.top - element.getBoundingClientRect().top;
       if (Math.abs(delta) < 1) return;
       const changed = element === target;
-      element.querySelectorAll<HTMLTableCellElement>("td").forEach((cell) =>
+      const cells = Array.from(
+        element.querySelectorAll<HTMLTableCellElement>("td"),
+      );
+      cells.forEach((cell, index) => {
+        const edgeShadow =
+          index === 0
+            ? "inset 4px 0 #d7aa00"
+            : index === cells.length - 1
+              ? "inset -1px 0 rgb(215 170 0 / 28%)"
+              : "inset 0 0 transparent";
+        const restingShadow = `${edgeShadow}, inset 0 1px rgb(255 255 255 / 62%), 0 2px 4px -3px rgb(74 54 0 / 18%)`;
+        const floatingShadow = `${edgeShadow}, inset 0 2px rgb(255 255 255 / 78%), inset 0 -1px rgb(174 128 0 / 18%), 0 ${motion.shadowY}px ${motion.shadowBlur}px ${motion.shadowSpread}px rgb(74 54 0 / ${motion.shadowOpacity}%)`;
         cell.animate(
           changed
             ? [
                 {
                   transform: `translateY(${delta}px)`,
+                  backgroundColor: "#fff8dc",
+                  boxShadow: restingShadow,
                   offset: 0,
                 },
                 {
-                  transform: `translateY(${delta - 22}px)`,
-                  offset: 0.18,
+                  transform: `translateY(${delta - motion.lift}px)`,
+                  backgroundColor: "#fff1b2",
+                  boxShadow: floatingShadow,
+                  offset: liftOffset,
                 },
                 {
-                  transform: `translateY(${delta - 22}px)`,
-                  offset: 0.31,
+                  transform: `translateY(${delta - motion.lift}px)`,
+                  backgroundColor: "#fff1b2",
+                  boxShadow: floatingShadow,
+                  offset: holdOffset,
                 },
                 {
-                  transform: "translateY(-22px)",
-                  offset: 0.84,
+                  transform: `translateY(-${motion.lift}px)`,
+                  backgroundColor: "#fff1b2",
+                  boxShadow: floatingShadow,
+                  offset: glideOffset,
                 },
-                { transform: "translateY(0)", offset: 1 },
+                {
+                  transform: "translateY(0)",
+                  backgroundColor: "#fff5ca",
+                  boxShadow: restingShadow,
+                  offset: 1,
+                },
               ]
             : [
                 { transform: `translateY(${delta}px)`, offset: 0 },
-                { transform: `translateY(${delta}px)`, offset: 0.37 },
+                {
+                  transform: `translateY(${delta}px)`,
+                  offset: displacedHoldOffset,
+                },
                 { transform: "translateY(0)", offset: 1 },
               ],
           {
-            duration: changed ? 980 : 820,
+            duration: changed ? total : travelDuration,
             easing: changed ? "cubic-bezier(0.22, 1, 0.36, 1)" : "ease-out",
           },
-        ),
-      );
+        );
+      });
     });
     if (landingTimer.current) window.clearTimeout(landingTimer.current);
     if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
@@ -304,7 +355,7 @@ export function OrderListBody({
         () => setHighlightedId(""),
         1500,
       );
-    }, 980);
+    }, total);
   }, [rows]);
   return (
     <tbody className="order-list-body" ref={body}>

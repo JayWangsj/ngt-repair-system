@@ -22,6 +22,7 @@ if (!new URL(env.DATABASE_URL).pathname.endsWith("_test")) {
 env.AUTH_URL = `http://localhost:${port}`;
 env.AUTH_TRUST_HOST = "true";
 env.AUTH_SECRET ||= "ci-test-only-auth-secret-32-characters-minimum";
+env.NGT_TEST_TOOLS = "true";
 env.HOSTNAME = "127.0.0.1";
 env.PORT = port;
 env.PLAYWRIGHT_BASE_URL = `http://127.0.0.1:${port}`;

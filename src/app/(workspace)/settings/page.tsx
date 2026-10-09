@@ -4,6 +4,7 @@ import { getMessages } from "@/lib/i18n-server";
 import { db } from "@/lib/db";
 import { getBusinessClock, getBusinessDay } from "@/lib/business-date";
 import { appVersion } from "@/lib/version";
+import { isTestToolsEnabled } from "@/lib/test-tools-guard";
 
 export default async function SettingsPage() {
   const it = await getMessages();
@@ -30,6 +31,7 @@ export default async function SettingsPage() {
         description={it.settingsDescription}
       />
       <SettingsTools
+        testToolsEnabled={isTestToolsEnabled()}
         currentVersion={appVersion}
         clock={clock}
         today={today}

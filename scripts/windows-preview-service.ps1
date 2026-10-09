@@ -50,6 +50,7 @@ while ($true) {
     $env:HOSTNAME = "127.0.0.1"
     $env:AUTH_URL = "http://127.0.0.1:3236"
     $env:AUTH_TRUST_HOST = "true"
+    $env:NGT_TEST_TOOLS = "true"
     Start-NgtProcess -Name "preview" -Script "scripts/start.mjs" -Port 3236
   } catch {
     Add-Content -LiteralPath (Join-Path $stateDirectory "preview-supervisor.error.log") `

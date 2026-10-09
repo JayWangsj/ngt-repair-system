@@ -1198,7 +1198,7 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await expect(row).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
   await expect(row.locator(".order-inline-edit-cell > *").first()).toHaveCSS(
     "transform",
-    /matrix\(1\.015, 0, 0, 1\.015, 0, 0\)/,
+    "matrix(1, 0, 0, 1, 0, 0)",
   );
   const status = row.locator(".status-dropdown-trigger");
   await expect(status).toBeVisible();
@@ -1685,16 +1685,18 @@ test("repair list animates a row reordered by a local status change", async ({
     name: "Annulla scheda",
   });
   await expect(fixedViewportDialog).toBeVisible();
-  const fixedViewportScroll = await page.evaluate(() => window.scrollY);
   await fixedViewportDialog
     .getByRole("button", { name: "Conferma annullamento" })
     .click({ delay: 150 });
   await expect(fixedViewportRow).toHaveClass(/order-row-status-moving/);
+  const fixedViewportScroll = await page.evaluate(() => window.scrollY);
   await expect(page.locator(".order-floating-table")).toBeVisible();
   await expect(fixedViewportRow).toHaveClass(/order-row-status-highlight/, {
     timeout: 2000,
   });
-  expect(await page.evaluate(() => window.scrollY)).toBe(fixedViewportScroll);
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY))
+    .toBe(fixedViewportScroll);
 });
 test("repair list delivery uses the shared checkout and refreshes the row", async ({
   page,

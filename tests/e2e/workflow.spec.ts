@@ -1299,6 +1299,7 @@ test("repair list animates a row reordered by a local status change", async ({
     document.body.dataset.changedOrderAirborneObserved = "false";
     document.body.dataset.changedOrderScaleObserved = "false";
     document.body.dataset.changedOrderDescentObserved = "false";
+    document.body.dataset.changedOrderLandingScaleStable = "false";
     document.body.dataset.changedOrderCameraObserved = "false";
     document.body.dataset.changedOrderVisibleDuringGlide = "false";
     document.body.dataset.changedOrderAlignedBeforeRemoval = "false";
@@ -1381,7 +1382,7 @@ test("repair list animates a row reordered by a local status change", async ({
           if (
             liftFrame?.transform === holdFrame?.transform &&
             glideFrame?.transform &&
-            new DOMMatrixReadOnly(String(glideFrame.transform)).m11 >= 1.019
+            String(glideFrame.boxShadow).includes("18px 30px -14px")
           )
             document.body.dataset.changedOrderAirborneObserved = "true";
           if (
@@ -1395,9 +1396,17 @@ test("repair list animates a row reordered by a local status change", async ({
             new DOMMatrixReadOnly(String(landFrame.transform)).m42 -
               new DOMMatrixReadOnly(String(glideFrame.transform)).m42 >=
               29 &&
+            new DOMMatrixReadOnly(String(glideFrame.transform)).m11 === 1 &&
             new DOMMatrixReadOnly(String(landFrame.transform)).m11 === 1
           )
             document.body.dataset.changedOrderDescentObserved = "true";
+          if (
+            glideFrame?.transform &&
+            landFrame?.transform &&
+            new DOMMatrixReadOnly(String(glideFrame.transform)).m11 === 1 &&
+            new DOMMatrixReadOnly(String(landFrame.transform)).m11 === 1
+          )
+            document.body.dataset.changedOrderLandingScaleStable = "true";
           if (
             frames.some((frame) =>
               String(frame.boxShadow).includes("18px 30px -14px"),
@@ -1532,6 +1541,10 @@ test("repair list animates a row reordered by a local status change", async ({
   );
   await expect(page.locator("body")).toHaveAttribute(
     "data-changed-order-descent-observed",
+    "true",
+  );
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-changed-order-landing-scale-stable",
     "true",
   );
   await expect(page.locator("body")).toHaveAttribute(

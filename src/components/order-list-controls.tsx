@@ -402,7 +402,7 @@ export function OrderListBody({
             easing: "cubic-bezier(0.2, 0.75, 0.25, 1)",
           },
           {
-            transform: `translateY(${targetDelta - motion.lift}px) scale(${scale})`,
+            transform: `translateY(${targetDelta - motion.lift}px) scale(1)`,
             boxShadow: floatingShadow,
             offset: glideOffset,
             easing: "cubic-bezier(0.4, 0, 0.2, 1)",

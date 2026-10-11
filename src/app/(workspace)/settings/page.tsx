@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { getBusinessClock, getBusinessDay } from "@/lib/business-date";
 import { appVersion } from "@/lib/version";
 import { isTestToolsEnabled } from "@/lib/test-tools-guard";
+import { cents } from "@/lib/domain";
 
 export default async function SettingsPage() {
   const it = await getMessages();
@@ -70,7 +71,7 @@ export default async function SettingsPage() {
         }))}
         quickServices={quickServices.map((service) => ({
           ...service,
-          defaultPrice: Number(service.defaultPrice) * 100,
+          defaultPrice: cents(service.defaultPrice),
           createdAt: undefined,
           updatedAt: undefined,
         }))}

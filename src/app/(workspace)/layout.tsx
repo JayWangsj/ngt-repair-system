@@ -3,6 +3,7 @@ import { requireActor } from "@/lib/session";
 import { Sidebar } from "@/components/sidebar";
 import { BusinessDayProvider } from "@/components/business-date";
 import { getBusinessDay } from "@/lib/business-date";
+import { BrandLogo } from "@/components/brand-logo";
 export const dynamic = "force-dynamic";
 export default async function WorkspaceLayout({
   children,
@@ -19,6 +20,9 @@ export default async function WorkspaceLayout({
       <div className="app-shell">
         <Sidebar />
         <main className="main-content">
+          <header className="print-brand-header">
+            <BrandLogo className="print-brand-logo" />
+          </header>
           {children}
           <footer className="footer">
             NGT · {it.subtitle} <span>Europe/Rome · EUR</span>

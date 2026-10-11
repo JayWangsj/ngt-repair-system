@@ -30,6 +30,7 @@ env.PLAYWRIGHT_BASE_URL = `http://127.0.0.1:${port}`;
 await cp(`${distDir}/static`, `${distDir}/standalone/${distDir}/static`, {
   recursive: true,
 });
+await cp("public", `${distDir}/standalone/public`, { recursive: true });
 
 const server = spawn(process.execPath, [`${distDir}/standalone/server.js`], {
   env,

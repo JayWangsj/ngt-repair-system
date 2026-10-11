@@ -87,6 +87,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $stage $requiredPrismaClient))) {
   throw "The standalone Prisma client is incomplete."
 }
 Copy-Item -LiteralPath (Join-Path $BuildDirectory "static") -Destination (Join-Path $stage ".next\static") -Recurse -Force
+Copy-Item -LiteralPath "public" -Destination (Join-Path $stage "public") -Recurse -Force
 $copiedEnvironment = Join-Path $stage ".next\standalone\.env"
 if (Test-Path -LiteralPath $copiedEnvironment) {
   Remove-Item -LiteralPath $copiedEnvironment -Force

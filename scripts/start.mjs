@@ -6,6 +6,7 @@ try {
   if (e.code !== "ENOENT") throw e;
 }
 await cp(".next/static", ".next/standalone/.next/static", { recursive: true });
+await cp("public", ".next/standalone/public", { recursive: true });
 const child = spawn(process.execPath, [".next/standalone/server.js"], {
   stdio: "inherit",
   windowsHide: true,

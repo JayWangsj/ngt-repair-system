@@ -1212,6 +1212,25 @@ test("business statistics keeps the open balance summary without the unpaid list
   await expect(statsDialog.locator(".order-table")).toHaveCount(0);
 });
 
+test("workspace and print views use the shared NGT brand", async ({ page }) => {
+  await page.goto("/");
+
+  const sidebarLogo = page.locator(".sidebar .brand-logo");
+  await expect(sidebarLogo).toBeVisible();
+  await expect(sidebarLogo).toHaveAttribute(
+    "src",
+    /\/brand\/ngt-logo-horizontal\.svg$/,
+  );
+  await expect(page.locator('link[rel="icon"]').first()).toHaveAttribute(
+    "href",
+    /\/brand\/ngt-app-icon/,
+  );
+
+  await page.emulateMedia({ media: "print" });
+  await expect(page.locator(".print-brand-header")).toBeVisible();
+  await expect(page.locator(".sidebar")).toBeHidden();
+});
+
 test("dashboard animates on entry and data changes while respecting reduced motion", async ({
   page,
 }) => {

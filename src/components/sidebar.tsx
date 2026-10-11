@@ -8,10 +8,10 @@ import {
   ShoppingBag,
   Users,
   Tags,
-  Smartphone,
   Settings,
 } from "lucide-react";
 import { useMessages } from "./language";
+import { BrandLogo } from "./brand-logo";
 export function Sidebar() {
   const it = useMessages();
   const path = usePathname();
@@ -27,12 +27,7 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       <Link href="/" className="brand">
-        <span className="brand-mark">
-          <Smartphone size={24} />
-        </span>
-        <span>
-          NGT<small>{it.subtitle}</small>
-        </span>
+        <BrandLogo className="brand-logo" priority />
       </Link>
       <div className="nav-label">{it.navigation}</div>
       <nav aria-label={it.navigation}>

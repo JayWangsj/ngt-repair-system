@@ -81,7 +81,7 @@ async function createRepairDevice(page: Page, brand: string, model: string) {
     name: "Dispositivo del cliente",
   });
   await picker
-    .getByRole("button", { name: "Nuovo dispositivo", exact: true })
+    .getByRole("button", { name: "Dispositivo", exact: true })
     .click();
   const dialog = page.getByRole("dialog", { name: "Nuovo dispositivo" });
   await chooseBusinessOption(page, "Marca", brand, dialog);
@@ -117,9 +117,7 @@ async function createRepairProject(page: Page, name: string, price: string) {
   const picker = page.getByRole("dialog", {
     name: "Seleziona interventi",
   });
-  await picker
-    .getByRole("button", { name: "Intervento personalizzato", exact: true })
-    .click();
+  await picker.getByRole("button", { name: "Intervento", exact: true }).click();
   const dialog = page.getByRole("dialog", {
     name: "Intervento personalizzato",
   });
@@ -408,13 +406,38 @@ test("device step gates faults and advances only after faults and due date", asy
   await expect(
     picker.locator(".customer-device-row.is-selected"),
   ).toContainText("Apple iPhone 13");
+  const selectedDeviceRow = picker.locator(".customer-device-row.is-selected");
+  await expect(
+    selectedDeviceRow.locator('input[type="checkbox"]'),
+  ).toBeChecked();
+  await selectedDeviceRow.hover();
+  const editSelectedDevice = selectedDeviceRow.getByRole("button", {
+    name: "Modifica dispositivo",
+    exact: true,
+  });
+  await expect(editSelectedDevice).toBeVisible();
+  await expect(
+    selectedDeviceRow.getByRole("button", {
+      name: "Elimina dispositivo",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await editSelectedDevice.click();
+  const editSelectedDeviceDialog = page.getByRole("dialog", {
+    name: "Modifica dispositivo",
+  });
+  await editSelectedDeviceDialog
+    .getByRole("button", { name: "Annulla", exact: true })
+    .click();
+  await expect(editSelectedDeviceDialog).toHaveCount(0);
+  await expect(picker).toBeVisible();
   await picker
     .getByRole("button", { name: "Conferma selezione", exact: true })
     .click();
   await deviceSummary.hover();
   await changeDevice.click();
   await picker
-    .getByRole("button", { name: "Nuovo dispositivo", exact: true })
+    .getByRole("button", { name: "Dispositivo", exact: true })
     .click();
   const newDeviceDialog = page.getByRole("dialog", {
     name: "Nuovo dispositivo",
@@ -475,6 +498,15 @@ test("repair project picker selects multiple items and removes a summary on hove
     exact: true,
   });
   await expect(addProject).toBeVisible();
+  const [projectButtonWidth, projectEditorWidth] = await Promise.all([
+    addProject.evaluate((element) => element.getBoundingClientRect().width),
+    page
+      .locator(".items-editor")
+      .evaluate((element) => element.getBoundingClientRect().width),
+  ]);
+  expect(Math.abs(projectButtonWidth - projectEditorWidth)).toBeLessThan(1);
+  await addProject.hover();
+  await expect(addProject).toHaveCSS("background-color", "rgb(255, 249, 232)");
   await addProject.click();
   const picker = page.getByRole("dialog", {
     name: "Seleziona interventi",
@@ -483,9 +515,7 @@ test("repair project picker selects multiple items and removes a summary on hove
     .locator(".quick-service-picker-option")
     .filter({ hasText: "sostituzione display" })
     .click();
-  await picker
-    .getByRole("button", { name: "Intervento personalizzato", exact: true })
-    .click();
+  await picker.getByRole("button", { name: "Intervento", exact: true }).click();
   const customDialog = page.getByRole("dialog", {
     name: "Intervento personalizzato",
   });
@@ -503,6 +533,30 @@ test("repair project picker selects multiple items and removes a summary on hove
     picker.locator(".quick-service-picker-option.is-selected"),
   ).toHaveCount(2);
   await expect(picker).toContainText("2 interventi selezionati");
+  const customProjectRow = picker
+    .locator(".quick-service-picker-service")
+    .filter({ hasText: "Pulizia completa" });
+  await customProjectRow.hover();
+  const editCustomProject = customProjectRow.getByRole("button", {
+    name: "Modifica dati Pulizia completa",
+    exact: true,
+  });
+  await expect(editCustomProject).toBeVisible();
+  await expect(
+    customProjectRow.getByRole("button", {
+      name: "Rimuovi Pulizia completa",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await editCustomProject.click();
+  const editCustomProjectDialog = page.getByRole("dialog", {
+    name: "Modifica dati",
+  });
+  await editCustomProjectDialog
+    .getByRole("button", { name: "Annulla", exact: true })
+    .click();
+  await expect(editCustomProjectDialog).toHaveCount(0);
+  await expect(picker).toBeVisible();
   await picker
     .getByRole("button", { name: "Conferma selezione", exact: true })
     .click();
@@ -627,22 +681,49 @@ test("manages one quick service for held service orders and retail checkout", as
   await expect(page.locator(".selected-customer-summary")).toContainText(
     "Cliente Playwright",
   );
-  await expect(
-    page.getByRole("button", { name: "Aggiungi dispositivo", exact: true }),
-  ).toHaveCount(1);
-  await page.locator(".quick-service-device-card.is-add").click();
+  const quickLayout = page.locator(".new-order-layout");
+  const layoutBeforeDialog = await quickLayout.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { x: rect.x, width: rect.width };
+  });
+  const addQuickDevice = page.getByRole("button", {
+    name: "Dispositivo",
+    exact: true,
+  });
+  await expect(addQuickDevice).toHaveCount(1);
+  await addQuickDevice.hover();
+  await expect(addQuickDevice).toHaveCSS(
+    "background-color",
+    "rgb(255, 249, 232)",
+  );
+  await addQuickDevice.click();
   const devicePicker = page.getByRole("dialog", {
     name: "Dispositivi associati",
   });
+  const layoutDuringDialog = await quickLayout.evaluate((element) => {
+    const rect = element.getBoundingClientRect();
+    return { x: rect.x, width: rect.width };
+  });
+  expect(Math.abs(layoutBeforeDialog.x - layoutDuringDialog.x)).toBeLessThan(1);
+  expect(
+    Math.abs(layoutBeforeDialog.width - layoutDuringDialog.width),
+  ).toBeLessThan(1);
   await expect(
     devicePicker.getByRole("button", {
-      name: "Nuovo dispositivo",
+      name: "Dispositivo",
       exact: true,
     }),
   ).toBeVisible();
-  await devicePicker
-    .getByRole("button", { name: "Nuovo dispositivo", exact: true })
-    .click();
+  const addPickerDevice = devicePicker.getByRole("button", {
+    name: "Dispositivo",
+    exact: true,
+  });
+  await addPickerDevice.hover();
+  await expect(addPickerDevice).toHaveCSS(
+    "background-color",
+    "rgb(255, 249, 232)",
+  );
+  await addPickerDevice.click();
   const newDeviceDialog = page.getByRole("dialog", {
     name: "Nuovo dispositivo",
   });
@@ -680,11 +761,11 @@ test("manages one quick service for held service orders and retail checkout", as
   await expect(devicePicker).toBeVisible();
   await expect(
     devicePicker
-      .locator(".customer-device-row")
+      .locator(".customer-device-row.is-selected")
       .filter({ hasText: "Apple iPhone 14" }),
   ).toHaveClass(/is-selected/);
   const createdDeviceRow = devicePicker
-    .locator(".customer-device-row")
+    .locator(".customer-device-row.is-selected")
     .filter({ hasText: "Apple iPhone 14" });
   const editDevice = createdDeviceRow.getByRole("button", {
     name: "Modifica dispositivo",
@@ -767,7 +848,16 @@ test("manages one quick service for held service orders and retail checkout", as
   await expect(removeDevice).toHaveCSS("opacity", "0");
   await firstDeviceCard.hover();
   await expect(removeDevice).toHaveCSS("opacity", "1");
-  await page.locator(".quick-service-service-add").click();
+  const addQuickService = page.getByRole("button", {
+    name: "Servizi",
+    exact: true,
+  });
+  await addQuickService.hover();
+  await expect(addQuickService).toHaveCSS(
+    "background-color",
+    "rgb(255, 249, 232)",
+  );
+  await addQuickService.click();
   const servicePicker = page.getByRole("dialog", {
     name: "Seleziona servizi",
   });
@@ -778,7 +868,7 @@ test("manages one quick service for held service orders and retail checkout", as
     }),
   ).toHaveCount(0);
   await servicePicker
-    .getByRole("button", { name: "Nuovo servizio", exact: true })
+    .getByRole("button", { name: "Servizi", exact: true })
     .click();
   const editor = page.getByRole("dialog", { name: "Nuovo servizio" });
   await editor.getByLabel("Nome servizio", { exact: true }).fill(serviceName);
@@ -825,7 +915,7 @@ test("manages one quick service for held service orders and retail checkout", as
     .getByRole("button", { name: "Annulla", exact: true })
     .click();
   await expect(page.locator(".selected-project-summary")).toHaveCount(0);
-  await page.locator(".quick-service-service-add").click();
+  await addQuickService.click();
   const confirmedServicePicker = page.getByRole("dialog", {
     name: "Seleziona servizi",
   });
@@ -3966,7 +4056,9 @@ test("a unique normalized customer device is reused and stops matching after edi
   await expect(
     picker.locator(".customer-device-row.is-selected"),
   ).toContainText("Apple iPhone 13");
-  await picker.getByRole("button", { name: "Nuovo dispositivo" }).click();
+  await picker
+    .getByRole("button", { name: "Dispositivo", exact: true })
+    .click();
   await chooseBusinessOption(page, "Marca", "Apple");
   const newModel = page.getByRole("combobox", {
     name: "Modello",

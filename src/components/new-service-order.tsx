@@ -240,7 +240,7 @@ export function NewServiceOrder({
                   disabled={!customer}
                   onClick={openDevicePicker}
                 >
-                  <Plus size={18} /> {it.quickService.addDevice}
+                  <Plus size={18} /> {it.device}
                 </button>
               </div>
             </section>
@@ -340,7 +340,7 @@ export function NewServiceOrder({
                   className="quick-service-service-add"
                   onClick={openServicePicker}
                 >
-                  <Plus size={18} /> {it.quickService.addService}
+                  <Plus size={18} /> {it.quickService.serviceItems}
                 </button>
               </div>
             </section>
@@ -423,7 +423,7 @@ export function NewServiceOrder({
                       setCreatingDevice(true);
                     }}
                   >
-                    <Plus size={16} /> {it.newDevice}
+                    <Plus size={16} /> {it.device}
                   </button>
                   <div className="quick-service-picker-footer">
                     <strong>
@@ -525,7 +525,7 @@ export function NewServiceOrder({
                       setCreatingService(true);
                     }}
                   >
-                    <Plus size={16} /> {it.quickService.new}
+                    <Plus size={16} /> {it.quickService.serviceItems}
                   </button>
                   <div className="quick-service-picker-footer">
                     <strong>

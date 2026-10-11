@@ -782,6 +782,7 @@ export function ItemsEditor({
     [],
   );
   const [creatingProject, setCreatingProject] = useState(false);
+  const [editingPickerProject, setEditingPickerProject] = useState("");
   const [newProject, setNewProject] = useState("");
   const [newProjectPrice, setNewProjectPrice] = useState("");
   const [newProjectPart, setNewProjectPart] = useState("");
@@ -957,7 +958,9 @@ export function ItemsEditor({
     });
   const newProjectExists = pickerProjects.some(
     (choice) =>
-      normalizedProject(choice.project) === normalizedProject(newProject),
+      normalizedProject(choice.project) === normalizedProject(newProject) &&
+      normalizedProject(choice.project) !==
+        normalizedProject(editingPickerProject),
   );
   return (
     <div className="items-editor">
@@ -1547,6 +1550,11 @@ export function ItemsEditor({
                     normalizedProject(project) ===
                     normalizedProject(choice.project),
                 );
+                const custom = pickerCustomProjects.find(
+                  (item) =>
+                    normalizedProject(item.project) ===
+                    normalizedProject(choice.project),
+                );
                 return (
                   <article
                     className={`quick-service-picker-option quick-service-picker-service business-list-row${selected ? " is-selected" : ""}`}
@@ -1570,6 +1578,45 @@ export function ItemsEditor({
                     <strong className="quick-service-picker-price">
                       {money(cents(choice.final))}
                     </strong>
+                    {custom && (
+                      <div
+                        className="record-actions"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <RecordIcon
+                          kind="edit"
+                          label={`${it.edit} ${choice.project}`}
+                          onClick={() => {
+                            setEditingPickerProject(choice.project);
+                            setNewProject(custom.project);
+                            setNewProjectPrice(custom.final);
+                            setNewProjectPart(custom.requiredProductId ?? "");
+                            setChoosingProjects(false);
+                            setCreatingProject(true);
+                          }}
+                        />
+                        <RecordIcon
+                          kind="delete"
+                          label={`${it.remove} ${choice.project}`}
+                          onClick={() => {
+                            setPickerCustomProjects((current) =>
+                              current.filter(
+                                (item) =>
+                                  normalizedProject(item.project) !==
+                                  normalizedProject(choice.project),
+                              ),
+                            );
+                            setDraftProjects((current) =>
+                              current.filter(
+                                (project) =>
+                                  normalizedProject(project) !==
+                                  normalizedProject(choice.project),
+                              ),
+                            );
+                          }}
+                        />
+                      </div>
+                    )}
                   </article>
                 );
               })}
@@ -1584,11 +1631,12 @@ export function ItemsEditor({
                 setNewProject("");
                 setNewProjectPrice("");
                 setNewProjectPart("");
+                setEditingPickerProject("");
                 setChoosingProjects(false);
                 setCreatingProject(true);
               }}
             >
-              <Plus size={16} /> {it.afterSales.addCustomProject}
+              <Plus size={16} /> {it.project}
             </button>
             <div className="quick-service-picker-footer">
               <strong>
@@ -1615,9 +1663,12 @@ export function ItemsEditor({
       )}
       {creatingProject && (
         <FormDialog
-          title={it.afterSales.addCustomProject}
+          title={
+            editingPickerProject ? it.edit : it.afterSales.addCustomProject
+          }
           onClose={() => {
             setCreatingProject(false);
+            setEditingPickerProject("");
             setChoosingProjects(true);
           }}
         >
@@ -1669,6 +1720,7 @@ export function ItemsEditor({
                 variant="outline"
                 onClick={() => {
                   setCreatingProject(false);
+                  setEditingPickerProject("");
                   setChoosingProjects(true);
                 }}
               >
@@ -1693,9 +1745,28 @@ export function ItemsEditor({
                     requiredQuantity: 1,
                     requiredProductRemoved: false,
                   };
-                  setPickerCustomProjects((current) => [...current, item]);
-                  setDraftProjects((current) => [...current, item.project]);
+                  setPickerCustomProjects((current) =>
+                    editingPickerProject
+                      ? current.map((project) =>
+                          normalizedProject(project.project) ===
+                          normalizedProject(editingPickerProject)
+                            ? item
+                            : project,
+                        )
+                      : [...current, item],
+                  );
+                  setDraftProjects((current) =>
+                    editingPickerProject
+                      ? current.map((project) =>
+                          normalizedProject(project) ===
+                          normalizedProject(editingPickerProject)
+                            ? item.project
+                            : project,
+                        )
+                      : [...current, item.project],
+                  );
                   setCreatingProject(false);
+                  setEditingPickerProject("");
                   setChoosingProjects(true);
                 }}
               >

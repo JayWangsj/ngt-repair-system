@@ -43,7 +43,11 @@ import {
   type CustomerDetail,
   type CustomerOption,
 } from "./customer-picker";
-import { CustomerDeviceCard } from "./customers";
+import {
+  CustomerDeviceCard,
+  DeleteRecordDialog,
+  type CustomerDevice,
+} from "./customers";
 
 type Item = {
   project: string;
@@ -226,6 +230,12 @@ export function NewOrderWizard({
   const [deviceId, setDeviceId] = useState("");
   const [choosingDevice, setChoosingDevice] = useState(false);
   const [creatingDevice, setCreatingDevice] = useState(false);
+  const [editingDevice, setEditingDevice] = useState<CustomerDevice | null>(
+    null,
+  );
+  const [deletingDevice, setDeletingDevice] = useState<CustomerDevice | null>(
+    null,
+  );
   const [draftDeviceId, setDraftDeviceId] = useState("");
   const [category, setCategory] = useState<Category>("PHONE");
   const [brand, setBrand] = useState("");
@@ -334,23 +344,28 @@ export function NewOrderWizard({
     clearDevice();
     setChoosingDevice(false);
     setCreatingDevice(false);
+    setEditingDevice(null);
+    setDeletingDevice(null);
     if (!next) {
       setSelectedStep(0);
       setExpandedStep(0);
     }
   }
-  async function refreshDevices() {
+  async function refreshDevices(selectCreated = false) {
     if (!customer) return;
     const previousIds = new Set(customer.devices.map((device) => device.id));
     const updated = await lookupCustomerAction(customer.phone);
     setCreatingDevice(false);
+    setEditingDevice(null);
     setChoosingDevice(true);
     if (!updated) return;
     const created = updated.devices.find(
       (device) => !previousIds.has(device.id),
     );
     setCustomer(updated);
-    if (created) setDraftDeviceId(created.id);
+    if (selectCreated && created) setDraftDeviceId(created.id);
+    const selected = updated.devices.find((device) => device.id === deviceId);
+    if (selected) selectCustomerDevice(selected);
   }
   function leaveInspection() {
     if (inspectionMode) setInspectionMode(false);
@@ -593,7 +608,15 @@ export function NewOrderWizard({
                         key={device.id}
                         device={device}
                         selected={device.id === draftDeviceId}
-                        onSelect={() => setDraftDeviceId(device.id)}
+                        onToggle={() => setDraftDeviceId(device.id)}
+                        onEdit={() => {
+                          setChoosingDevice(false);
+                          setEditingDevice(device);
+                        }}
+                        onDelete={() => {
+                          setChoosingDevice(false);
+                          setDeletingDevice(device);
+                        }}
                       />
                     ))}
                     {!customer.devices.length && (
@@ -608,7 +631,7 @@ export function NewOrderWizard({
                       setCreatingDevice(true);
                     }}
                   >
-                    <Plus size={16} /> {it.newDevice}
+                    <Plus size={16} /> {it.device}
                   </button>
                   <div className="quick-service-picker-footer">
                     <div className="dialog-actions">
@@ -648,13 +671,50 @@ export function NewOrderWizard({
               >
                 <DeviceForm
                   customerId={customer.id}
-                  onSuccess={() => void refreshDevices()}
+                  onSuccess={() => void refreshDevices(true)}
                   onCancel={() => {
                     setCreatingDevice(false);
                     setChoosingDevice(true);
                   }}
                 />
               </FormDialog>
+            )}
+            {editingDevice && (
+              <FormDialog
+                title={it.editDevice}
+                onClose={() => {
+                  setEditingDevice(null);
+                  setChoosingDevice(true);
+                }}
+              >
+                <DeviceForm
+                  device={editingDevice}
+                  onSuccess={() => void refreshDevices()}
+                  onCancel={() => {
+                    setEditingDevice(null);
+                    setChoosingDevice(true);
+                  }}
+                />
+              </FormDialog>
+            )}
+            {deletingDevice && (
+              <DeleteRecordDialog
+                kind="device"
+                id={deletingDevice.id}
+                name={`${deletingDevice.brand} ${deletingDevice.model}`}
+                onClose={() => {
+                  setDeletingDevice(null);
+                  setChoosingDevice(true);
+                }}
+                onDeleted={() => {
+                  setDraftDeviceId((current) =>
+                    current === deletingDevice.id ? "" : current,
+                  );
+                  if (deviceId === deletingDevice.id) clearDevice();
+                  setDeletingDevice(null);
+                  void refreshDevices();
+                }}
+              />
             )}
             {touched && !validFault && (
               <p className="field-error">{it.selectFaultError}</p>

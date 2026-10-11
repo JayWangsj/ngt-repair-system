@@ -1338,20 +1338,51 @@ export function ItemsEditor({
                             </span>
                           </small>
                         </div>
-                        <button
-                          type="button"
-                          className="summary-action"
-                          onClick={() =>
-                            setEditingParts((current) => ({
-                              ...current,
-                              [index]: true,
-                            }))
-                          }
-                        >
-                          <span>{it.change}</span>
-                          <ChevronRight size={15} aria-hidden="true" />
-                        </button>
+                        <div className="selected-part-actions">
+                          <button
+                            type="button"
+                            className="summary-action"
+                            onClick={() =>
+                              setEditingParts((current) => ({
+                                ...current,
+                                [index]: true,
+                              }))
+                            }
+                          >
+                            <span>{it.change}</span>
+                            <ChevronRight size={15} aria-hidden="true" />
+                          </button>
+                          {projectPicker && (
+                            <button
+                              type="button"
+                              className="quick-service-remove"
+                              aria-label={`${it.remove} ${selectedProduct.name}`}
+                              onClick={() =>
+                                update(index, {
+                                  requiredProductId: "",
+                                  requiredQuantity: 1,
+                                  requiredProductRemoved: true,
+                                })
+                              }
+                            >
+                              <X size={16} />
+                            </button>
+                          )}
+                        </div>
                       </div>
+                    ) : projectPicker && !editingPart ? (
+                      <button
+                        type="button"
+                        className="quick-service-service-add quote-required-part-add"
+                        onClick={() =>
+                          setEditingParts((current) => ({
+                            ...current,
+                            [index]: true,
+                          }))
+                        }
+                      >
+                        <Plus size={18} /> {it.repairPart}
+                      </button>
                     ) : showEmptyPartSummary && !editingPart ? (
                       <div
                         className="selection-summary selected-part-summary is-actionable"

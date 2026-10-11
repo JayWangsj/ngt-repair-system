@@ -541,6 +541,7 @@ export const it = {
   dueDate: "Consegna prevista",
   diagnosticFee: "Costo diagnosi (€)",
   requiredPart: "Ricambio richiesto",
+  repairPart: "Ricambio",
   optional: "facoltativo",
   change: "Cambia",
   searchInventoryPart: "Cerca ricambio in magazzino...",

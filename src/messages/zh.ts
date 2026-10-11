@@ -478,6 +478,7 @@ export const zh: typeof it = {
   dueDate: "预计交付日期",
   diagnosticFee: "检测费用（€）",
   requiredPart: "所需维修配件",
+  repairPart: "维修配件",
   optional: "可选",
   change: "更改",
   searchInventoryPart: "搜索库存配件...",

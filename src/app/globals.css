@@ -1235,6 +1235,11 @@ textarea {
   min-height: 32px;
   padding: 5px 8px;
 }
+.selected-part-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 .selected-part-remove {
   width: 30px;
   height: 30px;
@@ -3164,7 +3169,9 @@ details[open] > summary {
   .quick-service-picker-service:hover .record-actions > .record-icon,
   .quick-service-picker-service:focus-within .record-actions > .record-icon,
   .selected-project-summary:hover .quick-service-remove,
-  .selected-project-summary:focus-within .quick-service-remove {
+  .selected-project-summary:focus-within .quick-service-remove,
+  .selected-part-summary:hover .quick-service-remove,
+  .selected-part-summary:focus-within .quick-service-remove {
     opacity: 1;
     pointer-events: auto;
   }

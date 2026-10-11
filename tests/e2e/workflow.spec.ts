@@ -56,8 +56,15 @@ async function chooseRequiredPart(
     name: "Ricambio richiesto 1",
     exact: true,
   });
-  if (!(await combobox.isVisible()))
-    await scope.locator(".selected-part-summary").first().click();
+  if (!(await combobox.isVisible())) {
+    const summary = scope.locator(".selected-part-summary").first();
+    if (await summary.isVisible()) await summary.click();
+    else
+      await scope
+        .getByRole("button", { name: "Ricambio", exact: true })
+        .first()
+        .click();
+  }
   await chooseBusinessOption(page, "Ricambio richiesto 1", option, scope);
 }
 
@@ -4339,21 +4346,27 @@ test("creates a repair part from the quote and selects it immediately", async ({
   page,
 }) => {
   await page.goto("/orders/new");
-  await openStep(page, 1);
-  await chooseBusinessOption(page, "Marca", "Apple");
-  await chooseBusinessOption(page, "Modello", "iPhone 13");
-  await openStep(page, 2);
-  await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
+  await chooseBusinessOption(page, "Cerca cliente", "Cliente Playwright");
+  await chooseRepairDevice(page, "Apple iPhone 13");
+  await page.getByLabel("Display rotto", { exact: true }).check();
+  await page
+    .getByLabel("Consegna prevista", { exact: true })
+    .fill("2099-12-31");
+  await chooseRepairProjects(page, ["sostituzione display"]);
 
-  const emptyPartSummary = page.locator(".selected-part-summary");
-  await expect(emptyPartSummary).toContainText("Nessuno");
+  const addPart = page.getByRole("button", {
+    name: "Ricambio",
+    exact: true,
+  });
+  await expect(addPart).toBeVisible();
+  await expect(page.locator(".selected-part-summary")).toHaveCount(0);
   await expect(
     page.getByRole("combobox", {
       name: "Ricambio richiesto 1",
       exact: true,
     }),
   ).toHaveCount(0);
-  await emptyPartSummary.click();
+  await addPart.click();
   const partSearch = page.getByRole("combobox", {
     name: "Ricambio richiesto 1",
     exact: true,
@@ -4398,14 +4411,13 @@ test("changing a selected repair part focuses its current name and preserves it 
   page,
 }) => {
   await page.goto("/orders/new");
-  await openStep(page, 1);
-  await chooseBusinessOption(page, "Marca", "Apple");
-  await chooseBusinessOption(page, "Modello", "iPhone 13");
+  await chooseBusinessOption(page, "Cerca cliente", "Cliente Playwright");
+  await chooseRepairDevice(page, "Apple iPhone 13");
   await page.getByLabel("Display rotto", { exact: true }).check();
   await page
     .getByLabel("Consegna prevista", { exact: true })
     .fill("2099-12-31");
-  await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
+  await chooseRepairProjects(page, ["sostituzione display"]);
   await chooseRequiredPart(page, "Batteria Test");
   const summary = page.locator(".selected-part-summary");
   await expect(summary).toContainText("Batteria Test");
@@ -4450,7 +4462,14 @@ test("changing a selected repair part focuses its current name and preserves it 
       );
     }),
   ).toBeLessThanOrEqual(1);
+  const removePart = summary.getByRole("button", {
+    name: "Rimuovi Batteria Test",
+    exact: true,
+  });
+  await page.mouse.move(0, 0);
+  await expect(removePart).toHaveCSS("opacity", "0");
   await summary.hover();
+  await expect(removePart).toHaveCSS("opacity", "1");
   await expect(summary.locator(".summary-action svg")).toHaveCSS(
     "transform",
     "matrix(1, 0, 0, 1, 4, 0)",
@@ -4481,8 +4500,14 @@ test("changing a selected repair part focuses its current name and preserves it 
     exact: true,
   });
   await expect(newPart).toBeEnabled();
-  await expect(newPart).toHaveCSS("background-color", "rgb(255, 240, 168)");
   await expect(newPart).toHaveCSS("font-weight", "650");
+  await search.press("Escape");
+  await summary.hover();
+  await removePart.click();
+  await expect(summary).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Ricambio", exact: true }),
+  ).toBeVisible();
 });
 
 test("clears a repair item and creates a custom item with Enter without submitting the order", async ({

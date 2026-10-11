@@ -6230,6 +6230,40 @@ test("test tools generate linked data and persist repair motion tuning", async (
     .allTextContents();
   expect(customers.every((name) => !name.includes("TEST"))).toBe(true);
 
+  const diagnosticRow = generatedRows
+    .filter({ hasText: "Samsung Galaxy S24 Ultra" })
+    .filter({ hasText: "In diagnosi" });
+  await expect(diagnosticRow).toHaveCount(1);
+  await diagnosticRow.locator(".order-code-link").click();
+  const status = page.locator(".detail-status .status-dropdown-trigger");
+  await expect(status).toContainText("In diagnosi");
+  const quote = page.getByTestId("quote-card");
+  await quote.getByRole("button", { name: "Diagnosi e preventivo" }).click();
+  await page
+    .getByRole("button", {
+      name: "Completa diagnosi e crea preventivo",
+      exact: true,
+    })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Completa diagnosi e crea preventivo",
+  });
+  await expect(dialog.locator(".quote-item")).toHaveCount(0);
+  await dialog.getByLabel("Display rotto", { exact: true }).check();
+  await dialog
+    .getByLabel("Consegna prevista", { exact: true })
+    .fill("2099-12-31");
+  await chooseRepairProjects(page, ["sostituzione display"], dialog);
+  const requiredPart = dialog.locator(".selected-part-summary");
+  await expect(requiredPart).toContainText(
+    "Display Dynamic AMOLED Galaxy S24 Ultra",
+  );
+  await expect(requiredPart).not.toContainText("iPhone 15 Pro Max");
+  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator(".message.error")).toHaveCount(0);
+  await expect(status).toContainText("In riparazione");
+
   await page.goto("/prices");
   await page.getByLabel("Cerca", { exact: true }).fill("iPhone 15 Pro Max");
   await expect(page.locator(".price-rule-row")).toHaveCount(4);

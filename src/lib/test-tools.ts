@@ -212,6 +212,19 @@ const productCatalog = [
   },
 ] as const;
 
+function productDevice(name: string) {
+  return devices.find((device) => name.includes(device.model));
+}
+
+function productProject(name: string) {
+  const normalized = name.toLocaleLowerCase("it-IT");
+  if (normalized.includes("display")) return projects[0];
+  if (normalized.includes("batteria")) return projects[1];
+  if (normalized.includes("connettore")) return projects[2];
+  if (normalized.includes("fotocamera")) return projects[3];
+  return null;
+}
+
 const firstNames = [
   "Alessandro",
   "Andrea",
@@ -326,18 +339,21 @@ export async function generateTestData(
     });
 
     await tx.productCompatibility.createMany({
-      data: products.map((product, index) => {
-        const device = devices[index % devices.length];
-        return {
-          productId: product.id!,
-          category: "PHONE",
-          brand: device.brand,
-          model: device.model,
-          project:
-            product.usage === "REPAIR"
-              ? projects[index % projects.length].name
-              : "",
-        };
+      data: products.flatMap((product) => {
+        const device = productDevice(String(product.name));
+        if (!device) return [];
+        return [
+          {
+            productId: product.id!,
+            category: "PHONE",
+            brand: device.brand,
+            model: device.model,
+            project:
+              product.usage === "REPAIR"
+                ? (productProject(String(product.name))?.name ?? "")
+                : "",
+          },
+        ];
       }),
     });
 
@@ -382,10 +398,11 @@ export async function generateTestData(
     >();
     for (const [deviceIndex, device] of devices.entries()) {
       for (const [projectIndex, project] of projects.entries()) {
-        const requiredProduct =
-          repairProducts.find((product) =>
-            product.name.startsWith(project.product),
-          ) ?? repairProducts[projectIndex % repairProducts.length];
+        const requiredProduct = repairProducts.find(
+          (product) =>
+            productDevice(String(product.name))?.model === device.model &&
+            productProject(String(product.name))?.name === project.name,
+        );
         const suggested = String(device.prices[projectIndex]);
         const rule = await tx.priceRule.upsert({
           where: {
@@ -475,6 +492,7 @@ export async function generateTestData(
       const status = quick
         ? quickStatuses[Math.floor(index / 5) % quickStatuses.length]
         : statuses[index % statuses.length];
+      const diagnostic = !quick && status === "DIAGNOSING";
       const createdAt = new Date(now - index * 60_000);
       const dueOffset = index % 4 === 0 ? -3 : (index % 8) + 1;
       const customerName = `${firstNames[index % firstNames.length]} ${lastNames[(index * 7) % lastNames.length]}`;
@@ -527,11 +545,15 @@ export async function generateTestData(
         customerName,
         deviceId,
         status,
+        inspectionMode: diagnostic,
+        inspectionFee: diagnostic ? "30" : "0",
         fault: quick
           ? quickService.name
-          : index % 2
-            ? "Display rotto"
-            : "Problema di ricarica",
+          : diagnostic
+            ? "Da diagnosticare"
+            : index % 2
+              ? "Display rotto"
+              : "Problema di ricarica",
         notes: `Dati demo ${prefix}`,
         dueDate: offsetDay(businessDay, dueOffset),
         expectedAt: quick ? `${offsetDay(businessDay, dueOffset)}T18:00` : null,
@@ -539,19 +561,20 @@ export async function generateTestData(
         createdAt,
         updatedAt: createdAt,
       });
-      items.push({
-        id: `${prefix}-item-${index}`,
-        orderId,
-        ruleId: quick ? null : rule.id,
-        quickServiceId: quick ? quickService.id : null,
-        project: quick ? quickService.name : project.name,
-        suggested: quick ? quickService.defaultPrice : rule.suggested,
-        final: quick ? quickService.defaultPrice : rule.suggested,
-        matchLevel: quick ? "SERVICE" : "MODEL",
-        minutes: quick ? 0 : project.minutes,
-        requiredProductId: quick ? null : rule.requiredProductId,
-      });
-      if (!quick)
+      if (!diagnostic)
+        items.push({
+          id: `${prefix}-item-${index}`,
+          orderId,
+          ruleId: quick ? null : rule.id,
+          quickServiceId: quick ? quickService.id : null,
+          project: quick ? quickService.name : project.name,
+          suggested: quick ? quickService.defaultPrice : rule.suggested,
+          final: quick ? quickService.defaultPrice : rule.suggested,
+          matchLevel: quick ? "SERVICE" : "MODEL",
+          minutes: quick ? 0 : project.minutes,
+          requiredProductId: quick ? null : rule.requiredProductId,
+        });
+      if (!quick && !diagnostic)
         faults.push({
           id: `${prefix}-fault-${index}`,
           orderId,

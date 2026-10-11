@@ -80,11 +80,12 @@ describe("Windows persistent startup", () => {
     expect(shortcutInstaller).toContain("/win32icon:$iconPath");
     expect(shortcutInstaller).toContain("0x6D4B, 0x8BD5, 0x7CFB, 0x7EDF");
     expect(shortcutInstaller).not.toContain('"NGT 测试系统.lnk"');
-    expect(shortcutInstaller).toContain("$shortcut.TargetPath = $launcherPath");
-    expect(shortcutInstaller).toContain('$shortcut.Arguments = ""');
+    expect(shortcutInstaller).toContain('$desktopName + ".exe"');
+    expect(shortcutInstaller).toContain("Copy-Item -LiteralPath $launcherPath");
     expect(shortcutInstaller).toContain(
-      '$shortcut.IconLocation = "$launcherPath,0"',
+      "Remove-Item -LiteralPath $legacyShortcutPath",
     );
+    expect(shortcutInstaller).not.toContain("CreateShortcut");
     expect(desktopLauncher).toContain('FileName = "http://127.0.0.1:3236/"');
     expect(desktopLauncher).toContain("UseShellExecute = true");
   });

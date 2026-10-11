@@ -326,6 +326,54 @@ export async function generateTestData(
       })),
     });
 
+    await tx.productCompatibility.createMany({
+      data: products.map((product, index) => {
+        const device = devices[index % devices.length];
+        return {
+          productId: product.id!,
+          category: "PHONE",
+          brand: device.brand,
+          model: device.model,
+          project:
+            product.usage === "REPAIR"
+              ? projects[index % projects.length].name
+              : "",
+        };
+      }),
+    });
+
+    const quickServices = [
+      {
+        id: `${prefix}-quick-service-0`,
+        name: `Migrazione dati assistita ${token}`,
+        defaultPrice: "29.90",
+        notes: "Servizio demo per due dispositivi",
+        enabled: true,
+      },
+      {
+        id: `${prefix}-quick-service-1`,
+        name: `Configurazione smartphone ${token}`,
+        defaultPrice: "19.90",
+        notes: "Configurazione iniziale e account",
+        enabled: true,
+      },
+      {
+        id: `${prefix}-quick-service-2`,
+        name: `Applicazione pellicola ${token}`,
+        defaultPrice: "10.00",
+        notes: "Servizio rapido al banco",
+        enabled: true,
+      },
+      {
+        id: `${prefix}-quick-service-3`,
+        name: `Servizio sospeso ${token}`,
+        defaultPrice: "15.00",
+        notes: "Voce demo disattivata",
+        enabled: false,
+      },
+    ];
+    await tx.quickService.createMany({ data: quickServices });
+
     const repairProducts = products.filter(
       (product) => product.usage === "REPAIR",
     );
@@ -379,16 +427,27 @@ export async function generateTestData(
       }
     }
 
-    const codePrefix = `R-${businessDay.replaceAll("-", "")}`;
-    const latestOrder = await tx.workOrder.findFirst({
-      where: { code: { startsWith: codePrefix } },
-      orderBy: { code: "desc" },
-      select: { code: true },
-    });
-    const firstSequence = latestOrder
-      ? Number(latestOrder.code.slice(-3)) + 1
+    const repairCodePrefix = `R-${businessDay.replaceAll("-", "")}`;
+    const serviceCodePrefix = `S-${businessDay.replaceAll("-", "")}`;
+    const [latestRepairOrder, latestServiceOrder] = await Promise.all([
+      tx.workOrder.findFirst({
+        where: { code: { startsWith: repairCodePrefix } },
+        orderBy: { code: "desc" },
+        select: { code: true },
+      }),
+      tx.workOrder.findFirst({
+        where: { code: { startsWith: serviceCodePrefix } },
+        orderBy: { code: "desc" },
+        select: { code: true },
+      }),
+    ]);
+    const firstRepairSequence = latestRepairOrder
+      ? Number(latestRepairOrder.code.slice(-3)) + 1
       : 1;
-    if (firstSequence + count - 1 > 999)
+    const firstServiceSequence = latestServiceOrder
+      ? Number(latestServiceOrder.code.slice(-3)) + 1
+      : 1;
+    if (Math.max(firstRepairSequence, firstServiceSequence) + count - 1 > 999)
       throw new BusinessError("Limite giornaliero raggiunto.");
 
     const customers: Prisma.CustomerCreateManyInput[] = [];
@@ -397,11 +456,26 @@ export async function generateTestData(
     const orders: Prisma.WorkOrderCreateManyInput[] = [];
     const items: Prisma.WorkOrderItemCreateManyInput[] = [];
     const history: Prisma.StatusHistoryCreateManyInput[] = [];
+    const relatedDevices: Prisma.WorkOrderDeviceCreateManyInput[] = [];
+    const faults: Prisma.WorkOrderFaultCreateManyInput[] = [];
+    const extraDevices: Prisma.DeviceCreateManyInput[] = [];
+    let repairSequence = firstRepairSequence;
+    let serviceSequence = firstServiceSequence;
     for (let index = 0; index < count; index += 1) {
       const customerId = `${prefix}-customer-${index}`;
       const deviceId = `${prefix}-device-${index}`;
       const orderId = `${prefix}-order-${index}`;
-      const status = statuses[index % statuses.length];
+      const quick = index % 5 === 4;
+      const quickStatuses = [
+        "RECEIVED",
+        "REPAIRING",
+        "READY",
+        "COMPLETED",
+        "CANCELLED",
+      ] as const;
+      const status = quick
+        ? quickStatuses[Math.floor(index / 5) % quickStatuses.length]
+        : statuses[index % statuses.length];
       const createdAt = new Date(now - index * 60_000);
       const dueOffset = index % 4 === 0 ? -3 : (index % 8) + 1;
       const customerName = `${firstNames[index % firstNames.length]} ${lastNames[(index * 7) % lastNames.length]}`;
@@ -409,6 +483,10 @@ export async function generateTestData(
       const device = devices[index % devices.length];
       const project = projects[index % projects.length];
       const rule = rules.get(`${device.model}|${project.name}`)!;
+      const quickService = quickServices[index % 3];
+      const code = quick
+        ? `${serviceCodePrefix}${String(serviceSequence++).padStart(3, "0")}`
+        : `${repairCodePrefix}${String(repairSequence++).padStart(3, "0")}`;
       customers.push({
         id: customerId,
         name: customerName,
@@ -430,30 +508,57 @@ export async function generateTestData(
             : "Buone condizioni generali",
         accessories: index % 4 === 0 ? "Custodia protettiva" : "",
       });
+      relatedDevices.push({ orderId, deviceId });
+      if (quick) {
+        const extraDeviceId = `${prefix}-device-${index}-secondary`;
+        extraDevices.push({
+          id: extraDeviceId,
+          customerId,
+          category: "PHONE",
+          brand: index % 2 ? "Samsung" : "Apple",
+          model: index % 2 ? "Galaxy S24 Ultra" : "iPhone 15 Pro Max",
+          appearance: "Dispositivo secondario per servizio rapido",
+        });
+        relatedDevices.push({ orderId, deviceId: extraDeviceId });
+      }
       orders.push({
         id: orderId,
-        code: `${codePrefix}${String(firstSequence + index).padStart(3, "0")}`,
+        code,
+        type: quick ? "QUICK_SERVICE" : "REPAIR",
         customerName,
         deviceId,
         status,
-        fault: index % 2 ? "Display rotto" : "Problema di ricarica",
+        fault: quick
+          ? quickService.name
+          : index % 2
+            ? "Display rotto"
+            : "Problema di ricarica",
         notes: `Dati demo ${prefix}`,
         dueDate: offsetDay(businessDay, dueOffset),
-        afterSalesOpen: status === "REWORKING",
+        expectedAt: quick ? `${offsetDay(businessDay, dueOffset)}T18:00` : null,
+        afterSalesOpen: !quick && status === "REWORKING",
         createdAt,
         updatedAt: createdAt,
       });
       items.push({
         id: `${prefix}-item-${index}`,
         orderId,
-        ruleId: rule.id,
-        project: project.name,
-        suggested: rule.suggested,
-        final: rule.suggested,
-        matchLevel: "MODEL",
-        minutes: project.minutes,
-        requiredProductId: rule.requiredProductId,
+        ruleId: quick ? null : rule.id,
+        quickServiceId: quick ? quickService.id : null,
+        project: quick ? quickService.name : project.name,
+        suggested: quick ? quickService.defaultPrice : rule.suggested,
+        final: quick ? quickService.defaultPrice : rule.suggested,
+        matchLevel: quick ? "SERVICE" : "MODEL",
+        minutes: quick ? 0 : project.minutes,
+        requiredProductId: quick ? null : rule.requiredProductId,
       });
+      if (!quick)
+        faults.push({
+          id: `${prefix}-fault-${index}`,
+          orderId,
+          nameSnapshot: index % 2 ? "Display rotto" : "Problema di ricarica",
+          custom: false,
+        });
       history.push({
         id: `${prefix}-history-${index}`,
         orderId,
@@ -466,10 +571,156 @@ export async function generateTestData(
     }
     await tx.customer.createMany({ data: customers });
     await tx.customerPhone.createMany({ data: customerPhones });
-    await tx.device.createMany({ data: generatedDevices });
+    await tx.device.createMany({
+      data: [...generatedDevices, ...extraDevices],
+    });
     await tx.workOrder.createMany({ data: orders });
     await tx.workOrderItem.createMany({ data: items });
+    await tx.workOrderDevice.createMany({ data: relatedDevices });
+    await tx.workOrderFault.createMany({ data: faults });
     await tx.statusHistory.createMany({ data: history });
+
+    const reworkOrders = orders.filter(
+      (order) => order.type === "REPAIR" && order.status === "REWORKING",
+    );
+    for (const [index, order] of reworkOrders.entries()) {
+      const item = items.find((candidate) => candidate.orderId === order.id)!;
+      const sessionId = `${prefix}-rework-${index}`;
+      await tx.reworkSession.create({
+        data: {
+          id: sessionId,
+          orderId: order.id!,
+          dueDate: offsetDay(businessDay, 3),
+          notes: `Dati demo ${prefix}`,
+          items: {
+            create: {
+              originalItemId: item.id!,
+              warrantyState: index % 2 ? "EXPIRED" : "VALID",
+              treatment: index % 2 ? "PAID" : "WARRANTY",
+              fee: index % 2 ? "35.00" : "0",
+              requiredProductId: item.requiredProductId,
+            },
+          },
+        },
+      });
+    }
+
+    const retailProduct = products.find(
+      (product) => product.usage === "RETAIL" && product.stockQuantity! > 0,
+    )!;
+    const retailService = quickServices[2];
+    const retailSaleCount = Math.max(2, Math.ceil(count / 10));
+    const saleCodePrefix = `V-${businessDay.replaceAll("-", "")}`;
+    const latestSale = await tx.retailSale.findFirst({
+      where: { code: { startsWith: saleCodePrefix } },
+      orderBy: { code: "desc" },
+      select: { code: true },
+    });
+    const firstSaleSequence = latestSale
+      ? Number(latestSale.code.slice(-3)) + 1
+      : 1;
+    let stock = Number(retailProduct.stockQuantity);
+    for (let index = 0; index < retailSaleCount; index += 1) {
+      const sale = await tx.retailSale.create({
+        data: {
+          code: `${saleCodePrefix}${String(firstSaleSequence + index).padStart(3, "0")}`,
+          requestId: randomUUID(),
+          subtotal: "22.90",
+          total: "22.90",
+          itemCount: 2,
+          actorId: actor.id,
+          actorName: actor.name,
+          items: {
+            create: {
+              productId: retailProduct.id!,
+              productName: String(retailProduct.name),
+              category: String(retailProduct.category),
+              unitPrice: "12.90",
+              quantity: 1,
+              subtotal: "12.90",
+            },
+          },
+          serviceItems: {
+            create: {
+              quickServiceId: retailService.id,
+              serviceName: retailService.name,
+              notes: retailService.notes,
+              unitPrice: "10.00",
+              quantity: 1,
+              subtotal: "10.00",
+            },
+          },
+        },
+      });
+      const payment = await tx.payment.create({
+        data: {
+          requestId: randomUUID(),
+          saleId: sale.id,
+          amount: "22.90",
+          method: index % 2 ? "CARD" : "CASH",
+          kind: "SALE",
+          actorId: actor.id,
+          actorName: actor.name,
+        },
+      });
+      await tx.paymentAllocation.createMany({
+        data: [
+          { paymentId: payment.id, source: "RETAIL", amount: "12.90" },
+          {
+            paymentId: payment.id,
+            source: "QUICK_SERVICE",
+            amount: "10.00",
+          },
+        ],
+      });
+      await tx.inventoryMovement.create({
+        data: {
+          requestId: randomUUID(),
+          productId: retailProduct.id!,
+          quantity: -1,
+          stockBefore: stock,
+          stockAfter: stock - 1,
+          type: "RETAIL_SALE",
+          referenceType: "RETAIL_SALE",
+          referenceId: sale.id,
+          note: `Dati demo ${prefix}`,
+          actorId: actor.id,
+          actorName: actor.name,
+        },
+      });
+      stock -= 1;
+    }
+    await tx.product.update({
+      where: { id: retailProduct.id! },
+      data: { stockQuantity: stock },
+    });
+
+    const paidOrders = orders.filter(
+      (order) => order.status === "COMPLETED" || order.status === "READY",
+    );
+    for (const order of paidOrders) {
+      const item = items.find((candidate) => candidate.orderId === order.id)!;
+      const payment = await tx.payment.create({
+        data: {
+          requestId: randomUUID(),
+          orderId: order.id!,
+          amount: item.final,
+          method: "CARD",
+          kind: "BALANCE",
+          actorId: actor.id,
+          actorName: actor.name,
+        },
+      });
+      await tx.paymentAllocation.create({
+        data: {
+          paymentId: payment.id,
+          source: order.type === "QUICK_SERVICE" ? "QUICK_SERVICE" : "REPAIR",
+          amount: item.final,
+        },
+      });
+    }
+
+    return { retailSaleCount };
   });
 
   return {
@@ -478,5 +729,7 @@ export async function generateTestData(
     products: productCount,
     priceRules: devices.length * projects.length,
     orders: count,
+    quickServices: 4,
+    retailSales: Math.max(2, Math.ceil(count / 10)),
   };
 }

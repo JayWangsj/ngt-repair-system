@@ -1045,14 +1045,17 @@ export function ItemsEditor({
             itemSelected &&
             !editingProject ? (
               <div
-                className={`selection-summary selected-project-summary${!projectPicker && !editingPrices[index] ? " is-actionable" : ""}`}
+                className={`selection-summary selected-project-summary${!editingPrices[index] ? " is-actionable" : ""}`}
                 onClick={(event) => {
                   if (
-                    projectPicker ||
                     editingPrices[index] ||
                     (event.target as HTMLElement).closest("button, input")
                   )
                     return;
+                  if (projectPicker) {
+                    openProjectPicker();
+                    return;
+                  }
                   setEditingProjects((current) => ({
                     ...current,
                     [index]: true,
@@ -1125,20 +1128,30 @@ export function ItemsEditor({
                 </div>
                 {projectPicker ? (
                   !editingPrices[index] && (
-                    <button
-                      type="button"
-                      className="quick-service-remove"
-                      aria-label={`${it.remove} ${item.project}`}
-                      onClick={(event) => {
-                        event.currentTarget.blur();
-                        setProjectRemoveSuppressed(true);
-                        onChange(
-                          items.filter((_, itemIndex) => itemIndex !== index),
-                        );
-                      }}
-                    >
-                      <X size={16} />
-                    </button>
+                    <div className="selected-part-actions">
+                      <button
+                        type="button"
+                        className="summary-action"
+                        onClick={openProjectPicker}
+                      >
+                        <span>{it.change}</span>
+                        <ChevronRight size={15} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        className="quick-service-remove"
+                        aria-label={`${it.remove} ${item.project}`}
+                        onClick={(event) => {
+                          event.currentTarget.blur();
+                          setProjectRemoveSuppressed(true);
+                          onChange(
+                            items.filter((_, itemIndex) => itemIndex !== index),
+                          );
+                        }}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
                   )
                 ) : (
                   <button
@@ -1369,6 +1382,38 @@ export function ItemsEditor({
                             </button>
                           )}
                         </div>
+                      </div>
+                    ) : projectPicker &&
+                      item.requiredProductRemoved &&
+                      !editingPart ? (
+                      <div
+                        className="selection-summary selected-part-summary is-actionable"
+                        onClick={() =>
+                          setEditingParts((current) => ({
+                            ...current,
+                            [index]: true,
+                          }))
+                        }
+                      >
+                        <span className="selection-summary-icon is-part">
+                          <Package size={18} aria-hidden="true" />
+                        </span>
+                        <div className="selection-summary-copy">
+                          <strong>{it.afterSales.noPart}</strong>
+                        </div>
+                        <button
+                          type="button"
+                          className="summary-action"
+                          onClick={() =>
+                            setEditingParts((current) => ({
+                              ...current,
+                              [index]: true,
+                            }))
+                          }
+                        >
+                          <span>{it.change}</span>
+                          <ChevronRight size={15} aria-hidden="true" />
+                        </button>
                       </div>
                     ) : projectPicker && !editingPart ? (
                       <button
@@ -3055,10 +3100,12 @@ function ReworkPartSummary({
   product,
   disabled = false,
   onChange,
+  onRemove,
 }: {
   product?: CreatedProduct;
   disabled?: boolean;
   onChange: () => void;
+  onRemove: () => void;
 }) {
   const it = useMessages();
   const available = product?.available ?? product?.stock ?? 0;
@@ -3092,15 +3139,27 @@ function ReworkPartSummary({
           )}
         </small>
       </div>
-      <button
-        type="button"
-        className="summary-action"
-        disabled={disabled}
-        onClick={onChange}
-      >
-        <span>{it.change}</span>
-        <ChevronRight size={15} aria-hidden="true" />
-      </button>
+      <div className="selected-part-actions">
+        <button
+          type="button"
+          className="summary-action"
+          disabled={disabled}
+          onClick={onChange}
+        >
+          <span>{it.change}</span>
+          <ChevronRight size={15} aria-hidden="true" />
+        </button>
+        {product && !disabled && (
+          <button
+            type="button"
+            className="quick-service-remove"
+            aria-label={`${it.remove} ${product.name}`}
+            onClick={onRemove}
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -3186,6 +3245,7 @@ export function ReworkPartEditor({
           product={selectedProduct}
           disabled={pending}
           onChange={() => setEditing(true)}
+          onRemove={() => select("")}
         />
       )}
       {error && <p className="field-error">{error}</p>}
@@ -3428,6 +3488,15 @@ export function AfterSalesForm({
                     ) : (
                       <ReworkPartSummary
                         product={selectedProduct}
+                        onRemove={() =>
+                          setItemValues((current) => ({
+                            ...current,
+                            [project.id]: {
+                              ...value,
+                              requiredProductId: "",
+                            },
+                          }))
+                        }
                         onChange={() =>
                           setEditingParts((current) => ({
                             ...current,

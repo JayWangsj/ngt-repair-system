@@ -228,6 +228,7 @@ export function FaultCatalogManager({
   }
 
   async function toggle(item: FaultCatalogItem) {
+    if (pending) return;
     const previous = drafts;
     const next = drafts.map((candidate) =>
       candidate.id === item.id
@@ -252,6 +253,7 @@ export function FaultCatalogManager({
   }
 
   async function remove(item: FaultCatalogItem) {
+    if (pending) return;
     if (!window.confirm(it.permanentFaultDeleteConfirm)) return;
     setPending(true);
     setError("");
@@ -404,7 +406,6 @@ export function FaultCatalogManager({
                     <input
                       type="checkbox"
                       checked={!item.hidden}
-                      disabled={pending}
                       onChange={() => void toggle(item)}
                     />
                     <span>
@@ -415,7 +416,6 @@ export function FaultCatalogManager({
                     type="button"
                     className="fault-delete-button"
                     aria-label={`${it.remove} ${item.name}`}
-                    disabled={pending}
                     onClick={() => void remove(item)}
                   >
                     <Trash2 size={15} />
@@ -426,12 +426,7 @@ export function FaultCatalogManager({
             <p className="fault-drag-hint">{it.faultDragHint}</p>
             {error && <p className="message error">{error}</p>}
             <div className="dialog-actions">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={pending}
-                onClick={closeManager}
-              >
+              <Button type="button" variant="outline" onClick={closeManager}>
                 {it.close}
               </Button>
             </div>

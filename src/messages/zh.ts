@@ -282,6 +282,7 @@ export const zh: typeof it = {
     rename: "修改型号",
     current: "当前型号",
     replacement: "新型号",
+    duplicate: "同品牌、同类型下已存在这个型号。",
   },
   dashboard: {
     revenue7: "最近 7 天收款趋势",
@@ -370,12 +371,12 @@ export const zh: typeof it = {
     "仅在隔离测试系统中可用，测试批次保留在备注和内部数据中以便识别。",
   generateTestData: "生成测试数据",
   generateTestDataHelp:
-    "追加模拟真实情况并相互关联的客户、商品、报价、库存和服务单，不会清空其他测试记录。",
+    "追加覆盖维修、快速服务、零售、返修、库存、收款和统计的关联测试数据，不会清空其他测试记录。",
   generatingTestData: "生成中…",
   testDataSize: "测试数据数量",
   testOrders: "条服务单",
   testDataCreated:
-    "已生成 {customers} 位客户、{products} 件商品、{priceRules} 条报价和 {orders} 条服务单。",
+    "已生成 {customers} 位客户、{products} 件商品、{priceRules} 条报价、{orders} 条服务单、{quickServices} 个快速服务和 {retailSales} 笔零售交易。",
   openRepairList: "打开服务单列表",
   repairMotionTuning: "服务单换位动画",
   repairMotionTuningHelp:

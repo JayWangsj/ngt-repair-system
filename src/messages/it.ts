@@ -326,6 +326,7 @@ export const it = {
     rename: "Rinomina modello",
     current: "Modello attuale",
     replacement: "Nuovo nome",
+    duplicate: "Questo modello esiste già per la stessa marca e tipologia.",
   },
   dashboard: {
     revenue7: "Incassi degli ultimi 7 giorni",
@@ -417,12 +418,12 @@ export const it = {
     "Disponibili solo nel sistema di prova isolato. Il lotto demo resta identificabile nelle note e nei dati tecnici.",
   generateTestData: "Genera dati di test",
   generateTestDataHelp:
-    "Aggiunge clienti, prodotti, prezzi, scorte e schede realistiche collegate senza cancellare gli altri dati di prova.",
+    "Aggiunge dati collegati per riparazioni, servizi rapidi, vendite, post-vendita, magazzino, incassi e statistiche senza cancellare gli altri dati di prova.",
   generatingTestData: "Generazione…",
   testDataSize: "Quantità dati di test",
   testOrders: "schede",
   testDataCreated:
-    "Creati {customers} clienti, {products} prodotti, {priceRules} preventivi e {orders} schede di test.",
+    "Creati {customers} clienti, {products} prodotti, {priceRules} preventivi, {orders} schede, {quickServices} servizi rapidi e {retailSales} vendite di test.",
   openRepairList: "Apri elenco schede di servizio",
   repairMotionTuning: "Movimento cambio posizione",
   repairMotionTuningHelp:

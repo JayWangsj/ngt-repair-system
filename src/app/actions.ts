@@ -367,11 +367,20 @@ export async function generateTestDataAction(count: 10 | 50 | 100) {
     return { ok: false as const, error: "Quantità di test non valida." };
   return execute(
     () => generateTestData(actor, count),
-    ({ customers, products, priceRules, orders }) => ({
+    ({
       customers,
       products,
       priceRules,
       orders,
+      quickServices,
+      retailSales,
+    }) => ({
+      customers,
+      products,
+      priceRules,
+      orders,
+      quickServices,
+      retailSales,
     }),
   );
 }

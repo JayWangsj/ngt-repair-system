@@ -75,7 +75,9 @@ export function TestTools() {
         .replace("{customers}", String(result.data.customers))
         .replace("{products}", String(result.data.products))
         .replace("{priceRules}", String(result.data.priceRules))
-        .replace("{orders}", String(result.data.orders)),
+        .replace("{orders}", String(result.data.orders))
+        .replace("{quickServices}", String(result.data.quickServices))
+        .replace("{retailSales}", String(result.data.retailSales)),
     );
     router.refresh();
   }

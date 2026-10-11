@@ -26,6 +26,7 @@ export type OrderDetailEditTarget = {
   kind: "repair";
   index: number;
   field: "project" | "part";
+  action?: "remove";
 };
 
 const OrderDetailEditContext = createContext<{

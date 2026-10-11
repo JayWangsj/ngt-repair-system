@@ -28,9 +28,15 @@ export function normalizeModel(value: string, catalog: string[] = []) {
   if (exact) return exact;
   let model = value.trim().replace(/[\s-]+/g, " ");
   if (!model) return "";
-  const compact = modelKey(model).replace(/^iphone/, "iPhone");
-  if (/^iphone/i.test(compact))
-    model = `iPhone ${compact.slice(6).replace(/(pro|max|ultra|plus|mini|duo)/gi, " $1 ")}`;
+  const iphone = model.match(/^iphone\s*(.*)$/i);
+  if (iphone) {
+    const suffix = iphone[1].trim();
+    model = `iPhone ${
+      suffix.includes(" ")
+        ? suffix
+        : suffix.replace(/(pro|max|ultra|plus|mini|duo)/gi, " $1 ")
+    }`;
+  }
   const knownSeries = ["Galaxy", "Pixel", "Xperia", "Moto", "Redmi Note"];
   const series = knownSeries.find((name) =>
     modelKey(model).startsWith(modelKey(name)),
@@ -65,12 +71,10 @@ export function normalizeModel(value: string, catalog: string[] = []) {
 }
 
 export function normalizeDeviceModel(
-  brand: string,
+  _brand: string,
   value: string,
   catalog: string[] = [],
 ) {
-  const normalizedBrand = normalizeBrand(brand);
-  if (normalizedBrand === "Apple") return normalizeModel(value, catalog);
   return normalizeModel(value, catalog);
 }
 export const brands: Record<Category, string[]> = {

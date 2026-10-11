@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronRight, Package, Wrench } from "lucide-react";
+import { ChevronRight, Package, Plus, Wrench, X } from "lucide-react";
 import { cents, money } from "@/lib/domain";
 import {
   ItemsEditor,
@@ -11,7 +11,10 @@ import {
   type RuleView,
 } from "./forms";
 import { useMessages } from "./language";
-import { useOrderDetailEdit } from "./order-detail-ui";
+import {
+  useOrderDetailEdit,
+  type OrderDetailEditTarget,
+} from "./order-detail-ui";
 
 type Product = {
   id: string;
@@ -25,6 +28,25 @@ type SummaryItem = ItemView & {
   source: string;
   requiredProduct?: Product | null;
 };
+
+function removeDraftTarget(
+  items: ItemView[],
+  target: OrderDetailEditTarget | null | undefined,
+) {
+  if (target?.action !== "remove") return items;
+  if (target.field === "project")
+    return items.filter((_, index) => index !== target.index);
+  return items.map((item, index) =>
+    index === target.index
+      ? {
+          ...item,
+          requiredProductId: "",
+          requiredQuantity: 1,
+          requiredProductRemoved: true,
+        }
+      : item,
+  );
+}
 
 export function WorkOrderRepairSummary({
   orderId,
@@ -54,14 +76,17 @@ export function WorkOrderRepairSummary({
   const session = cardEdit?.session ?? 0;
   const [draft, setDraft] = useState<{ session: number; items: ItemView[] }>({
     session,
-    items,
+    items: removeDraftTarget(items, cardEdit?.target),
   });
   if (cardEdit?.editing && draft.session !== session)
-    setDraft({ session, items });
+    setDraft({ session, items: removeDraftTarget(items, cardEdit.target) });
   const draftItems = draft.items;
   const setDraftItems = (next: ItemView[]) =>
     setDraft({ session, items: next });
-  const editing = cardEdit?.target?.kind === "repair" ? cardEdit.target : null;
+  const editing =
+    cardEdit?.target?.kind === "repair" && !cardEdit.target.action
+      ? cardEdit.target
+      : null;
   const change = (index: number, field: "project" | "part") => {
     if (!locked) cardEdit?.requestEdit({ kind: "repair", index, field });
   };
@@ -82,6 +107,61 @@ export function WorkOrderRepairSummary({
     </div>
   );
   const displayedItems = cardEdit?.editing ? draftItems : items;
+  const removable = !locked;
+
+  function removeProject(index: number) {
+    if (!cardEdit?.editing) {
+      cardEdit?.requestEdit({
+        kind: "repair",
+        index,
+        field: "project",
+        action: "remove",
+      });
+      return;
+    }
+    cardEdit?.clearTarget();
+    setDraftItems(draftItems.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  function removePart(index: number) {
+    const remove = (current: ItemView[]) =>
+      current.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              requiredProductId: "",
+              requiredQuantity: 1,
+              requiredProductRemoved: true,
+            }
+          : item,
+      );
+    if (!cardEdit?.editing) {
+      cardEdit?.requestEdit({
+        kind: "repair",
+        index,
+        field: "part",
+        action: "remove",
+      });
+      return;
+    }
+    cardEdit?.clearTarget();
+    setDraftItems(remove(draftItems));
+  }
+
+  function addProject() {
+    const index = draftItems.length;
+    setDraftItems([
+      ...draftItems,
+      {
+        project: "",
+        final: "",
+        adjustmentReason: "",
+        discount: "0",
+        saveRule: false,
+      },
+    ]);
+    cardEdit?.requestEdit({ kind: "repair", index, field: "project" });
+  }
 
   return (
     <section className="detail-repair-summaries">
@@ -114,14 +194,29 @@ export function WorkOrderRepairSummary({
                   <strong>{money(cents(item.final))}</strong>
                 </div>
                 {!locked && (
-                  <button
-                    type="button"
-                    className="summary-action"
-                    onClick={() => change(index, "project")}
-                  >
-                    <span>{it.change}</span>
-                    <ChevronRight size={15} aria-hidden="true" />
-                  </button>
+                  <div className="selected-part-actions">
+                    <button
+                      type="button"
+                      className="summary-action"
+                      onClick={() => change(index, "project")}
+                    >
+                      <span>{it.change}</span>
+                      <ChevronRight size={15} aria-hidden="true" />
+                    </button>
+                    {removable && (
+                      <button
+                        type="button"
+                        className="quick-service-remove"
+                        aria-label={`${it.remove} ${item.project}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          removeProject(index);
+                        }}
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -157,20 +252,44 @@ export function WorkOrderRepairSummary({
                   )}
                 </div>
                 {!locked && (
-                  <button
-                    type="button"
-                    className="summary-action"
-                    onClick={() => change(index, "part")}
-                  >
-                    <span>{it.change}</span>
-                    <ChevronRight size={15} aria-hidden="true" />
-                  </button>
+                  <div className="selected-part-actions">
+                    <button
+                      type="button"
+                      className="summary-action"
+                      onClick={() => change(index, "part")}
+                    >
+                      <span>{it.change}</span>
+                      <ChevronRight size={15} aria-hidden="true" />
+                    </button>
+                    {removable && product && (
+                      <button
+                        type="button"
+                        className="quick-service-remove"
+                        aria-label={`${it.remove} ${product.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          removePart(index);
+                        }}
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             )}
           </div>
         );
       })}
+      {cardEdit?.editing && !locked && (
+        <button
+          type="button"
+          className="quick-service-service-add detail-repair-add"
+          onClick={addProject}
+        >
+          <Plus size={18} /> {it.project}
+        </button>
+      )}
       {cardEdit?.editing && !locked && (
         <QuoteItemsDraftForm
           id={orderId}

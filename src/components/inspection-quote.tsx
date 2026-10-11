@@ -152,6 +152,7 @@ export function CompleteInspectionButton({
                   products={products}
                   productCategories={productCategories}
                   progressive
+                  projectPicker
                 />
                 {quoteValid && (
                   <div className="inspection-progressive-reveal">

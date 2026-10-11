@@ -16,5 +16,11 @@ describe("model normalization", () => {
     expect(normalizeDeviceModel("Samsung", "galaxya265g")).toBe(
       "Galaxy A26 5G",
     );
+    expect(normalizeDeviceModel("Apple", "iphone18promax")).toBe(
+      "iPhone 18 Pro Max",
+    );
+    expect(normalizeDeviceModel("Apple", "iphone 13 inline")).toBe(
+      "iPhone 13 Inline",
+    );
   });
 });

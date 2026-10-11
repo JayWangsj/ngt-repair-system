@@ -1907,6 +1907,12 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await fillOrder(page, { manual: true });
   await save(page);
   await page.goto("/orders");
+  await expect(
+    page.getByRole("columnheader", { name: "Ultima operazione", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".order-updated-cell").nth(1)).toContainText(
+    /\d{2}\/\d{2}\/\d{2}, \d{2}:\d{2}/,
+  );
   const month = page.locator('input[name="month"]');
   await expect(month).toHaveValue(/^\d{4}-\d{2}$/);
   await page.evaluate(() => {

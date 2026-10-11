@@ -650,8 +650,11 @@ td small {
   font-variant-numeric: tabular-nums;
 }
 .order-table {
-  min-width: 900px;
+  min-width: 1040px;
   table-layout: fixed;
+}
+.order-table-compact {
+  min-width: 900px;
 }
 .order-table th:first-child {
   width: 105px;
@@ -7247,6 +7250,9 @@ summary.record-icon::-webkit-details-marker {
   transform-origin: center;
 }
 .order-due-cell {
+  width: 145px;
+}
+.order-updated-cell {
   width: 145px;
 }
 .order-payment-cell {

@@ -12,6 +12,7 @@ import { getMessages } from "@/lib/i18n-server";
 import {
   balance,
   cents,
+  dateTime,
   isOverdue,
   settlement,
   type OrderStatus,
@@ -100,7 +101,7 @@ export async function OrderTable({
     return compact ? <p className="compact-empty">{it.empty}</p> : <Empty />;
   return (
     <div className="table-scroll order-table-scroll">
-      <table className="order-table">
+      <table className={`order-table${compact ? " order-table-compact" : ""}`}>
         <thead>
           <tr>
             <th aria-label={it.serviceType} />
@@ -109,6 +110,9 @@ export async function OrderTable({
             <th>{it.device}</th>
             <th className="order-status-cell">{it.statusLabel}</th>
             <th className="order-due-cell">{it.dueDate}</th>
+            {!compact && (
+              <th className="order-updated-cell">{it.lastOperation}</th>
+            )}
             <th className="numeric order-payment-cell">{it.payments}</th>
           </tr>
         </thead>
@@ -142,6 +146,7 @@ export async function OrderTable({
               status: order.status,
               dueDate: order.dueDate ?? "",
               overdue: isOverdue(order, today),
+              lastUpdated: dateTime(order.updatedAt),
               due,
               paid,
               balance: remaining,

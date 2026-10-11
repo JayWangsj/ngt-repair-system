@@ -783,6 +783,7 @@ export function ItemsEditor({
   );
   const [creatingProject, setCreatingProject] = useState(false);
   const [editingPickerProject, setEditingPickerProject] = useState("");
+  const [projectRemoveSuppressed, setProjectRemoveSuppressed] = useState(false);
   const [newProject, setNewProject] = useState("");
   const [newProjectPrice, setNewProjectPrice] = useState("");
   const [newProjectPart, setNewProjectPart] = useState("");
@@ -963,7 +964,12 @@ export function ItemsEditor({
         normalizedProject(editingPickerProject),
   );
   return (
-    <div className="items-editor">
+    <div
+      className={`items-editor${projectRemoveSuppressed ? " is-remove-suppressed" : ""}`}
+      onPointerMove={() => {
+        if (projectRemoveSuppressed) setProjectRemoveSuppressed(false);
+      }}
+    >
       {items.map((item, index) => {
         if (focusedEdit && initialEdit?.index !== index) return null;
         const projects = deviceProjects(rules, device);
@@ -1033,7 +1039,7 @@ export function ItemsEditor({
         return (
           <div
             className={`quote-item${focusedEdit ? " is-focused-edit" : ""}`}
-            key={index}
+            key={projectPicker ? normalizedProject(item.project) : index}
           >
             {(!focusedEdit || initialEdit?.field === "project") &&
             itemSelected &&
@@ -1122,11 +1128,13 @@ export function ItemsEditor({
                     type="button"
                     className="quick-service-remove"
                     aria-label={`${it.remove} ${item.project}`}
-                    onClick={() =>
+                    onClick={(event) => {
+                      event.currentTarget.blur();
+                      setProjectRemoveSuppressed(true);
                       onChange(
                         items.filter((_, itemIndex) => itemIndex !== index),
-                      )
-                    }
+                      );
+                    }}
                   >
                     <X size={16} />
                   </button>

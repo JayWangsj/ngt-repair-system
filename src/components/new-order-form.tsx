@@ -608,7 +608,7 @@ export function NewOrderWizard({
                         key={device.id}
                         device={device}
                         selected={device.id === draftDeviceId}
-                        onToggle={() => setDraftDeviceId(device.id)}
+                        onSelect={() => setDraftDeviceId(device.id)}
                         onEdit={() => {
                           setChoosingDevice(false);
                           setEditingDevice(device);

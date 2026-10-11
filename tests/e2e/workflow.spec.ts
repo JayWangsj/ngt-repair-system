@@ -407,9 +407,10 @@ test("device step gates faults and advances only after faults and due date", asy
     picker.locator(".customer-device-row.is-selected"),
   ).toContainText("Apple iPhone 13");
   const selectedDeviceRow = picker.locator(".customer-device-row.is-selected");
-  await expect(
-    selectedDeviceRow.locator('input[type="checkbox"]'),
-  ).toBeChecked();
+  await expect(selectedDeviceRow.locator('input[type="checkbox"]')).toHaveCount(
+    0,
+  );
+  await expect(selectedDeviceRow).toHaveCSS("border-radius", "10px");
   await selectedDeviceRow.hover();
   const editSelectedDevice = selectedDeviceRow.getByRole("button", {
     name: "Modifica dispositivo",
@@ -533,6 +534,18 @@ test("repair project picker selects multiple items and removes a summary on hove
     picker.locator(".quick-service-picker-option.is-selected"),
   ).toHaveCount(2);
   await expect(picker).toContainText("2 interventi selezionati");
+  const pickerListBox = await picker
+    .locator(".quick-service-picker-list")
+    .boundingBox();
+  const firstSelectedBox = await picker
+    .locator(".quick-service-picker-option.is-selected")
+    .first()
+    .boundingBox();
+  expect(firstSelectedBox!.x).toBeGreaterThan(pickerListBox!.x);
+  expect(firstSelectedBox!.y).toBeGreaterThan(pickerListBox!.y);
+  expect(firstSelectedBox!.x + firstSelectedBox!.width).toBeLessThan(
+    pickerListBox!.x + pickerListBox!.width,
+  );
   const customProjectRow = picker
     .locator(".quick-service-picker-service")
     .filter({ hasText: "Pulizia completa" });
@@ -564,17 +577,28 @@ test("repair project picker selects multiple items and removes a summary on hove
   const summaries = page.locator(".selected-project-summary");
   await expect(summaries).toHaveCount(2);
   await expect(addProject).toBeVisible();
+  const catalogSummary = summaries.filter({
+    hasText: "sostituzione display",
+  });
+  const removeCatalog = catalogSummary.getByRole("button", {
+    name: "Rimuovi sostituzione display",
+    exact: true,
+  });
+  await catalogSummary.hover();
+  await expect(removeCatalog).toHaveCSS("opacity", "1");
+  await removeCatalog.click();
+  await expect(summaries).toHaveCount(1);
   const customSummary = summaries.filter({ hasText: "Pulizia completa" });
   const remove = customSummary.getByRole("button", {
     name: "Rimuovi Pulizia completa",
     exact: true,
   });
   await expect(remove).toHaveCSS("opacity", "0");
+  await page.mouse.move(0, 0);
   await customSummary.hover();
   await expect(remove).toHaveCSS("opacity", "1");
   await remove.click();
-  await expect(summaries).toHaveCount(1);
-  await expect(summaries).not.toContainText("Pulizia completa");
+  await expect(summaries).toHaveCount(0);
 });
 
 test("single operator opens every business page without login", async ({
@@ -767,6 +791,7 @@ test("manages one quick service for held service orders and retail checkout", as
   const createdDeviceRow = devicePicker
     .locator(".customer-device-row.is-selected")
     .filter({ hasText: "Apple iPhone 14" });
+  await expect(createdDeviceRow).toHaveCSS("border-radius", "10px");
   const editDevice = createdDeviceRow.getByRole("button", {
     name: "Modifica dispositivo",
     exact: true,

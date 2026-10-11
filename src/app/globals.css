@@ -3003,7 +3003,13 @@ details[open] > summary {
   display: grid;
   gap: 9px;
   max-height: min(48vh, 440px);
+  padding: 2px;
   overflow-y: auto;
+}
+.quick-service-picker-list .customer-device-row {
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
 }
 .quick-service-picker-add {
   min-height: 48px;
@@ -3161,6 +3167,10 @@ details[open] > summary {
   .selected-project-summary:focus-within .quick-service-remove {
     opacity: 1;
     pointer-events: auto;
+  }
+  .items-editor.is-remove-suppressed .quick-service-remove {
+    opacity: 0;
+    pointer-events: none;
   }
 }
 .catalog-manager-row small {

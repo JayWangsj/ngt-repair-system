@@ -4083,7 +4083,10 @@ export function DeviceForm({
         label={it.brand}
         createLabel={it.customBrand}
         value={brand}
-        onChange={setBrand}
+        onChange={(value) => {
+          setBrand(value);
+          setModel("");
+        }}
         options={brands[category] ?? []}
         normalize={normalizeBrand}
         required
@@ -4095,6 +4098,7 @@ export function DeviceForm({
         onChange={setModel}
         options={models[category]?.[brand] ?? []}
         normalize={(value) => normalizeDeviceModel(brand, value)}
+        readOnly={!brand}
         required
       />
       <Field label={it.imei}>

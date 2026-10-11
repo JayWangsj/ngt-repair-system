@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronDown, ChevronRight, Pencil, Plus } from "lucide-react";
 import { renameDeviceModelAction, saveQuickServiceAction } from "@/app/actions";
-import { categories, type Category } from "@/lib/catalog";
+import { modelKey, normalizeDeviceModel } from "@/lib/catalog";
 import { cents, decimal } from "@/lib/domain";
-import { useLanguage, useMessages } from "./language";
+import { useMessages } from "./language";
 import { Button } from "./ui/button";
 import { Field, FormDialog } from "./forms";
 
@@ -217,7 +217,6 @@ export function QuickServiceManager({ items }: { items: QuickServiceView[] }) {
 
 export function DeviceModelManager({ items }: { items: SavedModelView[] }) {
   const it = useMessages();
-  const { locale } = useLanguage();
   const [open, setOpen] = useState(false);
   const [drafts, setDrafts] = useState(items);
   const [editing, setEditing] = useState<SavedModelView | null>(null);
@@ -262,15 +261,14 @@ export function DeviceModelManager({ items }: { items: SavedModelView[] }) {
       return;
     }
     if (!editing || !replacement.trim()) return;
-    const nextModel = replacement.trim();
+    const nextModel = normalizeDeviceModel(editing.brand, replacement);
     const duplicate = drafts.some(
       (item) =>
         item !== editing &&
         item.category === editing.category &&
         item.brand.toLocaleLowerCase("it") ===
           editing.brand.toLocaleLowerCase("it") &&
-        item.model.toLocaleLowerCase("it") ===
-          nextModel.toLocaleLowerCase("it"),
+        modelKey(item.model) === modelKey(nextModel),
     );
     if (duplicate) {
       setError(it.modelCatalog.duplicate);
@@ -339,11 +337,6 @@ export function DeviceModelManager({ items }: { items: SavedModelView[] }) {
                 >
                   <span>
                     <strong>{group.brand}</strong>
-                    <small>
-                      {categories[group.category as Category]?.[
-                        locale === "zh" ? 1 : 0
-                      ] ?? group.category}
-                    </small>
                   </span>
                   <ChevronDown size={17} aria-hidden="true" />
                 </button>

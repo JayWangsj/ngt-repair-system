@@ -3279,6 +3279,22 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
 }) => {
   await page.goto("/settings");
 
+  await page.getByRole("button", { name: "中文", exact: true }).click();
+  await page
+    .getByRole("button", { name: "管理快速服务", exact: true })
+    .click();
+  const chineseServiceManager = page.getByRole("dialog", {
+    name: "管理快速服务",
+  });
+  await expect(chineseServiceManager).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "无法加载数据", exact: true }),
+  ).toHaveCount(0);
+  await chineseServiceManager
+    .getByRole("button", { name: "关闭", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Italiano", exact: true }).click();
+
   await page
     .getByRole("button", { name: "Gestisci servizi rapidi", exact: true })
     .click();
@@ -3316,6 +3332,7 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   const firstGroup = modelManager.locator(".model-manager section").first();
   const firstHeading = firstGroup.locator(".model-group-heading");
   await expect(firstHeading).toHaveAttribute("aria-expanded", "true");
+  await expect(firstHeading.locator("small")).toHaveCount(0);
   await firstHeading.click();
   await expect(firstHeading).toHaveAttribute("aria-expanded", "false");
   await expect(firstGroup.locator(".model-group-items")).toHaveCount(0);
@@ -3340,8 +3357,8 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   await modelInput.fill(duplicateModel);
   await modelManager.locator(".dialog-heading h2").click();
   await expect(modelManager.getByRole("alert")).toContainText("esiste già");
-  const temporaryModel = `${originalModel} Inline`;
-  await modelInput.fill(temporaryModel);
+  const temporaryModel = "iPhone 18 Pro Max";
+  await modelInput.fill("iphone18promax");
   await modelManager.locator(".dialog-heading h2").click();
   await expect(
     editableGroup!.getByRole("button", {

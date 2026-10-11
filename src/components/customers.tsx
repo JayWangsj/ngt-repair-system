@@ -21,7 +21,7 @@ type Customer = {
   phone: string;
   phones: { phone: string }[];
 };
-type Device = {
+export type CustomerDevice = {
   id: string;
   category: string;
   brand: string;
@@ -46,7 +46,7 @@ export function PhoneList({ customer }: { customer: Customer }) {
   );
 }
 
-function DeleteRecordDialog({
+export function DeleteRecordDialog({
   kind,
   id,
   name,
@@ -113,6 +113,67 @@ function DeleteRecordDialog({
         </div>
       </div>
     </FormDialog>
+  );
+}
+
+export function CustomerDeviceCard({
+  device,
+  selected,
+  onToggle,
+  onEdit,
+  onDelete,
+}: {
+  device: CustomerDevice;
+  selected?: boolean;
+  onToggle?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+}) {
+  const it = useMessages();
+  return (
+    <article
+      className={`customer-device-row business-list-row${selected ? " is-selected" : ""}${onToggle ? " is-selectable" : ""}`}
+      onClick={onToggle}
+    >
+      {onToggle && (
+        <input
+          type="checkbox"
+          checked={selected}
+          aria-label={`${it.selectOption} ${device.brand} ${device.model}`}
+          onChange={onToggle}
+          onClick={(event) => event.stopPropagation()}
+        />
+      )}
+      <div className="customer-device-icon" aria-hidden="true">
+        <Smartphone size={20} />
+      </div>
+      <div>
+        <strong>
+          {device.brand} {device.model}
+        </strong>
+        <small>
+          {device.category}
+          {device.imei ? ` · ${it.imei}: ${device.imei}` : ""}
+        </small>
+      </div>
+      {(onEdit || onDelete) && (
+        <div
+          className="record-actions"
+          onClick={(event) => event.stopPropagation()}
+        >
+          {onEdit && (
+            <RecordIcon kind="edit" label={it.editDevice} onClick={onEdit} />
+          )}
+          {onDelete && (
+            <RecordIcon
+              kind="delete"
+              label={it.deleteDevice}
+              onClick={onDelete}
+            />
+          )}
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -448,14 +509,14 @@ export function CustomerDevices({
   readOnly,
 }: {
   customerId: string;
-  devices: Device[];
+  devices: CustomerDevice[];
   readOnly: boolean;
 }) {
   const it = useMessages();
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState("");
-  const [deleting, setDeleting] = useState<Device | null>(null);
+  const [deleting, setDeleting] = useState<CustomerDevice | null>(null);
   return (
     <section className="customer-devices-section">
       <div className="customer-section-heading">
@@ -480,50 +541,27 @@ export function CustomerDevices({
           </article>
         )}
         {devices.length ? (
-          devices.map((device) => (
-            <article
-              className={`customer-device-row business-list-row ${editingId === device.id ? "is-editing" : ""}`}
-              key={device.id}
-            >
-              {editingId === device.id ? (
+          devices.map((device) =>
+            editingId === device.id ? (
+              <article
+                className="customer-device-row business-list-row is-editing"
+                key={device.id}
+              >
                 <DeviceForm
                   device={device}
                   onCancel={() => setEditingId("")}
                   onSuccess={() => setEditingId("")}
                 />
-              ) : (
-                <>
-                  <div className="customer-device-icon" aria-hidden="true">
-                    <Smartphone size={20} />
-                  </div>
-                  <div>
-                    <strong>
-                      {device.brand} {device.model}
-                    </strong>
-                    {device.imei && (
-                      <small>
-                        {it.imei}: {device.imei}
-                      </small>
-                    )}
-                  </div>
-                  {!readOnly && (
-                    <div className="record-actions">
-                      <RecordIcon
-                        kind="edit"
-                        label={it.editDevice}
-                        onClick={() => setEditingId(device.id)}
-                      />
-                      <RecordIcon
-                        kind="delete"
-                        label={it.deleteDevice}
-                        onClick={() => setDeleting(device)}
-                      />
-                    </div>
-                  )}
-                </>
-              )}
-            </article>
-          ))
+              </article>
+            ) : (
+              <CustomerDeviceCard
+                key={device.id}
+                device={device}
+                onEdit={readOnly ? undefined : () => setEditingId(device.id)}
+                onDelete={readOnly ? undefined : () => setDeleting(device)}
+              />
+            ),
+          )
         ) : creating ? null : (
           <p className="empty">{it.noDevices}</p>
         )}

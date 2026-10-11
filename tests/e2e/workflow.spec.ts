@@ -511,9 +511,34 @@ test("manages one quick service for held service orders and retail checkout", as
   await expect(devicePicker).toBeVisible();
   await expect(
     devicePicker
-      .locator(".quick-service-picker-option")
+      .locator(".customer-device-row")
       .filter({ hasText: "Apple iPhone 14" }),
   ).toHaveClass(/is-selected/);
+  const createdDeviceRow = devicePicker
+    .locator(".customer-device-row")
+    .filter({ hasText: "Apple iPhone 14" });
+  const editDevice = createdDeviceRow.getByRole("button", {
+    name: "Modifica dispositivo",
+    exact: true,
+  });
+  await createdDeviceRow.hover();
+  await expect(editDevice).toBeVisible();
+  await expect(
+    createdDeviceRow.getByRole("button", {
+      name: "Elimina dispositivo",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await editDevice.click();
+  const editDeviceDialog = page.getByRole("dialog", {
+    name: "Modifica dispositivo",
+  });
+  await expect(editDeviceDialog).toBeVisible();
+  await editDeviceDialog
+    .getByRole("button", { name: "Annulla", exact: true })
+    .click();
+  await expect(editDeviceDialog).toHaveCount(0);
+  await expect(devicePicker).toBeVisible();
   await expect(
     devicePicker.getByRole("textbox", {
       name: "Cerca dispositivo (marca, modello o IMEI)",
@@ -531,7 +556,7 @@ test("manages one quick service for held service orders and retail checkout", as
     name: "Dispositivi associati",
   });
   const existingDeviceCheckbox = updatedDevicePicker
-    .locator(".quick-service-picker-option")
+    .locator(".customer-device-row")
     .filter({ hasText: "Apple iPhone 13" })
     .locator('input[type="checkbox"]');
   await existingDeviceCheckbox.check();
@@ -544,7 +569,7 @@ test("manages one quick service for held service orders and retail checkout", as
   expect(checkboxBox!.height).toBeLessThanOrEqual(18);
   await expect(
     updatedDevicePicker
-      .locator(".quick-service-picker-option")
+      .locator(".customer-device-row")
       .filter({ hasText: "Apple iPhone 13" }),
   ).toHaveClass(/is-selected/);
   await updatedDevicePicker
@@ -556,7 +581,7 @@ test("manages one quick service for held service orders and retail checkout", as
     name: "Dispositivi associati",
   });
   await confirmedDevicePicker
-    .locator(".quick-service-picker-option")
+    .locator(".customer-device-row")
     .filter({ hasText: "Apple iPhone 13" })
     .locator('input[type="checkbox"]')
     .check();
@@ -588,6 +613,22 @@ test("manages one quick service for held service orders and retail checkout", as
     .locator(".quick-service-picker-service")
     .filter({ hasText: serviceName });
   await expect(createdService).toHaveClass(/is-selected/);
+  await createdService.hover();
+  const editService = createdService.getByRole("button", {
+    name: `Modifica dati ${serviceName}`,
+    exact: true,
+  });
+  await expect(editService).toBeVisible();
+  await editService.click();
+  const editServiceDialog = page.getByRole("dialog", {
+    name: "Modifica dati",
+  });
+  await expect(editServiceDialog).toBeVisible();
+  await editServiceDialog
+    .getByRole("button", { name: "Annulla", exact: true })
+    .click();
+  await expect(editServiceDialog).toHaveCount(0);
+  await expect(servicePicker).toBeVisible();
   await servicePicker
     .getByRole("button", { name: "Annulla", exact: true })
     .click();
@@ -607,6 +648,16 @@ test("manages one quick service for held service orders and retail checkout", as
   await expect(page.locator(".selected-project-summary")).toContainText(
     serviceName,
   );
+  const removeService = page.getByRole("button", {
+    name: `Rimuovi ${serviceName}`,
+    exact: true,
+  });
+  await expect(removeService).toHaveCSS("opacity", "0");
+  await page.locator(".selected-project-summary").hover();
+  await expect(removeService).toHaveCSS("opacity", "1");
+  await expect(
+    page.locator(".quick-service-device-card .quick-service-picker-icon"),
+  ).toHaveCount(2);
   const editQuote = page.getByRole("button", {
     name: "Modifica dati Preventivo attuale",
     exact: true,
@@ -674,6 +725,42 @@ test("manages one quick service for held service orders and retail checkout", as
   await expect(page.locator(".quick-service-detail-list")).toContainText(
     serviceName,
   );
+  const serviceDetailUrl = page.url();
+  await page.goto("/orders");
+  const quickOrderRow = page
+    .locator(".order-list-body > tr")
+    .filter({ hasText: serviceCode });
+  await expect(
+    quickOrderRow.locator(".order-type-quick-service"),
+  ).toBeVisible();
+  await expect(quickOrderRow.locator(".order-type-quick-service")).toHaveCSS(
+    "background-color",
+    "rgb(223, 245, 236)",
+  );
+  await page.evaluate(() => {
+    const tag = document.createElement("span");
+    tag.className = "order-type-tag order-type-repair e2e-repair-tag";
+    tag.textContent = "Servizio di riparazione";
+    document.body.append(tag);
+  });
+  const repairTag = page.locator(".e2e-repair-tag");
+  await expect(repairTag).toBeVisible();
+  expect(
+    await repairTag.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    ),
+  ).not.toBe(
+    await quickOrderRow
+      .locator(".order-type-quick-service")
+      .evaluate((element) => getComputedStyle(element).backgroundColor),
+  );
+  await chooseBusinessOption(page, "Tipo di servizio", "Riparazione");
+  await page.getByRole("button", { name: "Stato", exact: true }).click();
+  await expect(
+    page.getByRole("option", { name: "Ricevuto", exact: true }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.goto(serviceDetailUrl);
   await page.getByText("Altre azioni", { exact: true }).click();
   await page
     .getByRole("button", {
@@ -700,6 +787,17 @@ test("manages one quick service for held service orders and retail checkout", as
   const servicePrice = page.getByLabel(`${serviceName} Prezzo unitario`, {
     exact: true,
   });
+  const priceField = page.locator(".retail-service-price-field");
+  const cartRow = page
+    .locator(".retail-cart-row")
+    .filter({ hasText: serviceName });
+  const priceFieldBox = await priceField.boundingBox();
+  const cartRowBox = await cartRow.boundingBox();
+  expect(priceFieldBox!.x).toBeGreaterThan(
+    cartRowBox!.x + cartRowBox!.width / 2,
+  );
+  await expect(priceField).toHaveCSS("justify-self", "end");
+  await expect(cartRow.locator(":scope > b")).toHaveCount(0);
   await servicePrice.fill("24.50");
   await page.getByRole("button", { name: /Conferma incasso 24,50 €/ }).click();
   await expect(
@@ -1303,6 +1401,13 @@ test("creates and edits a product directly in the inventory row", async ({
   );
   await expect(tableCheckboxes.first()).toBeChecked();
   await expect(tableCheckboxes.last()).toBeChecked();
+  await expect(tableCheckboxes.first()).toHaveCSS(
+    "background-color",
+    "rgb(251, 215, 46)",
+  );
+  const inventoryCheckboxBox = await tableCheckboxes.first().boundingBox();
+  expect(inventoryCheckboxBox!.width).toBe(18);
+  expect(inventoryCheckboxBox!.height).toBe(18);
   await batchControls
     .getByRole("button", { name: "Fine", exact: true })
     .click();

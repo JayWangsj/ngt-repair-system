@@ -74,10 +74,17 @@ export function OrderFilters({ initial }: { initial: FilterValues }) {
           ariaLabel={it.statusLabel}
           options={[
             { value: "", label: `${it.all} · ${it.statusLabel}` },
-            ...statuses.map((status) => ({
-              value: status,
-              label: it.status[status],
-            })),
+            ...statuses
+              .filter(
+                (status) => status !== "RECEIVED" || values.type !== "REPAIR",
+              )
+              .map((status) => ({
+                value: status,
+                label:
+                  status === "RECEIVED"
+                    ? it.quickStatus.RECEIVED
+                    : it.status[status],
+              })),
           ]}
         />
       </label>

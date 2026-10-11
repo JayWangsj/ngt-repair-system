@@ -18,6 +18,12 @@ import {
   type CustomerOption,
 } from "./customer-picker";
 import { QuickServiceEditor, type QuickServiceView } from "./catalog-managers";
+import {
+  CustomerDeviceCard,
+  DeleteRecordDialog,
+  type CustomerDevice,
+} from "./customers";
+import { RecordIcon } from "./ui/record-icon";
 
 type Customer = CustomerOption & { devices: { id: string }[] };
 
@@ -63,7 +69,16 @@ export function NewServiceOrder({
   const [choosingServices, setChoosingServices] = useState(false);
   const [draftServiceIds, setDraftServiceIds] = useState<string[]>([]);
   const [creatingDevice, setCreatingDevice] = useState(false);
+  const [editingDevice, setEditingDevice] = useState<CustomerDevice | null>(
+    null,
+  );
+  const [deletingDevice, setDeletingDevice] = useState<CustomerDevice | null>(
+    null,
+  );
   const [creatingService, setCreatingService] = useState(false);
+  const [editingService, setEditingService] = useState<QuickServiceView | null>(
+    null,
+  );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const customerId = customer?.id ?? "";
@@ -111,19 +126,20 @@ export function NewServiceOrder({
     setChoosingServices(false);
   }
 
-  async function refreshDevices() {
+  async function refreshDevices(selectCreated = false) {
     if (!customer) return;
     const previousIds = new Set(customer.devices.map((device) => device.id));
+    setCreatingDevice(false);
+    setEditingDevice(null);
+    setChoosingDevices(true);
     const updated = await lookupCustomerAction(customer.phone);
     if (!updated) return;
     const created = updated.devices.find(
       (device) => !previousIds.has(device.id),
     );
     setCustomer(updated);
-    if (created)
+    if (selectCreated && created)
       setDraftDeviceIds((current) => [...new Set([...current, created.id])]);
-    setCreatingDevice(false);
-    setChoosingDevices(true);
   }
 
   async function submit() {
@@ -193,6 +209,12 @@ export function NewServiceOrder({
                     className="quick-service-device-card"
                     key={device.id}
                   >
+                    <span
+                      className="quick-service-picker-icon"
+                      aria-hidden="true"
+                    >
+                      <Smartphone size={22} />
+                    </span>
                     <div>
                       <strong>
                         {device.brand} {device.model}
@@ -374,28 +396,20 @@ export function NewServiceOrder({
                 <div className="quick-service-picker">
                   <div className="quick-service-picker-list">
                     {customer.devices.map((device) => (
-                      <label
-                        className={`quick-service-picker-option${draftDeviceIds.includes(device.id) ? " is-selected" : ""}`}
+                      <CustomerDeviceCard
                         key={device.id}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={draftDeviceIds.includes(device.id)}
-                          onChange={() => toggleDraftDevice(device.id)}
-                        />
-                        <span className="quick-service-picker-icon">
-                          <Smartphone size={22} aria-hidden="true" />
-                        </span>
-                        <span className="quick-service-picker-copy">
-                          <strong>
-                            {device.brand} {device.model}
-                          </strong>
-                          <small>{device.category}</small>
-                        </span>
-                        <small className="quick-service-picker-meta">
-                          IMEI: {device.imei || "—"}
-                        </small>
-                      </label>
+                        device={device}
+                        selected={draftDeviceIds.includes(device.id)}
+                        onToggle={() => toggleDraftDevice(device.id)}
+                        onEdit={() => {
+                          setChoosingDevices(false);
+                          setEditingDevice(device);
+                        }}
+                        onDelete={() => {
+                          setChoosingDevices(false);
+                          setDeletingDevice(device);
+                        }}
+                      />
                     ))}
                     {!customer.devices.length && (
                       <p className="muted">{it.noDevices}</p>
@@ -449,9 +463,16 @@ export function NewServiceOrder({
                 <div className="quick-service-picker">
                   <div className="quick-service-picker-list">
                     {availableServices.map((service) => (
-                      <label
+                      <article
                         className={`quick-service-picker-option quick-service-picker-service${draftServiceIds.includes(service.id) ? " is-selected" : ""}`}
                         key={service.id}
+                        onClick={() =>
+                          setDraftServiceIds((current) =>
+                            current.includes(service.id)
+                              ? current.filter((id) => id !== service.id)
+                              : [...current, service.id],
+                          )
+                        }
                       >
                         <input
                           type="checkbox"
@@ -463,6 +484,7 @@ export function NewServiceOrder({
                                 : [...current, service.id],
                             )
                           }
+                          onClick={(event) => event.stopPropagation()}
                         />
                         <span className="quick-service-picker-icon">
                           <Zap size={22} aria-hidden="true" />
@@ -476,7 +498,20 @@ export function NewServiceOrder({
                         <strong className="quick-service-picker-price">
                           {money(service.defaultPrice)}
                         </strong>
-                      </label>
+                        <div
+                          className="record-actions"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <RecordIcon
+                            kind="edit"
+                            label={`${it.edit} ${service.name}`}
+                            onClick={() => {
+                              setChoosingServices(false);
+                              setEditingService(service);
+                            }}
+                          />
+                        </div>
+                      </article>
                     ))}
                     {!availableServices.length && (
                       <p className="muted">{it.quickService.noServices}</p>
@@ -525,13 +560,52 @@ export function NewServiceOrder({
               >
                 <DeviceForm
                   customerId={customer.id}
-                  onSuccess={() => void refreshDevices()}
+                  onSuccess={() => void refreshDevices(true)}
                   onCancel={() => {
                     setCreatingDevice(false);
                     setChoosingDevices(true);
                   }}
                 />
               </FormDialog>
+            )}
+            {editingDevice && customer && (
+              <FormDialog
+                title={it.editDevice}
+                onClose={() => {
+                  setEditingDevice(null);
+                  setChoosingDevices(true);
+                }}
+              >
+                <DeviceForm
+                  device={editingDevice}
+                  onSuccess={() => void refreshDevices()}
+                  onCancel={() => {
+                    setEditingDevice(null);
+                    setChoosingDevices(true);
+                  }}
+                />
+              </FormDialog>
+            )}
+            {deletingDevice && (
+              <DeleteRecordDialog
+                kind="device"
+                id={deletingDevice.id}
+                name={`${deletingDevice.brand} ${deletingDevice.model}`}
+                onClose={() => {
+                  setDeletingDevice(null);
+                  setChoosingDevices(true);
+                }}
+                onDeleted={() => {
+                  setDraftDeviceIds((current) =>
+                    current.filter((id) => id !== deletingDevice.id),
+                  );
+                  setDeviceIds((current) =>
+                    current.filter((id) => id !== deletingDevice.id),
+                  );
+                  setDeletingDevice(null);
+                  void refreshDevices();
+                }}
+              />
             )}
             {creatingService && (
               <FormDialog
@@ -559,6 +633,46 @@ export function NewServiceOrder({
                         ...new Set([...current, saved.id]),
                       ]);
                     setCreatingService(false);
+                    setChoosingServices(true);
+                  }}
+                />
+              </FormDialog>
+            )}
+            {editingService && (
+              <FormDialog
+                title={it.edit}
+                onClose={() => {
+                  setEditingService(null);
+                  setChoosingServices(true);
+                }}
+              >
+                <QuickServiceEditor
+                  item={editingService}
+                  onCancel={() => {
+                    setEditingService(null);
+                    setChoosingServices(true);
+                  }}
+                  onSaved={(saved) => {
+                    setAvailableServices((current) =>
+                      saved.enabled
+                        ? current
+                            .map((item) =>
+                              item.id === saved.id ? saved : item,
+                            )
+                            .sort((a, b) => a.name.localeCompare(b.name))
+                        : current.filter((item) => item.id !== saved.id),
+                    );
+                    if (!saved.enabled) {
+                      setDraftServiceIds((current) =>
+                        current.filter((id) => id !== saved.id),
+                      );
+                      setSelectedServices((current) => {
+                        const next = { ...current };
+                        delete next[saved.id];
+                        return next;
+                      });
+                    }
+                    setEditingService(null);
                     setChoosingServices(true);
                   }}
                 />

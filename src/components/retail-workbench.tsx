@@ -374,19 +374,22 @@ export function RetailWorkbench({
                     >
                       ×
                     </button>
-                    <input
-                      className="retail-service-price"
-                      aria-label={`${item.name} ${it.retail.unitPrice}`}
-                      inputMode="decimal"
-                      value={item.price}
-                      onChange={(event) =>
-                        setServiceCart((current) => ({
-                          ...current,
-                          [item.id]: event.target.value,
-                        }))
-                      }
-                    />
-                    <b>{money(item.priceCents)}</b>
+                    <label className="retail-service-price-field">
+                      <span className="sr-only">{it.retail.unitPrice}</span>
+                      <input
+                        className="retail-service-price"
+                        aria-label={`${item.name} ${it.retail.unitPrice}`}
+                        inputMode="decimal"
+                        value={item.price}
+                        onChange={(event) =>
+                          setServiceCart((current) => ({
+                            ...current,
+                            [item.id]: event.target.value,
+                          }))
+                        }
+                      />
+                      <span aria-hidden="true">€</span>
+                    </label>
                   </div>
                 ))}
               </>

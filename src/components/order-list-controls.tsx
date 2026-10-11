@@ -629,7 +629,11 @@ export function OrderListBody({
             }}
           >
             <td className="order-type-cell">
-              <span className="order-type-tag">{it.orderTypes[row.type]}</span>
+              <span
+                className={`order-type-tag order-type-${row.type.toLowerCase().replace("_", "-")}`}
+              >
+                {it.orderTypes[row.type]}
+              </span>
             </td>
             <td>
               <Link

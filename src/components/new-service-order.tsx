@@ -129,9 +129,6 @@ export function NewServiceOrder({
   async function refreshDevices(selectCreated = false) {
     if (!customer) return;
     const previousIds = new Set(customer.devices.map((device) => device.id));
-    setCreatingDevice(false);
-    setEditingDevice(null);
-    setChoosingDevices(true);
     const updated = await lookupCustomerAction(customer.phone);
     if (!updated) return;
     const created = updated.devices.find(
@@ -140,6 +137,9 @@ export function NewServiceOrder({
     setCustomer(updated);
     if (selectCreated && created)
       setDraftDeviceIds((current) => [...new Set([...current, created.id])]);
+    setCreatingDevice(false);
+    setEditingDevice(null);
+    setChoosingDevices(true);
   }
 
   async function submit() {

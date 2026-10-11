@@ -7056,6 +7056,11 @@ summary.record-icon::-webkit-details-marker {
     inset 2px 0 #e4b600,
     0 2px 6px rgb(128 96 0 / 8%);
 }
+.quick-service-picker-list .customer-device-row.is-selected,
+.quick-service-picker-list .customer-device-row.business-list-row:hover {
+  border-color: #e8bb15;
+  box-shadow: inset 0 0 0 1px rgb(232 187 21 / 12%);
+}
 .business-list-row.order-row-active {
   background: #fff9e8;
   box-shadow: none;

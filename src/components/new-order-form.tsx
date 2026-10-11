@@ -355,9 +355,6 @@ export function NewOrderWizard({
     if (!customer) return;
     const previousIds = new Set(customer.devices.map((device) => device.id));
     const updated = await lookupCustomerAction(customer.phone);
-    setCreatingDevice(false);
-    setEditingDevice(null);
-    setChoosingDevice(true);
     if (!updated) return;
     const created = updated.devices.find(
       (device) => !previousIds.has(device.id),
@@ -366,6 +363,9 @@ export function NewOrderWizard({
     if (selectCreated && created) setDraftDeviceId(created.id);
     const selected = updated.devices.find((device) => device.id === deviceId);
     if (selected) selectCustomerDevice(selected);
+    setCreatingDevice(false);
+    setEditingDevice(null);
+    setChoosingDevice(true);
   }
   function leaveInspection() {
     if (inspectionMode) setInspectionMode(false);

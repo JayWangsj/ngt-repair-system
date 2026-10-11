@@ -411,6 +411,10 @@ test("device step gates faults and advances only after faults and due date", asy
     0,
   );
   await expect(selectedDeviceRow).toHaveCSS("border-radius", "10px");
+  await expect(selectedDeviceRow).toHaveCSS(
+    "border-top-color",
+    "rgb(232, 187, 21)",
+  );
   await selectedDeviceRow.hover();
   const editSelectedDevice = selectedDeviceRow.getByRole("button", {
     name: "Modifica dispositivo",
@@ -453,6 +457,22 @@ test("device step gates faults and advances only after faults and due date", asy
   await expect(
     picker.locator(".customer-device-row.is-selected"),
   ).toContainText("Apple iPhone 14");
+  await expect(picker.locator(".customer-device-row.is-selected")).toHaveCSS(
+    "border-top-color",
+    "rgb(232, 187, 21)",
+  );
+  const unselectedDeviceRow = picker
+    .locator(".customer-device-row:not(.is-selected)")
+    .first();
+  await unselectedDeviceRow.hover();
+  await expect(unselectedDeviceRow).toHaveCSS(
+    "border-top-color",
+    "rgb(232, 187, 21)",
+  );
+  await expect(unselectedDeviceRow).toHaveCSS(
+    "border-left-color",
+    "rgb(232, 187, 21)",
+  );
   await picker
     .getByRole("button", { name: "Conferma selezione", exact: true })
     .click();
@@ -783,6 +803,7 @@ test("manages one quick service for held service orders and retail checkout", as
     .click();
   await expect(newDeviceDialog).toHaveCount(0);
   await expect(devicePicker).toBeVisible();
+  await expect(devicePicker).toContainText("QUICK-SERVICE-TEST");
   await expect(
     devicePicker
       .locator(".customer-device-row.is-selected")
@@ -792,6 +813,10 @@ test("manages one quick service for held service orders and retail checkout", as
     .locator(".customer-device-row.is-selected")
     .filter({ hasText: "Apple iPhone 14" });
   await expect(createdDeviceRow).toHaveCSS("border-radius", "10px");
+  await expect(createdDeviceRow).toHaveCSS(
+    "border-top-color",
+    "rgb(232, 187, 21)",
+  );
   const editDevice = createdDeviceRow.getByRole("button", {
     name: "Modifica dispositivo",
     exact: true,

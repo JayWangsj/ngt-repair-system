@@ -604,6 +604,9 @@ test("repair project picker selects multiple items and removes a summary on hove
     name: "Rimuovi sostituzione display",
     exact: true,
   });
+  await catalogSummary.locator(".summary-price-button").click();
+  await expect(removeCatalog).toHaveCount(0);
+  await catalogSummary.locator(".quote-summary-price").press("Enter");
   await catalogSummary.hover();
   await expect(removeCatalog).toHaveCSS("opacity", "1");
   await removeCatalog.click();
@@ -996,6 +999,7 @@ test("manages one quick service for held service orders and retail checkout", as
   });
   await expect(editQuote).toContainText("29,90 €");
   await editQuote.click();
+  await expect(removeService).toHaveCount(0);
   await expect(
     page.getByLabel(`${serviceName} Preventivo attuale`, { exact: true }),
   ).toHaveValue("29.90");
@@ -1006,6 +1010,8 @@ test("manages one quick service for held service orders and retail checkout", as
     .getByLabel(`${serviceName} Preventivo attuale`, { exact: true })
     .press("Enter");
   await expect(editQuote).toContainText("34,50 €");
+  await page.locator(".selected-project-summary").hover();
+  await expect(removeService).toHaveCSS("opacity", "1");
   const expectedDate = page.getByLabel("Data", { exact: true });
   await expect(expectedDate).toHaveCSS("cursor", "pointer");
   await page.evaluate(() => {

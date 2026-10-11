@@ -319,20 +319,22 @@ export function NewServiceOrder({
                         </button>
                       )}
                     </div>
-                    <button
-                      type="button"
-                      className="quick-service-remove"
-                      aria-label={`${it.remove} ${service.name}`}
-                      onClick={() =>
-                        setSelectedServices((current) => {
-                          const next = { ...current };
-                          delete next[service.id];
-                          return next;
-                        })
-                      }
-                    >
-                      <X size={16} />
-                    </button>
+                    {!editingServicePrices[service.id] && (
+                      <button
+                        type="button"
+                        className="quick-service-remove"
+                        aria-label={`${it.remove} ${service.name}`}
+                        onClick={() =>
+                          setSelectedServices((current) => {
+                            const next = { ...current };
+                            delete next[service.id];
+                            return next;
+                          })
+                        }
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
                   </article>
                 ))}
                 <button

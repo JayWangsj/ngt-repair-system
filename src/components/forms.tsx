@@ -1124,20 +1124,22 @@ export function ItemsEditor({
                   )}
                 </div>
                 {projectPicker ? (
-                  <button
-                    type="button"
-                    className="quick-service-remove"
-                    aria-label={`${it.remove} ${item.project}`}
-                    onClick={(event) => {
-                      event.currentTarget.blur();
-                      setProjectRemoveSuppressed(true);
-                      onChange(
-                        items.filter((_, itemIndex) => itemIndex !== index),
-                      );
-                    }}
-                  >
-                    <X size={16} />
-                  </button>
+                  !editingPrices[index] && (
+                    <button
+                      type="button"
+                      className="quick-service-remove"
+                      aria-label={`${it.remove} ${item.project}`}
+                      onClick={(event) => {
+                        event.currentTarget.blur();
+                        setProjectRemoveSuppressed(true);
+                        onChange(
+                          items.filter((_, itemIndex) => itemIndex !== index),
+                        );
+                      }}
+                    >
+                      <X size={16} />
+                    </button>
+                  )
                 ) : (
                   <button
                     type="button"

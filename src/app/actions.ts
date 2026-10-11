@@ -203,6 +203,10 @@ export async function createRetailSaleAction(input: unknown) {
     }),
   );
 }
+export async function deleteRetailSaleAction(id: string) {
+  const actor = await requireActor();
+  return execute(() => service.deleteRetailSale(actor, id));
+}
 export async function saveQuickServiceAction(
   id: string | null,
   input: unknown,

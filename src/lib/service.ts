@@ -2641,6 +2641,63 @@ export async function createRetailSale(actorInput: Actor, raw: unknown) {
   });
 }
 
+export async function deleteRetailSale(actorInput: Actor, id: string) {
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const sale = await tx.retailSale.findUniqueOrThrow({
+      where: { id },
+      include: { items: true, payments: true },
+    });
+    const movements = await tx.inventoryMovement.findMany({
+      where: { referenceType: "RETAIL_SALE", referenceId: id },
+    });
+    const soldByProduct = new Map<string, number>();
+    for (const item of sale.items)
+      soldByProduct.set(
+        item.productId,
+        (soldByProduct.get(item.productId) ?? 0) + item.quantity,
+      );
+    const movedByProduct = new Map<string, number>();
+    for (const movement of movements)
+      movedByProduct.set(
+        movement.productId,
+        (movedByProduct.get(movement.productId) ?? 0) - movement.quantity,
+      );
+    if (
+      soldByProduct.size !== movedByProduct.size ||
+      [...soldByProduct].some(
+        ([productId, quantity]) => movedByProduct.get(productId) !== quantity,
+      )
+    )
+      throw new BusinessError(
+        "I movimenti di magazzino della vendita non sono coerenti.",
+      );
+    for (const [productId, quantity] of soldByProduct)
+      await tx.product.update({
+        where: { id: productId },
+        data: { stockQuantity: { increment: quantity } },
+      });
+    const paymentIds = sale.payments.map((payment) => payment.id);
+    await tx.paymentAllocation.deleteMany({
+      where: { paymentId: { in: paymentIds } },
+    });
+    await tx.payment.deleteMany({ where: { saleId: id } });
+    await tx.inventoryMovement.deleteMany({
+      where: { referenceType: "RETAIL_SALE", referenceId: id },
+    });
+    await tx.retailServiceItem.deleteMany({ where: { saleId: id } });
+    await tx.retailSaleItem.deleteMany({ where: { saleId: id } });
+    await tx.auditLog.deleteMany({ where: { entityId: id } });
+    await tx.retailSale.delete({ where: { id } });
+    await audit(tx, actor, id, "RETAIL_SALE_DELETED", {
+      code: sale.code,
+      total: sale.total.toString(),
+      itemCount: sale.itemCount,
+    });
+    return { id };
+  });
+}
+
 export async function saveQuickService(
   actorInput: Actor,
   id: string | null,

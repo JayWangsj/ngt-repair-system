@@ -29,6 +29,7 @@ import {
   changeStatus,
   createProduct,
   createRetailSale,
+  deleteRetailSale,
   adjustInventory,
   updateProduct,
   deleteProducts,
@@ -2036,6 +2037,45 @@ describe("retail checkout", () => {
     expect(
       (await db.product.findUniqueOrThrow({ where: { id: product.id } }))
         .stockQuantity,
+    ).toBe(1);
+  });
+
+  it("deletes a retail sale and restores its stock", async () => {
+    const product = await createProduct(staff, {
+      requestId: randomUUID(),
+      name: "Prodotto da annullare",
+      category: "Cover",
+      usage: "RETAIL",
+      costPrice: "3",
+      salePrice: "15",
+      initialStock: 5,
+      minStock: 0,
+    });
+    const sale = await createRetailSale(staff, {
+      requestId: randomUUID(),
+      items: [{ productId: product.id, quantity: 2 }],
+      services: [],
+      discount: "0",
+      method: "CASH",
+    });
+
+    await deleteRetailSale(staff, sale.id);
+
+    expect(await db.retailSale.count({ where: { id: sale.id } })).toBe(0);
+    expect(await db.payment.count({ where: { saleId: sale.id } })).toBe(0);
+    expect(
+      await db.inventoryMovement.count({
+        where: { referenceType: "RETAIL_SALE", referenceId: sale.id },
+      }),
+    ).toBe(0);
+    expect(
+      (await db.product.findUniqueOrThrow({ where: { id: product.id } }))
+        .stockQuantity,
+    ).toBe(5);
+    expect(
+      await db.auditLog.count({
+        where: { entityId: sale.id, action: "RETAIL_SALE_DELETED" },
+      }),
     ).toBe(1);
   });
 

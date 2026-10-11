@@ -7386,6 +7386,27 @@ summary.record-icon::-webkit-details-marker {
   font: inherit;
   cursor: pointer;
 }
+.sale-amount-cell > span {
+  display: inline-block;
+  min-width: 72px;
+}
+.sale-amount-cell .record-icon-delete {
+  display: inline-grid;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+@media (hover: hover) {
+  .sale-amount-cell .record-icon-delete {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+  .business-list-row:hover .sale-amount-cell .record-icon-delete,
+  .business-list-row:focus-within .sale-amount-cell .record-icon-delete {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
 .form-dialog:has(.retail-history-dialog),
 .form-dialog:has(.retail-sale-dialog) {
   width: min(880px, calc(100vw - 32px));

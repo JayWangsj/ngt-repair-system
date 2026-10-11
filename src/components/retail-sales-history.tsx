@@ -1,7 +1,12 @@
+"use client";
+
+import { useState, useTransition } from "react";
 import { ChevronRight } from "lucide-react";
+import { deleteRetailSaleAction } from "@/app/actions";
 import { DatePicker } from "./business-select";
 import { useMessages } from "./language";
 import { money } from "@/lib/domain";
+import { RecordIcon } from "./ui/record-icon";
 
 export type SaleHistoryRow = {
   id: string;
@@ -35,14 +40,27 @@ export function RetailSalesHistory({
   period,
   onPeriodChange,
   onSelect,
+  onDeleted,
 }: {
   sales: SaleHistoryRow[];
   period: string;
   onPeriodChange: (period: string) => void;
   onSelect: (sale: SaleHistoryRow) => void;
+  onDeleted: (id: string) => void;
 }) {
   const it = useMessages();
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
   const filtered = sales.filter((sale) => sale.period === period);
+  function remove(sale: SaleHistoryRow) {
+    if (!window.confirm(it.retail.deleteSaleConfirm)) return;
+    setError("");
+    startTransition(async () => {
+      const result = await deleteRetailSaleAction(sale.id);
+      if (!result.ok) return setError(result.error);
+      onDeleted(sale.id);
+    });
+  }
   return (
     <div className="retail-history-dialog" data-form-dialog-body>
       <DatePicker
@@ -81,7 +99,15 @@ export function RetailSalesHistory({
                     <td>{sale.date}</td>
                     <td className="numeric">{sale.itemCount}</td>
                     <td>{sale.method ? it.methods[sale.method] : "—"}</td>
-                    <td className="numeric">{money(sale.total)}</td>
+                    <td className="numeric sale-amount-cell">
+                      <span>{money(sale.total)}</span>
+                      <RecordIcon
+                        kind="delete"
+                        label={`${it.retail.deleteSale} ${sale.code}`}
+                        disabled={pending}
+                        onClick={() => remove(sale)}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -91,6 +117,11 @@ export function RetailSalesHistory({
           <p className="inventory-empty">{it.retail.noSales}</p>
         )}
       </section>
+      {error && (
+        <p className="message error" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

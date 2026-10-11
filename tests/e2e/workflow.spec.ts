@@ -2956,6 +2956,10 @@ test("completes a retail sale and opens its immutable receipt", async ({
     .first();
   await expect(saleNumber).toHaveClass(/order-code-link/);
   const historyRow = saleNumber.locator("xpath=ancestor::tr");
+  await historyRow.hover();
+  await expect(
+    historyRow.getByRole("button", { name: /Elimina vendita V-/ }),
+  ).toBeVisible();
   await expectMatchingColumn(
     historyDialog.locator("th").nth(2),
     historyRow.locator("td").nth(2),
@@ -3000,12 +3004,12 @@ test("completes a retail sale and opens its immutable receipt", async ({
   expect(motionProgress.payment).toBeGreaterThan(0);
   expect(motionProgress.payment).toBeLessThan(1);
   await page.waitForTimeout(750);
-  await expect(page.locator(".revenue-bar")).toHaveCount(14);
+  await expect(page.locator(".revenue-bar")).toHaveCount(21);
   const latestDay = page.locator(".revenue-day").last();
   await latestDay.hover();
   await expect(latestDay.locator(".revenue-tooltip")).toHaveCSS("opacity", "1");
   await expect(latestDay.locator(".revenue-tooltip")).toContainText("24,00");
-  await expect(page.locator(".donut-segment")).toHaveCount(2);
+  await expect(page.locator(".donut-segment")).toHaveCount(3);
   await expect(page.locator(".revenue-source-legend")).toContainText(
     "Vendita prodotti24,00 €",
   );

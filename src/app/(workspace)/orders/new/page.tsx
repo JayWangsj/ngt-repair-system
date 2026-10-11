@@ -18,12 +18,10 @@ export default async function NewOrder({
   });
   const [
     faultOptions,
-    devices,
     customers,
     products,
     productCategories,
     reservations,
-    catalogDeletions,
     quickServices,
   ] = await Promise.all([
     db.faultOption.findMany({
@@ -37,11 +35,6 @@ export default async function NewOrder({
         _count: { select: { orders: true } },
       },
       orderBy: [{ category: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
-    }),
-    db.device.findMany({
-      where: { deletedAt: null, customer: { deletedAt: null } },
-      select: { category: true, brand: true, model: true },
-      distinct: ["category", "brand", "model"],
     }),
     db.customer.findMany({
       where: { deletedAt: null },
@@ -76,9 +69,6 @@ export default async function NewOrder({
       },
       _sum: { quantity: true },
     }),
-    db.deviceCatalogDeletion.findMany({
-      select: { category: true, kind: true, brand: true, value: true },
-    }),
     db.quickService.findMany({
       where: { enabled: true },
       orderBy: { name: "asc" },
@@ -106,8 +96,6 @@ export default async function NewOrder({
               ...fault,
               usageCount: _count.orders,
             }))}
-            devices={devices}
-            catalogDeletions={catalogDeletions}
             customers={customers}
             products={products.map((product) => ({
               id: product.id,

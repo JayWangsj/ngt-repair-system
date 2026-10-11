@@ -61,6 +61,84 @@ async function chooseRequiredPart(
   await chooseBusinessOption(page, "Ricambio richiesto 1", option, scope);
 }
 
+async function chooseRepairDevice(page: Page, name: string) {
+  await page.getByRole("button", { name: "Dispositivo", exact: true }).click();
+  const dialog = page.getByRole("dialog", {
+    name: "Dispositivo del cliente",
+  });
+  await dialog
+    .locator(".customer-device-row")
+    .filter({ hasText: name })
+    .click();
+  await dialog
+    .getByRole("button", { name: "Conferma selezione", exact: true })
+    .click();
+}
+
+async function createRepairDevice(page: Page, brand: string, model: string) {
+  await page.getByRole("button", { name: "Dispositivo", exact: true }).click();
+  const picker = page.getByRole("dialog", {
+    name: "Dispositivo del cliente",
+  });
+  await picker
+    .getByRole("button", { name: "Nuovo dispositivo", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Nuovo dispositivo" });
+  await chooseBusinessOption(page, "Marca", brand, dialog);
+  await chooseBusinessOption(page, "Modello", model, dialog);
+  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    picker.locator(".customer-device-row.is-selected"),
+  ).toContainText(`${brand} ${model}`);
+  await picker
+    .getByRole("button", { name: "Conferma selezione", exact: true })
+    .click();
+}
+
+async function chooseRepairProjects(page: Page, names: string[]) {
+  await page.getByRole("button", { name: "Intervento", exact: true }).click();
+  const dialog = page.getByRole("dialog", {
+    name: "Seleziona interventi",
+  });
+  for (const name of names) {
+    await dialog
+      .locator(".quick-service-picker-option")
+      .filter({ hasText: name })
+      .click();
+  }
+  await dialog
+    .getByRole("button", { name: "Conferma selezione", exact: true })
+    .click();
+}
+
+async function createRepairProject(page: Page, name: string, price: string) {
+  await page.getByRole("button", { name: "Intervento", exact: true }).click();
+  const picker = page.getByRole("dialog", {
+    name: "Seleziona interventi",
+  });
+  await picker
+    .getByRole("button", { name: "Intervento personalizzato", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Intervento personalizzato",
+  });
+  await dialog.getByLabel("Intervento *", { exact: true }).fill(name);
+  await dialog
+    .getByLabel("Prezzo originale (€) *", { exact: true })
+    .fill(price);
+  await dialog.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    picker
+      .locator(".quick-service-picker-option.is-selected")
+      .filter({ hasText: name }),
+  ).toBeVisible();
+  await picker
+    .getByRole("button", { name: "Conferma selezione", exact: true })
+    .click();
+}
+
 async function enterBusinessValue(
   page: Page,
   label: string,
@@ -113,14 +191,9 @@ async function fillOrder(
   if (!options.phone)
     await chooseBusinessOption(page, "Cerca cliente", customerName);
   if (options.phone) {
-    await chooseBusinessOption(page, "Marca", "Apple");
-    await chooseBusinessOption(page, "Modello", "iPhone 13");
+    await createRepairDevice(page, "Apple", "iPhone 13");
   } else {
-    await chooseBusinessOption(
-      page,
-      "Dispositivo del cliente",
-      "Apple iPhone 13",
-    );
+    await chooseRepairDevice(page, "Apple iPhone 13");
   }
   if (options.diagnosis)
     await page
@@ -132,31 +205,14 @@ async function fillOrder(
     .fill("2099-12-31");
   if (options.diagnosis) {
     await expect(
-      page.getByRole("combobox", { name: "Intervento 1", exact: true }),
+      page.getByRole("button", { name: "Intervento", exact: true }),
     ).toHaveCount(0);
   } else if (options.manual) {
-    const project = page.getByRole("combobox", {
-      name: "Intervento 1",
-      exact: true,
-    });
-    await project.fill(`Fotocamera ${Date.now()}`);
-  } else
-    await chooseBusinessOption(page, "Intervento 1", "sostituzione display");
+    await createRepairProject(page, `Fotocamera ${Date.now()}`, "75");
+  } else await chooseRepairProjects(page, ["sostituzione display"]);
   if (options.diagnosis) {
     // Diagnosis orders intentionally have no repair quote yet.
-  } else if (options.manual) {
-    const price = page.getByLabel("Prezzo originale (€) 1", { exact: true });
-    const create = page.getByRole("button", {
-      name: "Intervento personalizzato",
-      exact: true,
-    });
-    await expect(async () => {
-      await price.fill("75");
-      await expect(price).toHaveValue("75");
-      await expect(create).toBeEnabled();
-    }).toPass();
-    await create.click();
-  } else
+  } else if (!options.manual)
     await expect(
       page.getByRole("button", {
         name: "Modifica dati Preventivo attuale",
@@ -310,27 +366,19 @@ test("device step gates faults and advances only after faults and due date", asy
   page,
 }) => {
   await page.goto("/orders/new");
-  await openStep(page, 1);
+  await chooseBusinessOption(page, "Cerca cliente", "Cliente Playwright");
   const card = page.locator(".order-step-card").nth(1);
   const dueDate = page.getByLabel("Consegna prevista", { exact: true });
   const inspection = card.locator(".inspection-choice button");
   const display = page.getByLabel("Display rotto", { exact: true });
   const power = page.getByLabel("Non si accende", { exact: true });
+  const addDevice = page.getByRole("button", {
+    name: "Dispositivo",
+    exact: true,
+  });
 
-  await expect(
-    page.getByText("Completa prima tipo, marca e modello"),
-  ).toBeVisible();
-  await expect(inspection).toHaveCount(0);
-  await expect(display).toHaveCount(0);
-  await expect(dueDate).toHaveCount(0);
-
-  await chooseBusinessOption(page, "Marca", "Apple");
-  await card.locator(".order-step-heading").click();
-  await expect(card.locator(".order-step-title small")).toHaveText(
-    "Seleziona il modello del dispositivo.",
-  );
-  await card.locator(".order-step-heading").click();
-  await chooseBusinessOption(page, "Modello", "iPhone 13");
+  await expect(addDevice).toBeEnabled();
+  await chooseRepairDevice(page, "Apple iPhone 13");
   const deviceSummary = card.locator(".repair-device-summary");
   const changeDevice = deviceSummary.getByRole("button", {
     name: "Cambia dispositivo",
@@ -354,10 +402,37 @@ test("device step gates faults and advances only after faults and due date", asy
     )
     .toContain("4, 0");
   await changeDevice.click();
-  await expect(deviceSummary).toHaveCount(0);
+  const picker = page.getByRole("dialog", {
+    name: "Dispositivo del cliente",
+  });
   await expect(
-    page.getByRole("combobox", { name: "Modello", exact: true }),
-  ).toHaveValue("iPhone 13");
+    picker.locator(".customer-device-row.is-selected"),
+  ).toContainText("Apple iPhone 13");
+  await picker
+    .getByRole("button", { name: "Conferma selezione", exact: true })
+    .click();
+  await deviceSummary.hover();
+  await changeDevice.click();
+  await picker
+    .getByRole("button", { name: "Nuovo dispositivo", exact: true })
+    .click();
+  const newDeviceDialog = page.getByRole("dialog", {
+    name: "Nuovo dispositivo",
+  });
+  await chooseBusinessOption(page, "Marca", "Apple", newDeviceDialog);
+  await chooseBusinessOption(page, "Modello", "iPhone 14", newDeviceDialog);
+  await newDeviceDialog
+    .getByRole("button", { name: "Salva", exact: true })
+    .click();
+  await expect(newDeviceDialog).toHaveCount(0);
+  await expect(picker).toBeVisible();
+  await expect(
+    picker.locator(".customer-device-row.is-selected"),
+  ).toContainText("Apple iPhone 14");
+  await picker
+    .getByRole("button", { name: "Conferma selezione", exact: true })
+    .click();
+  await expect(deviceSummary).toContainText("Apple iPhone 14");
   await expect(display).toBeEnabled();
   await expect(inspection).toBeEnabled();
   await expect(dueDate).toHaveCount(0);
@@ -379,6 +454,73 @@ test("device step gates faults and advances only after faults and due date", asy
   await expect(page.locator(".order-step-card").nth(2)).toHaveClass(
     /is-selected/,
   );
+});
+
+test("repair project picker selects multiple items and removes a summary on hover", async ({
+  page,
+}) => {
+  await page.goto("/orders/new");
+  await chooseBusinessOption(page, "Cerca cliente", "Cliente Playwright");
+  await chooseRepairDevice(page, "Apple iPhone 13");
+  await page.getByLabel("Display rotto", { exact: true }).check();
+  await page
+    .getByLabel("Consegna prevista", { exact: true })
+    .fill("2099-12-31");
+  await expect(
+    page.locator(".order-step-card").nth(2).locator(".order-step-heading"),
+  ).toHaveAttribute("aria-expanded", "true");
+
+  const addProject = page.getByRole("button", {
+    name: "Intervento",
+    exact: true,
+  });
+  await expect(addProject).toBeVisible();
+  await addProject.click();
+  const picker = page.getByRole("dialog", {
+    name: "Seleziona interventi",
+  });
+  await picker
+    .locator(".quick-service-picker-option")
+    .filter({ hasText: "sostituzione display" })
+    .click();
+  await picker
+    .getByRole("button", { name: "Intervento personalizzato", exact: true })
+    .click();
+  const customDialog = page.getByRole("dialog", {
+    name: "Intervento personalizzato",
+  });
+  await customDialog
+    .getByLabel("Intervento *", { exact: true })
+    .fill("Pulizia completa");
+  await customDialog
+    .getByLabel("Prezzo originale (€) *", { exact: true })
+    .fill("75");
+  await customDialog
+    .getByRole("button", { name: "Salva", exact: true })
+    .click();
+  await expect(customDialog).toHaveCount(0);
+  await expect(
+    picker.locator(".quick-service-picker-option.is-selected"),
+  ).toHaveCount(2);
+  await expect(picker).toContainText("2 interventi selezionati");
+  await picker
+    .getByRole("button", { name: "Conferma selezione", exact: true })
+    .click();
+
+  const summaries = page.locator(".selected-project-summary");
+  await expect(summaries).toHaveCount(2);
+  await expect(addProject).toBeVisible();
+  const customSummary = summaries.filter({ hasText: "Pulizia completa" });
+  const remove = customSummary.getByRole("button", {
+    name: "Rimuovi Pulizia completa",
+    exact: true,
+  });
+  await expect(remove).toHaveCSS("opacity", "0");
+  await customSummary.hover();
+  await expect(remove).toHaveCSS("opacity", "1");
+  await remove.click();
+  await expect(summaries).toHaveCount(1);
+  await expect(summaries).not.toContainText("Pulizia completa");
 });
 
 test("single operator opens every business page without login", async ({

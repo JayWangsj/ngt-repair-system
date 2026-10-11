@@ -8,23 +8,11 @@ import {
   Plus,
   Search,
   Smartphone,
-  Trash2,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import {
-  createOrderAction,
-  deleteDeviceCatalogOptionAction,
-} from "@/app/actions";
-import {
-  brands,
-  categories,
-  modelKey,
-  models,
-  normalizeBrand,
-  normalizeDeviceModel,
-  type Category,
-} from "@/lib/catalog";
+import { createOrderAction, lookupCustomerAction } from "@/app/actions";
+import { categories, type Category } from "@/lib/catalog";
 import {
   cents,
   creatablePaymentMethods,
@@ -33,15 +21,11 @@ import {
   settlement,
 } from "@/lib/domain";
 import { useBusinessDay } from "./business-date";
-import { uniqueOptions } from "@/lib/options";
 import { translateError } from "@/lib/i18n";
 import { prefersReducedMotion } from "@/lib/motion-preference";
+import { DatePicker, SimpleSelect } from "./business-select";
 import {
-  DatePicker,
-  SearchableCombobox,
-  SimpleSelect,
-} from "./business-select";
-import {
+  DeviceForm,
   Field,
   FormDialog,
   ItemsEditor,
@@ -214,21 +198,12 @@ function StepCard({
 export function NewOrderWizard({
   rules,
   faultOptions,
-  devices,
-  catalogDeletions,
   customers,
   products,
   productCategories,
 }: {
   rules: RuleView[];
   faultOptions: FaultCatalogItem[];
-  devices: { category: string; brand: string; model: string }[];
-  catalogDeletions: {
-    category: string;
-    kind: string;
-    brand: string;
-    value: string;
-  }[];
   customers: CustomerOption[];
   products: {
     id: string;
@@ -249,9 +224,9 @@ export function NewOrderWizard({
   const [expandedStep, setExpandedStep] = useState<number | null>(0);
   const [customer, setCustomer] = useState<CustomerDetail>(null);
   const [deviceId, setDeviceId] = useState("");
-  const [autoMatchedDevice, setAutoMatchedDevice] = useState(false);
-  const [editingDevice, setEditingDevice] = useState(true);
   const [choosingDevice, setChoosingDevice] = useState(false);
+  const [creatingDevice, setCreatingDevice] = useState(false);
+  const [draftDeviceId, setDraftDeviceId] = useState("");
   const [category, setCategory] = useState<Category>("PHONE");
   const [brand, setBrand] = useState("");
   const [series, setSeries] = useState("");
@@ -266,9 +241,7 @@ export function NewOrderWizard({
   const [inspectionMode, setInspectionMode] = useState(false);
   const [inspectionFee, setInspectionFee] = useState("30");
   const [dueDate, setDueDate] = useState("");
-  const [items, setItems] = useState<Item[]>([
-    { project: "", final: "", adjustmentReason: "", discount: "0" },
-  ]);
+  const [items, setItems] = useState<Item[]>([]);
   const [orderDiscount, setOrderDiscount] = useState("0");
   const [includeVat, setIncludeVat] = useState(false);
   const [deposit, setDeposit] = useState("0");
@@ -277,71 +250,11 @@ export function NewOrderWizard({
   const [touched, setTouched] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const [hiddenCatalog, setHiddenCatalog] = useState(catalogDeletions);
   const completed = useRef([false, false, false]);
 
   const catalog = faults
     .filter((fault) => fault.category === category && !fault.hidden)
     .sort((a, b) => a.sortOrder - b.sortOrder);
-  const knownDevices = devices.filter((device) => device.category === category);
-  const brandOptions = uniqueOptions(
-    [
-      ...brands[category],
-      ...knownDevices.map((device) => device.brand),
-      ...rules
-        .filter((rule) => rule.category === category)
-        .map((rule) => rule.brand),
-    ].filter(Boolean),
-  ).filter(
-    (value) =>
-      !hiddenCatalog.some(
-        (entry) =>
-          entry.category === category &&
-          entry.kind === "BRAND" &&
-          entry.value.toLocaleLowerCase("it") === value.toLocaleLowerCase("it"),
-      ),
-  );
-  const modelOptions = uniqueOptions(
-    [
-      ...(models[category]?.[brand] ?? []),
-      ...knownDevices
-        .filter(
-          (device) =>
-            device.brand.toLocaleLowerCase("it") ===
-            brand.toLocaleLowerCase("it"),
-        )
-        .map((device) => device.model),
-      ...rules
-        .filter(
-          (rule) =>
-            rule.category === category &&
-            rule.brand.toLocaleLowerCase("it") ===
-              brand.toLocaleLowerCase("it"),
-        )
-        .map((rule) => rule.model),
-    ].filter(Boolean),
-  ).filter(
-    (value) =>
-      !hiddenCatalog.some(
-        (entry) =>
-          entry.category === category &&
-          entry.kind === "MODEL" &&
-          entry.brand.toLocaleLowerCase("it") ===
-            brand.toLocaleLowerCase("it") &&
-          entry.value.toLocaleLowerCase("it") === value.toLocaleLowerCase("it"),
-      ),
-  );
-  async function deleteCatalogOption(kind: "BRAND" | "MODEL", value: string) {
-    const input = {
-      category,
-      kind,
-      brand: kind === "MODEL" ? brand : "",
-      value,
-    };
-    const result = await deleteDeviceCatalogOptionAction(input);
-    if (!result.ok) return setError(result.error);
-    setHiddenCatalog((current) => [...current, input]);
-  }
   const validCustomer = !!customer;
   const validDevice = !!category && !!brand.trim() && !!model.trim();
   const validFault =
@@ -393,18 +306,17 @@ export function NewOrderWizard({
   }
   function clearDevice() {
     setDeviceId("");
-    setAutoMatchedDevice(false);
     setBrand("");
     setSeries("");
     setModel("");
     setImei("");
-    setEditingDevice(true);
+    setAppearance("");
+    setAccessories("");
   }
   function selectCustomerDevice(
     device: NonNullable<CustomerDetail>["devices"][number],
   ) {
     setDeviceId(device.id);
-    setAutoMatchedDevice(false);
     setCategory(device.category as Category);
     setBrand(device.brand);
     setSeries(device.series);
@@ -412,49 +324,33 @@ export function NewOrderWizard({
     setImei(device.imei ?? "");
     setAppearance(device.appearance);
     setAccessories(device.accessories);
-    setEditingDevice(false);
   }
   function changeDevice() {
-    if (customer?.devices.length) setChoosingDevice(true);
-    else setEditingDevice(true);
+    setDraftDeviceId(deviceId);
+    setChoosingDevice(true);
   }
   function changeCustomer(next: CustomerDetail) {
     setCustomer(next);
     clearDevice();
+    setChoosingDevice(false);
+    setCreatingDevice(false);
     if (!next) {
       setSelectedStep(0);
       setExpandedStep(0);
     }
   }
-  function matchCustomerDevice(
-    nextCategory: Category,
-    nextBrand: string,
-    nextModel: string,
-  ) {
-    if (deviceId && !autoMatchedDevice) return;
-    const matches =
-      customer?.devices.filter(
-        (device) =>
-          device.category === nextCategory &&
-          normalizeBrand(device.brand).toLocaleLowerCase("it") ===
-            normalizeBrand(nextBrand).toLocaleLowerCase("it") &&
-          modelKey(device.model) === modelKey(nextModel),
-      ) ?? [];
-    if (matches.length !== 1) {
-      setDeviceId("");
-      setAutoMatchedDevice(false);
-      return;
-    }
-    const [match] = matches;
-    setDeviceId(match.id);
-    setAutoMatchedDevice(true);
-    setCategory(match.category as Category);
-    setBrand(match.brand);
-    setSeries(match.series);
-    setModel(match.model);
-    setImei(match.imei ?? "");
-    setAppearance(match.appearance);
-    setAccessories(match.accessories);
+  async function refreshDevices() {
+    if (!customer) return;
+    const previousIds = new Set(customer.devices.map((device) => device.id));
+    const updated = await lookupCustomerAction(customer.phone);
+    setCreatingDevice(false);
+    setChoosingDevice(true);
+    if (!updated) return;
+    const created = updated.devices.find(
+      (device) => !previousIds.has(device.id),
+    );
+    setCustomer(updated);
+    if (created) setDraftDeviceId(created.id);
   }
   function leaveInspection() {
     if (inspectionMode) setInspectionMode(false);
@@ -603,7 +499,7 @@ export function NewOrderWizard({
             }
             summaryError={expandedStep !== 1 && !validStep2}
           >
-            {validDevice && !editingDevice && (
+            {validDevice ? (
               <RepairDeviceSummary
                 category={categories[category][locale === "zh" ? 1 : 0]}
                 brand={brand}
@@ -611,173 +507,17 @@ export function NewOrderWizard({
                 imei={imei}
                 onChange={changeDevice}
               />
-            )}
-            {editingDevice && customer?.devices?.length ? (
-              <Field label={it.chooseDevice}>
-                <SimpleSelect
-                  value={deviceId}
-                  onChange={(id) => {
-                    const device = customer.devices.find(
-                      (entry) => entry.id === id,
-                    );
-                    if (device) selectCustomerDevice(device);
-                    else clearDevice();
-                  }}
-                  ariaLabel={it.chooseDevice}
-                  placeholder={it.newDevice}
-                  options={[
-                    { value: "", label: it.newDevice },
-                    ...customer.devices.map((device) => ({
-                      value: device.id,
-                      label: `${device.brand} ${device.model}`,
-                      secondary: device.imei ?? undefined,
-                    })),
-                  ]}
-                />
-              </Field>
-            ) : null}
-            <div className="form-grid three" hidden={!editingDevice}>
-              <Field label={it.deviceType}>
-                <SimpleSelect
-                  value={category}
-                  onChange={(value) => {
-                    setCategory(value as Category);
-                    clearDevice();
-                    setSelectedFaults([]);
-                  }}
-                  disabled={!!deviceId && !autoMatchedDevice}
-                  ariaLabel={it.deviceType}
-                  placeholder={it.selectOption}
-                  options={Object.entries(categories).map(
-                    ([value, labels]) => ({
-                      value,
-                      label: labels[locale === "zh" ? 1 : 0],
-                    }),
-                  )}
-                />
-              </Field>
-              <Field label={`${it.brand} *`}>
-                <SearchableCombobox
-                  value={brand}
-                  onChange={(value) => {
-                    const nextBrand = normalizeBrand(value);
-                    setBrand(nextBrand);
-                    setModel("");
-                    setSeries("");
-                    matchCustomerDevice(category, nextBrand, "");
-                  }}
-                  disabled={!!deviceId && !autoMatchedDevice}
-                  ariaLabel={it.brand}
-                  placeholder={it.manualEntry}
-                  searchPlaceholder={it.search}
-                  emptyText={it.noMatches}
-                  customLabel={it.customBrand}
-                  onCustom={(value) => {
-                    const nextBrand = normalizeBrand(value);
-                    setBrand(nextBrand);
-                    setModel("");
-                    setSeries("");
-                    matchCustomerDevice(category, nextBrand, "");
-                  }}
-                  clearable
-                  groups={[
-                    {
-                      options: brandOptions.map((value) => ({
-                        value,
-                        label: value,
-                        ariaLabel: value,
-                        trailing: (
-                          <button
-                            type="button"
-                            className="option-delete"
-                            aria-label={`${it.remove} ${value}`}
-                            onPointerDown={(event) => event.preventDefault()}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void deleteCatalogOption("BRAND", value);
-                            }}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        ),
-                      })),
-                    },
-                  ]}
-                />
-              </Field>
-              <Field label={`${it.model} *`}>
-                <SearchableCombobox
-                  value={model}
-                  onChange={(value) => {
-                    const nextModel = normalizeDeviceModel(
-                      brand,
-                      value,
-                      modelOptions,
-                    );
-                    setModel(nextModel);
-                    matchCustomerDevice(category, brand, nextModel);
-                    setEditingDevice(false);
-                  }}
-                  disabled={(!!deviceId && !autoMatchedDevice) || !brand}
-                  ariaLabel={it.model}
-                  placeholder={it.manualEntry}
-                  searchPlaceholder={it.search}
-                  emptyText={it.noMatches}
-                  customLabel={it.customModel}
-                  onCustom={(value) => {
-                    const nextModel = normalizeDeviceModel(
-                      brand,
-                      value,
-                      modelOptions,
-                    );
-                    setModel(nextModel);
-                    matchCustomerDevice(category, brand, nextModel);
-                    setEditingDevice(false);
-                  }}
-                  onCommit={(value) => {
-                    const nextModel = normalizeDeviceModel(
-                      brand,
-                      value,
-                      modelOptions,
-                    );
-                    setModel(nextModel);
-                    matchCustomerDevice(category, brand, nextModel);
-                    setEditingDevice(false);
-                  }}
-                  clearable
-                  groups={[
-                    {
-                      options: modelOptions.map((value) => ({
-                        value,
-                        label: value,
-                        ariaLabel: value,
-                        trailing: (
-                          <button
-                            type="button"
-                            className="option-delete"
-                            aria-label={`${it.remove} ${value}`}
-                            onPointerDown={(event) => event.preventDefault()}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void deleteCatalogOption("MODEL", value);
-                            }}
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        ),
-                      })),
-                    },
-                  ]}
-                />
-              </Field>
-            </div>
-            {editingDevice && touched && !validDevice && (
-              <p className="field-error">
-                {!brand ? it.selectBrandError : it.selectModelError}
-              </p>
-            )}
-            {editingDevice && !validDevice && (
-              <p className="device-dependency-hint">{it.completeDeviceFirst}</p>
+            ) : (
+              <div className="quick-service-device-cards">
+                <button
+                  type="button"
+                  className="quick-service-device-card is-add"
+                  disabled={!customer}
+                  onClick={changeDevice}
+                >
+                  <Plus size={18} /> {it.device}
+                </button>
+              </div>
             )}
             {validDevice && (
               <div className="wizard-progressive-reveal">
@@ -852,25 +592,68 @@ export function NewOrderWizard({
                       <CustomerDeviceCard
                         key={device.id}
                         device={device}
-                        selected={device.id === deviceId}
-                        onSelect={() => {
-                          selectCustomerDevice(device);
-                          setChoosingDevice(false);
-                        }}
+                        selected={device.id === draftDeviceId}
+                        onSelect={() => setDraftDeviceId(device.id)}
                       />
                     ))}
+                    {!customer.devices.length && (
+                      <p className="muted">{it.noDevices}</p>
+                    )}
                   </div>
                   <button
                     type="button"
                     className="quick-service-picker-add"
                     onClick={() => {
-                      clearDevice();
                       setChoosingDevice(false);
+                      setCreatingDevice(true);
                     }}
                   >
                     <Plus size={16} /> {it.newDevice}
                   </button>
+                  <div className="quick-service-picker-footer">
+                    <div className="dialog-actions">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setChoosingDevice(false)}
+                      >
+                        {it.cancel}
+                      </Button>
+                      <Button
+                        type="button"
+                        disabled={!draftDeviceId}
+                        onClick={() => {
+                          const device = customer.devices.find(
+                            (entry) => entry.id === draftDeviceId,
+                          );
+                          if (!device) return;
+                          selectCustomerDevice(device);
+                          setChoosingDevice(false);
+                        }}
+                      >
+                        {it.quickService.confirmDevices}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
+              </FormDialog>
+            )}
+            {creatingDevice && customer && (
+              <FormDialog
+                title={it.newDevice}
+                onClose={() => {
+                  setCreatingDevice(false);
+                  setChoosingDevice(true);
+                }}
+              >
+                <DeviceForm
+                  customerId={customer.id}
+                  onSuccess={() => void refreshDevices()}
+                  onCancel={() => {
+                    setCreatingDevice(false);
+                    setChoosingDevice(true);
+                  }}
+                />
               </FormDialog>
             )}
             {touched && !validFault && (
@@ -940,6 +723,7 @@ export function NewOrderWizard({
                 products={products}
                 productCategories={productCategories}
                 progressive
+                projectPicker
               />
             )}
             {touched && !validQuote && (

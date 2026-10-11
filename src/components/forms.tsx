@@ -725,6 +725,7 @@ export function ItemsEditor({
   initialEdit,
   focusedEdit = false,
   onFocusedEditComplete,
+  projectPicker = false,
 }: {
   discounts?: boolean;
   items: ItemView[];
@@ -746,6 +747,7 @@ export function ItemsEditor({
   initialEdit?: { index: number; field: "project" | "part" };
   focusedEdit?: boolean;
   onFocusedEditComplete?: () => void;
+  projectPicker?: boolean;
 }) {
   const it = useMessages();
   const [createdProducts, setCreatedProducts] = useState<CreatedProduct[]>([]);
@@ -774,6 +776,15 @@ export function ItemsEditor({
   const [temporaryProjects, setTemporaryProjects] = useState<
     Record<number, ItemView[]>
   >({});
+  const [choosingProjects, setChoosingProjects] = useState(false);
+  const [draftProjects, setDraftProjects] = useState<string[]>([]);
+  const [pickerCustomProjects, setPickerCustomProjects] = useState<ItemView[]>(
+    [],
+  );
+  const [creatingProject, setCreatingProject] = useState(false);
+  const [newProject, setNewProject] = useState("");
+  const [newProjectPrice, setNewProjectPrice] = useState("");
+  const [newProjectPart, setNewProjectPart] = useState("");
   const priceInputs = useRef<Record<number, HTMLInputElement | null>>({});
   useEffect(() => {
     const index = Object.entries(editingPrices).find(
@@ -792,6 +803,83 @@ export function ItemsEditor({
     device.model,
   ].join("|");
   const previousDevice = useRef(deviceKey);
+  const catalogProjects = deviceProjects(rules, device);
+  const pickerProjects = [
+    ...catalogProjects.map((project) => {
+      const found = matchRule(rules, device, project)!;
+      return {
+        project,
+        final: found.rule.suggested,
+        notes: found.rule.notes,
+        item: {
+          project,
+          final: found.rule.suggested,
+          adjustmentReason: "",
+          discount: "0",
+          discountVisible: false,
+          saveRule: false,
+          requiredProductId: found.rule.requiredProductId ?? "",
+          requiredQuantity: found.rule.requiredQuantity ?? 1,
+          requiredProductRemoved: false,
+        } satisfies ItemView,
+      };
+    }),
+    ...pickerCustomProjects
+      .filter(
+        (item) =>
+          !catalogProjects.some(
+            (project) =>
+              normalizedProject(project) === normalizedProject(item.project),
+          ),
+      )
+      .map((item) => ({
+        project: item.project,
+        final: item.final,
+        notes: it.afterSales.temporaryProject,
+        item,
+      })),
+  ];
+  function openProjectPicker() {
+    setDraftProjects(items.map((item) => item.project).filter(Boolean));
+    setPickerCustomProjects(
+      items.filter(
+        (item) => item.saveRule && !matchRule(rules, device, item.project),
+      ),
+    );
+    setChoosingProjects(true);
+  }
+  function toggleDraftProject(project: string) {
+    setDraftProjects((current) =>
+      current.some(
+        (value) => normalizedProject(value) === normalizedProject(project),
+      )
+        ? current.filter(
+            (value) => normalizedProject(value) !== normalizedProject(project),
+          )
+        : [...current, project],
+    );
+  }
+  function confirmProjects() {
+    onChange(
+      draftProjects
+        .map((project) => {
+          const existing = items.find(
+            (item) =>
+              normalizedProject(item.project) === normalizedProject(project),
+          );
+          return (
+            existing ??
+            pickerProjects.find(
+              (choice) =>
+                normalizedProject(choice.project) ===
+                normalizedProject(project),
+            )?.item
+          );
+        })
+        .filter((item): item is ItemView => Boolean(item)),
+    );
+    setChoosingProjects(false);
+  }
   useEffect(() => {
     if (previousDevice.current === deviceKey) return;
     previousDevice.current = deviceKey;
@@ -800,35 +888,34 @@ export function ItemsEditor({
     setEditingPrices({});
     setTemporaryProjects({});
     const projects = deviceProjects(rules, device);
-    onChange(
-      items.map((item) => {
-        const project = projects.find(
-          (candidate) =>
-            candidate.toLocaleLowerCase("it") ===
-            item.project.trim().toLocaleLowerCase("it"),
-        );
-        const found = project ? matchRule(rules, device, project) : null;
-        return project && found
-          ? {
-              ...item,
-              project,
-              final: found.rule.suggested,
-              requiredProductId: found.rule.requiredProductId ?? "",
-              requiredQuantity: found.rule.requiredQuantity ?? 1,
-              requiredProductRemoved: false,
-            }
-          : {
-              ...item,
-              project: "",
-              final: "",
-              discount: "0",
-              requiredProductId: "",
-              requiredQuantity: 1,
-              requiredProductRemoved: false,
-            };
-      }),
-    );
-  }, [deviceKey, device, items, rules, onChange]);
+    const next = items.map((item) => {
+      const project = projects.find(
+        (candidate) =>
+          candidate.toLocaleLowerCase("it") ===
+          item.project.trim().toLocaleLowerCase("it"),
+      );
+      const found = project ? matchRule(rules, device, project) : null;
+      return project && found
+        ? {
+            ...item,
+            project,
+            final: found.rule.suggested,
+            requiredProductId: found.rule.requiredProductId ?? "",
+            requiredQuantity: found.rule.requiredQuantity ?? 1,
+            requiredProductRemoved: false,
+          }
+        : {
+            ...item,
+            project: "",
+            final: "",
+            discount: "0",
+            requiredProductId: "",
+            requiredQuantity: 1,
+            requiredProductRemoved: false,
+          };
+    });
+    onChange(projectPicker ? next.filter((item) => item.project) : next);
+  }, [deviceKey, device, items, rules, onChange, projectPicker]);
   const update = (index: number, patch: Partial<ItemView>) => {
     const next = items.map((item, i) =>
       i === index ? { ...item, ...patch } : item,
@@ -868,6 +955,10 @@ export function ItemsEditor({
       requiredQuantity: 1,
       requiredProductRemoved: false,
     });
+  const newProjectExists = pickerProjects.some(
+    (choice) =>
+      normalizedProject(choice.project) === normalizedProject(newProject),
+  );
   return (
     <div className="items-editor">
       {items.map((item, index) => {
@@ -945,9 +1036,10 @@ export function ItemsEditor({
             itemSelected &&
             !editingProject ? (
               <div
-                className={`selection-summary selected-project-summary${editingPrices[index] ? "" : " is-actionable"}`}
+                className={`selection-summary selected-project-summary${!projectPicker && !editingPrices[index] ? " is-actionable" : ""}`}
                 onClick={(event) => {
                   if (
+                    projectPicker ||
                     editingPrices[index] ||
                     (event.target as HTMLElement).closest("button, input")
                   )
@@ -1022,21 +1114,37 @@ export function ItemsEditor({
                     </button>
                   )}
                 </div>
-                <button
-                  type="button"
-                  className="summary-action"
-                  onClick={() =>
-                    setEditingProjects((current) => ({
-                      ...current,
-                      [index]: true,
-                    }))
-                  }
-                >
-                  <span>{it.change}</span>
-                  <ChevronRight size={15} aria-hidden="true" />
-                </button>
+                {projectPicker ? (
+                  <button
+                    type="button"
+                    className="quick-service-remove"
+                    aria-label={`${it.remove} ${item.project}`}
+                    onClick={() =>
+                      onChange(
+                        items.filter((_, itemIndex) => itemIndex !== index),
+                      )
+                    }
+                  >
+                    <X size={16} />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="summary-action"
+                    onClick={() =>
+                      setEditingProjects((current) => ({
+                        ...current,
+                        [index]: true,
+                      }))
+                    }
+                  >
+                    <span>{it.change}</span>
+                    <ChevronRight size={15} aria-hidden="true" />
+                  </button>
+                )}
               </div>
-            ) : !focusedEdit || initialEdit?.field === "project" ? (
+            ) : projectPicker ? null : !focusedEdit ||
+              initialEdit?.field === "project" ? (
               <>
                 <SearchableCombobox
                   className="repair-project-combobox"
@@ -1379,7 +1487,7 @@ export function ItemsEditor({
                   )}
                 </div>
               )}
-            {!focusedEdit && items.length > 1 && (
+            {!projectPicker && !focusedEdit && items.length > 1 && (
               <RecordIcon
                 kind="delete"
                 label={it.remove + " " + it.project + " " + (index + 1)}
@@ -1389,7 +1497,8 @@ export function ItemsEditor({
           </div>
         );
       })}
-      {!focusedEdit &&
+      {!projectPicker &&
+        !focusedEdit &&
         (!progressive ||
           items.every(
             (item) => item.project.trim() && validAmount(item.final),
@@ -1403,6 +1512,15 @@ export function ItemsEditor({
             {it.addItem}
           </Button>
         )}
+      {projectPicker && (
+        <button
+          type="button"
+          className="quick-service-service-add"
+          onClick={openProjectPicker}
+        >
+          <Plus size={18} /> {it.project}
+        </button>
+      )}
       {!focusedEdit &&
         (!progressive ||
           items.some(
@@ -1415,6 +1533,178 @@ export function ItemsEditor({
             </strong>
           </div>
         )}
+      {choosingProjects && (
+        <FormDialog
+          title={it.selectRepairProjects}
+          subtitle={it.repairProjectPickerHelp}
+          onClose={() => setChoosingProjects(false)}
+        >
+          <div className="quick-service-picker">
+            <div className="quick-service-picker-list">
+              {pickerProjects.map((choice) => {
+                const selected = draftProjects.some(
+                  (project) =>
+                    normalizedProject(project) ===
+                    normalizedProject(choice.project),
+                );
+                return (
+                  <article
+                    className={`quick-service-picker-option quick-service-picker-service business-list-row${selected ? " is-selected" : ""}`}
+                    key={normalizedProject(choice.project)}
+                    onClick={() => toggleDraftProject(choice.project)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      aria-label={`${it.selectOption} ${choice.project}`}
+                      onChange={() => toggleDraftProject(choice.project)}
+                      onClick={(event) => event.stopPropagation()}
+                    />
+                    <span className="quick-service-picker-icon">
+                      <Wrench size={22} aria-hidden="true" />
+                    </span>
+                    <span className="quick-service-picker-copy">
+                      <strong>{choice.project}</strong>
+                      <small>{choice.notes || it.priceListProject}</small>
+                    </span>
+                    <strong className="quick-service-picker-price">
+                      {money(cents(choice.final))}
+                    </strong>
+                  </article>
+                );
+              })}
+              {!pickerProjects.length && (
+                <p className="muted">{it.afterSales.noDeviceProjects}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              className="quick-service-picker-add"
+              onClick={() => {
+                setNewProject("");
+                setNewProjectPrice("");
+                setNewProjectPart("");
+                setChoosingProjects(false);
+                setCreatingProject(true);
+              }}
+            >
+              <Plus size={16} /> {it.afterSales.addCustomProject}
+            </button>
+            <div className="quick-service-picker-footer">
+              <strong>
+                {it.selectedRepairProjects.replace(
+                  "{count}",
+                  String(draftProjects.length),
+                )}
+              </strong>
+              <div className="dialog-actions">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setChoosingProjects(false)}
+                >
+                  {it.cancel}
+                </Button>
+                <Button type="button" onClick={confirmProjects}>
+                  {it.quickService.confirmServices}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </FormDialog>
+      )}
+      {creatingProject && (
+        <FormDialog
+          title={it.afterSales.addCustomProject}
+          onClose={() => {
+            setCreatingProject(false);
+            setChoosingProjects(true);
+          }}
+        >
+          <div className="quick-service-custom-project">
+            <Field label={`${it.project} *`}>
+              <input
+                autoFocus
+                value={newProject}
+                onChange={(event) => setNewProject(event.target.value)}
+              />
+            </Field>
+            <Field label={`${it.final} *`}>
+              <input
+                inputMode="decimal"
+                value={newProjectPrice}
+                onChange={(event) => setNewProjectPrice(event.target.value)}
+                aria-invalid={
+                  Boolean(newProjectPrice) &&
+                  !validPositiveAmount(newProjectPrice)
+                }
+              />
+            </Field>
+            <Field label={`${it.requiredPart} (${it.optional})`}>
+              <SearchableCombobox
+                value={newProjectPart}
+                onChange={setNewProjectPart}
+                ariaLabel={it.requiredPart}
+                placeholder={it.noRequiredPart}
+                searchPlaceholder={it.searchInventoryPart}
+                emptyText={it.noMatches}
+                clearable
+                groups={[
+                  {
+                    options: availableProducts.map((product) => ({
+                      value: product.id,
+                      label: product.name,
+                      secondary: product.category,
+                    })),
+                  },
+                ]}
+              />
+            </Field>
+            {newProjectExists && (
+              <p className="field-error">{it.repairProjectExists}</p>
+            )}
+            <div className="dialog-actions">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setCreatingProject(false);
+                  setChoosingProjects(true);
+                }}
+              >
+                {it.cancel}
+              </Button>
+              <Button
+                type="button"
+                disabled={
+                  !newProject.trim() ||
+                  !validPositiveAmount(newProjectPrice) ||
+                  newProjectExists
+                }
+                onClick={() => {
+                  const item: ItemView = {
+                    project: newProject.trim(),
+                    final: newProjectPrice,
+                    adjustmentReason: "",
+                    discount: "0",
+                    discountVisible: false,
+                    saveRule: true,
+                    requiredProductId: newProjectPart,
+                    requiredQuantity: 1,
+                    requiredProductRemoved: false,
+                  };
+                  setPickerCustomProjects((current) => [...current, item]);
+                  setDraftProjects((current) => [...current, item.project]);
+                  setCreatingProject(false);
+                  setChoosingProjects(true);
+                }}
+              >
+                {it.save}
+              </Button>
+            </div>
+          </div>
+        </FormDialog>
+      )}
       {creatingPart && (
         <FormDialog
           title={it.newRepairPart}

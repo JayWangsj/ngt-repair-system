@@ -598,6 +598,11 @@ export const it = {
   final: "Prezzo originale (€)",
   reason: "Motivo prezzo manuale / modifica",
   addItem: "Aggiungi intervento",
+  selectRepairProjects: "Seleziona interventi",
+  repairProjectPickerHelp:
+    "Seleziona gli interventi necessari per questa riparazione. Selezione multipla disponibile.",
+  selectedRepairProjects: "{count} interventi selezionati",
+  repairProjectExists: "Questo intervento esiste già.",
   remove: "Rimuovi",
   noMatch:
     "Nessun prezzo trovato: inserisci il prezzo. Verrà salvato nel listino.",

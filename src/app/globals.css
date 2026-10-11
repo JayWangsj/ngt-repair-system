@@ -3104,13 +3104,6 @@ details[open] > summary {
   .service-order-print-signatures {
     margin-top: auto;
   }
-  .service-order-print-warranties {
-    display: grid;
-    gap: 0.6mm;
-    min-height: 6mm;
-    padding: 1.2mm 2.5mm;
-    font-size: 7.5pt;
-  }
   .service-order-print-signature-lines {
     display: grid;
     grid-template-columns: 1fr 1fr 0.7fr;

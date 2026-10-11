@@ -11,11 +11,6 @@ type PrintDevice = {
   imei?: string | null;
 };
 
-type PrintWarranty = {
-  project: string;
-  days: number;
-};
-
 export function ServiceOrderPrint({
   code,
   acceptedAt,
@@ -34,7 +29,6 @@ export function ServiceOrderPrint({
   remaining,
   paymentStatus,
   paymentMethods,
-  warranties,
 }: {
   code: string;
   acceptedAt: string;
@@ -53,13 +47,11 @@ export function ServiceOrderPrint({
   remaining: string;
   paymentStatus: string;
   paymentMethods: string[];
-  warranties: PrintWarranty[];
 }) {
   const labels = it.printOrder;
   const densityScore =
     interventions.length +
     devices.length +
-    warranties.length +
     Math.floor(problem.join(" ").length / 120);
   const density =
     densityScore > 10 ? " is-compact" : densityScore > 7 ? " is-dense" : "";
@@ -222,20 +214,9 @@ export function ServiceOrderPrint({
             )}
 
             <PrintSection
-              title={labels.warrantyAndSignatures}
+              title={labels.signatures}
               className="service-order-print-signatures"
             >
-              <div className="service-order-print-warranties">
-                {warranties.length ? (
-                  warranties.map((warranty) => (
-                    <span key={warranty.project}>
-                      {warranty.project}: {warranty.days} {labels.days}
-                    </span>
-                  ))
-                ) : (
-                  <span>{labels.noWarranty}</span>
-                )}
-              </div>
               <div className="service-order-print-signature-lines">
                 <span>{labels.customerSignature}</span>
                 <span>{labels.shopSignature}</span>

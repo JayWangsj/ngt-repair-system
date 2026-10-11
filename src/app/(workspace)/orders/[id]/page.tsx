@@ -258,9 +258,6 @@ export default async function Detail({
             .map((payment) => italianMessages.methods[payment.method]),
         ),
       ]}
-      warranties={order.items
-        .filter((item) => item.warrantyDays > 0)
-        .map((item) => ({ project: item.project, days: item.warrantyDays }))}
     />
   );
 

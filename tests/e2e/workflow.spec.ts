@@ -1265,6 +1265,9 @@ test("service order print renders mirrored copies from live order data", async (
   await expect(copies.nth(0)).toContainText("COPIA CLIENTE");
   await expect(copies.nth(1)).toContainText("COPIA NEGOZIO");
   await expect(printView).toContainText("SCHEDA DI ASSISTENZA");
+  await expect(printView).toContainText("FIRME");
+  await expect(printView).not.toContainText("GARANZIA");
+  await expect(printView).not.toContainText("Garanzia non impostata");
   await expect(printView).not.toContainText("维修管理系统");
   const printBrand = printView.locator(".service-order-print-brand").first();
   await expect(printBrand.locator("img")).toHaveAttribute(

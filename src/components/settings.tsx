@@ -27,6 +27,12 @@ import {
   readOrderViewportFollow,
   writeOrderViewportFollow,
 } from "@/lib/order-motion";
+import {
+  DeviceModelManager,
+  QuickServiceManager,
+  type QuickServiceView,
+  type SavedModelView,
+} from "./catalog-managers";
 
 export function SettingsTools({
   currentVersion,
@@ -34,12 +40,16 @@ export function SettingsTools({
   faultOptions,
   clock,
   today,
+  quickServices,
+  savedModels,
 }: {
   currentVersion: string;
   testToolsEnabled: boolean;
   faultOptions: FaultCatalogItem[];
   clock: { mode: "SYSTEM" | "MANUAL"; manualDate: string };
   today: string;
+  quickServices: QuickServiceView[];
+  savedModels: SavedModelView[];
 }) {
   const it = useMessages();
   const router = useRouter();
@@ -504,6 +514,16 @@ export function SettingsTools({
             </form>
           </FormDialog>
         )}
+      </section>
+      <section className="panel padded settings-card">
+        <h2>{it.quickService.title}</h2>
+        <p>{it.quickService.description}</p>
+        <QuickServiceManager items={quickServices} />
+      </section>
+      <section className="panel padded settings-card">
+        <h2>{it.modelCatalog.title}</h2>
+        <p>{it.modelCatalog.description}</p>
+        <DeviceModelManager items={savedModels} />
       </section>
       <section className="panel padded settings-card">
         <h2>{it.faultCatalog}</h2>

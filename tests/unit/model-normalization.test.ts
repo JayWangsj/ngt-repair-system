@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { modelKey, normalizeModel } from "@/lib/catalog";
+import { modelKey, normalizeDeviceModel, normalizeModel } from "@/lib/catalog";
 
 describe("model normalization", () => {
   it("prefers the current brand catalog display name", () => {
@@ -13,5 +13,8 @@ describe("model normalization", () => {
     expect(normalizeModel("galaxys24ultra")).toBe("Galaxy S24 Ultra");
     expect(normalizeModel("X200")).toBe("X200");
     expect(normalizeModel("13T")).toBe("13T");
+    expect(normalizeDeviceModel("Samsung", "galaxya265g")).toBe(
+      "Galaxy A26 5G",
+    );
   });
 });

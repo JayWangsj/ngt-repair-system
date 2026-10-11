@@ -37,6 +37,7 @@ import { DetailStatusControl } from "@/components/order-list-controls";
 import { CompleteInspectionButton } from "@/components/inspection-quote";
 import { getBusinessDay } from "@/lib/business-date";
 import { WorkOrderRepairSummary } from "@/components/work-order-repair-summary";
+import { ServiceOrderActions } from "@/components/service-order-actions";
 
 type TimelineEvent = {
   id: string;
@@ -62,7 +63,7 @@ export default async function Detail({
   const actor = await requireActor();
   const today = await getBusinessDay();
   const { id } = await params;
-  const [order, audits] = await Promise.all([
+  const [order, audits, inventoryMovementCount] = await Promise.all([
     db.workOrder.findUnique({ where: { id }, include: orderInclude }),
     db.auditLog.findMany({
       where: {
@@ -81,6 +82,9 @@ export default async function Detail({
         },
       },
       orderBy: { createdAt: "asc" },
+    }),
+    db.inventoryMovement.count({
+      where: { referenceType: "WORK_ORDER", referenceId: id },
     }),
   ]);
   if (!order) notFound();
@@ -147,6 +151,13 @@ export default async function Detail({
   const financiallyClosed = ["REFUNDED", "CANCELLED"].includes(order.status);
   const received = financiallyClosed ? 0 : receivedTotal;
   const currentDue = financiallyClosed ? 0 : totals.due;
+  const deleteBlockedReason = order.payments.length
+    ? it.deleteServiceOrderBlockedPayment
+    : order.products.length || inventoryMovementCount
+      ? it.deleteServiceOrderBlockedInventory
+      : order.reworks.length
+        ? it.deleteServiceOrderBlockedAfterSales
+        : undefined;
   const repairAmount = financiallyClosed
     ? 0
     : totals.due -
@@ -164,6 +175,120 @@ export default async function Detail({
       warrantyProgress(item.warrantyStart, item.warrantyDays, today),
     ]),
   );
+
+  if (order.type === "QUICK_SERVICE")
+    return (
+      <>
+        <BackButton href="/orders" label={it.nav.orders} />
+        <PageHeader
+          title={orderCode(order.code)}
+          description={`${it.orderTypes.QUICK_SERVICE} · ${order.device.customer.name}`}
+        />
+        <div className="detail-status">
+          <DetailStatusControl
+            id={id}
+            type={order.type}
+            status={order.status}
+            customerName={order.customerName || order.device.customer.name}
+            due={currentDue}
+            paid={received}
+            balance={remaining}
+            afterSalesOpen={false}
+          />
+          <span>
+            {it.created}: {dateTime(order.createdAt)}
+          </span>
+          <span>
+            {it.quickService.expectedAt}:{" "}
+            {order.expectedAt?.replace("T", " ") ?? "—"}
+          </span>
+          <ServiceOrderActions
+            id={id}
+            code={order.code}
+            blockedReason={deleteBlockedReason}
+          />
+        </div>
+        <div className="detail-grid">
+          <div className="stack">
+            <section className="panel padded">
+              <h2>{it.quickService.serviceItems}</h2>
+              <div className="quick-service-detail-list">
+                {order.items.map((item) => (
+                  <div key={item.id}>
+                    <span>
+                      <strong>{item.project}</strong>
+                      {item.quickService?.notes && (
+                        <small>{item.quickService.notes}</small>
+                      )}
+                    </span>
+                    <strong>{money(cents(item.final))}</strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <section className="panel padded">
+              <h2>{it.quickService.selectDevices}</h2>
+              <div className="quick-service-device-list">
+                {order.relatedDevices.map(({ device }) => (
+                  <div key={device.id}>
+                    <strong>
+                      {device.brand} {device.model}
+                    </strong>
+                    <small>{device.imei || "—"}</small>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+          <div className="stack">
+            <section className="panel padded balance-card">
+              <span>{it.balance}</span>
+              <strong>{money(remaining)}</strong>
+              <div>
+                <span>
+                  {it.quickService.income}: {money(currentDue)}
+                </span>
+                <span>
+                  {it.paid}: {money(received)}
+                </span>
+              </div>
+            </section>
+            {order.status === "READY" && (
+              <section className="panel padded status-operation-card">
+                <h2>{it.orderProducts.checkout}</h2>
+                <WorkOrderCheckout
+                  orderId={id}
+                  due={currentDue}
+                  paid={received}
+                  remaining={remaining}
+                  customerName={
+                    order.customerName || order.device.customer.name
+                  }
+                />
+              </section>
+            )}
+            <section className="panel padded payments-card">
+              <h2>{it.payments}</h2>
+              {order.payments.map((payment) => (
+                <div className="payment-row" key={payment.id}>
+                  <strong>{money(cents(payment.amount))}</strong>
+                  <span>
+                    {it.kinds[payment.kind]} · {it.methods[payment.method]}
+                  </span>
+                  <small>
+                    {dateTime(payment.receivedAt)} · {payment.actorName}
+                  </small>
+                </div>
+              ))}
+              {remaining > 0 &&
+                !["COMPLETED", "CANCELLED"].includes(order.status) && (
+                  <PaymentForm key={remaining} id={id} remaining={remaining} />
+                )}
+            </section>
+          </div>
+        </div>
+      </>
+    );
 
   const events: TimelineEvent[] = [];
   for (const audit of audits) {
@@ -346,6 +471,7 @@ export default async function Detail({
       <div className="detail-status">
         <DetailStatusControl
           id={id}
+          type={order.type}
           status={order.status}
           customerName={order.customerName || order.device.customer.name}
           due={currentDue}
@@ -356,6 +482,11 @@ export default async function Detail({
         <span>
           {it.created}: {dateTime(order.createdAt)}
         </span>
+        <ServiceOrderActions
+          id={id}
+          code={order.code}
+          blockedReason={deleteBlockedReason}
+        />
         <span>
           {it.dueDate}: {dateOnly(order.afterSalesDueDate ?? order.dueDate)}
         </span>

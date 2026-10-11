@@ -48,6 +48,10 @@ import {
   refundOrder,
   deleteInventoryCategory,
   deleteDeviceCatalogOption,
+  createQuickServiceOrder,
+  deleteWorkOrder,
+  renameDeviceModel,
+  saveQuickService,
 } from "@/lib/service";
 import { balance, type Actor } from "@/lib/domain";
 import {
@@ -82,6 +86,7 @@ beforeAll(async () => {
   await db.auditLog.deleteMany();
   await db.paymentAllocation.deleteMany();
   await db.payment.deleteMany();
+  await db.retailServiceItem.deleteMany();
   await db.retailSaleItem.deleteMany();
   await db.retailSale.deleteMany();
   await db.inventoryMovement.deleteMany();
@@ -91,11 +96,13 @@ beforeAll(async () => {
   await db.product.deleteMany();
   await db.inventoryCategory.deleteMany();
   await db.statusHistory.deleteMany();
+  await db.workOrderDevice.deleteMany();
   await db.workOrderItem.deleteMany();
   await db.workOrder.deleteMany();
   await db.device.deleteMany();
   await db.customer.deleteMany();
   await db.priceRule.deleteMany();
+  await db.quickService.deleteMany();
   await db.faultOption.deleteMany();
   await db.user.deleteMany();
   owner = await db.user.create({
@@ -127,6 +134,7 @@ beforeEach(async () => {
   await db.auditLog.deleteMany();
   await db.paymentAllocation.deleteMany();
   await db.payment.deleteMany();
+  await db.retailServiceItem.deleteMany();
   await db.retailSaleItem.deleteMany();
   await db.retailSale.deleteMany();
   await db.inventoryMovement.deleteMany();
@@ -137,11 +145,13 @@ beforeEach(async () => {
   await db.inventoryCategory.deleteMany();
   await db.deviceCatalogDeletion.deleteMany();
   await db.statusHistory.deleteMany();
+  await db.workOrderDevice.deleteMany();
   await db.workOrderItem.deleteMany();
   await db.workOrder.deleteMany();
   await db.device.deleteMany();
   await db.customer.deleteMany();
   await db.priceRule.deleteMany();
+  await db.quickService.deleteMany();
   await db.faultOption.deleteMany();
   await db.user.updateMany({ data: { enabled: true } });
   await savePriceRule(owner, null, {
@@ -2028,6 +2038,194 @@ describe("retail checkout", () => {
         .stockQuantity,
     ).toBe(1);
   });
+
+  it("classifies quick services separately without changing inventory", async () => {
+    const service = await saveQuickService(owner, null, {
+      name: "Trasferimento dati",
+      defaultPrice: "30",
+      notes: "",
+      enabled: true,
+    });
+    const sale = await createRetailSale(staff, {
+      requestId: randomUUID(),
+      items: [],
+      services: [{ serviceId: service.id, price: "25", quantity: 1 }],
+      discount: "0",
+      method: "CARD",
+    });
+    expect(sale.code).toMatch(/^V-\d{8}001$/);
+    expect(sale.serviceItems).toMatchObject([
+      { serviceName: "Trasferimento dati", quantity: 1 },
+    ]);
+    expect(await db.inventoryMovement.count()).toBe(0);
+    const allocations = await db.paymentAllocation.findMany({
+      where: { payment: { saleId: sale.id } },
+    });
+    expect(allocations.map((entry) => entry.source)).toEqual(["QUICK_SERVICE"]);
+    expect(allocations[0].amount.toString()).toBe("25");
+  });
+});
+
+describe("quick service orders", () => {
+  it("creates an S order with multiple devices and an independent sequence", async () => {
+    const customer = await saveCustomer(owner, null, {
+      name: "Migrazione cliente",
+      phone: "3331010123",
+      additionalPhones: [],
+    });
+    const firstDevice = await createDevice(owner, customer.id, {
+      category: "PHONE",
+      brand: "Samsung",
+      model: "galaxya265g",
+      imei: "",
+    });
+    const secondDevice = await createDevice(owner, customer.id, {
+      category: "PHONE",
+      brand: "Samsung",
+      model: "Galaxy S24",
+      imei: "",
+    });
+    const service = await saveQuickService(owner, null, {
+      name: "Migrazione completa",
+      defaultPrice: "40",
+      notes: "Due telefoni",
+      enabled: true,
+    });
+    const repair = await createOrder(owner, input({ deposit: "0" }));
+    const order = await createQuickServiceOrder(staff, {
+      requestId: randomUUID(),
+      customerId: customer.id,
+      deviceIds: [firstDevice.id, secondDevice.id],
+      services: [{ serviceId: service.id, price: "35" }],
+      expectedAt: "2099-12-31T18:30",
+    });
+    expect(repair.code).toBe("R-20261001001");
+    expect(order.code).toBe("S-20261001001");
+    const saved = await db.workOrder.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { relatedDevices: true, items: true },
+    });
+    expect(saved).toMatchObject({
+      type: "QUICK_SERVICE",
+      status: "RECEIVED",
+      expectedAt: "2099-12-31T18:30",
+    });
+    expect(saved.relatedDevices).toHaveLength(2);
+    expect(saved.items[0].final.toString()).toBe("35");
+    expect(
+      (await db.device.findUniqueOrThrow({ where: { id: firstDevice.id } }))
+        .model,
+    ).toBe("Galaxy A26 5G");
+    await deleteWorkOrder(owner, order.id, { code: order.code });
+    expect(await db.workOrder.count({ where: { id: order.id } })).toBe(0);
+  });
+});
+
+describe("service order safety", () => {
+  it("can charge the diagnostic fee while cancelling and then blocks deletion", async () => {
+    const order = await createOrder(
+      staff,
+      input({
+        inspectionMode: true,
+        faults: [],
+        fault: "",
+        items: [],
+        diagnosticFee: "12.50",
+        deposit: "0",
+      }),
+    );
+    await changeStatus(staff, order.id, {
+      status: "CANCELLED",
+      note: "Cliente rinuncia",
+      cancelPayment: {
+        requestId: randomUUID(),
+        amount: "12.50",
+        method: "CASH",
+      },
+    });
+    const payment = await db.payment.findFirstOrThrow({
+      where: { orderId: order.id },
+      include: { allocations: true },
+    });
+    expect(payment.amount.toString()).toBe("12.5");
+    expect(payment.allocations).toMatchObject([{ source: "REPAIR" }]);
+    await expect(
+      deleteWorkOrder(owner, order.id, { code: order.code }),
+    ).rejects.toThrow("incassi");
+  });
+
+  it("renames devices, quotes and compatible parts while merging duplicates", async () => {
+    const product = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Display A26",
+      category: "Ricambi",
+      usage: "REPAIR",
+      costPrice: "20",
+      salePrice: "0",
+      initialStock: 2,
+      minStock: 0,
+    });
+    const customer = await saveCustomer(owner, null, {
+      name: "Modello errato",
+      phone: "3331010456",
+      additionalPhones: [],
+    });
+    await db.device.create({
+      data: {
+        customerId: customer.id,
+        category: "PHONE",
+        brand: "Samsung",
+        model: "A265G",
+      },
+    });
+    await db.priceRule.create({
+      data: {
+        category: "PHONE",
+        brand: "Samsung",
+        model: "A265G",
+        project: "Display",
+        suggested: "90",
+        requiredProductId: product.id,
+      },
+    });
+    await savePriceRule(owner, null, {
+      category: "PHONE",
+      brand: "Samsung",
+      model: "A26 5G",
+      project: "Display",
+      suggested: "95",
+      requiredProductId: product.id,
+      requiredQuantity: 1,
+    });
+    await db.productCompatibility.create({
+      data: {
+        productId: product.id,
+        category: "PHONE",
+        brand: "Samsung",
+        model: "A265G",
+        project: "display",
+      },
+    });
+    await renameDeviceModel(owner, {
+      category: "PHONE",
+      brand: "Samsung",
+      from: "A265G",
+      to: "A26 5G",
+    });
+    expect(
+      await db.device.count({ where: { brand: "Samsung", model: "A26 5G" } }),
+    ).toBe(1);
+    expect(
+      await db.priceRule.count({
+        where: { brand: "Samsung", model: "A26 5G", project: "Display" },
+      }),
+    ).toBe(1);
+    expect(
+      await db.productCompatibility.count({
+        where: { productId: product.id, model: "A26 5G" },
+      }),
+    ).toBe(1);
+  });
 });
 
 describe("versioned data backup and merge import", () => {
@@ -2065,7 +2263,7 @@ describe("versioned data backup and merge import", () => {
     const backup = await exportBusinessData();
     expect(backup).toMatchObject({
       format: "ngt-repair-data",
-      version: 7,
+      version: 8,
     });
     expect(backup.data.orders).toHaveLength(1);
     expect(backup.data.payments.map((payment) => payment.kind).sort()).toEqual([

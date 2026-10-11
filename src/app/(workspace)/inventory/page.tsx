@@ -35,6 +35,7 @@ export default async function InventoryPage({
     db.product.findMany({
       where: { enabled: true },
       include: {
+        compatibilities: true,
         requiredByRules: {
           where: { enabled: true },
           select: {
@@ -88,7 +89,7 @@ export default async function InventoryPage({
     enabled: product.enabled,
     compatibilities: [
       ...new Map(
-        product.requiredByRules.map((rule) => [
+        [...product.compatibilities, ...product.requiredByRules].map((rule) => [
           [rule.brand, rule.category, rule.model, rule.project]
             .map((value) => value.trim().toLocaleLowerCase())
             .join("\u0000"),

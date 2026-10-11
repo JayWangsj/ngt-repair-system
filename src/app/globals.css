@@ -2540,6 +2540,14 @@ details[open] > summary {
 .revenue-donut .donut-segment.retail {
   stroke: var(--dashboard-retail);
 }
+.revenue-donut .donut-segment.quick-service,
+.revenue-bar.quick-service,
+.chart-legend i.quick-service,
+.revenue-source-legend i.quick-service,
+.revenue-tooltip i.quick-service {
+  stroke: #14b8a6;
+  background: #14b8a6;
+}
 .revenue-donut .donut-segment:hover {
   stroke-width: 6.2;
   filter: brightness(0.97) saturate(1.08);
@@ -2805,6 +2813,171 @@ details[open] > summary {
     > .dashboard-link-label::after,
   html:not([data-motion="always"]) .dashboard-action-link svg {
     transition: none !important;
+  }
+}
+
+.service-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px;
+  margin-bottom: 18px;
+}
+.service-mode-switch button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--muted);
+  background: transparent;
+  font-weight: 700;
+  cursor: pointer;
+}
+.service-mode-switch button.active {
+  color: var(--ink);
+  background: var(--soft);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.quick-service-order-form,
+.quick-service-choice-list,
+.catalog-manager,
+.catalog-manager-list,
+.model-manager,
+.quick-service-detail-list,
+.quick-service-device-list {
+  display: grid;
+  gap: 12px;
+}
+.quick-service-choice-list,
+.product-compatibility-editor {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.quick-service-choice-list legend,
+.product-compatibility-editor legend {
+  padding: 0 6px;
+  font-weight: 700;
+}
+.quick-service-choice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px;
+  gap: 12px;
+  align-items: center;
+}
+.quick-service-choice small,
+.catalog-manager-row small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+}
+.catalog-manager-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.catalog-manager-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 16px;
+  align-items: center;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  text-align: left;
+  background: var(--surface);
+  cursor: pointer;
+}
+.catalog-manager-row em {
+  color: var(--muted);
+  font-size: 12px;
+  font-style: normal;
+}
+.model-manager section {
+  display: grid;
+  gap: 8px;
+}
+.model-manager h3 {
+  margin: 0;
+}
+.model-manager section > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.model-manager button {
+  padding: 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.product-compatibility-editor {
+  display: grid;
+  gap: 10px;
+}
+.product-compatibility-row {
+  display: grid;
+  grid-template-columns: 150px repeat(3, minmax(120px, 1fr)) auto;
+  gap: 8px;
+  align-items: center;
+}
+.order-type-tag {
+  display: inline-flex;
+  width: max-content;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--soft);
+  font-size: 11px;
+  font-weight: 700;
+}
+.secondary-actions {
+  position: relative;
+  width: max-content;
+}
+.secondary-actions summary {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  cursor: pointer;
+  list-style: none;
+}
+.secondary-actions summary::-webkit-details-marker {
+  display: none;
+}
+.secondary-actions > button {
+  position: absolute;
+  z-index: 5;
+  right: 0;
+  top: calc(100% + 6px);
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  width: max-content;
+  padding: 10px 12px;
+  border: 1px solid #efc4c4;
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+.retail-service-price {
+  width: 92px;
+}
+.quick-service-detail-list > div,
+.quick-service-device-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+@media (max-width: 760px) {
+  .quick-service-choice,
+  .product-compatibility-row,
+  .catalog-manager-row {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -6436,9 +6609,15 @@ summary.record-icon::-webkit-details-marker {
   white-space: nowrap;
 }
 .product-name {
-  display: inline-flex;
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
   align-items: center;
   gap: 7px;
+}
+.product-name strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .product-name svg {
   color: #d69a00;

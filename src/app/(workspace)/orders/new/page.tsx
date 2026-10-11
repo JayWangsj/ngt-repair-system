@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { requireActor } from "@/lib/session";
 import { NewOrderWizard } from "@/components/new-order-form";
+import { NewServiceOrder } from "@/components/new-service-order";
 import { BackButton, PageHeader } from "@/components/common";
 import { getMessages } from "@/lib/i18n-server";
 export default async function NewOrder() {
@@ -18,6 +19,7 @@ export default async function NewOrder() {
     productCategories,
     reservations,
     catalogDeletions,
+    quickServices,
   ] = await Promise.all([
     db.faultOption.findMany({
       select: {
@@ -43,6 +45,10 @@ export default async function NewOrder() {
         name: true,
         phone: true,
         phones: { select: { phone: true } },
+        devices: {
+          where: { deletedAt: null },
+          select: { id: true, category: true, brand: true, model: true },
+        },
       },
       orderBy: { name: "asc" },
     }),
@@ -68,6 +74,10 @@ export default async function NewOrder() {
     db.deviceCatalogDeletion.findMany({
       select: { category: true, kind: true, brand: true, value: true },
     }),
+    db.quickService.findMany({
+      where: { enabled: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
   const reservedByProduct = new Map(
     reservations.map((entry) => [entry.productId, entry._sum.quantity ?? 0]),
@@ -76,32 +86,44 @@ export default async function NewOrder() {
     <>
       <BackButton href="/orders" label={it.nav.orders} />
       <PageHeader title={it.newOrder} description={it.ordersDescription} />
-      <NewOrderWizard
-        faultOptions={faultOptions.map(({ _count, ...fault }) => ({
-          ...fault,
-          usageCount: _count.orders,
-        }))}
-        devices={devices}
-        catalogDeletions={catalogDeletions}
+      <NewServiceOrder
         customers={customers}
-        products={products.map((product) => ({
-          id: product.id,
-          name: product.name,
-          category: product.category,
-          stock: product.stockQuantity,
-          reserved: reservedByProduct.get(product.id) ?? 0,
-          available: Math.max(
-            0,
-            product.stockQuantity - (reservedByProduct.get(product.id) ?? 0),
-          ),
+        services={quickServices.map((service) => ({
+          id: service.id,
+          name: service.name,
+          notes: service.notes,
+          defaultPrice: Number(service.defaultPrice) * 100,
         }))}
-        productCategories={productCategories}
-        rules={rules.map((r) => ({
-          ...r,
-          suggested: r.suggested.toString(),
-          cost: undefined,
-          updatedAt: undefined,
-        }))}
+        repairForm={
+          <NewOrderWizard
+            faultOptions={faultOptions.map(({ _count, ...fault }) => ({
+              ...fault,
+              usageCount: _count.orders,
+            }))}
+            devices={devices}
+            catalogDeletions={catalogDeletions}
+            customers={customers}
+            products={products.map((product) => ({
+              id: product.id,
+              name: product.name,
+              category: product.category,
+              stock: product.stockQuantity,
+              reserved: reservedByProduct.get(product.id) ?? 0,
+              available: Math.max(
+                0,
+                product.stockQuantity -
+                  (reservedByProduct.get(product.id) ?? 0),
+              ),
+            }))}
+            productCategories={productCategories}
+            rules={rules.map((r) => ({
+              ...r,
+              suggested: r.suggested.toString(),
+              cost: undefined,
+              updatedAt: undefined,
+            }))}
+          />
+        }
       />
     </>
   );

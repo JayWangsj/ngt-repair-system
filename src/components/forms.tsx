@@ -52,7 +52,7 @@ import {
   faultPresets,
   type Category,
   normalizeBrand,
-  normalizeModel,
+  normalizeDeviceModel,
 } from "@/lib/catalog";
 import { isDiagnosticFault, settlement } from "@/lib/domain";
 import { useBusinessDay } from "./business-date";
@@ -347,6 +347,113 @@ export type CreatedProduct = {
   available?: number;
 };
 
+export type ProductCompatibilityDraft = {
+  category: string;
+  brand: string;
+  model: string;
+  project: string;
+};
+
+export function ProductCompatibilityFields({
+  value,
+  onChange,
+}: {
+  value: ProductCompatibilityDraft[];
+  onChange: (value: ProductCompatibilityDraft[]) => void;
+}) {
+  const it = useMessages();
+  const { locale } = useLanguage();
+  return (
+    <fieldset className="product-compatibility-editor">
+      <legend>{it.inventory.compatibleDevices}</legend>
+      {value.map((entry, index) => (
+        <div className="product-compatibility-row" key={index}>
+          <SimpleSelect
+            value={entry.category}
+            onChange={(category) =>
+              onChange(
+                value.map((item, position) =>
+                  position === index ? { ...item, category } : item,
+                ),
+              )
+            }
+            placeholder={it.deviceType}
+            ariaLabel={it.deviceType}
+            options={Object.entries(categories).map(([category, labels]) => ({
+              value: category,
+              label: labels[locale === "zh" ? 1 : 0],
+            }))}
+          />
+          <input
+            aria-label={it.brand}
+            placeholder={it.brand}
+            value={entry.brand}
+            onChange={(event) =>
+              onChange(
+                value.map((item, position) =>
+                  position === index
+                    ? { ...item, brand: event.target.value }
+                    : item,
+                ),
+              )
+            }
+          />
+          <input
+            aria-label={it.model}
+            placeholder={it.model}
+            value={entry.model}
+            onChange={(event) =>
+              onChange(
+                value.map((item, position) =>
+                  position === index
+                    ? { ...item, model: event.target.value }
+                    : item,
+                ),
+              )
+            }
+          />
+          <input
+            aria-label={it.project}
+            placeholder={`${it.project} (${it.optional})`}
+            value={entry.project}
+            onChange={(event) =>
+              onChange(
+                value.map((item, position) =>
+                  position === index
+                    ? { ...item, project: event.target.value }
+                    : item,
+                ),
+              )
+            }
+          />
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={it.remove}
+            onClick={() =>
+              onChange(value.filter((_, position) => position !== index))
+            }
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
+      ))}
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() =>
+          onChange([
+            ...value,
+            { category: "PHONE", brand: "", model: "", project: "" },
+          ])
+        }
+      >
+        <Plus size={16} /> {it.inventory.addCompatibility}
+      </Button>
+    </fieldset>
+  );
+}
+
 const presetInventoryCategories = [
   "Accessori",
   "Ricambi",
@@ -381,6 +488,9 @@ export function ProductForm({
   const [usage, setUsage] = useState<"RETAIL" | "REPAIR">(
     quickRepair ? "REPAIR" : (initialUsage ?? "RETAIL"),
   );
+  const [compatibilities, setCompatibilities] = useState<
+    ProductCompatibilityDraft[]
+  >([]);
   const [hiddenCategories, setHiddenCategories] = useState<string[]>([]);
   const nameInput = useRef<HTMLInputElement>(null);
   const costInput = useRef<HTMLInputElement>(null);
@@ -432,6 +542,9 @@ export function ProductForm({
         minStock: String(form.get("minStock") ?? "0"),
         favorite: form.get("favorite") === "on",
         enabled: true,
+        compatibilities: compatibilities.filter(
+          (entry) => entry.brand.trim() && entry.model.trim(),
+        ),
       });
       if (!result.ok) return setError(result.error);
       if (result.id)
@@ -549,6 +662,12 @@ export function ProductForm({
           />
         </Field>
       </div>
+      {mode === "inventory" && usage === "REPAIR" && (
+        <ProductCompatibilityFields
+          value={compatibilities}
+          onChange={setCompatibilities}
+        />
+      )}
       <label className="checkbox">
         <input name="favorite" type="checkbox" />
         {it.inventory.favorite}
@@ -1047,11 +1166,6 @@ export function ItemsEditor({
                           [index]: false,
                         }));
                     }
-                    requestAnimationFrame(() => {
-                      focusComfortably(priceInputs.current[index], {
-                        select: true,
-                      });
-                    });
                   }}
                 />
                 {noProjectMatches && (
@@ -1739,7 +1853,7 @@ export function NewOrderForm({
             required
             readOnly={!!values.deviceId}
             options={uniqueOptions(modelOptions)}
-            normalize={normalizeModel}
+            normalize={(model) => normalizeDeviceModel(values.brand, model)}
             onChange={(model) => setValue("model", model)}
           />
         </div>
@@ -3190,7 +3304,7 @@ export function RuleForm({
         onSuccess?.({
           category,
           brand: normalizeBrand(brand),
-          model: normalizeModel(model),
+          model: normalizeDeviceModel(brand, model),
         })
       }
       action={(data) =>
@@ -3252,7 +3366,7 @@ export function RuleForm({
               )
               .map((r) => r.model),
           )}
-          normalize={normalizeModel}
+          normalize={(value) => normalizeDeviceModel(brand, value)}
         />
       </div>
       <EditableSelect
@@ -3508,7 +3622,7 @@ export function DeviceForm({
         value={model}
         onChange={setModel}
         options={models[category]?.[brand] ?? []}
-        normalize={normalizeModel}
+        normalize={(value) => normalizeDeviceModel(brand, value)}
         required
       />
       <Field label={it.imei}>

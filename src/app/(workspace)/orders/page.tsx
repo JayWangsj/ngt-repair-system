@@ -13,6 +13,7 @@ export default async function Orders({
     status?: string;
     attention?: string;
     month?: string;
+    type?: string;
   }>;
 }) {
   const it = await getMessages();
@@ -52,6 +53,7 @@ export default async function Orders({
   const filtered = orders.filter(
     (o) =>
       (!query.status || o.status === query.status) &&
+      (!query.type || o.type === query.type) &&
       (!month || romeDay(o.createdAt).startsWith(month)) &&
       (query.attention === "overdue"
         ? isOverdue(o, today)
@@ -72,6 +74,7 @@ export default async function Orders({
           month,
           status: query.status ?? "",
           attention: query.attention ?? "",
+          type: query.type ?? "",
         }}
       />
       <section className="panel table-panel">

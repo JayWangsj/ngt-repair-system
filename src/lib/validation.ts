@@ -165,6 +165,17 @@ export const productInput = z.object({
   minStock: z.coerce.number().int().min(0).max(1_000_000).default(0),
   favorite: z.boolean().default(false),
   enabled: z.boolean().default(true),
+  compatibilities: z
+    .array(
+      z.object({
+        category: z.string().trim().min(1).max(30),
+        brand: short,
+        model: short,
+        project: z.string().trim().max(120).default(""),
+      }),
+    )
+    .max(100)
+    .default([]),
 });
 export const productUpdateInput = z.object({
   name: short,
@@ -175,6 +186,17 @@ export const productUpdateInput = z.object({
   stockQuantity: z.coerce.number().int().min(0).max(1_000_000),
   minStock: z.coerce.number().int().min(0).max(1_000_000),
   favorite: z.boolean(),
+  compatibilities: z
+    .array(
+      z.object({
+        category: z.string().trim().min(1).max(30),
+        brand: short,
+        model: short,
+        project: z.string().trim().max(120).default(""),
+      }),
+    )
+    .max(100)
+    .optional(),
 });
 export const paidTotalInput = z.object({
   requestId: z.string().uuid(),
@@ -192,20 +214,34 @@ export const inventoryAdjustmentInput = z.object({
   type: z.enum(["STOCK_IN", "MANUAL_ADJUSTMENT"]),
   note: text,
 });
-export const retailSaleInput = z.object({
-  requestId: z.string().uuid(),
-  items: z
-    .array(
-      z.object({
-        productId: z.string().min(1),
-        quantity: z.coerce.number().int().min(1).max(999),
-      }),
-    )
-    .min(1)
-    .max(100),
-  discount: amountInput.default("0"),
-  method: z.enum(["CASH", "CARD", "OTHER"]),
-});
+export const retailSaleInput = z
+  .object({
+    requestId: z.string().uuid(),
+    items: z
+      .array(
+        z.object({
+          productId: z.string().min(1),
+          quantity: z.coerce.number().int().min(1).max(999),
+        }),
+      )
+      .max(100)
+      .default([]),
+    services: z
+      .array(
+        z.object({
+          serviceId: z.string().min(1).max(100),
+          price: amountInput,
+          quantity: z.coerce.number().int().min(1).max(99).default(1),
+        }),
+      )
+      .max(100)
+      .default([]),
+    discount: amountInput.default("0"),
+    method: z.enum(["CASH", "CARD", "OTHER"]),
+  })
+  .refine((value) => value.items.length + value.services.length > 0, {
+    message: "Aggiungi almeno un prodotto o servizio.",
+  });
 export const workOrderProductInput = z.object({
   productId: z.string().min(1),
   kind: z.enum(["REPAIR_PART", "RETAIL_ADDON"]),
@@ -224,6 +260,53 @@ export const statusInput = z.object({
   note: text,
   pickedUpBy: z.string().trim().max(120).default(""),
   override: z.boolean().default(false),
+  cancelPayment: z
+    .object({
+      requestId: z.string().uuid(),
+      amount: amountInput,
+      method: z.enum(["CASH", "CARD", "OTHER"]),
+    })
+    .optional(),
+});
+
+export const quickServiceInput = z.object({
+  name: short,
+  defaultPrice: amountInput,
+  notes: text,
+  enabled: z.boolean().default(true),
+});
+
+export const quickServiceOrderInput = z.object({
+  requestId: z.string().uuid(),
+  customerId: z.string().min(1).max(100),
+  deviceIds: z.array(z.string().min(1).max(100)).min(1).max(10),
+  services: z
+    .array(
+      z.object({
+        serviceId: z.string().min(1).max(100),
+        price: amountInput,
+      }),
+    )
+    .min(1)
+    .max(30),
+  expectedAt: z
+    .string()
+    .trim()
+    .refine(
+      (value) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value),
+      "Data e ora non valide",
+    ),
+});
+
+export const renameDeviceModelInput = z.object({
+  category: z.string().trim().min(1).max(30),
+  brand: short,
+  from: short,
+  to: short,
+});
+
+export const deleteWorkOrderInput = z.object({
+  code: short,
 });
 export const warrantyInput = z.object({
   items: z

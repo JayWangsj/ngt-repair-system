@@ -1,7 +1,7 @@
 import { cents, romeDay } from "./domain";
 
 type Allocation = {
-  source: "REPAIR" | "RETAIL";
+  source: "REPAIR" | "RETAIL" | "QUICK_SERVICE";
   amount: string | { toString(): string };
 };
 export type BusinessPayment = {
@@ -17,17 +17,19 @@ export function revenueParts(payment: BusinessPayment) {
   if (payment.allocations?.length) {
     return payment.allocations.reduce(
       (result, allocation) => {
-        result[allocation.source.toLowerCase() as "repair" | "retail"] += cents(
-          allocation.amount,
-        );
+        const key =
+          allocation.source === "QUICK_SERVICE"
+            ? "quickService"
+            : (allocation.source.toLowerCase() as "repair" | "retail");
+        result[key] += cents(allocation.amount);
         return result;
       },
-      { repair: 0, retail: 0 },
+      { repair: 0, retail: 0, quickService: 0 },
     );
   }
   return payment.saleId
-    ? { repair: 0, retail: cents(payment.amount) }
-    : { repair: cents(payment.amount), retail: 0 };
+    ? { repair: 0, retail: cents(payment.amount), quickService: 0 }
+    : { repair: cents(payment.amount), retail: 0, quickService: 0 };
 }
 
 export function summarizePayments(payments: BusinessPayment[], day?: string) {
@@ -40,6 +42,7 @@ export function summarizePayments(payments: BusinessPayment[], day?: string) {
         summary.total += amount;
         summary.repair += parts.repair;
         summary.retail += parts.retail;
+        summary.quickService += parts.quickService;
         const method = payment.method === "TRANSFER" ? "OTHER" : payment.method;
         summary.methods[method] += amount;
         return summary;
@@ -48,6 +51,7 @@ export function summarizePayments(payments: BusinessPayment[], day?: string) {
         total: 0,
         repair: 0,
         retail: 0,
+        quickService: 0,
         methods: { CASH: 0, CARD: 0, OTHER: 0 },
       },
     );

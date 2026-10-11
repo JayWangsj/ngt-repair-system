@@ -9,6 +9,7 @@ async function main() {
   await db.auditLog.deleteMany();
   await db.paymentAllocation.deleteMany();
   await db.payment.deleteMany();
+  await db.retailServiceItem.deleteMany();
   await db.reworkItem.deleteMany();
   await db.reworkSession.deleteMany();
   await db.retailSaleItem.deleteMany();
@@ -19,11 +20,13 @@ async function main() {
   await db.inventoryCategory.deleteMany();
   await db.statusHistory.deleteMany();
   await db.workOrderFault.deleteMany();
+  await db.workOrderDevice.deleteMany();
   await db.workOrderItem.deleteMany();
   await db.workOrder.deleteMany();
   await db.device.deleteMany();
   await db.customer.deleteMany();
   await db.priceRule.deleteMany();
+  await db.quickService.deleteMany();
   await db.deviceCatalogDeletion.deleteMany();
   await db.faultOption.deleteMany();
   await db.user.deleteMany();

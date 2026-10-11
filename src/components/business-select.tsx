@@ -344,7 +344,8 @@ export function SelectDropdown({
     [],
   );
 
-  const inputValue = open ? query : displayValue;
+  const inputValue =
+    open || (preserveQueryOnClose && query) ? query : displayValue;
   const canClear = !disabled && (open ? !!query : clearable && !!currentValue);
   const activeDescendant =
     open && visible[active] ? optionId(active) : undefined;

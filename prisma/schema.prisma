@@ -43,6 +43,12 @@ enum PaymentKind {
 enum RevenueSource {
   REPAIR
   RETAIL
+  QUICK_SERVICE
+}
+
+enum WorkOrderType {
+  REPAIR
+  QUICK_SERVICE
 }
 
 enum ProductUsage {
@@ -110,18 +116,19 @@ model CustomerPhone {
 }
 
 model Device {
-  id          String      @id @default(cuid())
-  customerId  String
-  customer    Customer    @relation(fields: [customerId], references: [id])
-  category    String      @default("PHONE")
-  brand       String
-  series      String      @default("")
-  model       String
-  imei        String?
-  appearance  String      @default("")
-  accessories String      @default("")
-  orders      WorkOrder[]
-  deletedAt   DateTime?   @db.Timestamptz(3)
+  id            String            @id @default(cuid())
+  customerId    String
+  customer      Customer          @relation(fields: [customerId], references: [id])
+  category      String            @default("PHONE")
+  brand         String
+  series        String            @default("")
+  model         String
+  imei          String?
+  appearance    String            @default("")
+  accessories   String            @default("")
+  orders        WorkOrder[]
+  relatedOrders WorkOrderDevice[]
+  deletedAt     DateTime?         @db.Timestamptz(3)
 
   @@index([customerId])
 }
@@ -130,6 +137,7 @@ model WorkOrder {
   id                String             @id @default(cuid())
   number            Int                @unique @default(autoincrement())
   code              String             @unique
+  type              WorkOrderType      @default(REPAIR)
   customerName      String             @default("")
   deviceId          String
   device            Device             @relation(fields: [deviceId], references: [id])
@@ -145,6 +153,7 @@ model WorkOrder {
   accessories       String             @default("")
   notes             String             @default("")
   dueDate           String?
+  expectedAt        String?
   confirmedAt       DateTime?          @db.Timestamptz(3)
   confirmationNote  String             @default("")
   pickedUpAt        DateTime?          @db.Timestamptz(3)
@@ -164,6 +173,7 @@ model WorkOrder {
   payments          Payment[]
   history           StatusHistory[]
   reworks           ReworkSession[]
+  relatedDevices    WorkOrderDevice[]
 
   @@index([status, dueDate])
   @@index([deviceId])
@@ -192,48 +202,61 @@ model PriceRule {
 }
 
 model WorkOrderItem {
-  id                String     @id @default(cuid())
+  id                String        @id @default(cuid())
   orderId           String
-  order             WorkOrder  @relation(fields: [orderId], references: [id])
+  order             WorkOrder     @relation(fields: [orderId], references: [id])
   ruleId            String?
-  rule              PriceRule? @relation(fields: [ruleId], references: [id])
+  rule              PriceRule?    @relation(fields: [ruleId], references: [id])
+  quickServiceId    String?
+  quickService      QuickService? @relation(fields: [quickServiceId], references: [id], onDelete: SetNull)
   project           String
-  suggested         Decimal?   @db.Decimal(12, 2)
-  discount          Decimal    @default(0) @db.Decimal(12, 2)
-  final             Decimal    @db.Decimal(12, 2)
+  suggested         Decimal?      @db.Decimal(12, 2)
+  discount          Decimal       @default(0) @db.Decimal(12, 2)
+  final             Decimal       @db.Decimal(12, 2)
   matchLevel        String
-  adjustmentReason  String     @default("")
-  minutes           Int        @default(0)
+  adjustmentReason  String        @default("")
+  minutes           Int           @default(0)
   requiredProductId String?
-  requiredQuantity  Int        @default(1)
-  requiredProduct   Product?   @relation("RequiredWorkOrderProduct", fields: [requiredProductId], references: [id])
-  warrantyStart     DateTime?   @db.Timestamptz(3)
-  warrantyDays      Int        @default(0)
-  warrantyExpiresAt DateTime?   @db.Timestamptz(3)
-  warrantyNotes     String     @default("")
+  requiredQuantity  Int           @default(1)
+  requiredProduct   Product?      @relation("RequiredWorkOrderProduct", fields: [requiredProductId], references: [id])
+  warrantyStart     DateTime?     @db.Timestamptz(3)
+  warrantyDays      Int           @default(0)
+  warrantyExpiresAt DateTime?     @db.Timestamptz(3)
+  warrantyNotes     String        @default("")
   reworkItem        ReworkItem?
 
   @@index([orderId])
   @@index([requiredProductId])
+  @@index([quickServiceId])
+}
+
+model WorkOrderDevice {
+  orderId  String
+  order    WorkOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  deviceId String
+  device   Device    @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+
+  @@id([orderId, deviceId])
+  @@index([deviceId])
 }
 
 model Payment {
-  id          String              @id @default(cuid())
-  requestId   String              @unique
-  orderId     String?
-  order       WorkOrder?          @relation(fields: [orderId], references: [id])
-  saleId      String?
-  sale        RetailSale?         @relation(fields: [saleId], references: [id])
-  amount      Decimal             @db.Decimal(12, 2)
-  method      PaymentMethod
-  kind        PaymentKind
-  receivedAt  DateTime            @default(now()) @db.Timestamptz(3)
-  actorId     String
-  actor       User                @relation(fields: [actorId], references: [id])
-  actorName   String
-  allocations PaymentAllocation[]
+  id              String              @id @default(cuid())
+  requestId       String              @unique
+  orderId         String?
+  order           WorkOrder?          @relation(fields: [orderId], references: [id])
+  saleId          String?
+  sale            RetailSale?         @relation(fields: [saleId], references: [id])
+  amount          Decimal             @db.Decimal(12, 2)
+  method          PaymentMethod
+  kind            PaymentKind
+  receivedAt      DateTime            @default(now()) @db.Timestamptz(3)
+  actorId         String
+  actor           User                @relation(fields: [actorId], references: [id])
+  actorName       String
+  allocations     PaymentAllocation[]
   reworkSessionId String?
-  reworkSession ReworkSession? @relation(fields: [reworkSessionId], references: [id])
+  reworkSession   ReworkSession?      @relation(fields: [reworkSessionId], references: [id])
 
   @@index([orderId])
   @@index([saleId])
@@ -330,28 +353,56 @@ model WorkOrderFault {
 }
 
 model Product {
-  id                String              @id @default(cuid())
+  id                String                 @id @default(cuid())
   name              String
   category          String
   usage             ProductUsage
-  costPrice         Decimal             @db.Decimal(12, 2)
-  salePrice         Decimal             @db.Decimal(12, 2)
-  stockQuantity     Int                 @default(0)
-  minStock          Int                 @default(0)
-  favorite          Boolean             @default(false)
-  enabled           Boolean             @default(true)
-  createdAt         DateTime            @default(now()) @db.Timestamptz(3)
-  updatedAt         DateTime            @updatedAt @db.Timestamptz(3)
+  costPrice         Decimal                @db.Decimal(12, 2)
+  salePrice         Decimal                @db.Decimal(12, 2)
+  stockQuantity     Int                    @default(0)
+  minStock          Int                    @default(0)
+  favorite          Boolean                @default(false)
+  enabled           Boolean                @default(true)
+  createdAt         DateTime               @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime               @updatedAt @db.Timestamptz(3)
   movements         InventoryMovement[]
   saleItems         RetailSaleItem[]
   workOrderProducts WorkOrderProduct[]
-  requiredByRules   PriceRule[]         @relation("RequiredRepairProduct")
-  requiredByItems   WorkOrderItem[]     @relation("RequiredWorkOrderProduct")
+  requiredByRules   PriceRule[]            @relation("RequiredRepairProduct")
+  requiredByItems   WorkOrderItem[]        @relation("RequiredWorkOrderProduct")
   reworkItems       ReworkItem[]
+  compatibilities   ProductCompatibility[]
 
   @@index([name])
   @@index([category, usage, enabled])
   @@index([enabled, favorite])
+}
+
+model ProductCompatibility {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  category  String
+  brand     String
+  model     String
+  project   String  @default("")
+
+  @@unique([productId, category, brand, model, project])
+  @@index([category, brand, model])
+}
+
+model QuickService {
+  id           String              @id @default(cuid())
+  name         String
+  defaultPrice Decimal             @db.Decimal(12, 2)
+  notes        String              @default("")
+  enabled      Boolean             @default(true)
+  createdAt    DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime            @updatedAt @db.Timestamptz(3)
+  workItems    WorkOrderItem[]
+  retailItems  RetailServiceItem[]
+
+  @@index([enabled, name])
 }
 
 model InventoryCategory {
@@ -381,22 +432,39 @@ model BusinessClock {
 }
 
 model RetailSale {
-  id        String           @id @default(cuid())
-  number    Int              @unique @default(autoincrement())
-  code      String           @unique
-  requestId String           @unique
-  subtotal  Decimal          @db.Decimal(12, 2)
-  discount  Decimal          @default(0) @db.Decimal(12, 2)
-  total     Decimal          @db.Decimal(12, 2)
-  itemCount Int
-  actorId   String
-  actor     User             @relation(fields: [actorId], references: [id])
-  actorName String
-  createdAt DateTime         @default(now()) @db.Timestamptz(3)
-  items     RetailSaleItem[]
-  payments  Payment[]
+  id           String              @id @default(cuid())
+  number       Int                 @unique @default(autoincrement())
+  code         String              @unique
+  requestId    String              @unique
+  subtotal     Decimal             @db.Decimal(12, 2)
+  discount     Decimal             @default(0) @db.Decimal(12, 2)
+  total        Decimal             @db.Decimal(12, 2)
+  itemCount    Int
+  actorId      String
+  actor        User                @relation(fields: [actorId], references: [id])
+  actorName    String
+  createdAt    DateTime            @default(now()) @db.Timestamptz(3)
+  items        RetailSaleItem[]
+  serviceItems RetailServiceItem[]
+  payments     Payment[]
 
   @@index([createdAt])
+}
+
+model RetailServiceItem {
+  id             String        @id @default(cuid())
+  saleId         String
+  sale           RetailSale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  quickServiceId String?
+  quickService   QuickService? @relation(fields: [quickServiceId], references: [id], onDelete: SetNull)
+  serviceName    String
+  notes          String        @default("")
+  unitPrice      Decimal       @db.Decimal(12, 2)
+  quantity       Int           @default(1)
+  subtotal       Decimal       @db.Decimal(12, 2)
+
+  @@index([saleId])
+  @@index([quickServiceId])
 }
 
 model RetailSaleItem {

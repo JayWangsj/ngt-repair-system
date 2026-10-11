@@ -22,6 +22,8 @@ import { useMessages } from "./language";
 import { Field, FormDialog } from "./forms";
 import { WorkOrderCheckoutDialog } from "./work-order-products";
 import { Button } from "./ui/button";
+import { decimal, creatablePaymentMethods } from "@/lib/domain";
+import { SimpleSelect } from "./business-select";
 import {
   ensureComfortableInteractionSpace,
   focusComfortably,
@@ -200,6 +202,7 @@ export type StatusDropdownOrder = {
   paid: number;
   balance: number;
   afterSalesOpen?: boolean;
+  type?: "REPAIR" | "QUICK_SERVICE";
 };
 
 export function StatusDropdown({
@@ -221,6 +224,10 @@ export function StatusDropdown({
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [collectDiagnostic, setCollectDiagnostic] = useState(false);
+  const [cancelAmount, setCancelAmount] = useState(decimal(order.balance));
+  const [cancelMethod, setCancelMethod] =
+    useState<(typeof creatablePaymentMethods)[number]>("CASH");
   useEffect(() => {
     function sync(event: Event) {
       const detail = (
@@ -235,10 +242,21 @@ export function StatusDropdown({
     window.addEventListener("work-order-status-settled", sync);
     return () => window.removeEventListener("work-order-status-settled", sync);
   }, [order.id]);
-  const choices = allowedTransitions(
-    currentOrder.status,
-    currentOrder.afterSalesOpen,
-  ).filter((status) => status !== "REFUNDED");
+  const choices = (
+    currentOrder.type === "QUICK_SERVICE"
+      ? ((
+          {
+            RECEIVED: ["REPAIRING", "CANCELLED"],
+            REPAIRING: ["READY", "CANCELLED"],
+            READY: ["COMPLETED", "REPAIRING", "CANCELLED"],
+          } as Partial<Record<OrderStatus, OrderStatus[]>>
+        )[currentOrder.status] ?? [])
+      : allowedTransitions(currentOrder.status, currentOrder.afterSalesOpen)
+  ).filter((status) => status !== "REFUNDED") as OrderStatus[];
+  const statusLabel = (status: OrderStatus) =>
+    currentOrder.type === "QUICK_SERVICE" && status in it.quickStatus
+      ? it.quickStatus[status as keyof typeof it.quickStatus]
+      : it.status[status];
   function settled(snapshot: StatusMutationSnapshot) {
     const nextOrder = { ...currentOrder, ...snapshot };
     setCurrentOrder(nextOrder);
@@ -256,22 +274,26 @@ export function StatusDropdown({
     return (
       <span className={`badge status-${currentOrder.status.toLowerCase()}`}>
         <span className="badge-dot" aria-hidden="true" />
-        <span className="badge-label">{it.status[currentOrder.status]}</span>
+        <span className="badge-label">{statusLabel(currentOrder.status)}</span>
       </span>
     );
   return (
     <div className="inline-order-control">
       <StatusSelect
         value={currentOrder.status}
-        label={it.status[currentOrder.status]}
+        label={statusLabel(currentOrder.status)}
         options={choices.map((status) => ({
           value: status,
-          label: it.status[status],
+          label: statusLabel(status),
         }))}
         disabled={pending}
         onChange={(next) => {
           if (next === "COMPLETED") return setCheckoutOpen(true);
-          if (next === "CANCELLED") return setCancelOpen(true);
+          if (next === "CANCELLED") {
+            setCancelAmount(decimal(currentOrder.balance));
+            setCollectDiagnostic(false);
+            return setCancelOpen(true);
+          }
           void (async () => {
             setPending(true);
             try {
@@ -332,6 +354,15 @@ export function StatusDropdown({
                       status: "CANCELLED",
                       note: cancelReason,
                       pickedUpBy: "",
+                      ...(collectDiagnostic
+                        ? {
+                            cancelPayment: {
+                              requestId: crypto.randomUUID(),
+                              amount: cancelAmount,
+                              method: cancelMethod,
+                            },
+                          }
+                        : {}),
                     },
                     refreshOnSettled,
                   );
@@ -354,6 +385,48 @@ export function StatusDropdown({
                 maxLength={2000}
               />
             </Field>
+            {currentOrder.status === "DIAGNOSING" &&
+              currentOrder.balance > 0 && (
+                <div className="cancel-diagnostic-payment">
+                  <label className="checkbox">
+                    <input
+                      type="checkbox"
+                      checked={collectDiagnostic}
+                      onChange={(event) =>
+                        setCollectDiagnostic(event.target.checked)
+                      }
+                    />
+                    {it.collectDiagnosticOnCancel}
+                  </label>
+                  {collectDiagnostic && (
+                    <div className="form-grid">
+                      <Field label={it.diagnosticBalance}>
+                        <input
+                          inputMode="decimal"
+                          value={cancelAmount}
+                          onChange={(event) =>
+                            setCancelAmount(event.target.value)
+                          }
+                        />
+                      </Field>
+                      <Field label={it.paymentMethod}>
+                        <SimpleSelect
+                          value={cancelMethod}
+                          onChange={(value) =>
+                            setCancelMethod(value as typeof cancelMethod)
+                          }
+                          placeholder={it.selectOption}
+                          ariaLabel={it.paymentMethod}
+                          options={creatablePaymentMethods.map((method) => ({
+                            value: method,
+                            label: it.methods[method],
+                          }))}
+                        />
+                      </Field>
+                    </div>
+                  )}
+                </div>
+              )}
             {error && <p className="message error">{error}</p>}
             <div className="dialog-actions">
               <Button

@@ -390,7 +390,7 @@ export function FaultCatalogManager({
                     <button
                       type="button"
                       className="fault-name-button"
-                      onDoubleClick={() => {
+                      onClick={() => {
                         cancellingName.current = false;
                         setEditingId(item.id);
                         setEditingName(item.name);

@@ -7,6 +7,7 @@ import {
   Inbox,
   PackageCheck,
   ShoppingBag,
+  Sparkles,
   Wallet,
   Wrench,
 } from "lucide-react";
@@ -103,12 +104,16 @@ export default async function Dashboard({
   );
   const series = revenueSeries(payments, today);
   const chartMax = Math.max(
-    ...series.flatMap((day) => [day.repair, day.retail]),
+    ...series.flatMap((day) => [day.repair, day.retail, day.quickService]),
     1,
   );
   const hasRevenueSeries = series.some((day) => day.total !== 0);
   const repairShare = percentage(todayRevenue.repair, todayRevenue.total);
   const retailShare = percentage(todayRevenue.retail, todayRevenue.total);
+  const quickServiceShare = percentage(
+    todayRevenue.quickService,
+    todayRevenue.total,
+  );
   const hotProducts = Object.values(
     saleItems
       .filter((item) => romeDay(item.sale.createdAt) === today)
@@ -186,13 +191,29 @@ export default async function Dashboard({
             color: "orange",
             trend: revenueTrend(todayRevenue.retail, yesterdayRevenue.retail),
           },
+          {
+            label: it.dashboard.quickServiceRevenue,
+            value: money(todayRevenue.quickService),
+            count: todayRevenue.quickService,
+            type: "money",
+            icon: Sparkles,
+            color: "teal",
+            trend: revenueTrend(
+              todayRevenue.quickService,
+              yesterdayRevenue.quickService,
+            ),
+          },
         ]
       : []),
   ];
   const fingerprint = JSON.stringify({
     today,
     metrics: metrics.map(({ count }) => count),
-    series: series.map(({ repair, retail }) => [repair, retail]),
+    series: series.map(({ repair, retail, quickService }) => [
+      repair,
+      retail,
+      quickService,
+    ]),
     methods: todayRevenue.methods,
     attention: [overdue.length, lowStock.length, outOfStock.length],
     recent: [orders[0]?.updatedAt, sales[0]?.createdAt],
@@ -256,9 +277,13 @@ export default async function Dashboard({
                 <small>
                   {it.dashboard.repairRevenue} {money(todayRevenue.repair)} ·{" "}
                   {it.dashboard.retailRevenue} {money(todayRevenue.retail)}
+                  {" · "}
+                  {it.dashboard.quickServiceRevenue}{" "}
+                  {money(todayRevenue.quickService)}
                 </small>
               ) : label === it.dashboard.repairRevenue ||
-                label === it.dashboard.retailRevenue ? (
+                label === it.dashboard.retailRevenue ||
+                label === it.dashboard.quickServiceRevenue ? (
                 <small>{it.today}</small>
               ) : (
                 <small>{it.workspace}</small>
@@ -282,6 +307,10 @@ export default async function Dashboard({
                   <i className="retail" />
                   {it.dashboard.retailRevenue}
                 </span>
+                <span>
+                  <i className="quick-service" />
+                  {it.dashboard.quickServiceRevenue}
+                </span>
               </div>
             </div>
             {hasRevenueSeries ? (
@@ -297,7 +326,7 @@ export default async function Dashboard({
                   ).format(new Date(`${day.day}T12:00:00Z`));
                   return (
                     <div
-                      aria-label={`${dateLabel}: ${it.dashboard.repairRevenue} ${money(day.repair)}, ${it.dashboard.retailRevenue} ${money(day.retail)}, ${it.dashboard.totalRevenue} ${money(day.total)}`}
+                      aria-label={`${dateLabel}: ${it.dashboard.repairRevenue} ${money(day.repair)}, ${it.dashboard.retailRevenue} ${money(day.retail)}, ${it.dashboard.quickServiceRevenue} ${money(day.quickService)}, ${it.dashboard.totalRevenue} ${money(day.total)}`}
                       className="revenue-day"
                       key={day.day}
                       tabIndex={0}
@@ -317,6 +346,13 @@ export default async function Dashboard({
                             height: `${(day.retail / chartMax) * 100}%`,
                           }}
                         />
+                        <div
+                          className="revenue-bar quick-service"
+                          data-bar={`${(day.quickService / chartMax) * 100}%`}
+                          style={{
+                            height: `${(day.quickService / chartMax) * 100}%`,
+                          }}
+                        />
                       </div>
                       <small>{dateLabel}</small>
                       <div className="revenue-tooltip" role="tooltip">
@@ -325,6 +361,11 @@ export default async function Dashboard({
                           <i className="repair" />
                           {it.dashboard.repairRevenue}
                           <b>{money(day.repair)}</b>
+                        </span>
+                        <span>
+                          <i className="quick-service" />
+                          {it.dashboard.quickServiceRevenue}
+                          <b>{money(day.quickService)}</b>
                         </span>
                         <span>
                           <i className="retail" />
@@ -378,6 +419,19 @@ export default async function Dashboard({
                         strokeDashoffset: -repairShare,
                       }}
                     />
+                    <circle
+                      className="donut-segment quick-service"
+                      cx="21"
+                      cy="21"
+                      data-donut-segment={quickServiceShare}
+                      data-donut-offset={-(repairShare + retailShare)}
+                      pathLength="100"
+                      r="15.9"
+                      style={{
+                        strokeDasharray: `${quickServiceShare} ${100 - quickServiceShare}`,
+                        strokeDashoffset: -(repairShare + retailShare),
+                      }}
+                    />
                   </svg>
                   <span>
                     <strong
@@ -401,6 +455,12 @@ export default async function Dashboard({
                     <span>{it.dashboard.retailRevenue}</span>
                     <strong>{money(todayRevenue.retail)}</strong>
                     <small>{retailShare}%</small>
+                  </p>
+                  <p>
+                    <i className="quick-service" />
+                    <span>{it.dashboard.quickServiceRevenue}</span>
+                    <strong>{money(todayRevenue.quickService)}</strong>
+                    <small>{quickServiceShare}%</small>
                   </p>
                 </div>
               </div>

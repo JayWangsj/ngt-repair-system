@@ -21,6 +21,13 @@ export type SaleHistoryRow = {
     quantity: number;
     subtotal: number;
   }[];
+  services: {
+    id: string;
+    name: string;
+    unitPrice: number;
+    quantity: number;
+    subtotal: number;
+  }[];
 };
 
 export function RetailSalesHistory({
@@ -108,6 +115,17 @@ export function RetailSaleDetail({ sale }: { sale: SaleHistoryRow }) {
                 <td>
                   <strong>{item.name}</strong>
                   <small>{item.category}</small>
+                </td>
+                <td className="numeric">{money(item.unitPrice)}</td>
+                <td className="numeric">{item.quantity}</td>
+                <td className="numeric">{money(item.subtotal)}</td>
+              </tr>
+            ))}
+            {sale.services.map((item) => (
+              <tr key={item.id}>
+                <td>
+                  <strong>{item.name}</strong>
+                  <small>{it.quickService.title}</small>
                 </td>
                 <td className="numeric">{money(item.unitPrice)}</td>
                 <td className="numeric">{item.quantity}</td>

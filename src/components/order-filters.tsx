@@ -11,6 +11,7 @@ type FilterValues = {
   month: string;
   status: string;
   attention: string;
+  type: string;
 };
 
 export function OrderFilters({ initial }: { initial: FilterValues }) {
@@ -29,6 +30,7 @@ export function OrderFilters({ initial }: { initial: FilterValues }) {
       if (next.month) params.set("month", next.month);
       if (next.status) params.set("status", next.status);
       if (next.attention) params.set("attention", next.attention);
+      if (next.type) params.set("type", next.type);
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     };
     if (delay) timer.current = window.setTimeout(navigate, delay);
@@ -76,6 +78,21 @@ export function OrderFilters({ initial }: { initial: FilterValues }) {
               value: status,
               label: it.status[status],
             })),
+          ]}
+        />
+      </label>
+      <label>
+        <span className="sr-only">{it.serviceType}</span>
+        <SimpleSelect
+          name="type"
+          value={values.type}
+          onChange={(type) => apply({ ...values, type })}
+          placeholder={it.orderTypes.all}
+          ariaLabel={it.serviceType}
+          options={[
+            { value: "", label: it.orderTypes.all },
+            { value: "REPAIR", label: it.orderTypes.REPAIR },
+            { value: "QUICK_SERVICE", label: it.orderTypes.QUICK_SERVICE },
           ]}
         />
       </label>

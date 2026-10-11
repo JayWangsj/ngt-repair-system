@@ -38,6 +38,10 @@ export function normalizeModel(value: string, catalog: string[] = []) {
   if (series)
     model = `${series} ${modelKey(model).slice(modelKey(series).length)}`;
   model = model
+    .replace(/^([a-z]+)(\d+)([45]g)$/i, "$1$2 $3")
+    .replace(/(\d)(pro|max|ultra|plus|lite|mini)$/i, "$1 $2")
+    .replace(/([a-z]+\d+)([45]g)$/i, "$1 $2");
+  model = model
     .replace(/\biphone\b/gi, "iPhone")
     .replace(/(\d)(pro|max|ultra)$/i, "$1 $2")
     .replace(/([a-z])(\d)/i, "$1$2")
@@ -48,14 +52,26 @@ export function normalizeModel(value: string, catalog: string[] = []) {
     .map((token) =>
       token === "iPhone"
         ? token
-        : /^(?:[A-Za-z]+\d+|\d+[A-Za-z]+)$/.test(token)
-          ? token[0].toLocaleUpperCase("it") + token.slice(1)
-          : token
-            ? token[0].toLocaleUpperCase("it") +
-              token.slice(1).toLocaleLowerCase("it")
-            : token,
+        : /^[45]g$/i.test(token)
+          ? token.toLocaleUpperCase("it")
+          : /^(?:[A-Za-z]+\d+|\d+[A-Za-z]+)$/.test(token)
+            ? token[0].toLocaleUpperCase("it") + token.slice(1)
+            : token
+              ? token[0].toLocaleUpperCase("it") +
+                token.slice(1).toLocaleLowerCase("it")
+              : token,
     )
     .join(" ");
+}
+
+export function normalizeDeviceModel(
+  brand: string,
+  value: string,
+  catalog: string[] = [],
+) {
+  const normalizedBrand = normalizeBrand(brand);
+  if (normalizedBrand === "Apple") return normalizeModel(value, catalog);
+  return normalizeModel(value, catalog);
 }
 export const brands: Record<Category, string[]> = {
   PHONE: [

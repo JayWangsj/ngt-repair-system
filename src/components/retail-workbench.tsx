@@ -1,8 +1,15 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
-import { Check, ClipboardList, ShoppingBag, Star, Trash2 } from "lucide-react";
+import {
+  Check,
+  ClipboardList,
+  ShoppingBag,
+  Sparkles,
+  Star,
+  Trash2,
+} from "lucide-react";
 import { createRetailSaleAction } from "@/app/actions";
-import { cents, creatablePaymentMethods, money } from "@/lib/domain";
+import { cents, creatablePaymentMethods, decimal, money } from "@/lib/domain";
 import { FormDialog } from "./forms";
 import { useMessages } from "./language";
 import { NewProductDialogButton } from "./inventory";
@@ -23,6 +30,12 @@ type RetailProduct = {
   stockQuantity: number;
   favorite: boolean;
 };
+type RetailQuickService = {
+  id: string;
+  name: string;
+  notes: string;
+  defaultPrice: number;
+};
 
 type RetailDialog =
   | { view: "history" }
@@ -35,6 +48,7 @@ type RetailDialog =
 
 export function RetailWorkbench({
   products,
+  quickServices,
   categories: productCategories,
   sales: initialSales,
   initialPeriod,
@@ -44,6 +58,7 @@ export function RetailWorkbench({
   description,
 }: {
   products: RetailProduct[];
+  quickServices: RetailQuickService[];
   categories: CategoryView[];
   sales: SaleHistoryRow[];
   initialPeriod: string;
@@ -57,6 +72,7 @@ export function RetailWorkbench({
   const [category, setCategory] = useState("");
   const [favorites, setFavorites] = useState(false);
   const [cart, setCart] = useState<Record<string, number>>({});
+  const [serviceCart, setServiceCart] = useState<Record<string, string>>({});
   const [discount, setDiscount] = useState("0");
   const [method, setMethod] =
     useState<(typeof creatablePaymentMethods)[number]>("CASH");
@@ -86,6 +102,15 @@ export function RetailWorkbench({
       (!favorites || product.favorite)
     );
   });
+  const filteredServices = quickServices.filter((service) => {
+    const normalized = query.trim().toLocaleLowerCase();
+    return (
+      !category &&
+      (!normalized ||
+        service.name.toLocaleLowerCase().includes(normalized) ||
+        service.notes.toLocaleLowerCase().includes(normalized))
+    );
+  });
   const items = products
     .filter((product) => cart[product.id])
     .map((product) => ({ ...product, quantity: cart[product.id] }));
@@ -93,14 +118,30 @@ export function RetailWorkbench({
     (sum, item) => sum + item.salePrice * item.quantity,
     0,
   );
+  const serviceItems = quickServices
+    .filter((service) => service.id in serviceCart)
+    .map((service) => ({
+      ...service,
+      price: serviceCart[service.id],
+      priceCents: (() => {
+        try {
+          return cents(serviceCart[service.id]);
+        } catch {
+          return 0;
+        }
+      })(),
+    }));
+  const combinedSubtotal =
+    subtotal + serviceItems.reduce((sum, item) => sum + item.priceCents, 0);
   let discountCents = 0;
   try {
     discountCents = cents(discount || "0");
   } catch {
-    discountCents = subtotal;
+    discountCents = combinedSubtotal;
   }
-  const total = Math.max(0, subtotal - discountCents);
-  const count = items.reduce((sum, item) => sum + item.quantity, 0);
+  const total = Math.max(0, combinedSubtotal - discountCents);
+  const count =
+    items.reduce((sum, item) => sum + item.quantity, 0) + serviceItems.length;
   function setQuantity(product: RetailProduct, quantity: number) {
     setCart((current) => {
       const next = { ...current };
@@ -119,6 +160,11 @@ export function RetailWorkbench({
           productId: item.id,
           quantity: item.quantity,
         })),
+        services: serviceItems.map((item) => ({
+          serviceId: item.id,
+          price: item.price,
+          quantity: 1,
+        })),
         discount,
         method,
       });
@@ -130,6 +176,7 @@ export function RetailWorkbench({
         ...current.filter((item) => item.id !== sale.id),
       ]);
       setCart({});
+      setServiceCart({});
       setDiscount("0");
       setMethod("CASH");
       setDialog({ view: "completed", sale });
@@ -231,6 +278,25 @@ export function RetailWorkbench({
                 </button>
               );
             })}
+            {filteredServices.map((service) => (
+              <button
+                className="retail-product-card retail-service-card"
+                key={service.id}
+                onClick={() =>
+                  setServiceCart((current) => ({
+                    ...current,
+                    [service.id]: decimal(service.defaultPrice),
+                  }))
+                }
+              >
+                <span className="retail-product-icon">
+                  <Sparkles size={24} />
+                </span>
+                <strong>{service.name}</strong>
+                <small>{service.notes || it.quickService.title}</small>
+                <b>{money(service.defaultPrice)}</b>
+              </button>
+            ))}
             <div className="retail-new-product">
               <NewProductDialogButton
                 categories={productCategories}
@@ -247,41 +313,83 @@ export function RetailWorkbench({
                 {count} {it.retail.products}
               </span>
             </div>
-            {items.length > 0 && (
-              <Button variant="ghost" onClick={() => setCart({})}>
+            {count > 0 && (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setCart({});
+                  setServiceCart({});
+                }}
+              >
                 <Trash2 size={15} />
                 {it.retail.clear}
               </Button>
             )}
           </div>
           <div className="retail-cart-items">
-            {items.length ? (
-              items.map((item) => (
-                <div className="retail-cart-row" key={item.id}>
-                  <div>
-                    <strong>{item.name}</strong>
-                    <small>{money(item.salePrice)}</small>
+            {count ? (
+              <>
+                {items.map((item) => (
+                  <div className="retail-cart-row" key={item.id}>
+                    <div>
+                      <strong>{item.name}</strong>
+                      <small>{money(item.salePrice)}</small>
+                    </div>
+                    <button
+                      className="retail-remove"
+                      aria-label={`${it.retail.remove} ${item.name}`}
+                      onClick={() => setQuantity(item, 0)}
+                    >
+                      ×
+                    </button>
+                    <QuantityStepper
+                      key={`${item.id}-${item.quantity}`}
+                      className="is-retail"
+                      ariaLabel={`${it.retail.quantity} ${item.name}`}
+                      buttonLabel={item.name}
+                      defaultValue={item.quantity}
+                      min={0}
+                      max={item.stockQuantity}
+                      onCommit={(quantity) => setQuantity(item, quantity)}
+                    />
+                    <b>{money(item.salePrice * item.quantity)}</b>
                   </div>
-                  <button
-                    className="retail-remove"
-                    aria-label={`${it.retail.remove} ${item.name}`}
-                    onClick={() => setQuantity(item, 0)}
-                  >
-                    ×
-                  </button>
-                  <QuantityStepper
-                    key={`${item.id}-${item.quantity}`}
-                    className="is-retail"
-                    ariaLabel={`${it.retail.quantity} ${item.name}`}
-                    buttonLabel={item.name}
-                    defaultValue={item.quantity}
-                    min={0}
-                    max={item.stockQuantity}
-                    onCommit={(quantity) => setQuantity(item, quantity)}
-                  />
-                  <b>{money(item.salePrice * item.quantity)}</b>
-                </div>
-              ))
+                ))}
+                {serviceItems.map((item) => (
+                  <div className="retail-cart-row" key={item.id}>
+                    <div>
+                      <strong>{item.name}</strong>
+                      <small>{it.quickService.title}</small>
+                    </div>
+                    <button
+                      className="retail-remove"
+                      aria-label={`${it.retail.remove} ${item.name}`}
+                      onClick={() =>
+                        setServiceCart((current) => {
+                          const next = { ...current };
+                          delete next[item.id];
+                          return next;
+                        })
+                      }
+                    >
+                      ×
+                    </button>
+                    <input
+                      className="retail-service-price"
+                      aria-label={`${item.name} ${it.retail.unitPrice}`}
+                      inputMode="decimal"
+                      value={item.price}
+                      onChange={(event) =>
+                        setServiceCart((current) => ({
+                          ...current,
+                          [item.id]: event.target.value,
+                        }))
+                      }
+                    />
+                    <b>{money(item.priceCents)}</b>
+                  </div>
+                ))}
+              </>
             ) : (
               <p className="retail-empty-cart">{it.retail.emptyCart}</p>
             )}
@@ -289,7 +397,7 @@ export function RetailWorkbench({
           <div className="retail-totals">
             <div>
               <span>{it.retail.subtotal}</span>
-              <strong>{money(subtotal)}</strong>
+              <strong>{money(combinedSubtotal)}</strong>
             </div>
             <label>
               <span>{it.retail.discount}</span>
@@ -323,9 +431,9 @@ export function RetailWorkbench({
             className="retail-checkout"
             disabled={
               pending ||
-              !items.length ||
+              !count ||
               total <= 0 ||
-              discountCents >= subtotal
+              discountCents >= combinedSubtotal
             }
             onClick={checkout}
           >

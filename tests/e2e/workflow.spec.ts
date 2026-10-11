@@ -182,7 +182,9 @@ async function fillOrder(
   ).toHaveCount(0);
 }
 async function save(page: Page) {
-  await page.getByRole("button", { name: "Crea scheda", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Crea scheda di servizio", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/orders\/(?!new)[a-z0-9]+$/);
 }
 async function openPayment(page: Page) {
@@ -395,7 +397,7 @@ test("single operator opens every business page without login", async ({
     page.getByRole("button", { name: "Cancella tutti i dati", exact: true }),
   ).toBeVisible();
   for (const [path, name] of [
-    ["/orders", "Nuova riparazione"],
+    ["/orders", "Nuova scheda di servizio"],
     ["/customers", "Nuovo cliente"],
     ["/prices", "Nuova regola"],
   ] as const) {
@@ -413,6 +415,90 @@ test("single operator opens every business page without login", async ({
   await expect(page).toHaveURL(/\/$/);
   await page.goto("/team");
   await expect(page).toHaveURL(/\/$/);
+});
+
+test("manages one quick service for held service orders and retail checkout", async ({
+  page,
+}) => {
+  const serviceName = `Migrazione rapida ${Date.now()}`;
+  await page.goto("/settings");
+  await page
+    .getByRole("button", { name: "Gestisci servizi rapidi", exact: true })
+    .click();
+  const manager = page.getByRole("dialog", {
+    name: "Gestisci servizi rapidi",
+  });
+  await manager
+    .getByRole("button", { name: "Nuovo servizio", exact: true })
+    .click();
+  const editor = page.getByRole("dialog", { name: "Nuovo servizio" });
+  await editor.getByLabel("Nome servizio", { exact: true }).fill(serviceName);
+  await editor.getByLabel("Prezzo predefinito", { exact: true }).fill("29.90");
+  await editor.getByLabel("Note", { exact: true }).fill("Due dispositivi");
+  await editor.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(manager).toContainText(serviceName);
+
+  await page.goto("/orders/new");
+  await page
+    .getByRole("button", { name: "Servizio rapido", exact: true })
+    .click();
+  await chooseBusinessOption(page, "Cliente", "Cliente Playwright");
+  await page.getByLabel("Apple iPhone 13", { exact: true }).check();
+  await page
+    .locator(".quick-service-choice")
+    .filter({ hasText: serviceName })
+    .locator('input[type="checkbox"]')
+    .check();
+  await page
+    .getByLabel("Completamento previsto", { exact: true })
+    .fill("2099-12-31T18:30");
+  await page
+    .getByRole("button", {
+      name: "Crea scheda di servizio rapido",
+      exact: true,
+    })
+    .click();
+  await expect(page).toHaveURL(/\/orders\/(?!new)[^/]+$/);
+  const serviceCode = (await page.locator("h1").innerText()).trim();
+  expect(serviceCode).toMatch(/^S-\d{8}\d{3}$/);
+  await expect(page.locator(".page-header p")).toContainText("Servizio rapido");
+  await expect(page.locator(".quick-service-detail-list")).toContainText(
+    serviceName,
+  );
+  await page.getByText("Altre azioni", { exact: true }).click();
+  await page
+    .getByRole("button", {
+      name: "Elimina definitivamente la scheda",
+      exact: true,
+    })
+    .click();
+  const deleteDialog = page.getByRole("dialog", {
+    name: "Elimina definitivamente la scheda",
+  });
+  await deleteDialog
+    .getByLabel("Numero scheda di servizio", { exact: true })
+    .fill(serviceCode);
+  await deleteDialog
+    .getByRole("button", { name: "Elimina definitivamente", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/orders$/);
+
+  await page.goto("/retail");
+  await page
+    .locator(".retail-service-card")
+    .filter({ hasText: serviceName })
+    .click();
+  const servicePrice = page.getByLabel(`${serviceName} Prezzo unitario`, {
+    exact: true,
+  });
+  await servicePrice.fill("24.50");
+  await page.getByRole("button", { name: /Conferma incasso 24,50 €/ }).click();
+  await expect(
+    page
+      .getByRole("status")
+      .getByRole("heading", { name: "Vendita completata", exact: true }),
+  ).toBeVisible();
 });
 
 test("dashboard animates on entry and data changes while respecting reduced motion", async ({
@@ -774,7 +860,7 @@ test("settings can force interface animations when Windows reduces motion", asyn
 test("creates and edits a product directly in the inventory row", async ({
   page,
 }) => {
-  const productName = `Cavo USB-C E2E ${Date.now()}`;
+  const productName = `Cavo USB-C E2E con descrizione prodotto molto lunga ${Date.now()}`;
   await page.goto("/inventory");
   await expect(page.getByRole("heading", { name: "Magazzino" })).toBeVisible();
   const inventoryMain = page.locator(".inventory-main");
@@ -841,6 +927,18 @@ test("creates and edits a product directly in the inventory row", async ({
   const row = page.getByRole("row", { name: new RegExp(productName) });
   await expect(row).toContainText("Vendita");
   await expect(row).toContainText("4");
+  const productAndCategory = await row.evaluate((element) => {
+    const name = element
+      .querySelector(".product-name strong")!
+      .getBoundingClientRect();
+    const category = element
+      .querySelector(".inventory-category-cell")!
+      .getBoundingClientRect();
+    return { nameRight: name.right, categoryLeft: category.left };
+  });
+  expect(productAndCategory.nameRight).toBeLessThanOrEqual(
+    productAndCategory.categoryLeft,
+  );
   await expect(row.getByText("Cronologia", { exact: true })).toHaveCount(0);
   await expect(row.locator(".inventory-quantity-cell")).toHaveText(["0", "4"]);
   await expect(row.locator(".inventory-quantity-cell input")).toHaveCount(0);
@@ -1232,7 +1330,7 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await expect(row.getByLabel("Incassato", { exact: true })).toBeVisible();
   await row.getByLabel("Consegna prevista", { exact: true }).fill("2099-11-30");
   await row.getByLabel("Incassato", { exact: true }).fill("30");
-  await page.getByRole("heading", { name: "Riparazioni" }).click();
+  await page.getByRole("heading", { name: "Schede di servizio" }).click();
   await expect(row.getByLabel("Incassato", { exact: true })).toHaveCount(0);
   await expect(row).toContainText("30,00 €");
   await expect(row).toContainText("30/11/2099");
@@ -1698,6 +1796,39 @@ test("repair list animates a row reordered by a local status change", async ({
     .poll(() => page.evaluate(() => window.scrollY))
     .toBe(fixedViewportScroll);
 });
+test("repair list skips movement animation when the row stays in place", async ({
+  page,
+}) => {
+  await fillOrder(page, { manual: true });
+  await save(page);
+  const orderPath = new URL(page.url()).pathname;
+  const code = (await page.locator("h1").innerText()).trim();
+  await page.goto(`/orders?q=${encodeURIComponent(code)}`);
+  const row = page.locator(`tbody tr:has(a[href="${orderPath}"])`);
+  await expect(row).toBeVisible();
+  await row.evaluate((element) => {
+    document.body.dataset.samePositionAnimationObserved = "false";
+    const observer = new MutationObserver(() => {
+      if (element.classList.contains("order-row-status-moving"))
+        document.body.dataset.samePositionAnimationObserved = "true";
+    });
+    observer.observe(element, { attributes: true, attributeFilter: ["class"] });
+    window.setTimeout(() => observer.disconnect(), 3000);
+  });
+  await row.click();
+  await row.locator(".status-dropdown-trigger").click();
+  await page
+    .locator(".status-dropdown-menu")
+    .getByRole("option", { name: "Da ritirare", exact: true })
+    .click();
+  await expect(row.locator(".badge")).toContainText("Da ritirare");
+  await expect(row).not.toHaveClass(/order-row-status-moving/);
+  await expect(page.locator(".order-floating-table")).toHaveCount(0);
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-same-position-animation-observed",
+    "false",
+  );
+});
 test("repair list delivery uses the shared checkout and refreshes the row", async ({
   page,
 }) => {
@@ -1783,6 +1914,47 @@ test("repair detail cancellation persists after a reload", async ({ page }) => {
   await expect(
     page.locator(".detail-status .status-dropdown-trigger"),
   ).toContainText("Annullato");
+});
+
+test("diagnostic cancellation can collect the remaining diagnostic fee", async ({
+  page,
+}) => {
+  await fillOrder(page, { diagnosis: true });
+  await save(page);
+  await page.locator(".detail-status .status-dropdown-trigger").click();
+  await page.getByRole("option", { name: "Annullato", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Annulla scheda" });
+  await dialog
+    .getByLabel("Incassa il costo diagnosi prima di annullare", {
+      exact: true,
+    })
+    .check();
+  const amount = dialog.getByLabel("Costo diagnosi ancora da incassare", {
+    exact: true,
+  });
+  await expect(amount).not.toHaveValue("0.00");
+  await dialog
+    .getByRole("button", { name: "Conferma annullamento", exact: true })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toContainText("Annullato");
+  await expect(page.locator(".payments-card")).toContainText("Contanti");
+  await page.getByText("Altre azioni", { exact: true }).click();
+  await page
+    .getByRole("button", {
+      name: "Elimina definitivamente la scheda",
+      exact: true,
+    })
+    .click();
+  const deleteDialog = page.getByRole("dialog", {
+    name: "Elimina definitivamente la scheda",
+  });
+  await expect(deleteDialog).toContainText("contiene incassi o rimborsi");
+  await expect(
+    deleteDialog.getByLabel("Numero scheda di servizio", { exact: true }),
+  ).toHaveCount(0);
 });
 
 test("diagnostic order saves faults, date and quote in one progressive flow", async ({
@@ -2187,7 +2359,10 @@ test("language switching from settings persists across business pages", async ({
   await page.getByRole("button", { name: "Italiano", exact: true }).click();
   await page.goto("/orders/new");
   await expect(
-    page.getByRole("heading", { name: "Nuova riparazione", exact: true }),
+    page.getByRole("heading", {
+      name: "Nuova scheda di servizio",
+      exact: true,
+    }),
   ).toBeVisible();
 });
 test("settings applies a manual business date and can return to system time", async ({
@@ -3654,6 +3829,12 @@ test("clears a repair item and creates a custom item with Enter without submitti
   await search.fill(name);
   await expect(price).toBeEnabled();
   await expect(create).toBeDisabled();
+  await search
+    .locator("xpath=ancestor::*[contains(@class, 'business-combobox-control')]")
+    .locator(".business-combobox-chevron")
+    .click();
+  await expect(search).toHaveValue(name);
+  const scrollBeforeQuote = await page.evaluate(() => window.scrollY);
   await search.press("Enter");
   await expect(search).toHaveValue(name);
   await expect(price).toBeFocused();
@@ -3666,6 +3847,9 @@ test("clears a repair item and creates a custom item with Enter without submitti
   await expect(price).toHaveValue("85");
   await expect(create).toBeEnabled();
   await price.press("Enter");
+  expect(
+    Math.abs((await page.evaluate(() => window.scrollY)) - scrollBeforeQuote),
+  ).toBeLessThanOrEqual(2);
   await expect(create).toHaveCount(0);
   await expect(page.locator(".selected-project-summary")).toContainText(name);
   await expect(page.locator(".order-step-card").nth(2)).toHaveClass(
@@ -4164,7 +4348,7 @@ test("hides managed faults without changing historical records", async ({
   await row.hover();
   await expect(row.locator(".fault-delete-button")).toHaveCSS("opacity", "1");
 
-  await row.locator(".fault-name-button").dblclick();
+  await row.locator(".fault-name-button").click();
   const inlineName = dialog.locator(".fault-inline-name");
   await inlineName.fill("Display rotto test");
   await inlineName.press("Escape");
@@ -4253,7 +4437,7 @@ test("hides managed faults without changing historical records", async ({
     hasText: finalCreatedName,
   });
   await expect(createdRow).toBeVisible();
-  await createdRow.locator(".fault-name-button").dblclick();
+  await createdRow.locator(".fault-name-button").click();
   const createdInlineName = dialog.locator(".fault-inline-name");
   await createdInlineName.fill(`${finalCreatedName} modificato`);
   await createdInlineName.press("Enter");

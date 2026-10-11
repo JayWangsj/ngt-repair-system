@@ -41,10 +41,18 @@ import {
   businessClockInput,
   refundInput,
   userInput,
+  quickServiceInput,
+  quickServiceOrderInput,
+  renameDeviceModelInput,
+  deleteWorkOrderInput,
 } from "./validation";
 import { z } from "zod";
 import { hash } from "bcryptjs";
-import { normalizeBrand, normalizeModel } from "./catalog";
+import {
+  normalizeBrand,
+  normalizeDeviceModel,
+  normalizeModel,
+} from "./catalog";
 import { getBusinessDay } from "./business-date";
 
 type Tx = Prisma.TransactionClient;
@@ -57,7 +65,10 @@ function originalOrderLocked(order: {
 }
 export const orderInclude = {
   device: { include: { customer: true } },
-  items: { include: { requiredProduct: true, reworkItem: true } },
+  relatedDevices: { include: { device: true } },
+  items: {
+    include: { requiredProduct: true, reworkItem: true, quickService: true },
+  },
   faults: { include: { catalog: true } },
   products: true,
   payments: {
@@ -72,10 +83,14 @@ export const orderInclude = {
     orderBy: { createdAt: "asc" as const },
   },
 };
-async function nextDailyCode(tx: Tx, kind: "order" | "sale", day: string) {
-  const prefix = `${kind === "order" ? "R" : "V"}-${day.replaceAll("-", "")}`;
+async function nextDailyCode(
+  tx: Tx,
+  kind: "order" | "service" | "sale",
+  day: string,
+) {
+  const prefix = `${kind === "order" ? "R" : kind === "service" ? "S" : "V"}-${day.replaceAll("-", "")}`;
   const latest =
-    kind === "order"
+    kind !== "sale"
       ? await tx.workOrder.findFirst({
           where: { code: { startsWith: prefix } },
           orderBy: { code: "desc" },
@@ -328,7 +343,7 @@ async function snapshots(
       category: device.category,
       brand: normalizeBrand(device.brand),
       series: "",
-      model: normalizeModel(device.model),
+      model: normalizeDeviceModel(device.brand, device.model),
       project: item.project.trim().toLowerCase(),
     };
     const previous = await tx.priceRule.findUnique({
@@ -447,7 +462,7 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
             category: data.category,
             brand: normalizeBrand(data.brand),
             series: normalizeModel(data.series),
-            model: normalizeModel(data.model),
+            model: normalizeDeviceModel(data.brand, data.model),
             imei: data.imei || null,
             appearance: data.appearance,
             accessories: data.accessories,
@@ -538,6 +553,8 @@ export async function createOrder(actorInput: Actor, raw: unknown) {
         dueDate: data.dueDate || null,
         notes: data.notes,
         status: initialStatus,
+        type: "REPAIR",
+        relatedDevices: { create: { deviceId: device.id } },
         items: { create: items },
         faults: diagnostic
           ? undefined
@@ -1030,7 +1047,11 @@ export async function addPayment(actorInput: Actor, id: string, raw: unknown) {
     const retailDue = settlement([], { products: order.products }).productTotal;
     const repairPaid = order.payments
       .flatMap((payment) => payment.allocations)
-      .filter((allocation) => allocation.source === "REPAIR")
+      .filter(
+        (allocation) =>
+          allocation.source ===
+          (order.type === "QUICK_SERVICE" ? "QUICK_SERVICE" : "REPAIR"),
+      )
       .reduce((sum, allocation) => sum + cents(allocation.amount), 0);
     const retailPaid = order.payments
       .flatMap((payment) => payment.allocations)
@@ -1062,7 +1083,10 @@ export async function addPayment(actorInput: Actor, id: string, raw: unknown) {
             ...(allocation.repair
               ? [
                   {
-                    source: "REPAIR" as const,
+                    source:
+                      order.type === "QUICK_SERVICE"
+                        ? ("QUICK_SERVICE" as const)
+                        : ("REPAIR" as const),
                     amount: decimal(allocation.repair),
                   },
                 ]
@@ -1125,7 +1149,11 @@ export async function setPaidTotal(
     if (!delta) return;
     const repairPaid = order.payments
       .flatMap((payment) => payment.allocations)
-      .filter((allocation) => allocation.source === "REPAIR")
+      .filter(
+        (allocation) =>
+          allocation.source ===
+          (order.type === "QUICK_SERVICE" ? "QUICK_SERVICE" : "REPAIR"),
+      )
       .reduce((sum, allocation) => sum + cents(allocation.amount), 0);
     const retailPaid = current - repairPaid;
     const split =
@@ -1150,7 +1178,10 @@ export async function setPaidTotal(
             ...(split.repair
               ? [
                   {
-                    source: "REPAIR" as const,
+                    source:
+                      order.type === "QUICK_SERVICE"
+                        ? ("QUICK_SERVICE" as const)
+                        : ("REPAIR" as const),
                     amount: decimal(delta > 0 ? split.repair : -split.repair),
                   },
                 ]
@@ -1201,7 +1232,55 @@ export async function changeStatus(
       order.afterSalesOpen;
     if (data.status === "REWORKING" && !resumeRework)
       throw new BusinessError("Usa l'operazione post-vendita dedicata.");
-    assertTransition(order.status, data.status, order.afterSalesOpen);
+    if (order.type === "QUICK_SERVICE") {
+      const transitions: Record<string, string[]> = {
+        RECEIVED: ["REPAIRING", "CANCELLED"],
+        REPAIRING: ["READY", "CANCELLED"],
+        READY: ["COMPLETED", "REPAIRING", "CANCELLED"],
+      };
+      if (!(transitions[order.status] ?? []).includes(data.status))
+        throw new BusinessError("Passaggio di stato non consentito.");
+    } else {
+      assertTransition(order.status, data.status, order.afterSalesOpen);
+    }
+
+    if (data.cancelPayment) {
+      if (order.status !== "DIAGNOSING" || data.status !== "CANCELLED")
+        throw new BusinessError(
+          "Il costo diagnosi può essere incassato solo durante l'annullamento della diagnosi.",
+        );
+      const amount = cents(data.cancelPayment.amount);
+      const remaining = balance(order.items, order.payments, order);
+      if (amount <= 0 || amount > remaining)
+        throw new BusinessError("Importo diagnosi non valido.");
+      const existing = await tx.payment.findUnique({
+        where: { requestId: data.cancelPayment.requestId },
+      });
+      if (!existing) {
+        const payment = await tx.payment.create({
+          data: {
+            requestId: data.cancelPayment.requestId,
+            orderId: id,
+            amount: decimal(amount),
+            method: data.cancelPayment.method,
+            kind: "BALANCE",
+            actorId: actor.id,
+            actorName: actor.name,
+            allocations: {
+              create: { source: "REPAIR", amount: decimal(amount) },
+            },
+          },
+        });
+        order.payments.push(payment);
+        await audit(tx, actor, id, "PAYMENT_ADDED", {
+          paymentId: payment.id,
+          amount: decimal(amount),
+          kind: "BALANCE",
+          method: data.cancelPayment.method,
+          cancellation: true,
+        });
+      }
+    }
 
     if (data.status === "REPAIRING" && (await orderNeedsParts(tx, id)))
       throw new BusinessError(
@@ -1315,7 +1394,7 @@ export async function savePriceRule(
       category: input.category,
       brand: normalizeBrand(input.brand),
       series: normalizeModel(input.series),
-      model: normalizeModel(input.model),
+      model: normalizeDeviceModel(input.brand, input.model),
       project: input.project.toLowerCase(),
       suggested: decimal(cents(input.suggested)),
       cost: input.cost ? decimal(cents(input.cost)) : null,
@@ -1460,6 +1539,62 @@ async function consumeWorkOrderProducts(
     await refreshPartStatuses(tx, actor, productId);
 }
 
+type CompatibilityInput = {
+  category: string;
+  brand: string;
+  model: string;
+  project: string;
+};
+
+async function syncProductCompatibilities(
+  tx: Tx,
+  productId: string,
+  usage: "RETAIL" | "REPAIR",
+  input: CompatibilityInput[],
+) {
+  const normalized = [
+    ...new Map(
+      (usage === "REPAIR" ? input : []).map((entry) => {
+        const value = {
+          category: entry.category,
+          brand: normalizeBrand(entry.brand),
+          model: normalizeDeviceModel(entry.brand, entry.model),
+          project: entry.project.trim().toLocaleLowerCase("it"),
+        };
+        return [
+          [value.category, value.brand, value.model, value.project]
+            .map((part) => part.toLocaleLowerCase("it"))
+            .join("\u0000"),
+          value,
+        ];
+      }),
+    ).values(),
+  ];
+  await tx.productCompatibility.deleteMany({ where: { productId } });
+  if (normalized.length)
+    await tx.productCompatibility.createMany({
+      data: normalized.map((entry) => ({ ...entry, productId })),
+      skipDuplicates: true,
+    });
+  await tx.priceRule.updateMany({
+    where: { requiredProductId: productId },
+    data: { requiredProductId: null, requiredQuantity: 1 },
+  });
+  for (const entry of normalized) {
+    if (!entry.project) continue;
+    await tx.priceRule.updateMany({
+      where: {
+        category: entry.category,
+        brand: { equals: entry.brand, mode: "insensitive" },
+        model: { equals: entry.model, mode: "insensitive" },
+        project: { equals: entry.project, mode: "insensitive" },
+        enabled: true,
+      },
+      data: { requiredProductId: productId },
+    });
+  }
+}
+
 export async function createProduct(actorInput: Actor, raw: unknown) {
   const data = productInput.parse(raw);
   return transact(async (tx) => {
@@ -1501,6 +1636,12 @@ export async function createProduct(actorInput: Actor, raw: unknown) {
         referenceType: "PRODUCT",
         referenceId: product.id,
       });
+    await syncProductCompatibilities(
+      tx,
+      product.id,
+      data.usage,
+      data.compatibilities,
+    );
     await audit(tx, actor, product.id, "PRODUCT_CREATED", {
       requestId: data.requestId,
       initialStock: data.initialStock,
@@ -1653,6 +1794,13 @@ export async function updateProduct(
         favorite: data.favorite,
       },
     });
+    if (data.compatibilities)
+      await syncProductCompatibilities(
+        tx,
+        productId,
+        data.usage,
+        data.compatibilities,
+      );
     if (stockChange)
       await applyInventoryMovement(tx, actor, {
         requestId: crypto.randomUUID(),
@@ -1886,7 +2034,11 @@ export async function checkoutWorkOrder(
       }).productTotal;
       const repairPaid = order.payments
         .flatMap((payment) => payment.allocations)
-        .filter((allocation) => allocation.source === "REPAIR")
+        .filter(
+          (allocation) =>
+            allocation.source ===
+            (order.type === "QUICK_SERVICE" ? "QUICK_SERVICE" : "REPAIR"),
+        )
         .reduce((sum, allocation) => sum + cents(allocation.amount), 0);
       const retailPaid = order.payments
         .flatMap((payment) => payment.allocations)
@@ -1912,7 +2064,10 @@ export async function checkoutWorkOrder(
               ...(allocation.repair
                 ? [
                     {
-                      source: "REPAIR" as const,
+                      source:
+                        order.type === "QUICK_SERVICE"
+                          ? ("QUICK_SERVICE" as const)
+                          : ("REPAIR" as const),
                       amount: decimal(allocation.repair),
                     },
                   ]
@@ -2289,7 +2444,7 @@ export async function refundOrder(actorInput: Actor, id: string, raw: unknown) {
           create: [...allocations.entries()]
             .filter(([, amount]) => amount > 0)
             .map(([source, amount]) => ({
-              source: source as "REPAIR" | "RETAIL",
+              source: source as "REPAIR" | "RETAIL" | "QUICK_SERVICE",
               amount: decimal(-amount),
             })),
         },
@@ -2338,6 +2493,7 @@ export async function createRetailSale(actorInput: Actor, raw: unknown) {
       where: { requestId: data.requestId },
       include: {
         items: true,
+        serviceItems: true,
         payments: { orderBy: { receivedAt: "asc" } },
       },
     });
@@ -2361,12 +2517,46 @@ export async function createRetailSale(actorInput: Actor, raw: unknown) {
         subtotal: unitPrice * quantity,
       };
     });
-    const subtotal = lines.reduce((sum, line) => sum + line.subtotal, 0);
+    const quickServices = await tx.quickService.findMany({
+      where: {
+        id: { in: [...new Set(data.services.map((line) => line.serviceId))] },
+        enabled: true,
+      },
+    });
+    if (
+      quickServices.length !==
+      new Set(data.services.map((line) => line.serviceId)).size
+    )
+      throw new BusinessError("Uno o più servizi non sono disponibili.");
+    const serviceLines = data.services.map((line) => {
+      const service = quickServices.find(
+        (entry) => entry.id === line.serviceId,
+      )!;
+      const unitPrice = cents(line.price);
+      return {
+        service,
+        quantity: line.quantity,
+        unitPrice,
+        subtotal: unitPrice * line.quantity,
+      };
+    });
+    const productSubtotal = lines.reduce((sum, line) => sum + line.subtotal, 0);
+    const serviceSubtotal = serviceLines.reduce(
+      (sum, line) => sum + line.subtotal,
+      0,
+    );
+    const subtotal = productSubtotal + serviceSubtotal;
     const discount = cents(data.discount);
     if (discount >= subtotal)
       throw new BusinessError("Lo sconto deve essere inferiore al subtotale.");
     const totalAmount = subtotal - discount;
-    const itemCount = lines.reduce((sum, line) => sum + line.quantity, 0);
+    const itemCount =
+      lines.reduce((sum, line) => sum + line.quantity, 0) +
+      serviceLines.reduce((sum, line) => sum + line.quantity, 0);
+    const retailAmount = subtotal
+      ? Math.round((totalAmount * productSubtotal) / subtotal)
+      : 0;
+    const serviceAmount = totalAmount - retailAmount;
     const sale = await tx.retailSale.create({
       data: {
         code: await nextDailyCode(tx, "sale", await getBusinessDay(tx)),
@@ -2387,6 +2577,16 @@ export async function createRetailSale(actorInput: Actor, raw: unknown) {
             subtotal: decimal(line.subtotal),
           })),
         },
+        serviceItems: {
+          create: serviceLines.map((line) => ({
+            quickServiceId: line.service.id,
+            serviceName: line.service.name,
+            notes: line.service.notes,
+            unitPrice: decimal(line.unitPrice),
+            quantity: line.quantity,
+            subtotal: decimal(line.subtotal),
+          })),
+        },
       },
     });
     const payment = await tx.payment.create({
@@ -2399,7 +2599,19 @@ export async function createRetailSale(actorInput: Actor, raw: unknown) {
         actorId: actor.id,
         actorName: actor.name,
         allocations: {
-          create: { source: "RETAIL", amount: decimal(totalAmount) },
+          create: [
+            ...(retailAmount
+              ? [{ source: "RETAIL" as const, amount: decimal(retailAmount) }]
+              : []),
+            ...(serviceAmount
+              ? [
+                  {
+                    source: "QUICK_SERVICE" as const,
+                    amount: decimal(serviceAmount),
+                  },
+                ]
+              : []),
+          ],
         },
       },
     });
@@ -2422,9 +2634,259 @@ export async function createRetailSale(actorInput: Actor, raw: unknown) {
       where: { id: sale.id },
       include: {
         items: true,
+        serviceItems: true,
         payments: { orderBy: { receivedAt: "asc" } },
       },
     });
+  });
+}
+
+export async function saveQuickService(
+  actorInput: Actor,
+  id: string | null,
+  raw: unknown,
+) {
+  const data = quickServiceInput.parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const duplicate = await tx.quickService.findFirst({
+      where: {
+        name: { equals: data.name, mode: "insensitive" },
+        ...(id ? { id: { not: id } } : {}),
+      },
+    });
+    if (duplicate)
+      throw new BusinessError("Esiste già un servizio con questo nome.");
+    const service = id
+      ? await tx.quickService.update({
+          where: { id },
+          data: {
+            name: data.name,
+            defaultPrice: decimal(cents(data.defaultPrice)),
+            notes: data.notes,
+            enabled: data.enabled,
+          },
+        })
+      : await tx.quickService.create({
+          data: {
+            name: data.name,
+            defaultPrice: decimal(cents(data.defaultPrice)),
+            notes: data.notes,
+            enabled: data.enabled,
+          },
+        });
+    await audit(
+      tx,
+      actor,
+      service.id,
+      id ? "QUICK_SERVICE_UPDATED" : "QUICK_SERVICE_CREATED",
+    );
+    return service;
+  });
+}
+
+export async function createQuickServiceOrder(actorInput: Actor, raw: unknown) {
+  const data = quickServiceOrderInput.parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const previous = await tx.auditLog.findFirst({
+      where: {
+        action: "QUICK_SERVICE_ORDER_CREATED",
+        context: { path: ["requestId"], equals: data.requestId },
+      },
+    });
+    if (previous)
+      return tx.workOrder.findUniqueOrThrow({
+        where: { id: previous.entityId },
+      });
+    const customer = await tx.customer.findFirstOrThrow({
+      where: { id: data.customerId, deletedAt: null },
+    });
+    const deviceIds = [...new Set(data.deviceIds)];
+    const devices = await tx.device.findMany({
+      where: {
+        id: { in: deviceIds },
+        customerId: customer.id,
+        deletedAt: null,
+      },
+    });
+    if (devices.length !== deviceIds.length)
+      throw new BusinessError("Uno o più dispositivi non sono disponibili.");
+    const serviceIds = [
+      ...new Set(data.services.map((line) => line.serviceId)),
+    ];
+    const services = await tx.quickService.findMany({
+      where: { id: { in: serviceIds }, enabled: true },
+    });
+    if (services.length !== serviceIds.length)
+      throw new BusinessError("Uno o più servizi non sono disponibili.");
+    const items = data.services.map((line) => {
+      const service = services.find((entry) => entry.id === line.serviceId)!;
+      return {
+        quickServiceId: service.id,
+        project: service.name,
+        suggested: service.defaultPrice,
+        final: decimal(cents(line.price)),
+        discount: decimal(0),
+        matchLevel: "SERVICE",
+        minutes: 0,
+      };
+    });
+    const primary = devices.find((device) => device.id === deviceIds[0])!;
+    const order = await tx.workOrder.create({
+      data: {
+        code: await nextDailyCode(tx, "service", await getBusinessDay(tx)),
+        type: "QUICK_SERVICE",
+        deviceId: primary.id,
+        customerName: customer.name,
+        fault: services.map((service) => service.name).join("; "),
+        status: "RECEIVED",
+        dueDate: data.expectedAt.slice(0, 10),
+        expectedAt: data.expectedAt,
+        items: { create: items },
+        relatedDevices: {
+          create: deviceIds.map((deviceId) => ({ deviceId })),
+        },
+        history: {
+          create: {
+            to: "RECEIVED",
+            actorId: actor.id,
+            actorName: actor.name,
+          },
+        },
+      },
+    });
+    await audit(tx, actor, order.id, "QUICK_SERVICE_ORDER_CREATED", {
+      requestId: data.requestId,
+      deviceIds,
+      serviceIds,
+    });
+    return order;
+  });
+}
+
+export async function renameDeviceModel(actorInput: Actor, raw: unknown) {
+  const input = renameDeviceModelInput.parse(raw);
+  const brand = normalizeBrand(input.brand);
+  const target = normalizeDeviceModel(brand, input.to);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const sourceWhere = {
+      category: input.category,
+      brand: { equals: brand, mode: "insensitive" as const },
+      model: { equals: input.from, mode: "insensitive" as const },
+    };
+    const [deviceCount, rules, compatibilities] = await Promise.all([
+      tx.device.count({ where: sourceWhere }),
+      tx.priceRule.findMany({ where: sourceWhere }),
+      tx.productCompatibility.findMany({ where: sourceWhere }),
+    ]);
+    if (!deviceCount && !rules.length && !compatibilities.length)
+      throw new BusinessError("Modello non disponibile.");
+    await tx.device.updateMany({
+      where: sourceWhere,
+      data: { brand, model: target },
+    });
+    for (const rule of rules) {
+      const duplicate = await tx.priceRule.findFirst({
+        where: {
+          id: { not: rule.id },
+          category: rule.category,
+          brand: { equals: brand, mode: "insensitive" },
+          series: rule.series,
+          model: { equals: target, mode: "insensitive" },
+          project: rule.project,
+        },
+      });
+      if (duplicate) {
+        await tx.workOrderItem.updateMany({
+          where: { ruleId: rule.id },
+          data: { ruleId: duplicate.id },
+        });
+        await tx.priceRule.delete({ where: { id: rule.id } });
+      } else {
+        await tx.priceRule.update({
+          where: { id: rule.id },
+          data: { brand, model: target },
+        });
+      }
+    }
+    for (const compatibility of compatibilities) {
+      const duplicate = await tx.productCompatibility.findFirst({
+        where: {
+          id: { not: compatibility.id },
+          productId: compatibility.productId,
+          category: compatibility.category,
+          brand: { equals: brand, mode: "insensitive" },
+          model: { equals: target, mode: "insensitive" },
+          project: compatibility.project,
+        },
+      });
+      if (duplicate)
+        await tx.productCompatibility.delete({
+          where: { id: compatibility.id },
+        });
+      else
+        await tx.productCompatibility.update({
+          where: { id: compatibility.id },
+          data: { brand, model: target },
+        });
+    }
+    await audit(
+      tx,
+      actor,
+      `${input.category}:${brand}:${input.from}`,
+      "DEVICE_MODEL_RENAMED",
+      {
+        to: target,
+        devices: deviceCount,
+        rules: rules.length,
+        compatibilities: compatibilities.length,
+      },
+    );
+  });
+}
+
+export async function deleteWorkOrder(
+  actorInput: Actor,
+  id: string,
+  raw: unknown,
+) {
+  const data = deleteWorkOrderInput.parse(raw);
+  return transact(async (tx) => {
+    await currentActor(tx, actorInput);
+    const order = await tx.workOrder.findUniqueOrThrow({
+      where: { id },
+      include: {
+        payments: true,
+        products: true,
+        reworks: true,
+      },
+    });
+    if (data.code !== order.code)
+      throw new BusinessError("Il numero della scheda non corrisponde.");
+    if (order.payments.length)
+      throw new BusinessError("La scheda contiene incassi o rimborsi.");
+    if (order.products.length)
+      throw new BusinessError(
+        "La scheda contiene prenotazioni o movimenti di magazzino.",
+      );
+    if (order.reworks.length)
+      throw new BusinessError("La scheda contiene una pratica post-vendita.");
+    if (
+      await tx.inventoryMovement.count({
+        where: { referenceType: "WORK_ORDER", referenceId: id },
+      })
+    )
+      throw new BusinessError(
+        "La scheda contiene prenotazioni o movimenti di magazzino.",
+      );
+    await tx.workOrderFault.deleteMany({ where: { orderId: id } });
+    await tx.statusHistory.deleteMany({ where: { orderId: id } });
+    await tx.workOrderItem.deleteMany({ where: { orderId: id } });
+    await tx.workOrderDevice.deleteMany({ where: { orderId: id } });
+    await tx.auditLog.deleteMany({ where: { entityId: id } });
+    await tx.workOrder.delete({ where: { id } });
   });
 }
 export async function createUser(actorInput: Actor, raw: unknown) {
@@ -2558,7 +3020,7 @@ export async function saveDevice(actorInput: Actor, id: string, raw: unknown) {
   const data = {
     ...parsed,
     brand: normalizeBrand(parsed.brand),
-    model: normalizeModel(parsed.model),
+    model: normalizeDeviceModel(parsed.brand, parsed.model),
   };
   return transact(async (tx) => {
     const actor = await currentActor(tx, actorInput);
@@ -2581,7 +3043,7 @@ export async function createDevice(
   const data = {
     ...parsed,
     brand: normalizeBrand(parsed.brand),
-    model: normalizeModel(parsed.model),
+    model: normalizeDeviceModel(parsed.brand, parsed.model),
   };
   return transact(async (tx) => {
     const actor = await currentActor(tx, actorInput);

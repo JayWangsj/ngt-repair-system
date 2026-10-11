@@ -12,7 +12,7 @@ export default async function RetailPage({
   await requireActor();
   const it = await getMessages();
   const query = await searchParams;
-  const [products, categories, sales] = await Promise.all([
+  const [products, categories, sales, quickServices] = await Promise.all([
     db.product.findMany({
       where: { enabled: true, usage: "RETAIL" },
       orderBy: [{ favorite: "desc" }, { name: "asc" }],
@@ -24,9 +24,14 @@ export default async function RetailPage({
     db.retailSale.findMany({
       include: {
         items: true,
+        serviceItems: true,
         payments: { orderBy: { receivedAt: "asc" } },
       },
       orderBy: { createdAt: "desc" },
+    }),
+    db.quickService.findMany({
+      where: { enabled: true },
+      orderBy: { name: "asc" },
     }),
   ]);
   const today = romeDay();
@@ -56,6 +61,12 @@ export default async function RetailPage({
         stockQuantity: product.stockQuantity,
         favorite: product.favorite,
       }))}
+      quickServices={quickServices.map((service) => ({
+        id: service.id,
+        name: service.name,
+        notes: service.notes,
+        defaultPrice: cents(service.defaultPrice),
+      }))}
       sales={sales.map((sale) => ({
         id: sale.id,
         code: sale.code,
@@ -70,6 +81,13 @@ export default async function RetailPage({
           id: item.id,
           name: item.productName,
           category: item.category,
+          unitPrice: cents(item.unitPrice),
+          quantity: item.quantity,
+          subtotal: cents(item.subtotal),
+        })),
+        services: sale.serviceItems.map((item) => ({
+          id: item.id,
+          name: item.serviceName,
           unitPrice: cents(item.unitPrice),
           quantity: item.quantity,
           subtotal: cents(item.subtotal),

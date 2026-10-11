@@ -23,7 +23,13 @@ import { deleteProductsAction, updateProductAction } from "@/app/actions";
 import { categories as deviceCategories, type Category } from "@/lib/catalog";
 import { decimal, inventoryStatus, money } from "@/lib/domain";
 import { useLanguage, useMessages } from "./language";
-import { FormDialog, ProductForm, type CategoryView } from "./forms";
+import {
+  FormDialog,
+  ProductCompatibilityFields,
+  ProductForm,
+  type CategoryView,
+  type ProductCompatibilityDraft,
+} from "./forms";
 import {
   DatePicker,
   SearchableCombobox,
@@ -63,6 +69,36 @@ type ProductCompatibility = {
   model: string;
   project: string;
 };
+
+function ProductCompatibilityDialog({
+  product,
+  onClose,
+  onSave,
+}: {
+  product: ProductView;
+  onClose: () => void;
+  onSave: (value: ProductCompatibilityDraft[]) => void;
+}) {
+  const it = useMessages();
+  const [value, setValue] = useState<ProductCompatibilityDraft[]>(
+    product.compatibilities,
+  );
+  return (
+    <FormDialog title={it.inventory.editCompatibleDevices} onClose={onClose}>
+      <div data-form-dialog-body data-product-compatibility-dialog>
+        <ProductCompatibilityFields value={value} onChange={setValue} />
+        <div className="dialog-actions">
+          <Button type="button" variant="outline" onClick={onClose}>
+            {it.cancel}
+          </Button>
+          <Button type="button" onClick={() => onSave(value)}>
+            {it.save}
+          </Button>
+        </div>
+      </div>
+    </FormDialog>
+  );
+}
 
 type DeviceFilter = {
   brand: string;
@@ -556,6 +592,7 @@ export function InventoryWorkspace({
   const [batchMode, setBatchMode] = useState(false);
   const [checked, setChecked] = useState<string[]>([]);
   const [drafts, setDrafts] = useState<Record<string, ProductView>>({});
+  const [compatibilityEditor, setCompatibilityEditor] = useState("");
   const draftsRef = useRef(drafts);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
@@ -649,29 +686,32 @@ export function InventoryWorkspace({
       requestAnimationFrame(() => window.scrollTo({ top, behavior: "auto" }));
     });
   }
-  function commit(productId: string, scrollTop = window.scrollY) {
-    const next = draftsRef.current[productId];
-    if (!next) return;
+  function saveProduct(next: ProductView, scrollTop = window.scrollY) {
     setError("");
     startTransition(async () => {
-      const result = await updateProductAction(productId, {
+      const result = await updateProductAction(next.id, {
         ...next,
         costPrice: decimal(next.costPrice),
         salePrice: decimal(next.salePrice),
       });
       if (!result.ok) {
-        setSelectedId(productId);
+        setSelectedId(next.id);
         return setError(result.error);
       }
       router.refresh();
       restoreScroll(scrollTop);
     });
   }
+  function commit(productId: string, scrollTop = window.scrollY) {
+    const next = draftsRef.current[productId];
+    if (next) saveProduct(next, scrollTop);
+  }
   useEffect(() => {
     function outside(event: PointerEvent) {
       if (!selectedId) return;
       const target = event.target;
       if (!(target instanceof Element)) return;
+      if (target.closest("[data-product-compatibility-dialog]")) return;
       if (target.closest(`[data-inventory-product="${selectedId}"]`)) return;
       const scrollTop = window.scrollY;
       const active = document.activeElement;
@@ -979,7 +1019,15 @@ export function InventoryWorkspace({
                       )}
                     </td>
                     <td className="inventory-compatible-cell">
-                      {compatibilityPaths(product).length ? (
+                      {selected && product.usage === "REPAIR" ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setCompatibilityEditor(product.id)}
+                        >
+                          {it.inventory.editCompatibleDevices}
+                        </Button>
+                      ) : compatibilityPaths(product).length ? (
                         <span className="inventory-compatibility-list">
                           {compatibilityPaths(product).map((path) => (
                             <span key={path}>{path}</span>
@@ -1082,6 +1130,26 @@ export function InventoryWorkspace({
       ) : (
         <p className="inventory-empty">{it.inventory.noProducts}</p>
       )}
+      {compatibilityEditor &&
+        (() => {
+          const source = products.find(
+            (product) => product.id === compatibilityEditor,
+          );
+          const product = drafts[compatibilityEditor] ?? source;
+          return product ? (
+            <ProductCompatibilityDialog
+              product={product}
+              onClose={() => setCompatibilityEditor("")}
+              onSave={(compatibilities) => {
+                const next = { ...product, compatibilities };
+                updateDraft(product, next);
+                saveProduct(next);
+                setCompatibilityEditor("");
+                setSelectedId("");
+              }}
+            />
+          ) : null;
+        })()}
     </section>
   );
 }

@@ -104,6 +104,10 @@ export async function createOrderAction(input: unknown) {
   const actor = await requireActor();
   return execute(() => service.createOrder(actor, input));
 }
+export async function createQuickServiceOrderAction(input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.createQuickServiceOrder(actor, input));
+}
 export async function updateBusinessClockAction(input: unknown) {
   const actor = await requireActor();
   return execute(() => service.updateBusinessClock(actor, input));
@@ -183,8 +187,30 @@ export async function createRetailSaleAction(input: unknown) {
         quantity: item.quantity,
         subtotal: cents(item.subtotal),
       })),
+      services: sale.serviceItems.map((item) => ({
+        id: item.id,
+        name: item.serviceName,
+        unitPrice: cents(item.unitPrice),
+        quantity: item.quantity,
+        subtotal: cents(item.subtotal),
+      })),
     }),
   );
+}
+export async function saveQuickServiceAction(
+  id: string | null,
+  input: unknown,
+) {
+  const actor = await requireActor();
+  return execute(() => service.saveQuickService(actor, id, input));
+}
+export async function renameDeviceModelAction(input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.renameDeviceModel(actor, input));
+}
+export async function deleteWorkOrderAction(id: string, input: unknown) {
+  const actor = await requireActor();
+  return execute(() => service.deleteWorkOrder(actor, id, input));
 }
 export async function addWorkOrderProductAction(id: string, input: unknown) {
   const actor = await requireActor();

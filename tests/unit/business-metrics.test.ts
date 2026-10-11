@@ -30,6 +30,7 @@ describe("business metrics", () => {
       total: 16000,
       repair: 12000,
       retail: 4000,
+      quickService: 0,
       methods: { CASH: 14500, CARD: 0, OTHER: 1500 },
     });
   });

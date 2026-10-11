@@ -39,6 +39,7 @@ export type OrderListRow = {
   paid: number;
   balance: number;
   afterSalesOpen: boolean;
+  type: "REPAIR" | "QUICK_SERVICE";
 };
 
 function StatusControl({
@@ -56,6 +57,7 @@ function StatusControl({
     | "paid"
     | "balance"
     | "afterSalesOpen"
+    | "type"
   >;
   active: boolean;
   onSettled?: (order: StatusDropdownOrder) => void;
@@ -80,6 +82,7 @@ export function DetailStatusControl({
   paid,
   balance,
   afterSalesOpen,
+  type,
 }: Pick<
   OrderListRow,
   | "id"
@@ -89,11 +92,21 @@ export function DetailStatusControl({
   | "paid"
   | "balance"
   | "afterSalesOpen"
+  | "type"
 >) {
   return (
     <div className="detail-status-control">
       <StatusControl
-        row={{ id, status, customerName, due, paid, balance, afterSalesOpen }}
+        row={{
+          id,
+          status,
+          customerName,
+          due,
+          paid,
+          balance,
+          afterSalesOpen,
+          type,
+        }}
         active
       />
     </div>
@@ -214,6 +227,7 @@ export function OrderListBody({
   hideCustomer?: boolean;
   compact?: boolean;
 }) {
+  const it = useMessages();
   const [activeId, setActiveId] = useState("");
   const [settledRows, setSettledRows] = useState<
     Record<string, { before: StatusDropdownOrder; after: StatusDropdownOrder }>
@@ -337,6 +351,7 @@ export function OrderListBody({
     const layoutDelta = previousTarget
       ? currentTarget.top - previousTarget.top
       : 0;
+    if (previousTarget && Math.abs(layoutDelta) < 1) return;
     target.classList.add("order-row-status-moving");
     if (previousTarget && Math.abs(layoutDelta) >= 1) {
       floatingRow.current?.remove();
@@ -620,6 +635,9 @@ export function OrderListBody({
                 onClick={(event) => event.stopPropagation()}
               >
                 <span>{row.code}</span>
+                <small className="order-type-tag">
+                  {it.orderTypes[row.type]}
+                </small>
                 <ChevronRight size={15} aria-hidden="true" />
               </Link>
             </td>

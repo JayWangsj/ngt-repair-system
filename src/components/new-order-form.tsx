@@ -23,7 +23,7 @@ import {
   modelKey,
   models,
   normalizeBrand,
-  normalizeModel,
+  normalizeDeviceModel,
   type Category,
 } from "@/lib/catalog";
 import {
@@ -787,7 +787,11 @@ export function NewOrderWizard({
                 <SearchableCombobox
                   value={model}
                   onChange={(value) => {
-                    const nextModel = normalizeModel(value, modelOptions);
+                    const nextModel = normalizeDeviceModel(
+                      brand,
+                      value,
+                      modelOptions,
+                    );
                     setModel(nextModel);
                     matchCustomerDevice(category, brand, nextModel);
                   }}
@@ -798,12 +802,20 @@ export function NewOrderWizard({
                   emptyText={it.noMatches}
                   customLabel={it.customModel}
                   onCustom={(value) => {
-                    const nextModel = normalizeModel(value, modelOptions);
+                    const nextModel = normalizeDeviceModel(
+                      brand,
+                      value,
+                      modelOptions,
+                    );
                     setModel(nextModel);
                     matchCustomerDevice(category, brand, nextModel);
                   }}
                   onCommit={(value) => {
-                    const nextModel = normalizeModel(value, modelOptions);
+                    const nextModel = normalizeDeviceModel(
+                      brand,
+                      value,
+                      modelOptions,
+                    );
                     setModel(nextModel);
                     matchCustomerDevice(category, brand, nextModel);
                   }}

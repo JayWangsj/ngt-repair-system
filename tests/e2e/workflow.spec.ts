@@ -2898,6 +2898,21 @@ test("sales history uses a monthly filter", async ({ page }) => {
   await period.fill("2025-01");
   await expect(dialog).toContainText("Nessuna vendita registrata.");
   await period.fill(new Date().toISOString().slice(0, 7));
+  const historyRow = dialog.locator("tbody tr").first();
+  await historyRow.hover();
+  await historyRow.getByRole("button", { name: /Elimina vendita V-/ }).click();
+  const deleteDialog = page.getByRole("dialog", {
+    name: "Elimina vendita",
+  });
+  await expect(deleteDialog).toBeVisible();
+  await expect(deleteDialog).toContainText(
+    "Eliminare definitivamente questa vendita e ripristinare le scorte?",
+  );
+  await expect(page.getByRole("dialog")).toHaveCount(2);
+  await deleteDialog
+    .getByRole("button", { name: "Annulla", exact: true })
+    .click();
+  await expect(deleteDialog).toHaveCount(0);
   await expect(page.locator('select[name="mode"]')).toHaveCount(0);
   await expect(page).toHaveURL(/\/retail$/);
   await dialog.getByRole("button", { name: "Chiudi" }).click();

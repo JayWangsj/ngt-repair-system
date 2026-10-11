@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Trash2 } from "lucide-react";
 import { deleteRetailSaleAction } from "@/app/actions";
 import { DatePicker } from "./business-select";
 import { useMessages } from "./language";
 import { money } from "@/lib/domain";
 import { RecordIcon } from "./ui/record-icon";
+import { FormDialog } from "./forms";
+import { Button } from "./ui/button";
 
 export type SaleHistoryRow = {
   id: string;
@@ -51,14 +53,16 @@ export function RetailSalesHistory({
   const it = useMessages();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const [saleToDelete, setSaleToDelete] = useState<SaleHistoryRow | null>(null);
   const filtered = sales.filter((sale) => sale.period === period);
-  function remove(sale: SaleHistoryRow) {
-    if (!window.confirm(it.retail.deleteSaleConfirm)) return;
+  function remove() {
+    if (!saleToDelete) return;
     setError("");
     startTransition(async () => {
-      const result = await deleteRetailSaleAction(sale.id);
+      const result = await deleteRetailSaleAction(saleToDelete.id);
       if (!result.ok) return setError(result.error);
-      onDeleted(sale.id);
+      onDeleted(saleToDelete.id);
+      setSaleToDelete(null);
     });
   }
   return (
@@ -105,7 +109,10 @@ export function RetailSalesHistory({
                         kind="delete"
                         label={`${it.retail.deleteSale} ${sale.code}`}
                         disabled={pending}
-                        onClick={() => remove(sale)}
+                        onClick={() => {
+                          setError("");
+                          setSaleToDelete(sale);
+                        }}
                       />
                     </td>
                   </tr>
@@ -117,10 +124,58 @@ export function RetailSalesHistory({
           <p className="inventory-empty">{it.retail.noSales}</p>
         )}
       </section>
-      {error && (
+      {error && !saleToDelete && (
         <p className="message error" role="alert">
           {error}
         </p>
+      )}
+      {saleToDelete && (
+        <FormDialog
+          title={it.retail.deleteSale}
+          onClose={() => {
+            if (!pending) {
+              setError("");
+              setSaleToDelete(null);
+            }
+          }}
+        >
+          <div
+            className="confirm-delete-dialog"
+            data-form-dialog-body
+            aria-busy={pending}
+          >
+            <div className="confirm-delete-icon" aria-hidden="true">
+              <Trash2 size={22} />
+            </div>
+            <p>{it.retail.deleteSaleConfirm}</p>
+            {error && (
+              <p className="message error" role="alert">
+                {error}
+              </p>
+            )}
+            <div className="dialog-actions">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending}
+                onClick={() => {
+                  setError("");
+                  setSaleToDelete(null);
+                }}
+              >
+                {it.cancel}
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                disabled={pending}
+                onClick={remove}
+              >
+                {it.retail.deleteSale}
+              </Button>
+            </div>
+          </div>
+        </FormDialog>
       )}
     </div>
   );

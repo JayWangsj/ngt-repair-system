@@ -10,6 +10,39 @@ const markMaster = path.join(brandDirectory, "ngt-mark.png");
 const pngSizes = [16, 24, 32, 48, 64, 128, 192, 256, 512];
 const icoSizes = new Set([16, 24, 32, 48, 64, 128, 256]);
 
+async function toWindowsIconBitmap(png, size) {
+  const pixels = await sharp(png).ensureAlpha().raw().toBuffer();
+  const bitmapHeader = Buffer.alloc(40);
+  const bitmap = Buffer.alloc(size * size * 4);
+  const maskRowBytes = Math.ceil(size / 32) * 4;
+  const transparencyMask = Buffer.alloc(maskRowBytes * size);
+
+  bitmapHeader.writeUInt32LE(40, 0);
+  bitmapHeader.writeInt32LE(size, 4);
+  bitmapHeader.writeInt32LE(size * 2, 8);
+  bitmapHeader.writeUInt16LE(1, 12);
+  bitmapHeader.writeUInt16LE(32, 14);
+  bitmapHeader.writeUInt32LE(bitmap.length, 20);
+
+  for (let y = 0; y < size; y += 1) {
+    const targetRow = size - y - 1;
+    for (let x = 0; x < size; x += 1) {
+      const source = (y * size + x) * 4;
+      const target = (targetRow * size + x) * 4;
+      bitmap[target] = pixels[source + 2];
+      bitmap[target + 1] = pixels[source + 1];
+      bitmap[target + 2] = pixels[source];
+      bitmap[target + 3] = pixels[source + 3];
+      if (pixels[source + 3] < 16) {
+        const maskByte = targetRow * maskRowBytes + Math.floor(x / 8);
+        transparencyMask[maskByte] |= 1 << (7 - (x % 8));
+      }
+    }
+  }
+
+  return Buffer.concat([bitmapHeader, bitmap, transparencyMask]);
+}
+
 const appPngs = [];
 for (const size of pngSizes) {
   const appPng = await sharp(appIconMaster)
@@ -25,7 +58,9 @@ for (const size of pngSizes) {
     appPng,
   );
   await writeFile(path.join(brandDirectory, `ngt-mark-${size}.png`), markPng);
-  if (icoSizes.has(size)) appPngs.push({ size, data: appPng });
+  if (icoSizes.has(size)) {
+    appPngs.push({ size, data: await toWindowsIconBitmap(appPng, size) });
+  }
 }
 
 const headerSize = 6 + appPngs.length * 16;
@@ -52,7 +87,7 @@ const ico = Buffer.concat([directory, ...appPngs.map((icon) => icon.data)]);
 await writeFile(path.join(root, "assets", "ngt-studio.ico"), ico);
 await writeFile(
   path.join(root, "assets", "ngt-studio-icon.png"),
-  appPngs.find(({ size }) => size === 256).data,
+  await readFile(path.join(brandDirectory, "ngt-app-icon-256.png")),
 );
 await writeFile(
   path.join(root, "assets", "ngt-studio-icon.svg"),

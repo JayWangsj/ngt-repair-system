@@ -298,5 +298,7 @@ describe("Windows persistent startup", () => {
       return size === 0 ? 256 : size;
     });
     expect(iconSizes).toEqual([16, 24, 32, 48, 64, 128, 256]);
+    const firstImageOffset = icon.readUInt32LE(6 + 12);
+    expect(icon.readUInt32LE(firstImageOffset)).toBe(40);
   });
 });

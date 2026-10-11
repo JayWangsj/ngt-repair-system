@@ -3465,6 +3465,75 @@ test("settings checks a private release and confirms before updating", async ({
     "Aggiornamento di prova interrotto.",
   );
 });
+test("settings keeps the update card stable and offers authorization", async ({
+  page,
+}) => {
+  let checkCount = 0;
+  let authorizationStarted = false;
+  let releaseSecondCheck = () => {};
+  const secondCheck = new Promise<void>((resolve) => {
+    releaseSecondCheck = resolve;
+  });
+  await page.route("**/api/system-update", async (route) => {
+    checkCount += 1;
+    if (checkCount === 2) await secondCheck;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        installed: true,
+        currentVersion: "1.11.57",
+        authRequired: true,
+        updateAvailable: false,
+      }),
+    });
+  });
+  await page.route("**/api/system-update/auth", (route) => {
+    authorizationStarted = true;
+    return route.fulfill({
+      status: 202,
+      contentType: "application/json",
+      body: JSON.stringify({ started: true }),
+    });
+  });
+
+  await page.goto("/settings");
+  const italianButton = page.getByRole("button", {
+    name: "Italiano",
+    exact: true,
+  });
+  if (await italianButton.isVisible()) await italianButton.click();
+  const updateCard = page.locator(".system-update-settings");
+  const nextCard = page.locator(".system-update-settings + .settings-card");
+  const checkButton = updateCard.locator(".system-update-check-button");
+  await checkButton.click();
+  await expect(updateCard).toContainText(
+    "Per controllare gli aggiornamenti, autorizza GitHub una sola volta.",
+  );
+  const beforeCard = await updateCard.boundingBox();
+  const beforeButton = await checkButton.boundingBox();
+  const beforeNextCard = await nextCard.boundingBox();
+
+  await checkButton.click();
+  await expect(checkButton).toContainText("Controllo…");
+  await expect.poll(() => checkCount).toBe(2);
+  const checkingCard = await updateCard.boundingBox();
+  const checkingButton = await checkButton.boundingBox();
+  const checkingNextCard = await nextCard.boundingBox();
+  expect(checkingCard?.height).toBe(beforeCard?.height);
+  expect(checkingButton?.width).toBe(beforeButton?.width);
+  expect(checkingNextCard?.y).toBe(beforeNextCard?.y);
+
+  releaseSecondCheck();
+  await expect(checkButton).toContainText("Controlla aggiornamenti");
+  await updateCard
+    .getByRole("button", { name: "Autorizza GitHub", exact: true })
+    .click();
+  await expect.poll(() => authorizationStarted).toBe(true);
+  await expect(updateCard).toContainText(
+    "Completa l'autorizzazione nella finestra aperta",
+  );
+});
 test("settings catalogs reuse stable inline and dialog interactions", async ({
   page,
 }) => {

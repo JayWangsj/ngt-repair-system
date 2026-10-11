@@ -186,18 +186,12 @@ export async function startGitHubLogin(
   const root = options.root || process.cwd();
   const context = await getStudioContext(root);
   if (!context.release?.version) throw new Error("studio_not_installed");
+  const githubCli = resolveGitHubCli(root);
+  const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
+  const command = `Start-Process -FilePath ${quote(githubCli)} -WorkingDirectory ${quote(root)} -ArgumentList @('auth','login','--hostname','github.com','--web','--clipboard','--git-protocol','https')`;
   const child = (options.launch || launchProcess)(
-    resolveGitHubCli(root),
-    [
-      "auth",
-      "login",
-      "--hostname",
-      "github.com",
-      "--web",
-      "--clipboard",
-      "--git-protocol",
-      "https",
-    ],
+    "powershell.exe",
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
     { cwd: root, detached: true, stdio: "ignore", windowsHide: true },
   );
   child.unref();

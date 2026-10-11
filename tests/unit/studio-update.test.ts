@@ -97,7 +97,7 @@ describe("studio update", () => {
     });
   });
 
-  it("launches browser authorization and a detached update process", async () => {
+  it("launches visible browser authorization and a detached update process", async () => {
     const { root, installRoot } = await studioRoot();
     const launches: { executable: string; args: string[] }[] = [];
     const launch = (executable: string, args: string[]) => {
@@ -106,8 +106,11 @@ describe("studio update", () => {
     };
     await startGitHubLogin({ root, launch });
     await startStudioUpdate({ root, launch });
-    expect(launches[0].args).toContain("--clipboard");
-    expect(launches[0].args).toContain("--web");
+    expect(launches[0].executable).toBe("powershell.exe");
+    expect(launches[0].args).toContain("-Command");
+    expect(launches[0].args.at(-1)).toContain("Start-Process");
+    expect(launches[0].args.at(-1)).toContain("--clipboard");
+    expect(launches[0].args.at(-1)).toContain("--web");
     expect(launches[1].executable).toBe("powershell.exe");
     expect(
       launches[1].args.some((argument) =>

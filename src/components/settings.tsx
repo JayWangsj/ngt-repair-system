@@ -97,15 +97,26 @@ export function SettingsTools({
   }
 
   async function beginGitHubLogin() {
-    const response = await fetch("/api/system-update/auth", { method: "POST" });
-    if (!response.ok) throw new Error(it.updateLoginFailed);
-    setUpdateMessage(it.updateLoginOpened);
+    setUpdatePending(true);
+    setUpdateError("");
+    try {
+      const response = await fetch("/api/system-update/auth", {
+        method: "POST",
+      });
+      if (!response.ok) throw new Error(it.updateLoginFailed);
+      setUpdateMessage(it.updateLoginOpened);
+    } catch (cause) {
+      setUpdateMessage("");
+      setUpdateError(
+        cause instanceof Error ? cause.message : it.updateLoginFailed,
+      );
+    } finally {
+      setUpdatePending(false);
+    }
   }
 
   async function checkForUpdates() {
     setUpdatePending(true);
-    setUpdateMessage("");
-    setUpdateError("");
     try {
       const response = await fetch("/api/system-update", { cache: "no-store" });
       const result = (await response.json()) as {
@@ -124,10 +135,11 @@ export function SettingsTools({
         latestVersion: result.latestVersion,
       };
       setUpdateInfo(info);
+      setUpdateError("");
       if (!info.installed) {
         setUpdateMessage(it.updateInstalledOnly);
       } else if (info.authRequired) {
-        await beginGitHubLogin();
+        setUpdateMessage(it.updateAuthRequired);
       } else if (info.updateAvailable) {
         setUpdateMessage(
           it.updateAvailable.replace(
@@ -139,6 +151,7 @@ export function SettingsTools({
         setUpdateMessage(it.updateCurrent);
       }
     } catch (cause) {
+      setUpdateMessage("");
       setUpdateError(
         cause instanceof Error ? cause.message : it.updateCheckFailed,
       );
@@ -448,12 +461,22 @@ export function SettingsTools({
             <Button
               type="button"
               variant="outline"
+              className="system-update-check-button"
               disabled={updatePending}
               onClick={() => void checkForUpdates()}
             >
               <RefreshCw size={17} />
               {updatePending ? it.checkingUpdates : it.checkForUpdates}
             </Button>
+            {updateInfo?.authRequired && (
+              <Button
+                type="button"
+                disabled={updatePending}
+                onClick={() => void beginGitHubLogin()}
+              >
+                {it.authorizeGitHub}
+              </Button>
+            )}
             {updateInfo?.updateAvailable && (
               <Button
                 type="button"

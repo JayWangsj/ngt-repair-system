@@ -465,12 +465,15 @@ export const it = {
   latestVersion: "Ultima versione",
   checkForUpdates: "Controlla aggiornamenti",
   checkingUpdates: "Controllo…",
+  authorizeGitHub: "Autorizza GitHub",
   updateCurrent: "Il sistema è aggiornato.",
   updateAvailable: "Nuova versione disponibile: {version}.",
   updateInstalledOnly:
     "L'aggiornamento automatico è disponibile solo nella versione installata per lo studio.",
+  updateAuthRequired:
+    "Per controllare gli aggiornamenti, autorizza GitHub una sola volta.",
   updateLoginOpened:
-    "La pagina di autorizzazione GitHub è stata aperta e il codice temporaneo è stato copiato. Dopo l'accesso, controlla di nuovo gli aggiornamenti.",
+    "Completa l'autorizzazione nella finestra aperta, quindi controlla di nuovo gli aggiornamenti.",
   updateLoginFailed: "Impossibile avviare l'autorizzazione GitHub.",
   updateCheckFailed: "Impossibile controllare gli aggiornamenti. Riprova.",
   updateNow: "Aggiorna ora",

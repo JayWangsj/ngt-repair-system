@@ -29,7 +29,7 @@ import {
   summarizePayments,
 } from "@/lib/business-metrics";
 import { getLocale, getMessages } from "@/lib/i18n-server";
-import { Badge, OrderTable, PageHeader } from "@/components/common";
+import { Badge, PageHeader } from "@/components/common";
 import { requireActor } from "@/lib/session";
 import { DashboardMotion } from "@/components/dashboard-motion";
 import { getBusinessDay } from "@/lib/business-date";
@@ -548,10 +548,6 @@ export default async function Dashboard({
                     ))}
                   </section>
                 </div>
-                <h2 className="spaced">{it.unpaid}</h2>
-                <section className="panel table-panel">
-                  <OrderTable orders={unpaid} />
-                </section>
               </div>
             </DashboardStatsDialog>
           </section>

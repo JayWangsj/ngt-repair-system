@@ -1197,6 +1197,21 @@ test("manages one quick service for held service orders and retail checkout", as
   ).toBeVisible();
 });
 
+test("business statistics keeps the open balance summary without the unpaid list", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.locator(".dashboard-action-link").first().click();
+
+  const statsDialog = page.getByRole("dialog", {
+    name: "Andamento",
+    exact: true,
+  });
+  await expect(statsDialog).toBeVisible();
+  await expect(statsDialog.getByText("Totale da incassare")).toBeVisible();
+  await expect(statsDialog.locator(".order-table")).toHaveCount(0);
+});
+
 test("dashboard animates on entry and data changes while respecting reduced motion", async ({
   page,
 }) => {

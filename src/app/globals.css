@@ -2737,9 +2737,6 @@ details[open] > summary {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
-.dashboard-stats-dialog > .spaced {
-  margin: 2px 0 -6px;
-}
 .dashboard-workflow {
   margin-bottom: 18px;
 }

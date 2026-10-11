@@ -3374,6 +3374,25 @@ details.secondary-actions {
   font-size: 14px;
   font-weight: 700;
 }
+.retail-service-price-display {
+  display: inline-flex;
+  align-items: center;
+  justify-self: end;
+  gap: 7px;
+  min-height: 36px;
+  padding: 6px 8px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.retail-service-price-display:hover,
+.retail-service-price-display:focus-visible {
+  color: #765900;
+  background: var(--soft);
+  border-radius: 8px;
+}
 .retail-service-price {
   width: 92px;
   min-height: 36px;

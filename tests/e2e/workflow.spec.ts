@@ -1152,9 +1152,23 @@ test("manages one quick service for held service orders and retail checkout", as
 
   await page.goto("/retail");
   await page
+    .getByRole("button", { name: "Servizi rapidi", exact: true })
+    .click();
+  await expect(page.locator(".retail-service-card")).toBeVisible();
+  await expect(
+    page.locator(".retail-product-card:not(.retail-service-card)"),
+  ).toHaveCount(0);
+  await page
     .locator(".retail-service-card")
     .filter({ hasText: serviceName })
     .click();
+  const editServicePrice = page.getByRole("button", {
+    name: `Modifica prezzo ${serviceName}`,
+    exact: true,
+  });
+  await expect(editServicePrice).toContainText("29,90 €");
+  await expect(editServicePrice).toHaveCSS("white-space", "nowrap");
+  await editServicePrice.click();
   const servicePrice = page.getByLabel(`${serviceName} Prezzo unitario`, {
     exact: true,
   });

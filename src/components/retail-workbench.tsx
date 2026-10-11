@@ -3,6 +3,7 @@ import { useMemo, useState, useTransition } from "react";
 import {
   Check,
   ClipboardList,
+  Pencil,
   ShoppingBag,
   Sparkles,
   Star,
@@ -36,6 +37,7 @@ type RetailQuickService = {
   notes: string;
   defaultPrice: number;
 };
+const quickServiceFilter = "__quick_services__";
 
 type RetailDialog =
   | { view: "history" }
@@ -73,6 +75,7 @@ export function RetailWorkbench({
   const [favorites, setFavorites] = useState(false);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [serviceCart, setServiceCart] = useState<Record<string, string>>({});
+  const [editingServicePrice, setEditingServicePrice] = useState("");
   const [discount, setDiscount] = useState("0");
   const [method, setMethod] =
     useState<(typeof creatablePaymentMethods)[number]>("CASH");
@@ -98,6 +101,7 @@ export function RetailWorkbench({
       (!normalized ||
         product.name.toLocaleLowerCase().includes(normalized) ||
         product.category.toLocaleLowerCase().includes(normalized)) &&
+      category !== quickServiceFilter &&
       (!category || product.category === category) &&
       (!favorites || product.favorite)
     );
@@ -105,7 +109,7 @@ export function RetailWorkbench({
   const filteredServices = quickServices.filter((service) => {
     const normalized = query.trim().toLocaleLowerCase();
     return (
-      !category &&
+      (!category || category === quickServiceFilter) &&
       (!normalized ||
         service.name.toLocaleLowerCase().includes(normalized) ||
         service.notes.toLocaleLowerCase().includes(normalized))
@@ -230,6 +234,16 @@ export function RetailWorkbench({
               >
                 <Star size={15} />
                 {it.retail.favorites}
+              </button>
+              <button
+                className={category === quickServiceFilter ? "active" : ""}
+                onClick={() => {
+                  setCategory(quickServiceFilter);
+                  setFavorites(false);
+                }}
+              >
+                <Sparkles size={15} />
+                {it.quickService.title}
               </button>
               {categories.map((item) => (
                 <button
@@ -374,22 +388,38 @@ export function RetailWorkbench({
                     >
                       ×
                     </button>
-                    <label className="retail-service-price-field">
-                      <span className="sr-only">{it.retail.unitPrice}</span>
-                      <input
-                        className="retail-service-price"
-                        aria-label={`${item.name} ${it.retail.unitPrice}`}
-                        inputMode="decimal"
-                        value={item.price}
-                        onChange={(event) =>
-                          setServiceCart((current) => ({
-                            ...current,
-                            [item.id]: event.target.value,
-                          }))
-                        }
-                      />
-                      <span aria-hidden="true">€</span>
-                    </label>
+                    {editingServicePrice === item.id ? (
+                      <label className="retail-service-price-field is-editing">
+                        <span className="sr-only">{it.retail.unitPrice}</span>
+                        <input
+                          autoFocus
+                          className="retail-service-price"
+                          aria-label={`${item.name} ${it.retail.unitPrice}`}
+                          inputMode="decimal"
+                          value={item.price}
+                          onChange={(event) =>
+                            setServiceCart((current) => ({
+                              ...current,
+                              [item.id]: event.target.value,
+                            }))
+                          }
+                          onBlur={() =>
+                            window.setTimeout(() => setEditingServicePrice(""))
+                          }
+                        />
+                        <span aria-hidden="true">€</span>
+                      </label>
+                    ) : (
+                      <button
+                        type="button"
+                        className="retail-service-price-display"
+                        aria-label={`${it.retail.editPrice} ${item.name}`}
+                        onClick={() => setEditingServicePrice(item.id)}
+                      >
+                        <span>{money(item.priceCents)}</span>
+                        <Pencil size={14} aria-hidden="true" />
+                      </button>
+                    )}
                   </div>
                 ))}
               </>
@@ -483,6 +513,9 @@ export function RetailWorkbench({
               sales={sales}
               period={period}
               onPeriodChange={setPeriod}
+              onDeleted={(id) =>
+                setSales((current) => current.filter((sale) => sale.id !== id))
+              }
               onSelect={(sale) =>
                 setDialog({ view: "detail", sale, returnTo: "history" })
               }

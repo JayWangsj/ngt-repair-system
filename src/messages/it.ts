@@ -73,6 +73,7 @@ export const it = {
   faultDragHint:
     "Trascina la maniglia a sinistra per modificare l'ordine nelle nuove schede.",
   operation: "Azioni",
+  lastOperation: "Ultima operazione",
   saveChanges: "Salva modifiche",
   permanentFaultDeleteConfirm:
     "Eliminare definitivamente questo problema mai utilizzato?",
@@ -264,6 +265,7 @@ export const it = {
     emptyCart: "Seleziona un prodotto o servizio per iniziare.",
     products: "prodotti",
     unitPrice: "Prezzo unitario",
+    editPrice: "Modifica prezzo",
     quantity: "Quantità",
     subtotal: "Subtotale",
     discount: "Sconto",
@@ -281,6 +283,9 @@ export const it = {
     amount: "Importo",
     detail: "Dettaglio vendita",
     noSales: "Nessuna vendita registrata.",
+    deleteSale: "Elimina vendita",
+    deleteSaleConfirm:
+      "Eliminare definitivamente questa vendita e ripristinare le scorte?",
     itemsSold: "articoli",
   },
   quickService: {

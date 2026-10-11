@@ -521,6 +521,7 @@ export const zh: typeof it = {
   lookup: "查找客户",
   newDevice: "新增设备",
   chooseDevice: "客户已有设备",
+  changeDevice: "更换设备",
   customerFound: "已找到客户，可选择已有设备。",
   customerNew: "未找到客户，将随服务单一起创建。",
   privacy: "客户同意处理个人信息（告知版本 1.0）",

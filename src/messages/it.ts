@@ -587,6 +587,7 @@ export const it = {
   lookup: "Cerca cliente",
   newDevice: "Nuovo dispositivo",
   chooseDevice: "Dispositivo del cliente",
+  changeDevice: "Cambia dispositivo",
   customerFound: "Cliente trovato: dati e dispositivi disponibili.",
   customerNew: "Nessun cliente trovato. Verrà creato con questa scheda.",
   privacy: "Il cliente acconsente al trattamento dei dati (informativa v1.0)",

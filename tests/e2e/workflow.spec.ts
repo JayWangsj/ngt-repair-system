@@ -331,6 +331,33 @@ test("device step gates faults and advances only after faults and due date", asy
   );
   await card.locator(".order-step-heading").click();
   await chooseBusinessOption(page, "Modello", "iPhone 13");
+  const deviceSummary = card.locator(".repair-device-summary");
+  const changeDevice = deviceSummary.getByRole("button", {
+    name: "Cambia dispositivo",
+    exact: true,
+  });
+  await expect(deviceSummary).toContainText("Apple iPhone 13");
+  await deviceSummary.hover();
+  await expect(changeDevice).toHaveCSS("color", "rgb(160, 111, 0)");
+  await expect
+    .poll(() =>
+      changeDevice
+        .locator("span")
+        .evaluate((element) => getComputedStyle(element, "::after").transform),
+    )
+    .toContain("1, 0, 0, 1");
+  await expect
+    .poll(() =>
+      changeDevice
+        .locator("svg")
+        .evaluate((element) => getComputedStyle(element).transform),
+    )
+    .toContain("4, 0");
+  await changeDevice.click();
+  await expect(deviceSummary).toHaveCount(0);
+  await expect(
+    page.getByRole("combobox", { name: "Modello", exact: true }),
+  ).toHaveValue("iPhone 13");
   await expect(display).toBeEnabled();
   await expect(inspection).toBeEnabled();
   await expect(dueDate).toHaveCount(0);
@@ -3786,19 +3813,34 @@ test("a unique normalized customer device is reused and stops matching after edi
   await page
     .getByRole("button", { name: "Modello personalizzato", exact: true })
     .click();
-  await expect(model).toHaveValue("iPhone 13");
-  const customerDevice = page.getByRole("button", {
+  const summary = page.locator(".repair-device-summary");
+  await expect(summary).toContainText("Apple iPhone 13");
+  await summary
+    .getByRole("button", { name: "Cambia dispositivo", exact: true })
+    .click();
+  const picker = page.getByRole("dialog", {
     name: "Dispositivo del cliente",
+  });
+  await expect(
+    picker.locator(".customer-device-row.is-selected"),
+  ).toContainText("Apple iPhone 13");
+  await picker.getByRole("button", { name: "Nuovo dispositivo" }).click();
+  await chooseBusinessOption(page, "Marca", "Apple");
+  const newModel = page.getByRole("combobox", {
+    name: "Modello",
     exact: true,
   });
-  await expect(customerDevice).toContainText("Apple iPhone 13");
-  await expect(model).toBeEnabled();
-
-  await model.fill("modello non registrato");
+  await newModel.fill("modello non registrato");
   await page
     .getByRole("button", { name: "Modello personalizzato", exact: true })
     .click();
-  await expect(customerDevice).toContainText("Nuovo dispositivo");
+  await expect(summary).toContainText("Apple Modello Non Registrato");
+  await summary
+    .getByRole("button", { name: "Cambia dispositivo", exact: true })
+    .click();
+  await expect(picker.locator(".customer-device-row.is-selected")).toHaveCount(
+    0,
+  );
 });
 
 test("native quote choices populate prices, clear on model changes and discounts are optional", async ({

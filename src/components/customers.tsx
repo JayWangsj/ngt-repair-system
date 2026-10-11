@@ -120,20 +120,23 @@ export function CustomerDeviceCard({
   device,
   selected,
   onToggle,
+  onSelect,
   onEdit,
   onDelete,
 }: {
   device: CustomerDevice;
   selected?: boolean;
   onToggle?: () => void;
+  onSelect?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
 }) {
   const it = useMessages();
+  const selectable = onToggle ?? onSelect;
   return (
     <article
-      className={`customer-device-row business-list-row${selected ? " is-selected" : ""}${onToggle ? " is-selectable" : ""}`}
-      onClick={onToggle}
+      className={`customer-device-row business-list-row${selected ? " is-selected" : ""}${selectable ? " is-selectable" : ""}`}
+      onClick={selectable}
     >
       {onToggle && (
         <input

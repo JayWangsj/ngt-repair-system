@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Search, Trash2, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  Search,
+  Smartphone,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   createOrderAction,
@@ -34,6 +43,7 @@ import {
 } from "./business-select";
 import {
   Field,
+  FormDialog,
   ItemsEditor,
   quoteItemsValid,
   type CategoryView,
@@ -49,6 +59,7 @@ import {
   type CustomerDetail,
   type CustomerOption,
 } from "./customer-picker";
+import { CustomerDeviceCard } from "./customers";
 
 type Item = {
   project: string;
@@ -76,6 +87,48 @@ function validAmount(value: string) {
   } catch {
     return false;
   }
+}
+
+function RepairDeviceSummary({
+  category,
+  brand,
+  model,
+  imei,
+  onChange,
+}: {
+  category: string;
+  brand: string;
+  model: string;
+  imei: string;
+  onChange: () => void;
+}) {
+  const it = useMessages();
+  return (
+    <div
+      className="selection-summary repair-device-summary is-actionable"
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("button")) return;
+        onChange();
+      }}
+    >
+      <span className="selection-summary-icon" aria-hidden="true">
+        <Smartphone size={20} />
+      </span>
+      <div className="selection-summary-copy">
+        <strong>
+          {brand} {model}
+        </strong>
+        <small>
+          {category}
+          {imei ? ` · ${it.imei}: ${imei}` : ""}
+        </small>
+      </div>
+      <button type="button" className="summary-action" onClick={onChange}>
+        <span>{it.changeDevice}</span>
+        <ChevronRight size={15} aria-hidden="true" />
+      </button>
+    </div>
+  );
 }
 
 function StepCard({
@@ -197,6 +250,8 @@ export function NewOrderWizard({
   const [customer, setCustomer] = useState<CustomerDetail>(null);
   const [deviceId, setDeviceId] = useState("");
   const [autoMatchedDevice, setAutoMatchedDevice] = useState(false);
+  const [editingDevice, setEditingDevice] = useState(true);
+  const [choosingDevice, setChoosingDevice] = useState(false);
   const [category, setCategory] = useState<Category>("PHONE");
   const [brand, setBrand] = useState("");
   const [series, setSeries] = useState("");
@@ -343,6 +398,25 @@ export function NewOrderWizard({
     setSeries("");
     setModel("");
     setImei("");
+    setEditingDevice(true);
+  }
+  function selectCustomerDevice(
+    device: NonNullable<CustomerDetail>["devices"][number],
+  ) {
+    setDeviceId(device.id);
+    setAutoMatchedDevice(false);
+    setCategory(device.category as Category);
+    setBrand(device.brand);
+    setSeries(device.series);
+    setModel(device.model);
+    setImei(device.imei ?? "");
+    setAppearance(device.appearance);
+    setAccessories(device.accessories);
+    setEditingDevice(false);
+  }
+  function changeDevice() {
+    if (customer?.devices.length) setChoosingDevice(true);
+    else setEditingDevice(true);
   }
   function changeCustomer(next: CustomerDetail) {
     setCustomer(next);
@@ -529,7 +603,16 @@ export function NewOrderWizard({
             }
             summaryError={expandedStep !== 1 && !validStep2}
           >
-            {customer?.devices?.length ? (
+            {validDevice && !editingDevice && (
+              <RepairDeviceSummary
+                category={categories[category][locale === "zh" ? 1 : 0]}
+                brand={brand}
+                model={model}
+                imei={imei}
+                onChange={changeDevice}
+              />
+            )}
+            {editingDevice && customer?.devices?.length ? (
               <Field label={it.chooseDevice}>
                 <SimpleSelect
                   value={deviceId}
@@ -537,17 +620,8 @@ export function NewOrderWizard({
                     const device = customer.devices.find(
                       (entry) => entry.id === id,
                     );
-                    setDeviceId(id);
-                    setAutoMatchedDevice(false);
-                    if (device) {
-                      setCategory(device.category as Category);
-                      setBrand(device.brand);
-                      setSeries(device.series);
-                      setModel(device.model);
-                      setImei(device.imei ?? "");
-                      setAppearance(device.appearance);
-                      setAccessories(device.accessories);
-                    } else clearDevice();
+                    if (device) selectCustomerDevice(device);
+                    else clearDevice();
                   }}
                   ariaLabel={it.chooseDevice}
                   placeholder={it.newDevice}
@@ -562,7 +636,7 @@ export function NewOrderWizard({
                 />
               </Field>
             ) : null}
-            <div className="form-grid three">
+            <div className="form-grid three" hidden={!editingDevice}>
               <Field label={it.deviceType}>
                 <SimpleSelect
                   value={category}
@@ -642,6 +716,7 @@ export function NewOrderWizard({
                     );
                     setModel(nextModel);
                     matchCustomerDevice(category, brand, nextModel);
+                    setEditingDevice(false);
                   }}
                   disabled={(!!deviceId && !autoMatchedDevice) || !brand}
                   ariaLabel={it.model}
@@ -657,6 +732,7 @@ export function NewOrderWizard({
                     );
                     setModel(nextModel);
                     matchCustomerDevice(category, brand, nextModel);
+                    setEditingDevice(false);
                   }}
                   onCommit={(value) => {
                     const nextModel = normalizeDeviceModel(
@@ -666,6 +742,7 @@ export function NewOrderWizard({
                     );
                     setModel(nextModel);
                     matchCustomerDevice(category, brand, nextModel);
+                    setEditingDevice(false);
                   }}
                   clearable
                   groups={[
@@ -694,12 +771,12 @@ export function NewOrderWizard({
                 />
               </Field>
             </div>
-            {touched && !validDevice && (
+            {editingDevice && touched && !validDevice && (
               <p className="field-error">
                 {!brand ? it.selectBrandError : it.selectModelError}
               </p>
             )}
-            {!validDevice && (
+            {editingDevice && !validDevice && (
               <p className="device-dependency-hint">{it.completeDeviceFirst}</p>
             )}
             {validDevice && (
@@ -763,6 +840,38 @@ export function NewOrderWizard({
                   />
                 </Field>
               </div>
+            )}
+            {choosingDevice && customer && (
+              <FormDialog
+                title={it.chooseDevice}
+                onClose={() => setChoosingDevice(false)}
+              >
+                <div className="quick-service-picker">
+                  <div className="quick-service-picker-list">
+                    {customer.devices.map((device) => (
+                      <CustomerDeviceCard
+                        key={device.id}
+                        device={device}
+                        selected={device.id === deviceId}
+                        onSelect={() => {
+                          selectCustomerDevice(device);
+                          setChoosingDevice(false);
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="quick-service-picker-add"
+                    onClick={() => {
+                      clearDevice();
+                      setChoosingDevice(false);
+                    }}
+                  >
+                    <Plus size={16} /> {it.newDevice}
+                  </button>
+                </div>
+              </FormDialog>
             )}
             {touched && !validFault && (
               <p className="field-error">{it.selectFaultError}</p>

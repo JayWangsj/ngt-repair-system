@@ -22,51 +22,120 @@ export type SavedModelView = {
   model: string;
 };
 
-export function QuickServiceManager({ items }: { items: QuickServiceView[] }) {
+export function QuickServiceEditor({
+  item,
+  onSaved,
+  onCancel,
+}: {
+  item?: QuickServiceView;
+  onSaved: (item: QuickServiceView) => void;
+  onCancel: () => void;
+}) {
   const it = useMessages();
-  const [open, setOpen] = useState(false);
-  const [drafts, setDrafts] = useState(items);
-  const [editing, setEditing] = useState<QuickServiceView | null>(null);
-  const [priceDraft, setPriceDraft] = useState("");
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState("");
-
-  function editor(item?: QuickServiceView) {
-    const next = item ?? {
+  const [draft, setDraft] = useState<QuickServiceView>(
+    item ?? {
       id: "",
       name: "",
       defaultPrice: 0,
       notes: "",
       enabled: true,
-    };
-    setEditing(next);
-    setPriceDraft(decimal(next.defaultPrice));
-    setError("");
-  }
+    },
+  );
+  const [priceDraft, setPriceDraft] = useState(
+    decimal(item?.defaultPrice ?? 0),
+  );
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState("");
 
   function save() {
-    if (!editing) return;
     startTransition(async () => {
-      const result = await saveQuickServiceAction(editing.id || null, {
-        name: editing.name,
+      const result = await saveQuickServiceAction(draft.id || null, {
+        name: draft.name,
         defaultPrice: priceDraft,
-        notes: editing.notes,
-        enabled: editing.enabled,
+        notes: draft.notes,
+        enabled: draft.enabled,
       });
       if (!result.ok || !result.id)
         return setError(result.ok ? it.connectionError : result.error);
-      const saved = {
-        ...editing,
+      onSaved({
+        ...draft,
         id: result.id,
         defaultPrice: cents(priceDraft),
-      };
-      setDrafts((current) =>
-        [...current.filter((item) => item.id !== saved.id), saved].sort(
-          (a, b) => a.name.localeCompare(b.name),
-        ),
-      );
-      setEditing(null);
+      });
     });
+  }
+
+  return (
+    <form
+      className="dialog-form"
+      data-form-dialog-body
+      onSubmit={(event) => {
+        event.preventDefault();
+        save();
+      }}
+    >
+      <Field label={it.quickService.name}>
+        <input
+          value={draft.name}
+          maxLength={120}
+          required
+          onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+        />
+      </Field>
+      <Field label={it.quickService.defaultPrice}>
+        <input
+          value={priceDraft}
+          inputMode="decimal"
+          required
+          onChange={(event) => setPriceDraft(event.target.value)}
+        />
+      </Field>
+      <Field label={it.quickService.notes}>
+        <textarea
+          value={draft.notes}
+          maxLength={2000}
+          onChange={(event) =>
+            setDraft({ ...draft, notes: event.target.value })
+          }
+        />
+      </Field>
+      <label className="checkbox">
+        <input
+          type="checkbox"
+          checked={draft.enabled}
+          onChange={(event) =>
+            setDraft({ ...draft, enabled: event.target.checked })
+          }
+        />
+        {it.quickService.enabled}
+      </label>
+      {error && <p className="message error">{error}</p>}
+      <div className="dialog-actions">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          {it.cancel}
+        </Button>
+        <Button disabled={pending}>{it.save}</Button>
+      </div>
+    </form>
+  );
+}
+
+export function QuickServiceManager({ items }: { items: QuickServiceView[] }) {
+  const it = useMessages();
+  const [open, setOpen] = useState(false);
+  const [drafts, setDrafts] = useState(items);
+  const [editing, setEditing] = useState<QuickServiceView | null>(null);
+
+  function editor(item?: QuickServiceView) {
+    setEditing(
+      item ?? {
+        id: "",
+        name: "",
+        defaultPrice: 0,
+        notes: "",
+        enabled: true,
+      },
+    );
   }
 
   return (
@@ -119,63 +188,19 @@ export function QuickServiceManager({ items }: { items: QuickServiceView[] }) {
           title={editing.id ? it.edit : it.quickService.new}
           onClose={() => setEditing(null)}
         >
-          <form
-            className="dialog-form"
-            data-form-dialog-body
-            onSubmit={(event) => {
-              event.preventDefault();
-              save();
+          <QuickServiceEditor
+            item={editing}
+            onCancel={() => setEditing(null)}
+            onSaved={(saved) => {
+              setDrafts((current) =>
+                [
+                  ...current.filter((entry) => entry.id !== saved.id),
+                  saved,
+                ].sort((a, b) => a.name.localeCompare(b.name)),
+              );
+              setEditing(null);
             }}
-          >
-            <Field label={it.quickService.name}>
-              <input
-                value={editing.name}
-                maxLength={120}
-                required
-                onChange={(event) =>
-                  setEditing({ ...editing, name: event.target.value })
-                }
-              />
-            </Field>
-            <Field label={it.quickService.defaultPrice}>
-              <input
-                value={priceDraft}
-                inputMode="decimal"
-                required
-                onChange={(event) => setPriceDraft(event.target.value)}
-              />
-            </Field>
-            <Field label={it.quickService.notes}>
-              <textarea
-                value={editing.notes}
-                maxLength={2000}
-                onChange={(event) =>
-                  setEditing({ ...editing, notes: event.target.value })
-                }
-              />
-            </Field>
-            <label className="checkbox">
-              <input
-                type="checkbox"
-                checked={editing.enabled}
-                onChange={(event) =>
-                  setEditing({ ...editing, enabled: event.target.checked })
-                }
-              />
-              {it.quickService.enabled}
-            </label>
-            {error && <p className="message error">{error}</p>}
-            <div className="dialog-actions">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setEditing(null)}
-              >
-                {it.cancel}
-              </Button>
-              <Button disabled={pending}>{it.save}</Button>
-            </div>
-          </form>
+          />
         </FormDialog>
       )}
     </>

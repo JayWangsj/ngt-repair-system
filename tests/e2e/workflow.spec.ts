@@ -431,24 +431,6 @@ test("manages one quick service for held service orders and retail checkout", as
   page,
 }) => {
   const serviceName = `Migrazione rapida ${Date.now()}`;
-  await page.goto("/settings");
-  await page
-    .getByRole("button", { name: "Gestisci servizi rapidi", exact: true })
-    .click();
-  const manager = page.getByRole("dialog", {
-    name: "Gestisci servizi rapidi",
-  });
-  await manager
-    .getByRole("button", { name: "Nuovo servizio", exact: true })
-    .click();
-  const editor = page.getByRole("dialog", { name: "Nuovo servizio" });
-  await editor.getByLabel("Nome servizio", { exact: true }).fill(serviceName);
-  await editor.getByLabel("Prezzo predefinito", { exact: true }).fill("29.90");
-  await editor.getByLabel("Note", { exact: true }).fill("Due dispositivi");
-  await editor.getByRole("button", { name: "Salva", exact: true }).click();
-  await expect(editor).toHaveCount(0);
-  await expect(manager).toContainText(serviceName);
-
   await page.goto("/orders");
   await page
     .getByRole("link", { name: "Servizio rapido", exact: true })
@@ -526,6 +508,21 @@ test("manages one quick service for held service orders and retail checkout", as
     .getByRole("button", { name: "Salva", exact: true })
     .click();
   await expect(newDeviceDialog).toHaveCount(0);
+  await expect(devicePicker).toBeVisible();
+  await expect(
+    devicePicker
+      .locator(".quick-service-picker-option")
+      .filter({ hasText: "Apple iPhone 14" }),
+  ).toHaveClass(/is-selected/);
+  await expect(
+    devicePicker.getByRole("textbox", {
+      name: "Cerca dispositivo (marca, modello o IMEI)",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await devicePicker
+    .getByRole("button", { name: "Conferma selezione", exact: true })
+    .click();
   await expect(
     page.locator(".quick-service-device-card").first(),
   ).toContainText("Apple iPhone 14");
@@ -533,17 +530,18 @@ test("manages one quick service for held service orders and retail checkout", as
   const updatedDevicePicker = page.getByRole("dialog", {
     name: "Dispositivi associati",
   });
-  await updatedDevicePicker
-    .getByRole("textbox", {
-      name: "Cerca dispositivo (marca, modello o IMEI)",
-      exact: true,
-    })
-    .fill("iPhone 13");
-  await updatedDevicePicker
+  const existingDeviceCheckbox = updatedDevicePicker
     .locator(".quick-service-picker-option")
     .filter({ hasText: "Apple iPhone 13" })
-    .locator('input[type="checkbox"]')
-    .check();
+    .locator('input[type="checkbox"]');
+  await existingDeviceCheckbox.check();
+  await expect(existingDeviceCheckbox).toHaveCSS(
+    "background-color",
+    "rgb(251, 215, 46)",
+  );
+  const checkboxBox = await existingDeviceCheckbox.boundingBox();
+  expect(checkboxBox!.width).toBeLessThanOrEqual(18);
+  expect(checkboxBox!.height).toBeLessThanOrEqual(18);
   await expect(
     updatedDevicePicker
       .locator(".quick-service-picker-option")
@@ -558,12 +556,6 @@ test("manages one quick service for held service orders and retail checkout", as
     name: "Dispositivi associati",
   });
   await confirmedDevicePicker
-    .getByRole("textbox", {
-      name: "Cerca dispositivo (marca, modello o IMEI)",
-      exact: true,
-    })
-    .fill("iPhone 13");
-  await confirmedDevicePicker
     .locator(".quick-service-picker-option")
     .filter({ hasText: "Apple iPhone 13" })
     .locator('input[type="checkbox"]')
@@ -576,14 +568,26 @@ test("manages one quick service for held service orders and retail checkout", as
   const servicePicker = page.getByRole("dialog", {
     name: "Seleziona servizi",
   });
+  await expect(
+    servicePicker.getByRole("textbox", {
+      name: "Cerca servizio",
+      exact: true,
+    }),
+  ).toHaveCount(0);
   await servicePicker
-    .getByRole("textbox", { name: "Cerca servizio", exact: true })
-    .fill(serviceName);
-  await servicePicker
+    .getByRole("button", { name: "Nuovo servizio", exact: true })
+    .click();
+  const editor = page.getByRole("dialog", { name: "Nuovo servizio" });
+  await editor.getByLabel("Nome servizio", { exact: true }).fill(serviceName);
+  await editor.getByLabel("Prezzo predefinito", { exact: true }).fill("29.90");
+  await editor.getByLabel("Note", { exact: true }).fill("Due dispositivi");
+  await editor.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(servicePicker).toBeVisible();
+  const createdService = servicePicker
     .locator(".quick-service-picker-service")
-    .filter({ hasText: serviceName })
-    .locator('input[type="checkbox"]')
-    .check();
+    .filter({ hasText: serviceName });
+  await expect(createdService).toHaveClass(/is-selected/);
   await servicePicker
     .getByRole("button", { name: "Annulla", exact: true })
     .click();
@@ -592,9 +596,6 @@ test("manages one quick service for held service orders and retail checkout", as
   const confirmedServicePicker = page.getByRole("dialog", {
     name: "Seleziona servizi",
   });
-  await confirmedServicePicker
-    .getByRole("textbox", { name: "Cerca servizio", exact: true })
-    .fill(serviceName);
   await confirmedServicePicker
     .locator(".quick-service-picker-service")
     .filter({ hasText: serviceName })
@@ -606,9 +607,22 @@ test("manages one quick service for held service orders and retail checkout", as
   await expect(page.locator(".selected-project-summary")).toContainText(
     serviceName,
   );
+  const editQuote = page.getByRole("button", {
+    name: "Modifica dati Preventivo attuale",
+    exact: true,
+  });
+  await expect(editQuote).toContainText("29,90 €");
+  await editQuote.click();
   await expect(
     page.getByLabel(`${serviceName} Preventivo attuale`, { exact: true }),
   ).toHaveValue("29.90");
+  await page
+    .getByLabel(`${serviceName} Preventivo attuale`, { exact: true })
+    .fill("34.50");
+  await page
+    .getByLabel(`${serviceName} Preventivo attuale`, { exact: true })
+    .press("Enter");
+  await expect(editQuote).toContainText("34,50 €");
   const expectedDate = page.getByLabel("Data", { exact: true });
   await expect(expectedDate).toHaveCSS("cursor", "pointer");
   await page.evaluate(() => {

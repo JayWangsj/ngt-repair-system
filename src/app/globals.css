@@ -44,6 +44,40 @@ input[type="number"]::-webkit-outer-spin-button {
 input[type="number"] {
   appearance: textfield;
 }
+input[type="checkbox"] {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  border: 1px solid #9aa29f;
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+}
+input[type="checkbox"]::before {
+  width: 9px;
+  height: 5px;
+  border-bottom: 3px solid #26302c;
+  border-left: 3px solid #26302c;
+  content: "";
+  transform: rotate(-45deg) scale(0);
+  transform-origin: center;
+}
+input[type="checkbox"]:checked {
+  border-color: #f2c717;
+  background: #fbd72e;
+}
+input[type="checkbox"]:checked::before {
+  transform: rotate(-45deg) scale(1);
+}
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid rgb(210 174 33 / 45%);
+  outline-offset: 2px;
+}
+input[type="checkbox"]:disabled {
+  border-color: #d5dad7;
+  background: #eef0ef;
+  cursor: not-allowed;
+}
 input[type="date"]:not(:disabled),
 input[type="month"]:not(:disabled) {
   cursor: pointer;
@@ -946,6 +980,14 @@ textarea {
   color: var(--ink);
   width: 100%;
   font-size: 13px;
+}
+input[type="checkbox"] {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  min-height: 16px;
+  flex: 0 0 16px;
+  padding: 0;
 }
 input:hover,
 select:hover,
@@ -2951,37 +2993,23 @@ details[open] > summary {
 .form-dialog:has(.quick-service-picker) {
   width: min(900px, calc(100vw - 32px));
 }
-.quick-service-picker-toolbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-}
-.quick-service-picker-search {
-  display: flex;
-  min-height: 42px;
-  align-items: center;
-  gap: 9px;
-  margin: 0;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  color: var(--muted);
-}
-.quick-service-picker-search input {
-  width: 100%;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  box-shadow: none;
-}
-.quick-service-picker-search input:focus {
-  outline: none;
-}
 .quick-service-picker-list {
   display: grid;
   gap: 9px;
   max-height: min(48vh, 440px);
   overflow-y: auto;
+}
+.quick-service-picker-add {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px dashed #d8c98d;
+  border-radius: 10px;
+  background: #fffdf7;
+  color: #6d5510;
+  font-weight: 650;
 }
 .quick-service-picker-option {
   display: grid;
@@ -3231,6 +3259,12 @@ details.secondary-actions {
   grid-template-columns: minmax(0, 1fr) 250px;
   gap: 18px;
   align-items: start;
+}
+.new-order-layout > .service-order-form-column {
+  grid-column: 1;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 .order-wizard {
   min-width: 0;
@@ -5067,9 +5101,6 @@ details.secondary-actions {
 @media (max-width: 600px) {
   .form-dialog {
     padding: 16px;
-  }
-  .quick-service-picker-toolbar {
-    grid-template-columns: 1fr;
   }
   .quick-service-picker-option {
     grid-template-columns: auto 40px minmax(0, 1fr);

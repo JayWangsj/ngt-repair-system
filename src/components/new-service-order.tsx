@@ -2,12 +2,12 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Search, Smartphone, Wrench, X, Zap } from "lucide-react";
+import { Pencil, Plus, Smartphone, Wrench, X, Zap } from "lucide-react";
 import {
   createQuickServiceOrderAction,
   lookupCustomerAction,
 } from "@/app/actions";
-import { decimal, money } from "@/lib/domain";
+import { cents, decimal, money } from "@/lib/domain";
 import { useMessages } from "./language";
 import { DeviceForm, Field, FormDialog } from "./forms";
 import { DatePicker } from "./business-select";
@@ -17,15 +17,19 @@ import {
   type CustomerDetail,
   type CustomerOption,
 } from "./customer-picker";
+import { QuickServiceEditor, type QuickServiceView } from "./catalog-managers";
 
 type Customer = CustomerOption & { devices: { id: string }[] };
 
-type Service = {
-  id: string;
-  name: string;
-  defaultPrice: number;
-  notes: string;
-};
+type Service = Omit<QuickServiceView, "enabled">;
+
+function validPrice(value: string) {
+  try {
+    return cents(value) > 0;
+  } catch {
+    return false;
+  }
+}
 
 export function NewServiceOrder({
   repairForm,
@@ -43,18 +47,23 @@ export function NewServiceOrder({
   const [mode, setMode] = useState<"REPAIR" | "QUICK_SERVICE">(initialMode);
   const [customer, setCustomer] = useState<CustomerDetail>(null);
   const [deviceIds, setDeviceIds] = useState<string[]>([]);
+  const [availableServices, setAvailableServices] = useState<
+    QuickServiceView[]
+  >(services.map((service) => ({ ...service, enabled: true })));
   const [selectedServices, setSelectedServices] = useState<
     Record<string, string>
+  >({});
+  const [editingServicePrices, setEditingServicePrices] = useState<
+    Record<string, boolean>
   >({});
   const [expectedDate, setExpectedDate] = useState("");
   const [expectedTime, setExpectedTime] = useState("");
   const [choosingDevices, setChoosingDevices] = useState(false);
   const [draftDeviceIds, setDraftDeviceIds] = useState<string[]>([]);
-  const [deviceQuery, setDeviceQuery] = useState("");
   const [choosingServices, setChoosingServices] = useState(false);
   const [draftServiceIds, setDraftServiceIds] = useState<string[]>([]);
-  const [serviceQuery, setServiceQuery] = useState("");
   const [creatingDevice, setCreatingDevice] = useState(false);
+  const [creatingService, setCreatingService] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const customerId = customer?.id ?? "";
@@ -62,23 +71,8 @@ export function NewServiceOrder({
     expectedDate && expectedTime ? `${expectedDate}T${expectedTime}` : "";
   const selectedDevices =
     customer?.devices.filter((device) => deviceIds.includes(device.id)) ?? [];
-  const selectedServiceItems = services.filter(
+  const selectedServiceItems = availableServices.filter(
     (service) => service.id in selectedServices,
-  );
-  const filteredDevices =
-    customer?.devices.filter((device) =>
-      [device.brand, device.model, device.imei]
-        .filter(Boolean)
-        .join(" ")
-        .toLocaleLowerCase()
-        .includes(deviceQuery.trim().toLocaleLowerCase()),
-    ) ?? [];
-  const filteredServices = services.filter((service) =>
-    [service.name, service.notes]
-      .filter(Boolean)
-      .join(" ")
-      .toLocaleLowerCase()
-      .includes(serviceQuery.trim().toLocaleLowerCase()),
   );
 
   function changeCustomer(next: CustomerDetail) {
@@ -97,13 +91,11 @@ export function NewServiceOrder({
 
   function openDevicePicker() {
     setDraftDeviceIds(deviceIds);
-    setDeviceQuery("");
     setChoosingDevices(true);
   }
 
   function openServicePicker() {
     setDraftServiceIds(Object.keys(selectedServices));
-    setServiceQuery("");
     setChoosingServices(true);
   }
 
@@ -111,7 +103,7 @@ export function NewServiceOrder({
     setSelectedServices((current) =>
       Object.fromEntries(
         draftServiceIds.map((id) => {
-          const service = services.find((item) => item.id === id)!;
+          const service = availableServices.find((item) => item.id === id)!;
           return [id, current[id] ?? decimal(service.defaultPrice)];
         }),
       ),
@@ -129,8 +121,9 @@ export function NewServiceOrder({
     );
     setCustomer(updated);
     if (created)
-      setDeviceIds((current) => [...new Set([...current, created.id])]);
+      setDraftDeviceIds((current) => [...new Set([...current, created.id])]);
     setCreatingDevice(false);
+    setChoosingDevices(true);
   }
 
   async function submit() {
@@ -183,7 +176,7 @@ export function NewServiceOrder({
         repairForm
       ) : (
         <div className="new-order-layout quick-service-layout">
-          <section className="panel padded quick-service-order-form">
+          <section className="panel padded quick-service-order-form service-order-form-column">
             <section className="quick-service-section">
               <h2>{it.customerSection}</h2>
               <CustomerPicker
@@ -248,18 +241,61 @@ export function NewServiceOrder({
                     </div>
                     <div className="selection-summary-value">
                       <small>{it.currentQuote}</small>
-                      <input
-                        className="quote-summary-price"
-                        aria-label={`${service.name} ${it.currentQuote}`}
-                        inputMode="decimal"
-                        value={selectedServices[service.id]}
-                        onChange={(event) =>
-                          setSelectedServices((current) => ({
-                            ...current,
-                            [service.id]: event.target.value,
-                          }))
-                        }
-                      />
+                      {editingServicePrices[service.id] ? (
+                        <div className="quote-summary-price-field">
+                          <input
+                            autoFocus
+                            className="quote-summary-price"
+                            aria-label={`${service.name} ${it.currentQuote}`}
+                            inputMode="decimal"
+                            value={selectedServices[service.id]}
+                            aria-invalid={
+                              !validPrice(selectedServices[service.id])
+                            }
+                            onChange={(event) =>
+                              setSelectedServices((current) => ({
+                                ...current,
+                                [service.id]: event.target.value,
+                              }))
+                            }
+                            onBlur={() => {
+                              if (validPrice(selectedServices[service.id]))
+                                setEditingServicePrices((current) => ({
+                                  ...current,
+                                  [service.id]: false,
+                                }));
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key !== "Enter") return;
+                              event.preventDefault();
+                              if (validPrice(selectedServices[service.id]))
+                                event.currentTarget.blur();
+                            }}
+                          />
+                          {!validPrice(selectedServices[service.id]) && (
+                            <small className="field-error">
+                              {it.positiveAmountError}
+                            </small>
+                          )}
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          className="summary-price-button"
+                          aria-label={`${it.edit} ${it.currentQuote}`}
+                          onClick={() =>
+                            setEditingServicePrices((current) => ({
+                              ...current,
+                              [service.id]: true,
+                            }))
+                          }
+                        >
+                          <strong>
+                            {money(cents(selectedServices[service.id]))}
+                          </strong>
+                          <Pencil size={14} aria-hidden="true" />
+                        </button>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -336,29 +372,8 @@ export function NewServiceOrder({
                 onClose={() => setChoosingDevices(false)}
               >
                 <div className="quick-service-picker">
-                  <div className="quick-service-picker-toolbar">
-                    <label className="quick-service-picker-search">
-                      <Search size={17} aria-hidden="true" />
-                      <input
-                        aria-label={it.quickService.searchDevices}
-                        placeholder={it.quickService.searchDevices}
-                        value={deviceQuery}
-                        onChange={(event) => setDeviceQuery(event.target.value)}
-                      />
-                    </label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setChoosingDevices(false);
-                        setCreatingDevice(true);
-                      }}
-                    >
-                      <Plus size={16} /> {it.newDevice}
-                    </Button>
-                  </div>
                   <div className="quick-service-picker-list">
-                    {filteredDevices.map((device) => (
+                    {customer.devices.map((device) => (
                       <label
                         className={`quick-service-picker-option${draftDeviceIds.includes(device.id) ? " is-selected" : ""}`}
                         key={device.id}
@@ -382,10 +397,20 @@ export function NewServiceOrder({
                         </small>
                       </label>
                     ))}
-                    {!filteredDevices.length && (
+                    {!customer.devices.length && (
                       <p className="muted">{it.noDevices}</p>
                     )}
                   </div>
+                  <button
+                    type="button"
+                    className="quick-service-picker-add"
+                    onClick={() => {
+                      setChoosingDevices(false);
+                      setCreatingDevice(true);
+                    }}
+                  >
+                    <Plus size={16} /> {it.newDevice}
+                  </button>
                   <div className="quick-service-picker-footer">
                     <strong>
                       {it.quickService.selectedDevices.replace(
@@ -422,17 +447,8 @@ export function NewServiceOrder({
                 onClose={() => setChoosingServices(false)}
               >
                 <div className="quick-service-picker">
-                  <label className="quick-service-picker-search">
-                    <Search size={17} aria-hidden="true" />
-                    <input
-                      aria-label={it.quickService.searchServices}
-                      placeholder={it.quickService.searchServices}
-                      value={serviceQuery}
-                      onChange={(event) => setServiceQuery(event.target.value)}
-                    />
-                  </label>
                   <div className="quick-service-picker-list">
-                    {filteredServices.map((service) => (
+                    {availableServices.map((service) => (
                       <label
                         className={`quick-service-picker-option quick-service-picker-service${draftServiceIds.includes(service.id) ? " is-selected" : ""}`}
                         key={service.id}
@@ -462,10 +478,20 @@ export function NewServiceOrder({
                         </strong>
                       </label>
                     ))}
-                    {!filteredServices.length && (
+                    {!availableServices.length && (
                       <p className="muted">{it.quickService.noServices}</p>
                     )}
                   </div>
+                  <button
+                    type="button"
+                    className="quick-service-picker-add"
+                    onClick={() => {
+                      setChoosingServices(false);
+                      setCreatingService(true);
+                    }}
+                  >
+                    <Plus size={16} /> {it.quickService.new}
+                  </button>
                   <div className="quick-service-picker-footer">
                     <strong>
                       {it.quickService.selectedServices.replace(
@@ -492,12 +518,49 @@ export function NewServiceOrder({
             {creatingDevice && customer && (
               <FormDialog
                 title={it.newDevice}
-                onClose={() => setCreatingDevice(false)}
+                onClose={() => {
+                  setCreatingDevice(false);
+                  setChoosingDevices(true);
+                }}
               >
                 <DeviceForm
                   customerId={customer.id}
                   onSuccess={() => void refreshDevices()}
-                  onCancel={() => setCreatingDevice(false)}
+                  onCancel={() => {
+                    setCreatingDevice(false);
+                    setChoosingDevices(true);
+                  }}
+                />
+              </FormDialog>
+            )}
+            {creatingService && (
+              <FormDialog
+                title={it.quickService.new}
+                onClose={() => {
+                  setCreatingService(false);
+                  setChoosingServices(true);
+                }}
+              >
+                <QuickServiceEditor
+                  onCancel={() => {
+                    setCreatingService(false);
+                    setChoosingServices(true);
+                  }}
+                  onSaved={(saved) => {
+                    setAvailableServices((current) =>
+                      saved.enabled
+                        ? [...current, saved].sort((a, b) =>
+                            a.name.localeCompare(b.name),
+                          )
+                        : current,
+                    );
+                    if (saved.enabled)
+                      setDraftServiceIds((current) => [
+                        ...new Set([...current, saved.id]),
+                      ]);
+                    setCreatingService(false);
+                    setChoosingServices(true);
+                  }}
                 />
               </FormDialog>
             )}

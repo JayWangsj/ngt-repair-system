@@ -487,7 +487,7 @@ export function NewOrderWizard({
     <>
       <div className="new-order-layout">
         <form
-          className="order-form order-wizard"
+          className="order-form order-wizard service-order-form-column"
           onSubmit={(event) => {
             event.preventDefault();
           }}

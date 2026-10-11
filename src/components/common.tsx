@@ -110,9 +110,7 @@ export async function OrderTable({
             <th>{it.device}</th>
             <th className="order-status-cell">{it.statusLabel}</th>
             <th className="order-due-cell">{it.dueDate}</th>
-            {!compact && (
-              <th className="order-updated-cell">{it.lastOperation}</th>
-            )}
+            <th className="order-updated-cell">{it.lastOperation}</th>
             <th className="numeric order-payment-cell">{it.payments}</th>
           </tr>
         </thead>

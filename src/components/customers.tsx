@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronRight, Pencil, Plus, Smartphone, Trash2 } from "lucide-react";
+import { ChevronRight, Plus, Smartphone, Trash2 } from "lucide-react";
 import { CustomerForm, DeviceForm, FormDialog } from "./forms";
 import { RecordIcon } from "./ui/record-icon";
 import { Button } from "./ui/button";
@@ -472,19 +472,17 @@ export function CustomerSummary({
             <PhoneList customer={customer} />
           </div>
           {!deleted && (
-            <div className="customer-summary-actions">
-              <Button variant="outline" onClick={() => setEditing(true)}>
-                <Pencil size={15} aria-hidden="true" />
-                {it.editCustomer}
-              </Button>
-              <Button
-                variant="outline"
-                className="button-danger"
+            <div className="customer-summary-actions record-actions">
+              <RecordIcon
+                kind="edit"
+                label={it.editCustomer}
+                onClick={() => setEditing(true)}
+              />
+              <RecordIcon
+                kind="delete"
+                label={it.deleteCustomer}
                 onClick={() => setDeleting(true)}
-              >
-                <Trash2 size={15} aria-hidden="true" />
-                {it.deleteCustomer}
-              </Button>
+              />
             </div>
           )}
         </>
@@ -529,7 +527,7 @@ export function CustomerDevices({
         {!readOnly && !creating && (
           <Button variant="outline" onClick={() => setCreating(true)}>
             <Plus size={15} aria-hidden="true" />
-            {it.newDevice}
+            {it.device}
           </Button>
         )}
       </div>

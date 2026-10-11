@@ -1621,7 +1621,7 @@ textarea {
   display: grid;
   place-items: center;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 7px;
   background: transparent;
   color: #806000;
   opacity: 0;
@@ -1639,7 +1639,7 @@ textarea {
 }
 .order-card-edit:hover,
 .order-card-edit:focus-visible {
-  border-color: #e5cc67;
+  border-color: transparent;
   background: #fff7d6;
 }
 .order-card-collapse {
@@ -4079,7 +4079,8 @@ details.secondary-actions {
 .fault-delete-button:focus-visible {
   opacity: 1;
 }
-.fault-delete-button:hover:not(:disabled) {
+.fault-delete-button:hover:not(:disabled),
+.fault-delete-button:focus-visible {
   background: #fff0ee;
 }
 .fault-enabled-switch {
@@ -5673,7 +5674,7 @@ details.secondary-actions {
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   background: transparent;
   color: #87908d;
   opacity: 0;
@@ -5688,9 +5689,10 @@ details.secondary-actions {
   opacity: 1;
   pointer-events: auto;
 }
-.option-delete:hover {
-  background: #f8eeee;
-  color: #9a4b45;
+.option-delete:hover,
+.option-delete:focus-visible {
+  background: #fff0ee;
+  color: #a64642;
 }
 .inventory-category-field .icon-button {
   opacity: 0;
@@ -6303,6 +6305,9 @@ details.secondary-actions {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+.customer-summary {
+  --record-action-size: 40px;
+}
 .customer-section-heading {
   margin: 22px 0 10px;
 }
@@ -6575,56 +6580,74 @@ details summary {
 }
 
 /* Compact, accessible record actions: targets stay still on hover. */
-.button.record-icon,
-summary.record-icon {
+.record-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  min-width: 40px;
-  height: 40px;
+  width: var(--record-action-size, 40px);
+  min-width: var(--record-action-size, 40px);
+  height: var(--record-action-size, 40px);
   padding: 0;
   flex-shrink: 0;
   border-color: transparent;
   background: transparent;
-  color: #625c50;
+  border-radius: 7px;
   list-style: none;
+}
+.catalog-manager-row,
+.price-rule-row,
+.product-compatibility-row,
+.order-product-line,
+.sale-actions-cell {
+  --record-action-size: 36px;
+}
+.record-icon-compact {
+  --record-action-size: 28px;
+}
+.record-icon-edit {
+  color: #806000;
+}
+.record-icon-delete {
+  color: #a64642;
 }
 summary.record-icon::-webkit-details-marker {
   display: none;
 }
-.button.record-icon:hover,
-.button.record-icon:focus-visible,
-summary.record-icon:hover,
-summary.record-icon:focus-visible {
-  border-color: #806000;
-  background: #fff1b6;
+.record-icon:hover,
+.record-icon:focus-visible {
+  border-color: transparent;
+  background: #fff7d6;
 }
-.button.record-icon-delete:hover,
-.button.record-icon-delete:focus-visible {
-  color: #b42318;
-  border-color: #b42318;
-  background: #fff1f0;
+.record-icon-delete:hover,
+.record-icon-delete:focus-visible {
+  color: #a64642;
+  border-color: transparent;
+  background: #fff0ee;
 }
 .x-icon-button,
 .dialog-close,
-.quick-service-remove {
+.quick-service-remove,
+.retail-remove {
   border-color: transparent;
   background: transparent;
+  border-radius: 7px;
 }
 .x-icon-button:hover:not(:disabled),
 .x-icon-button:focus-visible,
 .dialog-close:hover:not(:disabled),
 .dialog-close:focus-visible,
 .quick-service-remove:hover:not(:disabled),
-.quick-service-remove:focus-visible {
-  border-color: #806000;
-  background: #fff1b6;
+.quick-service-remove:focus-visible,
+.retail-remove:hover:not(:disabled),
+.retail-remove:focus-visible {
+  border-color: transparent;
+  background: #fff7d6;
 }
 .record-icon:focus-visible,
 .x-icon-button:focus-visible,
 .dialog-close:focus-visible,
 .quick-service-remove:focus-visible,
+.retail-remove:focus-visible,
 .order-link:focus-visible,
 .dashboard-action-link:focus-visible {
   outline: 2px solid #806000;

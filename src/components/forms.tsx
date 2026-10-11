@@ -428,7 +428,7 @@ export function ProductCompatibilityFields({
           />
           <button
             type="button"
-            className="icon-button"
+            className="icon-button record-icon record-icon-delete"
             aria-label={it.remove}
             onClick={() =>
               onChange(value.filter((_, position) => position !== index))
@@ -2335,6 +2335,7 @@ export function NewOrderForm({
               {managingFaults && (
                 <button
                   type="button"
+                  className="record-icon record-icon-delete record-icon-compact"
                   aria-label={it.deleteFault + " " + f.label}
                   onClick={async () => {
                     try {

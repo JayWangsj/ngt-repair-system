@@ -3367,11 +3367,11 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   await serviceManagerClose.hover();
   await expect(serviceManagerClose).toHaveCSS(
     "border-top-color",
-    "rgb(128, 96, 0)",
+    "rgba(0, 0, 0, 0)",
   );
   await expect(serviceManagerClose).toHaveCSS(
     "background-color",
-    "rgb(255, 241, 182)",
+    "rgb(255, 247, 214)",
   );
   const firstServiceRow = serviceManager
     .locator(".catalog-manager-row")
@@ -3391,15 +3391,16 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   await expect(serviceEdit).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
   await expect(serviceEdit).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await serviceEdit.hover();
-  await expect(serviceEdit).toHaveCSS("border-top-color", "rgb(128, 96, 0)");
-  await expect(serviceEdit).toHaveCSS("background-color", "rgb(255, 241, 182)");
+  await expect(serviceEdit).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
+  await expect(serviceEdit).toHaveCSS("background-color", "rgb(255, 247, 214)");
   await expect(serviceDelete).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
   await serviceDelete.hover();
-  await expect(serviceDelete).toHaveCSS("border-top-color", "rgb(180, 35, 24)");
+  await expect(serviceDelete).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
   await expect(serviceDelete).toHaveCSS(
     "background-color",
-    "rgb(255, 241, 240)",
+    "rgb(255, 240, 238)",
   );
+  const serviceDeleteWidth = (await serviceDelete.boundingBox())!.width;
   await serviceDelete.click();
   const serviceDeleteDialog = page.getByRole("dialog", {
     name: "Elimina servizio",
@@ -3514,6 +3515,15 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   await page.mouse.move(0, 0);
   const otherDelete = rows.nth(1).locator(".fault-delete-button");
   await expect(otherDelete).toHaveCSS("opacity", "0");
+  await rows.nth(0).hover();
+  const faultDelete = rows.nth(0).locator(".fault-delete-button");
+  await expect(faultDelete).toHaveCSS("opacity", "1");
+  await faultDelete.hover();
+  await expect(faultDelete).toHaveCSS("background-color", "rgb(255, 240, 238)");
+  await expect(faultDelete).toHaveCSS("border-top-width", "0px");
+  expect((await faultDelete.boundingBox())!.width).toBeLessThan(
+    serviceDeleteWidth,
+  );
   const faultSwitch = rows
     .nth(0)
     .locator('.fault-enabled-switch input[type="checkbox"]');
@@ -6004,6 +6014,15 @@ test("customer detail removes duplicate actions and supports keyboard icon editi
   const edit = page
     .locator(".customer-detail-dialog .customer-summary")
     .getByRole("button", { name: "Modifica cliente", exact: true });
+  await expect(edit).toHaveCSS("opacity", "0");
+  await customerDialog.locator(".customer-summary").hover();
+  await expect(edit).toHaveCSS("opacity", "1");
+  const remove = customerDialog
+    .locator(".customer-summary")
+    .getByRole("button", { name: "Elimina cliente", exact: true });
+  await remove.hover();
+  await expect(remove).toHaveCSS("background-color", "rgb(255, 240, 238)");
+  await expect(remove).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
   await edit.focus();
   await page.keyboard.press("Enter");
   await expect(
@@ -6163,6 +6182,21 @@ test("customer detail stays in one dialog and exposes inline device actions", as
     exact: true,
   });
   await expect(dialog).toBeVisible();
+  await expect(
+    dialog.getByRole("columnheader", {
+      name: "Ultima operazione",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    dialog.locator(".order-list-body .order-updated-cell").first(),
+  ).not.toBeEmpty();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await dialog.locator(".customer-summary").hover();
   await dialog
     .getByRole("button", { name: "Modifica cliente", exact: true })
     .click();
@@ -6175,7 +6209,7 @@ test("customer detail stays in one dialog and exposes inline device actions", as
   await expect(dialog).not.toContainText("non salvato");
 
   await dialog
-    .getByRole("button", { name: "Nuovo dispositivo", exact: true })
+    .getByRole("button", { name: "Dispositivo", exact: true })
     .click();
   await chooseBusinessOption(page, "Marca", "Apple", dialog);
   await chooseBusinessOption(page, "Modello", "iPhone 13", dialog);

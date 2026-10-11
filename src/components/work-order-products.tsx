@@ -142,7 +142,7 @@ export function WorkOrderProducts({
               <strong>{money(cents(line.unitPrice) * line.quantity)}</strong>
               {!closed && !line.consumedAt && (
                 <button
-                  className="icon-button"
+                  className="icon-button record-icon record-icon-delete"
                   type="button"
                   aria-label={it.remove}
                   disabled={pending}

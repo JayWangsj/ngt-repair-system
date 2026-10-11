@@ -703,9 +703,7 @@ export function OrderListBody({
             >
               <DueDateControl key={row.dueDate} row={row} active={active} />
             </td>
-            {!compact && (
-              <td className="order-updated-cell">{row.lastUpdated}</td>
-            )}
+            <td className="order-updated-cell">{row.lastUpdated}</td>
             <td className="numeric order-inline-edit-cell order-payment-cell">
               <PaymentControl key={row.paid} row={row} active={active} />
             </td>

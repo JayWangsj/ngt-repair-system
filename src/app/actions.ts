@@ -214,6 +214,10 @@ export async function saveQuickServiceAction(
   const actor = await requireActor();
   return execute(() => service.saveQuickService(actor, id, input));
 }
+export async function deleteQuickServiceAction(id: string) {
+  const actor = await requireActor();
+  return execute(() => service.deleteQuickService(actor, id));
+}
 export async function renameDeviceModelAction(input: unknown) {
   const actor = await requireActor();
   return execute(() => service.renameDeviceModel(actor, input));

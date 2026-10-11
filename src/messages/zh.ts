@@ -258,6 +258,9 @@ export const zh: typeof it = {
     enabled: "启用",
     disabled: "停用",
     noServices: "暂无快速服务。",
+    delete: "删除服务",
+    deleteConfirm:
+      "确定永久删除这个快速服务吗？已有销售和服务单仍会保留服务名称与价格。",
     repairMode: "维修服务",
     quickMode: "快速服务",
     serviceItems: "服务项目",

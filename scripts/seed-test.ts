@@ -87,6 +87,22 @@ async function main() {
       enabled: true,
     },
   });
+  await db.quickService.createMany({
+    data: [
+      {
+        name: "Configurazione smartphone Test",
+        defaultPrice: "19.90",
+        notes: "Servizio rapido al banco",
+        enabled: true,
+      },
+      {
+        name: "Servizio sospeso Test",
+        defaultPrice: "15.00",
+        notes: "Servizio rapido disattivato",
+        enabled: false,
+      },
+    ],
+  });
   const actor = await db.user.findUniqueOrThrow({
     where: { email: "owner@test.it" },
   });

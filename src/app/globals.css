@@ -3198,7 +3198,7 @@ details[open] > summary {
 }
 .catalog-manager-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto 36px;
+  grid-template-columns: minmax(0, 1fr) auto auto 80px;
   gap: 16px;
   align-items: center;
   width: 100%;
@@ -3209,10 +3209,21 @@ details[open] > summary {
   background: var(--surface);
   cursor: pointer;
 }
-.catalog-manager-row em {
-  color: var(--muted);
-  font-size: 12px;
-  font-style: normal;
+.catalog-manager-row .record-actions {
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+@media (hover: hover) {
+  .catalog-manager-row .record-icon-delete {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 160ms ease;
+  }
+  .catalog-manager-row:hover .record-icon-delete,
+  .catalog-manager-row:focus-within .record-icon-delete {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 .model-manager section {
   display: grid;
@@ -7392,23 +7403,22 @@ summary.record-icon::-webkit-details-marker {
   font: inherit;
   cursor: pointer;
 }
-.sale-amount-cell > span {
-  display: inline-block;
-  min-width: 72px;
+.sale-actions-heading,
+.sale-actions-cell {
+  width: 52px;
+  padding-left: 0 !important;
 }
-.sale-amount-cell .record-icon-delete {
-  display: inline-grid;
-  margin-left: 8px;
-  vertical-align: middle;
+.sale-actions-cell {
+  text-align: center;
 }
 @media (hover: hover) {
-  .sale-amount-cell .record-icon-delete {
+  .sale-actions-cell .record-icon-delete {
     opacity: 0;
     pointer-events: none;
     transition: opacity 160ms ease;
   }
-  .business-list-row:hover .sale-amount-cell .record-icon-delete,
-  .business-list-row:focus-within .sale-amount-cell .record-icon-delete {
+  .business-list-row:hover .sale-actions-cell .record-icon-delete,
+  .business-list-row:focus-within .sale-actions-cell .record-icon-delete {
     opacity: 1;
     pointer-events: auto;
   }

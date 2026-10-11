@@ -2742,6 +2742,19 @@ export async function saveQuickService(
   });
 }
 
+export async function deleteQuickService(actorInput: Actor, id: string) {
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const service = await tx.quickService.findUniqueOrThrow({ where: { id } });
+    await tx.quickService.delete({ where: { id } });
+    await audit(tx, actor, id, "QUICK_SERVICE_DELETED", {
+      name: service.name,
+      defaultPrice: service.defaultPrice.toString(),
+    });
+    return { id };
+  });
+}
+
 export async function createQuickServiceOrder(actorInput: Actor, raw: unknown) {
   const data = quickServiceOrderInput.parse(raw);
   return transact(async (tx) => {

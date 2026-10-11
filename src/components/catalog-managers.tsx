@@ -1,13 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronDown, ChevronRight, Pencil, Plus } from "lucide-react";
-import { renameDeviceModelAction, saveQuickServiceAction } from "@/app/actions";
+import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
+import {
+  deleteQuickServiceAction,
+  renameDeviceModelAction,
+  saveQuickServiceAction,
+} from "@/app/actions";
 import { modelKey, normalizeDeviceModel } from "@/lib/catalog";
 import { cents, decimal } from "@/lib/domain";
 import { useMessages } from "./language";
 import { Button } from "./ui/button";
 import { Field, FormDialog } from "./forms";
+import { RecordIcon } from "./ui/record-icon";
 
 export type QuickServiceView = {
   id: string;
@@ -100,16 +105,6 @@ export function QuickServiceEditor({
           }
         />
       </Field>
-      <label className="checkbox">
-        <input
-          type="checkbox"
-          checked={draft.enabled}
-          onChange={(event) =>
-            setDraft({ ...draft, enabled: event.target.checked })
-          }
-        />
-        {it.quickService.enabled}
-      </label>
       {error && <p className="message error">{error}</p>}
       <div className="dialog-actions">
         <Button type="button" variant="outline" onClick={onCancel}>
@@ -126,6 +121,9 @@ export function QuickServiceManager({ items }: { items: QuickServiceView[] }) {
   const [open, setOpen] = useState(false);
   const [drafts, setDrafts] = useState(items);
   const [editing, setEditing] = useState<QuickServiceView | null>(null);
+  const [deleting, setDeleting] = useState<QuickServiceView | null>(null);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
 
   function editor(item?: QuickServiceView) {
     setEditing(
@@ -137,6 +135,41 @@ export function QuickServiceManager({ items }: { items: QuickServiceView[] }) {
         enabled: true,
       },
     );
+  }
+
+  async function toggle(item: QuickServiceView) {
+    if (pending) return;
+    const previous = drafts;
+    const next = drafts.map((candidate) =>
+      candidate.id === item.id
+        ? { ...candidate, enabled: !candidate.enabled }
+        : candidate,
+    );
+    setDrafts(next);
+    setPending(true);
+    setError("");
+    const result = await saveQuickServiceAction(item.id, {
+      name: item.name,
+      defaultPrice: decimal(item.defaultPrice),
+      notes: item.notes,
+      enabled: !item.enabled,
+    });
+    setPending(false);
+    if (!result.ok) {
+      setDrafts(previous);
+      setError(result.error);
+    }
+  }
+
+  async function remove() {
+    if (!deleting || pending) return;
+    setPending(true);
+    setError("");
+    const result = await deleteQuickServiceAction(deleting.id);
+    setPending(false);
+    if (!result.ok) return setError(result.error);
+    setDrafts((current) => current.filter((item) => item.id !== deleting.id));
+    setDeleting(null);
   }
 
   return (
@@ -158,8 +191,7 @@ export function QuickServiceManager({ items }: { items: QuickServiceView[] }) {
             {drafts.length ? (
               <div className="catalog-manager-list">
                 {drafts.map((item) => (
-                  <button
-                    type="button"
+                  <div
                     className="catalog-manager-row business-list-row"
                     key={item.id}
                     onClick={() => editor(item)}
@@ -169,13 +201,41 @@ export function QuickServiceManager({ items }: { items: QuickServiceView[] }) {
                       <small>{item.notes || "—"}</small>
                     </span>
                     <span>{decimal(item.defaultPrice)}</span>
-                    <em>{item.enabled ? it.enabledState : it.disabledState}</em>
-                    <span className="record-actions" aria-hidden="true">
-                      <span className="record-icon">
-                        <Pencil size={15} />
+                    <label
+                      className="fault-enabled-switch"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={item.enabled}
+                        disabled={pending}
+                        onChange={() => void toggle(item)}
+                      />
+                      <span>
+                        {item.enabled ? it.enabledState : it.disabledState}
                       </span>
+                    </label>
+                    <span className="record-actions">
+                      <RecordIcon
+                        kind="edit"
+                        label={`${it.edit} ${item.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          editor(item);
+                        }}
+                      />
+                      <RecordIcon
+                        kind="delete"
+                        label={`${it.quickService.delete} ${item.name}`}
+                        disabled={pending}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setError("");
+                          setDeleting(item);
+                        }}
+                      />
                     </span>
-                  </button>
+                  </div>
                 ))}
               </div>
             ) : (
@@ -188,6 +248,11 @@ export function QuickServiceManager({ items }: { items: QuickServiceView[] }) {
             >
               <Plus size={18} /> {it.quickService.new}
             </button>
+            {error && !deleting && (
+              <p className="message error" role="alert">
+                {error}
+              </p>
+            )}
           </div>
         </FormDialog>
       )}
@@ -209,6 +274,54 @@ export function QuickServiceManager({ items }: { items: QuickServiceView[] }) {
               setEditing(null);
             }}
           />
+        </FormDialog>
+      )}
+      {deleting && (
+        <FormDialog
+          title={it.quickService.delete}
+          onClose={() => {
+            if (!pending) {
+              setError("");
+              setDeleting(null);
+            }
+          }}
+        >
+          <div
+            className="confirm-delete-dialog"
+            data-form-dialog-body
+            aria-busy={pending}
+          >
+            <div className="confirm-delete-icon" aria-hidden="true">
+              <Trash2 size={22} />
+            </div>
+            <p>{it.quickService.deleteConfirm}</p>
+            {error && (
+              <p className="message error" role="alert">
+                {error}
+              </p>
+            )}
+            <div className="dialog-actions">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending}
+                onClick={() => {
+                  setError("");
+                  setDeleting(null);
+                }}
+              >
+                {it.cancel}
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                disabled={pending}
+                onClick={remove}
+              >
+                {it.quickService.delete}
+              </Button>
+            </div>
+          </div>
         </FormDialog>
       )}
     </>

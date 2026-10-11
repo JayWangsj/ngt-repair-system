@@ -85,7 +85,13 @@ export function RetailSalesHistory({
                   <th>{it.retail.date}</th>
                   <th className="numeric">{it.retail.quantity}</th>
                   <th>{it.retail.paymentMethod}</th>
-                  <th className="numeric">{it.retail.amount}</th>
+                  <th className="numeric sale-amount-heading">
+                    {it.retail.amount}
+                  </th>
+                  <th
+                    className="sale-actions-heading"
+                    aria-label={it.retail.deleteSale}
+                  />
                 </tr>
               </thead>
               <tbody>
@@ -104,7 +110,9 @@ export function RetailSalesHistory({
                     <td className="numeric">{sale.itemCount}</td>
                     <td>{sale.method ? it.methods[sale.method] : "—"}</td>
                     <td className="numeric sale-amount-cell">
-                      <span>{money(sale.total)}</span>
+                      {money(sale.total)}
+                    </td>
+                    <td className="sale-actions-cell">
                       <RecordIcon
                         kind="delete"
                         label={`${it.retail.deleteSale} ${sale.code}`}

@@ -2991,6 +2991,15 @@ test("completes a retail sale and opens its immutable receipt", async ({
     historyRow.locator("td").nth(4),
     "right",
   );
+  await expect(historyDialog.locator("th")).toHaveCount(6);
+  await expect(
+    historyRow
+      .locator("td")
+      .nth(5)
+      .getByRole("button", {
+        name: /Elimina vendita V-/,
+      }),
+  ).toBeVisible();
   await saleNumber.click();
   await expect(page.getByRole("dialog")).toHaveCount(1);
   await expect(historyDialog).toContainText("Cavo USB-C Test");
@@ -3319,9 +3328,7 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   await page.goto("/settings");
 
   await page.getByRole("button", { name: "中文", exact: true }).click();
-  await page
-    .getByRole("button", { name: "管理快速服务", exact: true })
-    .click();
+  await page.getByRole("button", { name: "管理快速服务", exact: true }).click();
   const chineseServiceManager = page.getByRole("dialog", {
     name: "管理快速服务",
   });
@@ -3340,6 +3347,40 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   const serviceManager = page.getByRole("dialog", {
     name: "Gestisci servizi rapidi",
   });
+  const firstServiceRow = serviceManager
+    .locator(".catalog-manager-row")
+    .first();
+  const serviceDelete = firstServiceRow.getByRole("button", {
+    name: /Elimina servizio/,
+  });
+  await page.mouse.move(0, 0);
+  await expect(serviceDelete).toHaveCSS("opacity", "0");
+  await firstServiceRow.hover();
+  await expect(serviceDelete).toHaveCSS("opacity", "1");
+  await serviceDelete.click();
+  const serviceDeleteDialog = page.getByRole("dialog", {
+    name: "Elimina servizio",
+  });
+  await expect(serviceDeleteDialog).toContainText(
+    "Le vendite e le schede esistenti conserveranno nome e prezzo.",
+  );
+  await expect(page.getByRole("dialog")).toHaveCount(2);
+  await serviceDeleteDialog
+    .getByRole("button", { name: "Annulla", exact: true })
+    .click();
+  await expect(serviceDeleteDialog).toHaveCount(0);
+  const serviceSwitch = firstServiceRow.locator(
+    '.fault-enabled-switch input[type="checkbox"]',
+  );
+  await expect(serviceSwitch).toHaveCSS("width", "32px");
+  await expect(serviceSwitch).toHaveCSS("height", "18px");
+  const serviceInitiallyEnabled = await serviceSwitch.isChecked();
+  await serviceSwitch.click();
+  await expect(serviceSwitch).toBeChecked({
+    checked: !serviceInitiallyEnabled,
+  });
+  await serviceSwitch.click();
+  await expect(serviceSwitch).toBeChecked({ checked: serviceInitiallyEnabled });
   const addService = serviceManager.getByRole("button", {
     name: "Nuovo servizio",
     exact: true,
@@ -3349,6 +3390,7 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   await expect(addService).toHaveCSS("background-color", "rgb(255, 249, 232)");
   await addService.click();
   const serviceEditor = page.getByRole("dialog", { name: "Nuovo servizio" });
+  await expect(serviceEditor.locator('input[type="checkbox"]')).toHaveCount(0);
   const serviceActions = serviceEditor.locator(".dialog-actions");
   expect(
     await serviceActions.evaluate((actions) => {

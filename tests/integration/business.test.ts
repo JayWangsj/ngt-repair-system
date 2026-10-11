@@ -50,6 +50,7 @@ import {
   deleteInventoryCategory,
   deleteDeviceCatalogOption,
   createQuickServiceOrder,
+  deleteQuickService,
   deleteWorkOrder,
   renameDeviceModel,
   saveQuickService,
@@ -2103,6 +2104,39 @@ describe("retail checkout", () => {
     });
     expect(allocations.map((entry) => entry.source)).toEqual(["QUICK_SERVICE"]);
     expect(allocations[0].amount.toString()).toBe("25");
+  });
+
+  it("deletes quick services without changing retail history", async () => {
+    const service = await saveQuickService(owner, null, {
+      name: "Servizio eliminabile",
+      defaultPrice: "30",
+      notes: "Snapshot storico",
+      enabled: true,
+    });
+    const sale = await createRetailSale(staff, {
+      requestId: randomUUID(),
+      items: [],
+      services: [{ serviceId: service.id, price: "25", quantity: 1 }],
+      discount: "0",
+      method: "CARD",
+    });
+
+    await deleteQuickService(owner, service.id);
+
+    expect(await db.quickService.count({ where: { id: service.id } })).toBe(0);
+    const historicalItem = await db.retailServiceItem.findFirstOrThrow({
+      where: { saleId: sale.id },
+    });
+    expect(historicalItem).toMatchObject({
+      quickServiceId: null,
+      serviceName: "Servizio eliminabile",
+    });
+    expect(historicalItem.unitPrice.toString()).toBe("25");
+    expect(
+      await db.auditLog.count({
+        where: { entityId: service.id, action: "QUICK_SERVICE_DELETED" },
+      }),
+    ).toBe(1);
   });
 });
 

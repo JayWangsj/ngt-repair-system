@@ -300,6 +300,9 @@ export const it = {
     enabled: "Attivo",
     disabled: "Disattivato",
     noServices: "Nessun servizio rapido configurato.",
+    delete: "Elimina servizio",
+    deleteConfirm:
+      "Eliminare definitivamente questo servizio rapido? Le vendite e le schede esistenti conserveranno nome e prezzo.",
     repairMode: "Servizio di riparazione",
     quickMode: "Servizio rapido",
     serviceItems: "Servizi",

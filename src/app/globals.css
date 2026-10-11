@@ -3214,13 +3214,13 @@ details[open] > summary {
   flex-wrap: nowrap;
 }
 @media (hover: hover) {
-  .catalog-manager-row .record-icon-delete {
+  .catalog-manager-row .record-icon {
     opacity: 0;
     pointer-events: none;
     transition: opacity 160ms ease;
   }
-  .catalog-manager-row:hover .record-icon-delete,
-  .catalog-manager-row:focus-within .record-icon-delete {
+  .catalog-manager-row:hover .record-icon,
+  .catalog-manager-row:focus-within .record-icon {
     opacity: 1;
     pointer-events: auto;
   }
@@ -6585,19 +6585,46 @@ summary.record-icon {
   height: 40px;
   padding: 0;
   flex-shrink: 0;
+  border-color: transparent;
+  background: transparent;
   color: #625c50;
   list-style: none;
 }
 summary.record-icon::-webkit-details-marker {
   display: none;
 }
-.record-icon-delete:hover,
-.record-icon-delete:focus-visible {
+.button.record-icon:hover,
+.button.record-icon:focus-visible,
+summary.record-icon:hover,
+summary.record-icon:focus-visible {
+  border-color: #806000;
+  background: #fff1b6;
+}
+.button.record-icon-delete:hover,
+.button.record-icon-delete:focus-visible {
   color: #b42318;
   border-color: #b42318;
   background: #fff1f0;
 }
+.x-icon-button,
+.dialog-close,
+.quick-service-remove {
+  border-color: transparent;
+  background: transparent;
+}
+.x-icon-button:hover:not(:disabled),
+.x-icon-button:focus-visible,
+.dialog-close:hover:not(:disabled),
+.dialog-close:focus-visible,
+.quick-service-remove:hover:not(:disabled),
+.quick-service-remove:focus-visible {
+  border-color: #806000;
+  background: #fff1b6;
+}
 .record-icon:focus-visible,
+.x-icon-button:focus-visible,
+.dialog-close:focus-visible,
+.quick-service-remove:focus-visible,
 .order-link:focus-visible,
 .dashboard-action-link:focus-visible {
   outline: 2px solid #806000;

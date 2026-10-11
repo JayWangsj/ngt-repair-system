@@ -223,6 +223,7 @@ export function NewServiceOrder({
                     </div>
                     <button
                       type="button"
+                      className="x-icon-button"
                       aria-label={`${it.remove} ${device.brand} ${device.model}`}
                       onClick={() =>
                         setDeviceIds((current) =>

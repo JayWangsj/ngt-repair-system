@@ -398,7 +398,7 @@ export function SelectDropdown({
             {canClear && (
               <button
                 type="button"
-                className="business-combobox-clear"
+                className="business-combobox-clear x-icon-button"
                 aria-label={open ? it.clearSearch : it.clearSelection}
                 onPointerDown={(event) => event.preventDefault()}
                 onClick={(event) => {

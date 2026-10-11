@@ -573,6 +573,7 @@ export function NewOrderWizard({
                 <span>{description}</span>
                 <button
                   type="button"
+                  className="x-icon-button"
                   aria-label={`${it.remove} ${description}`}
                   onClick={() =>
                     setCustomFaults((current) =>

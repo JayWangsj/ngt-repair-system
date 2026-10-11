@@ -631,6 +631,11 @@ test("repair project picker selects multiple items and removes a summary on hove
   await page.mouse.move(0, 0);
   await customSummary.hover();
   await expect(remove).toHaveCSS("opacity", "1");
+  await expect(remove).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
+  await expect(remove).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await remove.hover();
+  await expect(remove).toHaveCSS("border-top-color", "rgb(128, 96, 0)");
+  await expect(remove).toHaveCSS("background-color", "rgb(255, 241, 182)");
   await remove.click();
   await expect(summaries).toHaveCount(0);
 });
@@ -3347,16 +3352,54 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   const serviceManager = page.getByRole("dialog", {
     name: "Gestisci servizi rapidi",
   });
+  const serviceManagerClose = serviceManager.getByRole("button", {
+    name: "Chiudi",
+    exact: true,
+  });
+  await expect(serviceManagerClose).toHaveCSS(
+    "border-top-color",
+    "rgba(0, 0, 0, 0)",
+  );
+  await expect(serviceManagerClose).toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
+  await serviceManagerClose.hover();
+  await expect(serviceManagerClose).toHaveCSS(
+    "border-top-color",
+    "rgb(128, 96, 0)",
+  );
+  await expect(serviceManagerClose).toHaveCSS(
+    "background-color",
+    "rgb(255, 241, 182)",
+  );
   const firstServiceRow = serviceManager
     .locator(".catalog-manager-row")
     .first();
+  const serviceEdit = firstServiceRow.getByRole("button", {
+    name: /Modifica/,
+  });
   const serviceDelete = firstServiceRow.getByRole("button", {
     name: /Elimina servizio/,
   });
   await page.mouse.move(0, 0);
+  await expect(serviceEdit).toHaveCSS("opacity", "0");
   await expect(serviceDelete).toHaveCSS("opacity", "0");
   await firstServiceRow.hover();
+  await expect(serviceEdit).toHaveCSS("opacity", "1");
   await expect(serviceDelete).toHaveCSS("opacity", "1");
+  await expect(serviceEdit).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
+  await expect(serviceEdit).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await serviceEdit.hover();
+  await expect(serviceEdit).toHaveCSS("border-top-color", "rgb(128, 96, 0)");
+  await expect(serviceEdit).toHaveCSS("background-color", "rgb(255, 241, 182)");
+  await expect(serviceDelete).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
+  await serviceDelete.hover();
+  await expect(serviceDelete).toHaveCSS("border-top-color", "rgb(180, 35, 24)");
+  await expect(serviceDelete).toHaveCSS(
+    "background-color",
+    "rgb(255, 241, 240)",
+  );
   await serviceDelete.click();
   const serviceDeleteDialog = page.getByRole("dialog", {
     name: "Elimina servizio",

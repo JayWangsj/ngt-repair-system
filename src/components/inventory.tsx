@@ -460,7 +460,7 @@ function DeviceCompatibilityFilter({
               <strong>{it.inventory.compatibleDevices}</strong>
               <button
                 type="button"
-                className="icon-button"
+                className="icon-button x-icon-button"
                 aria-label={it.close}
                 onClick={() => setOpen(false)}
               >

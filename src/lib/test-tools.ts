@@ -274,7 +274,6 @@ export async function generateTestData(
   const prefix = `TEST-${token}`;
   const now = Date.now();
   const statuses = [
-    "RECEIVED",
     "DIAGNOSING",
     "REPAIRING",
     "PARTS_MISSING",

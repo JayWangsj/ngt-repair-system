@@ -54,6 +54,7 @@ export const zh: typeof it = {
   yes: "是",
   no: "否",
   repairItemError: "请选择至少一个维修项目并填写有效价格。",
+  repairItemMinimum: "服务单至少需要保留一个维修项目。",
   selectFaultError: "请选择至少一个报修故障，或设为“故障待检测”。",
   selectDueDateError: "请设置预计交付日期。",
   repairItems: "个维修项目",

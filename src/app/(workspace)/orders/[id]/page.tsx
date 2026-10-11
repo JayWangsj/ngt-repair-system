@@ -139,6 +139,9 @@ export default async function Detail({
       _sum: { quantity: true },
     }),
   ]);
+  const repairProducts = products.filter(
+    (product) => product.usage === "REPAIR",
+  );
   const reservedByProduct = new Map(
     reservations.map((entry) => [entry.productId, entry._sum.quantity ?? 0]),
   );
@@ -582,7 +585,7 @@ export default async function Detail({
                     cost: undefined,
                     updatedAt: undefined,
                   }))}
-                  products={products.map((product) => ({
+                  products={repairProducts.map((product) => ({
                     id: product.id,
                     name: product.name,
                     category: product.category,
@@ -722,7 +725,7 @@ export default async function Detail({
                     cost: undefined,
                     updatedAt: undefined,
                   }))}
-                  products={products.map((product) => ({
+                  products={repairProducts.map((product) => ({
                     id: product.id,
                     name: product.name,
                     category: product.category,
@@ -788,7 +791,7 @@ export default async function Detail({
                   initialFaultIds={order.faults.flatMap((fault) =>
                     fault.catalogId ? [fault.catalogId] : [],
                   )}
-                  products={products.map((product) => ({
+                  products={repairProducts.map((product) => ({
                     id: product.id,
                     name: product.name,
                     category: product.category,
@@ -868,7 +871,7 @@ export default async function Detail({
                           orderId={id}
                           itemId={activeRework.id}
                           value={activeRework.requiredProductId ?? ""}
-                          products={products.map((product) => ({
+                          products={repairProducts.map((product) => ({
                             id: product.id,
                             name: product.name,
                             category: product.category,
@@ -1006,7 +1009,7 @@ export default async function Detail({
                 requiredProductId: item.requiredProductId ?? undefined,
                 requiredQuantity: item.requiredQuantity,
               }))}
-              products={products.map((product) => ({
+              products={repairProducts.map((product) => ({
                 id: product.id,
                 name: product.name,
                 category: product.category,

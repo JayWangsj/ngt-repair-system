@@ -78,6 +78,7 @@ export function WorkOrderRepairSummary({
     session,
     items: removeDraftTarget(items, cardEdit?.target),
   });
+  const [minimumNotice, setMinimumNotice] = useState(false);
   if (cardEdit?.editing && draft.session !== session)
     setDraft({ session, items: removeDraftTarget(items, cardEdit.target) });
   const draftItems = draft.items;
@@ -88,7 +89,10 @@ export function WorkOrderRepairSummary({
       ? cardEdit.target
       : null;
   const change = (index: number, field: "project" | "part") => {
-    if (!locked) cardEdit?.requestEdit({ kind: "repair", index, field });
+    if (!locked) {
+      setMinimumNotice(false);
+      cardEdit?.requestEdit({ kind: "repair", index, field });
+    }
   };
   const editor = (index: number, field: "project" | "part") => (
     <div className={`detail-repair-editor is-${field}`}>
@@ -110,6 +114,11 @@ export function WorkOrderRepairSummary({
   const removable = !locked;
 
   function removeProject(index: number) {
+    if ((cardEdit?.editing ? draftItems : items).length <= 1) {
+      setMinimumNotice(true);
+      return;
+    }
+    setMinimumNotice(false);
     if (!cardEdit?.editing) {
       cardEdit?.requestEdit({
         kind: "repair",
@@ -149,6 +158,7 @@ export function WorkOrderRepairSummary({
   }
 
   function addProject() {
+    setMinimumNotice(false);
     const index = draftItems.length;
     setDraftItems([
       ...draftItems,
@@ -166,6 +176,11 @@ export function WorkOrderRepairSummary({
   return (
     <section className="detail-repair-summaries">
       <h3>{it.quoteSection}</h3>
+      {minimumNotice && (
+        <p className="message warning" role="status">
+          {it.repairItemMinimum}
+        </p>
+      )}
       {displayedItems.map((item, index) => {
         const product = products.find(
           (candidate) => candidate.id === item.requiredProductId,

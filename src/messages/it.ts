@@ -57,6 +57,7 @@ export const it = {
   yes: "Sì",
   no: "No",
   repairItemError: "Seleziona almeno un intervento e indica un prezzo valido.",
+  repairItemMinimum: "La scheda deve conservare almeno un intervento.",
   selectFaultError: "Seleziona almeno un problema o imposta la diagnosi.",
   selectDueDateError: "Imposta la data di consegna prevista.",
   repairItems: "interventi",

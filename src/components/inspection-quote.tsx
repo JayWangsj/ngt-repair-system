@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { completeInspectionAction } from "@/app/actions";
 import { settlement } from "@/lib/domain";
@@ -54,14 +54,13 @@ export function CompleteInspectionButton({
   const [faults, setFaults] = useState(faultOptions);
   const [selectedFaults, setSelectedFaults] = useState(initialFaultIds);
   const [faultNote, setFaultNote] = useState("");
-  const [items, setItems] = useState<ItemView[]>([
-    { project: "", final: "", discount: "0", adjustmentReason: "" },
-  ]);
+  const [items, setItems] = useState<ItemView[]>([]);
   const [discount, setDiscount] = useState("0");
   const [includeVat, setIncludeVat] = useState(false);
   const [dueDate, setDueDate] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const submitting = useRef(false);
   const quoteValid = quoteItemsValid(items, rules, device);
   const priceValid = useMemo(() => {
     try {
@@ -94,21 +93,26 @@ export function CompleteInspectionButton({
             aria-busy={pending}
             onSubmit={async (event) => {
               event.preventDefault();
-              if (pending || !ready) return;
+              if (submitting.current || pending || !ready) return;
+              submitting.current = true;
               setPending(true);
               setError("");
-              const response = await completeInspectionAction(orderId, {
-                standardFaultIds: selectedFaults,
-                faultNote,
-                items,
-                orderDiscount: discount,
-                includeVat,
-                dueDate,
-              });
-              setPending(false);
-              if (!response.ok) return setError(response.error);
-              setOpen(false);
-              router.refresh();
+              try {
+                const response = await completeInspectionAction(orderId, {
+                  standardFaultIds: selectedFaults,
+                  faultNote,
+                  items,
+                  orderDiscount: discount,
+                  includeVat,
+                  dueDate,
+                });
+                if (!response.ok) return setError(response.error);
+                setOpen(false);
+                router.refresh();
+              } finally {
+                submitting.current = false;
+                setPending(false);
+              }
             }}
           >
             <FaultSelector

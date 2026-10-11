@@ -1238,7 +1238,11 @@ textarea {
 .selected-part-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 10px;
+}
+.selection-summary > .selected-part-actions {
+  display: flex;
 }
 .selected-part-remove {
   width: 30px;

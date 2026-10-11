@@ -2724,6 +2724,7 @@ test("diagnostic order saves faults, date and quote in one progressive flow", as
   const dialog = page.getByRole("dialog", {
     name: "Completa diagnosi e crea preventivo",
   });
+  await expect(dialog.locator(".quote-item")).toHaveCount(0);
   const saveInspection = dialog.getByRole("button", {
     name: "Salva",
     exact: true,
@@ -2749,6 +2750,7 @@ test("diagnostic order saves faults, date and quote in one progressive flow", as
   await expect(dialog.locator(".selected-project-summary")).toContainText(
     "100,00 €",
   );
+  await expect(dialog.locator(".quote-item")).toHaveCount(1);
   await dialog.locator(".selected-project-summary").hover();
   await expect(
     dialog.locator(".selected-project-summary .summary-action"),
@@ -2762,8 +2764,37 @@ test("diagnostic order saves faults, date and quote in one progressive flow", as
       exact: true,
     }),
   ).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Ricambio", exact: true }).click();
+  const inspectionPartSearch = dialog.getByRole("combobox", {
+    name: "Ricambio richiesto 1",
+    exact: true,
+  });
+  await inspectionPartSearch.fill("Cavo USB-C Test");
+  await expect(
+    dialog.getByRole("option", { name: /Cavo USB-C Test/ }),
+  ).toHaveCount(0);
+  await inspectionPartSearch.press("Escape");
+  const projectActions = dialog.locator(
+    ".selected-project-summary .selected-part-actions",
+  );
+  const changeProject = projectActions.locator(".summary-action");
+  const removeProject = projectActions.locator(".quick-service-remove");
+  await dialog.locator(".selected-project-summary").hover();
+  await expect(removeProject).toBeVisible();
+  const [changeBox, removeBox] = await Promise.all([
+    changeProject.boundingBox(),
+    removeProject.boundingBox(),
+  ]);
+  expect(changeBox!.x).toBeLessThan(removeBox!.x);
+  expect(
+    Math.abs(
+      changeBox!.y +
+        changeBox!.height / 2 -
+        (removeBox!.y + removeBox!.height / 2),
+    ),
+  ).toBeLessThanOrEqual(1);
   await expect(saveInspection).toBeEnabled();
-  await saveInspection.click();
+  await saveInspection.dblclick();
   await expect(dialog).toHaveCount(0);
   await expect(status).toContainText("In riparazione");
   await details.locator(".order-card-heading").click();
@@ -3548,6 +3579,13 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await expect(removeProject).toHaveCSS("opacity", "0");
   await editableProject.hover();
   await expect(removeProject).toHaveCSS("opacity", "1");
+  await removeProject.click();
+  await expect(details.locator(".message.warning")).toContainText(
+    "La scheda deve conservare almeno un intervento.",
+  );
+  await expect(
+    details.locator(".detail-repair-summary .selected-project-summary"),
+  ).toHaveCount(1);
   await expect(
     details.getByRole("button", { name: "Intervento", exact: true }),
   ).toBeVisible();
@@ -6182,6 +6220,11 @@ test("test tools generate linked data and persist repair motion tuning", async (
   expect(codes.every((code) => /^[RS]-\d{11}$/.test(code.trim()))).toBe(true);
   expect(codes.some((code) => code.trim().startsWith("R-"))).toBe(true);
   expect(codes.some((code) => code.trim().startsWith("S-"))).toBe(true);
+  await expect(
+    generatedRows.filter({ hasText: "Riparazione" }).filter({
+      hasText: "Ricevuto",
+    }),
+  ).toHaveCount(0);
   const customers = await generatedRows
     .locator(".order-customer-link span")
     .allTextContents();

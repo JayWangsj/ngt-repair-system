@@ -2960,34 +2960,23 @@ details[open] > summary {
     letter-spacing: 0.05em;
   }
   .service-order-print-brand {
-    display: flex;
-    align-items: center;
-    gap: 2mm;
+    position: relative;
+    width: 43mm;
+    overflow: hidden;
   }
-  .service-order-print-brand > span {
-    display: grid;
-    width: 9mm;
-    height: 9mm;
-    place-items: center;
-    background: #f4cf21;
-    color: #111;
-    font-size: 17pt;
-    font-weight: 900;
-    line-height: 1;
+  .service-order-print-brand::after {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 24%;
+    height: 12%;
+    background: #fff;
+    content: "";
   }
-  .service-order-print-brand div {
-    display: grid;
-    line-height: 1;
-  }
-  .service-order-print-brand strong {
-    font-size: 15pt;
-    letter-spacing: 0.06em;
-  }
-  .service-order-print-brand small {
-    margin-top: 0.7mm;
-    font-size: 5.5pt;
-    font-weight: 700;
-    letter-spacing: 0.12em;
+  .service-order-print-logo {
+    display: block;
+    width: 43mm;
+    height: auto;
   }
   .service-order-print-title {
     display: block;

@@ -1,4 +1,5 @@
 import { it } from "@/messages/it";
+import { BrandLogo } from "./brand-logo";
 
 type PrintLine = {
   label: string;
@@ -80,11 +81,7 @@ export function ServiceOrderPrint({
           <article className="service-order-print-copy" key={copy.key}>
             <header className="service-order-print-header">
               <div className="service-order-print-brand" aria-label="NGT">
-                <span aria-hidden="true">N</span>
-                <div>
-                  <strong>NGT</strong>
-                  <small>NEXT GEN TECH</small>
-                </div>
+                <BrandLogo className="service-order-print-logo" />
               </div>
               <strong>{copy.title}</strong>
             </header>

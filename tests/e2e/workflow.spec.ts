@@ -1267,8 +1267,10 @@ test("service order print renders mirrored copies from live order data", async (
   await expect(printView).toContainText("SCHEDA DI ASSISTENZA");
   await expect(printView).not.toContainText("维修管理系统");
   const printBrand = printView.locator(".service-order-print-brand").first();
-  await expect(printBrand.locator("strong")).toHaveText("NGT");
-  await expect(printBrand.locator("small")).toHaveText("NEXT GEN TECH");
+  await expect(printBrand.locator("img")).toHaveAttribute(
+    "src",
+    /\/brand\/ngt-logo-horizontal\.svg$/,
+  );
   await expect(copies.nth(0)).toContainText(code);
   await expect(copies.nth(1)).toContainText(code);
   await expect(copies.nth(0).locator(".service-order-print-line")).toHaveCount(
@@ -1284,6 +1286,11 @@ test("service order print renders mirrored copies from live order data", async (
   );
 
   await page.emulateMedia({ media: "print" });
+  expect(
+    await printBrand.evaluate(
+      (element) => getComputedStyle(element, "::after").content,
+    ),
+  ).not.toBe("none");
   await expect(printView).toBeVisible();
   await expect(page.locator(".detail-grid")).toBeHidden();
   await expect(page.locator(".print-brand-header")).toBeHidden();

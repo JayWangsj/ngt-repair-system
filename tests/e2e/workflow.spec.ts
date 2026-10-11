@@ -589,6 +589,15 @@ test("manages one quick service for held service orders and retail checkout", as
     .getByRole("button", { name: "Conferma selezione", exact: true })
     .click();
   await expect(page.locator(".quick-service-device-card")).toHaveCount(3);
+  const firstDeviceCard = page
+    .locator(".quick-service-device-card:not(.is-add)")
+    .first();
+  const removeDevice = firstDeviceCard.getByRole("button", {
+    name: /Rimuovi Apple iPhone/,
+  });
+  await expect(removeDevice).toHaveCSS("opacity", "0");
+  await firstDeviceCard.hover();
+  await expect(removeDevice).toHaveCSS("opacity", "1");
   await page.locator(".quick-service-service-add").click();
   const servicePicker = page.getByRole("dialog", {
     name: "Seleziona servizi",

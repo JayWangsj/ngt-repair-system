@@ -464,7 +464,7 @@ export function NewServiceOrder({
                   <div className="quick-service-picker-list">
                     {availableServices.map((service) => (
                       <article
-                        className={`quick-service-picker-option quick-service-picker-service${draftServiceIds.includes(service.id) ? " is-selected" : ""}`}
+                        className={`quick-service-picker-option quick-service-picker-service business-list-row${draftServiceIds.includes(service.id) ? " is-selected" : ""}`}
                         key={service.id}
                         onClick={() =>
                           setDraftServiceIds((current) =>

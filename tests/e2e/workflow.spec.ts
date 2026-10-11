@@ -622,7 +622,21 @@ test("manages one quick service for held service orders and retail checkout", as
     .locator(".quick-service-picker-service")
     .filter({ hasText: serviceName });
   await expect(createdService).toHaveClass(/is-selected/);
+  await expect(createdService).toHaveClass(/business-list-row/);
   await createdService.hover();
+  await expect(createdService).toHaveCSS(
+    "background-color",
+    "rgb(255, 249, 232)",
+  );
+  await expect(createdService).toHaveCSS(
+    "transform",
+    "matrix(1, 0, 0, 1, 0, -1)",
+  );
+  expect(
+    await createdService.evaluate(
+      (element) => getComputedStyle(element).boxShadow,
+    ),
+  ).toContain("rgba(128, 96, 0, 0.08)");
   const editService = createdService.getByRole("button", {
     name: `Modifica dati ${serviceName}`,
     exact: true,

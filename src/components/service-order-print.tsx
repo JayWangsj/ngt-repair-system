@@ -1,6 +1,4 @@
-import { BrandLogo } from "./brand-logo";
-
-type Messages = typeof import("@/messages/it").it;
+import { it } from "@/messages/it";
 
 type PrintLine = {
   label: string;
@@ -18,7 +16,6 @@ type PrintWarranty = {
 };
 
 export function ServiceOrderPrint({
-  messages,
   code,
   acceptedAt,
   expectedAt,
@@ -38,7 +35,6 @@ export function ServiceOrderPrint({
   paymentMethods,
   warranties,
 }: {
-  messages: Messages;
   code: string;
   acceptedAt: string;
   expectedAt: string;
@@ -58,7 +54,7 @@ export function ServiceOrderPrint({
   paymentMethods: string[];
   warranties: PrintWarranty[];
 }) {
-  const labels = messages.printOrder;
+  const labels = it.printOrder;
   const densityScore =
     interventions.length +
     devices.length +
@@ -83,7 +79,13 @@ export function ServiceOrderPrint({
         {copies.map((copy) => (
           <article className="service-order-print-copy" key={copy.key}>
             <header className="service-order-print-header">
-              <BrandLogo className="service-order-print-logo" />
+              <div className="service-order-print-brand" aria-label="NGT">
+                <span aria-hidden="true">N</span>
+                <div>
+                  <strong>NGT</strong>
+                  <small>NEXT GEN TECH</small>
+                </div>
+              </div>
               <strong>{copy.title}</strong>
             </header>
 

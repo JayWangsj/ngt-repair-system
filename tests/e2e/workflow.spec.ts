@@ -1240,11 +1240,35 @@ test("service order print renders mirrored copies from live order data", async (
   await save(page);
 
   const code = (await page.locator(".page-header h1").innerText()).trim();
+  const originalTitle = await page.title();
+  await page.evaluate(() => {
+    window.print = () => {
+      document.body.dataset.printTitle = document.title || "empty";
+    };
+  });
+  await page.getByText("Altre azioni", { exact: true }).click();
+  await page.getByRole("button", { name: "Stampa", exact: true }).click();
+  await expect(page.locator("body")).toHaveAttribute(
+    "data-print-title",
+    "empty",
+  );
+  await expect(page).toHaveTitle(originalTitle);
+
+  await page.evaluate(() => {
+    document.cookie = "ngt-locale=zh; Path=/; SameSite=Lax";
+  });
+  await page.reload();
+
   const printView = page.getByTestId("service-order-print");
   const copies = printView.locator(".service-order-print-copy");
   await expect(copies).toHaveCount(2);
   await expect(copies.nth(0)).toContainText("COPIA CLIENTE");
   await expect(copies.nth(1)).toContainText("COPIA NEGOZIO");
+  await expect(printView).toContainText("SCHEDA DI ASSISTENZA");
+  await expect(printView).not.toContainText("维修管理系统");
+  const printBrand = printView.locator(".service-order-print-brand").first();
+  await expect(printBrand.locator("strong")).toHaveText("NGT");
+  await expect(printBrand.locator("small")).toHaveText("NEXT GEN TECH");
   await expect(copies.nth(0)).toContainText(code);
   await expect(copies.nth(1)).toContainText(code);
   await expect(copies.nth(0).locator(".service-order-print-line")).toHaveCount(

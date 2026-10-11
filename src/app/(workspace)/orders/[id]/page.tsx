@@ -39,6 +39,7 @@ import { getBusinessDay } from "@/lib/business-date";
 import { WorkOrderRepairSummary } from "@/components/work-order-repair-summary";
 import { ServiceOrderActions } from "@/components/service-order-actions";
 import { ServiceOrderPrint } from "@/components/service-order-print";
+import { it as italianMessages } from "@/messages/it";
 
 type TimelineEvent = {
   id: string;
@@ -199,7 +200,7 @@ export default async function Detail({
     ...(totals.inspectionTotal > 0
       ? [
           {
-            label: it.inspectionFeeLabel,
+            label: italianMessages.inspectionFeeLabel,
             amount: money(totals.inspectionTotal),
           },
         ]
@@ -211,7 +212,7 @@ export default async function Detail({
     ...(totals.afterSalesTotal > 0
       ? [
           {
-            label: it.afterSales.feeEvent,
+            label: italianMessages.afterSales.feeEvent,
             amount: money(totals.afterSalesTotal),
           },
         ]
@@ -219,7 +220,6 @@ export default async function Detail({
   ];
   const printView = (
     <ServiceOrderPrint
-      messages={it}
       code={orderCode(order.code)}
       acceptedAt={dateTime(order.createdAt)}
       expectedAt={
@@ -233,7 +233,7 @@ export default async function Detail({
       appearance={order.appearance || order.device.appearance}
       accessories={order.accessories || order.device.accessories}
       problem={[
-        faultLabel(order.fault, locale),
+        faultLabel(order.fault, "it"),
         order.faultNote,
         order.inspectionResult,
         order.notes,
@@ -246,16 +246,16 @@ export default async function Detail({
       remaining={money(remaining)}
       paymentStatus={
         ["REFUNDED", "CANCELLED"].includes(order.status)
-          ? it.status[order.status]
+          ? italianMessages.status[order.status]
           : remaining === 0
-            ? it.printOrder.settled
-            : it.printOrder.outstanding
+            ? italianMessages.printOrder.settled
+            : italianMessages.printOrder.outstanding
       }
       paymentMethods={[
         ...new Set(
           order.payments
             .filter((payment) => payment.kind !== "REFUND")
-            .map((payment) => it.methods[payment.method]),
+            .map((payment) => italianMessages.methods[payment.method]),
         ),
       ]}
       warranties={order.items

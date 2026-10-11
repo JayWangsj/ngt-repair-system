@@ -35,7 +35,13 @@ export function ServiceOrderActions({
             type="button"
             onClick={(event) => {
               event.currentTarget.closest("details")?.removeAttribute("open");
-              window.print();
+              const title = document.title;
+              document.title = "";
+              try {
+                window.print();
+              } finally {
+                document.title = title;
+              }
             }}
           >
             <Printer size={16} /> {it.print}

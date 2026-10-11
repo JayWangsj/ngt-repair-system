@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { statuses } from "@/lib/domain";
-import { SimpleSelect } from "./business-select";
+import { DatePicker, SimpleSelect } from "./business-select";
 import { useMessages } from "./language";
 
 type FilterValues = {
@@ -57,7 +57,7 @@ export function OrderFilters({ initial }: { initial: FilterValues }) {
       </label>
       <label>
         <span className="sr-only">{it.month}</span>
-        <input
+        <DatePicker
           name="month"
           type="month"
           value={values.month}

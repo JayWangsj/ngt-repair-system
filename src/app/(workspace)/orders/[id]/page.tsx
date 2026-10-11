@@ -185,16 +185,23 @@ export default async function Detail({
           description={`${it.orderTypes.QUICK_SERVICE} · ${order.device.customer.name}`}
         />
         <div className="detail-status">
-          <DetailStatusControl
-            id={id}
-            type={order.type}
-            status={order.status}
-            customerName={order.customerName || order.device.customer.name}
-            due={currentDue}
-            paid={received}
-            balance={remaining}
-            afterSalesOpen={false}
-          />
+          <div className="detail-primary-actions">
+            <DetailStatusControl
+              id={id}
+              type={order.type}
+              status={order.status}
+              customerName={order.customerName || order.device.customer.name}
+              due={currentDue}
+              paid={received}
+              balance={remaining}
+              afterSalesOpen={false}
+            />
+            <ServiceOrderActions
+              id={id}
+              code={order.code}
+              blockedReason={deleteBlockedReason}
+            />
+          </div>
           <span>
             {it.created}: {dateTime(order.createdAt)}
           </span>
@@ -202,11 +209,6 @@ export default async function Detail({
             {it.quickService.expectedAt}:{" "}
             {order.expectedAt?.replace("T", " ") ?? "—"}
           </span>
-          <ServiceOrderActions
-            id={id}
-            code={order.code}
-            blockedReason={deleteBlockedReason}
-          />
         </div>
         <div className="detail-grid">
           <div className="stack">
@@ -469,24 +471,26 @@ export default async function Detail({
         description={`${order.device.brand} ${order.device.model} · ${order.device.customer.name}`}
       />
       <div className="detail-status">
-        <DetailStatusControl
-          id={id}
-          type={order.type}
-          status={order.status}
-          customerName={order.customerName || order.device.customer.name}
-          due={currentDue}
-          paid={received}
-          balance={remaining}
-          afterSalesOpen={order.afterSalesOpen}
-        />
+        <div className="detail-primary-actions">
+          <DetailStatusControl
+            id={id}
+            type={order.type}
+            status={order.status}
+            customerName={order.customerName || order.device.customer.name}
+            due={currentDue}
+            paid={received}
+            balance={remaining}
+            afterSalesOpen={order.afterSalesOpen}
+          />
+          <ServiceOrderActions
+            id={id}
+            code={order.code}
+            blockedReason={deleteBlockedReason}
+          />
+        </div>
         <span>
           {it.created}: {dateTime(order.createdAt)}
         </span>
-        <ServiceOrderActions
-          id={id}
-          code={order.code}
-          blockedReason={deleteBlockedReason}
-        />
         <span>
           {it.dueDate}: {dateOnly(order.afterSalesDueDate ?? order.dueDate)}
         </span>

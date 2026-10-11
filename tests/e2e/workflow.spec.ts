@@ -396,19 +396,23 @@ test("single operator opens every business page without login", async ({
   await expect(
     page.getByRole("button", { name: "Cancella tutti i dati", exact: true }),
   ).toBeVisible();
+  await page.goto("/orders");
+  await expect(
+    page.getByRole("link", {
+      name: "Servizio di riparazione",
+      exact: true,
+    }),
+  ).toHaveClass(/button-primary/);
+  await expect(
+    page.getByRole("link", { name: "Servizio rapido", exact: true }),
+  ).toHaveClass(/button-primary/);
   for (const [path, name] of [
-    ["/orders", "Nuova scheda di servizio"],
     ["/customers", "Nuovo cliente"],
     ["/prices", "Nuova regola"],
   ] as const) {
     await page.goto(path);
     await expect(
-      page
-        .getByRole(path === "/orders" ? "link" : "button", {
-          name,
-          exact: true,
-        })
-        .first(),
+      page.getByRole("button", { name, exact: true }).first(),
     ).toHaveClass(/button-primary/);
   }
   await page.goto("/login");
@@ -439,10 +443,14 @@ test("manages one quick service for held service orders and retail checkout", as
   await expect(editor).toHaveCount(0);
   await expect(manager).toContainText(serviceName);
 
-  await page.goto("/orders/new");
+  await page.goto("/orders");
   await page
-    .getByRole("button", { name: "Servizio rapido", exact: true })
+    .getByRole("link", { name: "Servizio rapido", exact: true })
     .click();
+  await expect(page).toHaveURL(/\/orders\/new\?type=quick$/);
+  await expect(
+    page.getByRole("button", { name: "Servizio rapido", exact: true }),
+  ).toHaveClass(/active/);
   await chooseBusinessOption(page, "Cliente", "Cliente Playwright");
   await page.getByLabel("Apple iPhone 13", { exact: true }).check();
   await page
@@ -463,6 +471,14 @@ test("manages one quick service for held service orders and retail checkout", as
   const serviceCode = (await page.locator("h1").innerText()).trim();
   expect(serviceCode).toMatch(/^S-\d{8}\d{3}$/);
   await expect(page.locator(".page-header p")).toContainText("Servizio rapido");
+  const statusBox = await page
+    .locator(".detail-primary-actions .status-dropdown-trigger")
+    .boundingBox();
+  const moreBox = await page
+    .locator(".detail-primary-actions .secondary-actions summary")
+    .boundingBox();
+  expect(Math.abs(statusBox!.y - moreBox!.y)).toBeLessThan(1);
+  expect(Math.abs(statusBox!.height - moreBox!.height)).toBeLessThan(1);
   await expect(page.locator(".quick-service-detail-list")).toContainText(
     serviceName,
   );
@@ -1211,6 +1227,30 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await page.goto("/orders");
   const month = page.locator('input[name="month"]');
   await expect(month).toHaveValue(/^\d{4}-\d{2}$/);
+  await page.evaluate(() => {
+    const input = document.querySelector<HTMLInputElement>(
+      'input[name="month"]',
+    );
+    if (!input) return;
+    Object.defineProperty(input, "showPicker", {
+      value: () => {
+        (
+          window as Window & { orderMonthPickerOpened?: number }
+        ).orderMonthPickerOpened =
+          ((window as Window & { orderMonthPickerOpened?: number })
+            .orderMonthPickerOpened ?? 0) + 1;
+      },
+    });
+  });
+  const monthBox = await month.boundingBox();
+  await month.click({ position: { x: 8, y: monthBox!.height / 2 } });
+  expect(
+    await page.evaluate(
+      () =>
+        (window as Window & { orderMonthPickerOpened?: number })
+          .orderMonthPickerOpened,
+    ),
+  ).toBe(1);
   const currentMonth = await month.inputValue();
   await expect(
     page.getByRole("button", { name: "Filtra", exact: true }),
@@ -1244,6 +1284,12 @@ test("repair list exposes month, status, due-date and payment controls", async (
     (url) => url.searchParams.get("attention") === "unpaid",
   );
   const row = page.locator("tbody tr").first();
+  await expect(row.locator("td").first()).toHaveClass(/order-type-cell/);
+  await expect(row.locator("td").first()).toHaveText("Riparazione");
+  await expect(row.locator(".order-code-link")).not.toContainText(
+    "Riparazione",
+  );
+  await expect(page.locator("thead th").first()).toHaveText("");
   await row.hover();
   await expect(row).toHaveCSS("background-color", "rgb(255, 249, 232)");
   await expect(row).toHaveCSS("transform", /matrix\(1, 0, 0, 1, 0, -1\)/);

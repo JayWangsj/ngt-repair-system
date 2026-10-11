@@ -5,6 +5,9 @@ import { OrderFilters } from "@/components/order-filters";
 import { balance, isOverdue, romeDay } from "@/lib/domain";
 import { requireActor } from "@/lib/session";
 import { getBusinessDay } from "@/lib/business-date";
+import Link from "next/link";
+import { Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 export default async function Orders({
   searchParams,
 }: {
@@ -66,7 +69,22 @@ export default async function Orders({
       <PageHeader
         title={it.nav.orders}
         description={it.ordersDescription}
-        action
+        actionNode={
+          <div className="page-header-actions">
+            <Button asChild>
+              <Link href="/orders/new">
+                <Plus size={18} />
+                {it.quickService.repairMode}
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/orders/new?type=quick">
+                <Plus size={18} />
+                {it.quickService.quickMode}
+              </Link>
+            </Button>
+          </div>
+        }
       />
       <OrderFilters
         initial={{

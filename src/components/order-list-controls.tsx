@@ -628,6 +628,9 @@ export function OrderListBody({
               requestAnimationFrame(() => setActiveId(""));
             }}
           >
+            <td className="order-type-cell">
+              <span className="order-type-tag">{it.orderTypes[row.type]}</span>
+            </td>
             <td>
               <Link
                 className="order-link order-code-link"
@@ -635,9 +638,6 @@ export function OrderListBody({
                 onClick={(event) => event.stopPropagation()}
               >
                 <span>{row.code}</span>
-                <small className="order-type-tag">
-                  {it.orderTypes[row.type]}
-                </small>
                 <ChevronRight size={15} aria-hidden="true" />
               </Link>
             </td>

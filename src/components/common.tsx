@@ -97,6 +97,7 @@ export async function OrderTable({
       <table className="order-table">
         <thead>
           <tr>
+            <th aria-label={it.serviceType} />
             <th>{it.order}</th>
             {!hideCustomer && <th>{it.customer}</th>}
             <th>{it.device}</th>

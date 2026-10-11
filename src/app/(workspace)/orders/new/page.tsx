@@ -4,9 +4,14 @@ import { NewOrderWizard } from "@/components/new-order-form";
 import { NewServiceOrder } from "@/components/new-service-order";
 import { BackButton, PageHeader } from "@/components/common";
 import { getMessages } from "@/lib/i18n-server";
-export default async function NewOrder() {
+export default async function NewOrder({
+  searchParams,
+}: {
+  searchParams: Promise<{ type?: string }>;
+}) {
   const it = await getMessages();
   await requireActor();
+  const query = await searchParams;
   const rules = await db.priceRule.findMany({
     where: { enabled: true },
     orderBy: { project: "asc" },
@@ -87,6 +92,7 @@ export default async function NewOrder() {
       <BackButton href="/orders" label={it.nav.orders} />
       <PageHeader title={it.newOrder} description={it.ordersDescription} />
       <NewServiceOrder
+        initialMode={query.type === "quick" ? "QUICK_SERVICE" : "REPAIR"}
         customers={customers}
         services={quickServices.map((service) => ({
           id: service.id,

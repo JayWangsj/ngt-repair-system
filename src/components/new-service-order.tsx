@@ -32,14 +32,16 @@ export function NewServiceOrder({
   repairForm,
   customers,
   services,
+  initialMode = "REPAIR",
 }: {
   repairForm: ReactNode;
   customers: Customer[];
   services: Service[];
+  initialMode?: "REPAIR" | "QUICK_SERVICE";
 }) {
   const it = useMessages();
   const router = useRouter();
-  const [mode, setMode] = useState<"REPAIR" | "QUICK_SERVICE">("REPAIR");
+  const [mode, setMode] = useState<"REPAIR" | "QUICK_SERVICE">(initialMode);
   const [customerId, setCustomerId] = useState("");
   const [deviceIds, setDeviceIds] = useState<string[]>([]);
   const [selectedServices, setSelectedServices] = useState<

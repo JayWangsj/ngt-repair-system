@@ -459,10 +459,26 @@ test("manages one quick service for held service orders and retail checkout", as
   ).toHaveClass(/active/);
   const modeSwitch = await page.locator(".service-mode-switch").boundingBox();
   expect(modeSwitch!.width).toBeLessThanOrEqual(410);
+  const quickFormWidth = await page
+    .locator(".quick-service-order-form")
+    .evaluate((element) => element.getBoundingClientRect().width);
+  await page
+    .getByRole("button", { name: "Servizio di riparazione", exact: true })
+    .click();
+  const repairFormWidth = await page
+    .locator(".order-wizard")
+    .evaluate((element) => element.getBoundingClientRect().width);
+  expect(Math.abs(quickFormWidth - repairFormWidth)).toBeLessThan(1);
+  await page
+    .getByRole("button", { name: "Servizio rapido", exact: true })
+    .click();
   await chooseBusinessOption(page, "Cerca cliente", "Cliente Playwright");
   await expect(page.locator(".selected-customer-summary")).toContainText(
     "Cliente Playwright",
   );
+  await expect(
+    page.getByRole("button", { name: "Aggiungi dispositivo", exact: true }),
+  ).toHaveCount(1);
   await page.locator(".quick-service-device-card.is-add").click();
   const devicePicker = page.getByRole("dialog", {
     name: "Dispositivi associati",
@@ -479,6 +495,28 @@ test("manages one quick service for held service orders and retail checkout", as
   const newDeviceDialog = page.getByRole("dialog", {
     name: "Nuovo dispositivo",
   });
+  const brandCombobox = newDeviceDialog.getByRole("combobox", {
+    name: "Marca",
+    exact: true,
+  });
+  await brandCombobox.fill("Apple");
+  await expect(
+    newDeviceDialog.getByRole("button", {
+      name: "Marca personalizzata",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await brandCombobox.fill(`Marca prova ${Date.now()}`);
+  const customBrandButton = newDeviceDialog.getByRole("button", {
+    name: "Marca personalizzata",
+    exact: true,
+  });
+  await expect(customBrandButton).toBeVisible();
+  expect(
+    await customBrandButton.evaluate(
+      (element) => element.scrollWidth <= element.clientWidth,
+    ),
+  ).toBe(true);
   await chooseBusinessOption(page, "Marca", "Apple", newDeviceDialog);
   await chooseBusinessOption(page, "Modello", "iPhone 14", newDeviceDialog);
   await newDeviceDialog
@@ -496,20 +534,83 @@ test("manages one quick service for held service orders and retail checkout", as
     name: "Dispositivi associati",
   });
   await updatedDevicePicker
-    .locator(".quick-service-device-option")
+    .getByRole("textbox", {
+      name: "Cerca dispositivo (marca, modello o IMEI)",
+      exact: true,
+    })
+    .fill("iPhone 13");
+  await updatedDevicePicker
+    .locator(".quick-service-picker-option")
     .filter({ hasText: "Apple iPhone 13" })
     .locator('input[type="checkbox"]')
     .check();
+  await expect(
+    updatedDevicePicker
+      .locator(".quick-service-picker-option")
+      .filter({ hasText: "Apple iPhone 13" }),
+  ).toHaveClass(/is-selected/);
   await updatedDevicePicker
+    .getByRole("button", { name: "Annulla", exact: true })
+    .click();
+  await expect(page.locator(".quick-service-device-card")).toHaveCount(2);
+  await page.locator(".quick-service-device-card.is-add").click();
+  const confirmedDevicePicker = page.getByRole("dialog", {
+    name: "Dispositivi associati",
+  });
+  await confirmedDevicePicker
+    .getByRole("textbox", {
+      name: "Cerca dispositivo (marca, modello o IMEI)",
+      exact: true,
+    })
+    .fill("iPhone 13");
+  await confirmedDevicePicker
+    .locator(".quick-service-picker-option")
+    .filter({ hasText: "Apple iPhone 13" })
+    .locator('input[type="checkbox"]')
+    .check();
+  await confirmedDevicePicker
     .getByRole("button", { name: "Conferma selezione", exact: true })
     .click();
   await expect(page.locator(".quick-service-device-card")).toHaveCount(3);
-  await page
-    .locator(".quick-service-choice")
+  await page.locator(".quick-service-service-add").click();
+  const servicePicker = page.getByRole("dialog", {
+    name: "Seleziona servizi",
+  });
+  await servicePicker
+    .getByRole("textbox", { name: "Cerca servizio", exact: true })
+    .fill(serviceName);
+  await servicePicker
+    .locator(".quick-service-picker-service")
     .filter({ hasText: serviceName })
     .locator('input[type="checkbox"]')
     .check();
+  await servicePicker
+    .getByRole("button", { name: "Annulla", exact: true })
+    .click();
+  await expect(page.locator(".selected-project-summary")).toHaveCount(0);
+  await page.locator(".quick-service-service-add").click();
+  const confirmedServicePicker = page.getByRole("dialog", {
+    name: "Seleziona servizi",
+  });
+  await confirmedServicePicker
+    .getByRole("textbox", { name: "Cerca servizio", exact: true })
+    .fill(serviceName);
+  await confirmedServicePicker
+    .locator(".quick-service-picker-service")
+    .filter({ hasText: serviceName })
+    .locator('input[type="checkbox"]')
+    .check();
+  await confirmedServicePicker
+    .getByRole("button", { name: "Conferma selezione", exact: true })
+    .click();
+  await expect(page.locator(".selected-project-summary")).toContainText(
+    serviceName,
+  );
+  await expect(
+    page.getByLabel(`${serviceName} Preventivo attuale`, { exact: true }),
+  ).toHaveValue("29.90");
   const expectedDate = page.getByLabel("Data", { exact: true });
+  await expect(expectedDate).toHaveCSS("cursor", "pointer");
   await page.evaluate(() => {
     const input = document.querySelector<HTMLInputElement>(
       '.quick-service-schedule input[type="date"]',

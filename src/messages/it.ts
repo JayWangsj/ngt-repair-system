@@ -302,7 +302,18 @@ export const it = {
     expectedTime: "Ora",
     selectDevices: "Dispositivi associati",
     addDevice: "Aggiungi dispositivo",
+    devicePickerHelp:
+      "Seleziona i dispositivi del cliente o aggiungine uno nuovo. Selezione multipla disponibile.",
+    searchDevices: "Cerca dispositivo (marca, modello o IMEI)",
+    selectedDevices: "{count} dispositivi selezionati",
     confirmDevices: "Conferma selezione",
+    addService: "Aggiungi servizio",
+    selectServices: "Seleziona servizi",
+    servicePickerHelp:
+      "Seleziona i servizi rapidi richiesti. Selezione multipla disponibile.",
+    searchServices: "Cerca servizio",
+    selectedServices: "{count} servizi selezionati",
+    confirmServices: "Conferma selezione",
     selectAtLeastOneDevice: "Seleziona almeno un dispositivo.",
     createOrder: "Crea scheda di servizio rapido",
     income: "Servizi rapidi",

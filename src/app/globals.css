@@ -44,6 +44,10 @@ input[type="number"]::-webkit-outer-spin-button {
 input[type="number"] {
   appearance: textfield;
 }
+input[type="date"]:not(:disabled),
+input[type="month"]:not(:disabled) {
+  cursor: pointer;
+}
 button,
 a,
 input,
@@ -2867,7 +2871,6 @@ details[open] > summary {
   background: #fbd72e;
 }
 .quick-service-order-form,
-.quick-service-choice-list,
 .catalog-manager,
 .catalog-manager-list,
 .model-manager,
@@ -2876,14 +2879,12 @@ details[open] > summary {
   display: grid;
   gap: 12px;
 }
-.quick-service-choice-list,
 .product-compatibility-editor {
   min-width: 0;
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 12px;
 }
-.quick-service-choice-list legend,
 .product-compatibility-editor legend {
   padding: 0 6px;
   font-weight: 700;
@@ -2897,15 +2898,6 @@ details[open] > summary {
 .quick-service-section h2 {
   margin: 0;
   font-size: 15px;
-}
-.quick-service-section-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.quick-service-section-heading .button {
-  margin: 0;
 }
 .quick-service-device-cards {
   display: grid;
@@ -2952,25 +2944,110 @@ details[open] > summary {
   color: var(--muted);
   cursor: pointer;
 }
-.quick-service-device-picker {
+.quick-service-picker {
   display: grid;
-  gap: 10px;
+  gap: 14px;
 }
-.quick-service-device-option {
+.form-dialog:has(.quick-service-picker) {
+  width: min(900px, calc(100vw - 32px));
+}
+.quick-service-picker-toolbar {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+.quick-service-picker-search {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+}
+.quick-service-picker-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+.quick-service-picker-search input:focus {
+  outline: none;
+}
+.quick-service-picker-list {
+  display: grid;
+  gap: 9px;
+  max-height: min(48vh, 440px);
+  overflow-y: auto;
+}
+.quick-service-picker-option {
+  display: grid;
+  grid-template-columns: auto 46px minmax(0, 1fr) minmax(150px, auto);
   align-items: center;
   gap: 12px;
   margin: 0;
-  padding: 12px;
+  padding: 10px 14px;
   border: 1px solid var(--line);
   border-radius: 10px;
+  background: var(--surface);
   cursor: pointer;
 }
-.quick-service-device-option input {
+.quick-service-picker-option.is-selected {
+  border-color: #e8bb15;
+  background: #fffaf0;
+  box-shadow: 0 0 0 1px rgb(232 187 21 / 12%);
+}
+.quick-service-picker-option input {
   width: 16px;
   min-width: 16px;
   min-height: 16px;
+  accent-color: #e4b900;
+}
+.quick-service-picker-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: #f4f5f4;
+  color: #59635f;
+}
+.quick-service-picker-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.quick-service-picker-copy strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quick-service-picker-copy small,
+.quick-service-picker-meta {
+  color: var(--muted);
+}
+.quick-service-picker-meta,
+.quick-service-picker-price {
+  padding-left: 20px;
+  border-left: 1px solid var(--line);
+}
+.quick-service-picker-price {
+  text-align: right;
+}
+.quick-service-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.quick-service-picker-footer .dialog-actions {
+  padding: 0;
+  border: 0;
 }
 .quick-service-schedule {
   border-bottom: 0;
@@ -2978,13 +3055,33 @@ details[open] > summary {
 .quick-service-schedule .form-grid {
   width: min(100%, 620px);
 }
-.quick-service-choice {
+.quick-service-service-cards {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 130px;
-  gap: 12px;
-  align-items: center;
+  gap: 10px;
 }
-.quick-service-choice small,
+.quick-service-service-add {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.quick-service-remove {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--soft);
+  color: var(--muted);
+}
 .catalog-manager-row small {
   display: block;
   margin-top: 3px;
@@ -4971,6 +5068,27 @@ details.secondary-actions {
   .form-dialog {
     padding: 16px;
   }
+  .quick-service-picker-toolbar {
+    grid-template-columns: 1fr;
+  }
+  .quick-service-picker-option {
+    grid-template-columns: auto 40px minmax(0, 1fr);
+  }
+  .quick-service-picker-icon {
+    width: 40px;
+    height: 40px;
+  }
+  .quick-service-picker-meta,
+  .quick-service-picker-price {
+    grid-column: 3;
+    padding-left: 0;
+    border-left: 0;
+    text-align: left;
+  }
+  .quick-service-picker-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
   .price-tree-level {
     margin-left: 6px;
     padding-left: 8px;
@@ -5128,6 +5246,9 @@ details.secondary-actions {
     transform 180ms var(--ease-ui),
     border-color 180ms var(--ease-ui),
     background 180ms var(--ease-ui);
+}
+.editable-field .business-select-create {
+  max-width: none;
 }
 .business-select-create span {
   overflow: hidden;

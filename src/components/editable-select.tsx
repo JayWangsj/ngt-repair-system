@@ -72,6 +72,7 @@ export function EditableSelect({
         searchPlaceholder={it.manualEntry}
         emptyText={it.noMatches}
         customLabel={createLabel ?? it.newValue}
+        creationControls="no-match"
         onCustom={(next) => {
           if (!required || next) {
             const trimmed = next.slice(0, maxLength);

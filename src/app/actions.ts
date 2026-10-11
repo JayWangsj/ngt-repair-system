@@ -92,10 +92,16 @@ function statusMutationSnapshot(
   const closed = ["REFUNDED", "CANCELLED"].includes(order.status);
   const due = closed ? 0 : settlement(order.items, order).due;
   const remaining = balance(order.items, order.payments, order);
+  const paid =
+    order.status === "CANCELLED"
+      ? order.payments.reduce((sum, payment) => sum + cents(payment.amount), 0)
+      : order.status === "REFUNDED"
+        ? 0
+        : due - remaining;
   return {
     status: order.status,
     due,
-    paid: closed ? 0 : due - remaining,
+    paid,
     balance: remaining,
     pickedUpAt: order.pickedUpAt?.toISOString() ?? null,
   };

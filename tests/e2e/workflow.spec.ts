@@ -2655,6 +2655,15 @@ test("diagnostic cancellation can collect the remaining diagnostic fee", async (
     page.locator(".detail-status .status-dropdown-trigger"),
   ).toContainText("Annullato");
   await expect(page.locator(".payments-card")).toContainText("Contanti");
+  const cancelledOrderPath = new URL(page.url()).pathname;
+  await page.goto("/orders");
+  const cancelledRow = page.locator(
+    `tbody tr:has(a[href="${cancelledOrderPath}"])`,
+  );
+  await expect(cancelledRow.locator(".order-payment-values")).toContainText(
+    "30,00 €",
+  );
+  await cancelledRow.locator(".order-code-link").click();
   await page.getByText("Altre azioni", { exact: true }).click();
   await page
     .getByRole("button", {

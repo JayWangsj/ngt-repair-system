@@ -9,7 +9,13 @@ import type {
 } from "@prisma/client";
 import { Plus, Wrench } from "lucide-react";
 import { getMessages } from "@/lib/i18n-server";
-import { balance, isOverdue, settlement, type OrderStatus } from "@/lib/domain";
+import {
+  balance,
+  cents,
+  isOverdue,
+  settlement,
+  type OrderStatus,
+} from "@/lib/domain";
 import { Button } from "./ui/button";
 import { OrderListBody } from "./order-list-controls";
 import { getBusinessDay } from "@/lib/business-date";
@@ -114,6 +120,15 @@ export async function OrderTable({
               ? 0
               : settlement(order.items, order).due;
             const remaining = balance(order.items, order.payments, order);
+            const paid =
+              order.status === "CANCELLED"
+                ? order.payments.reduce(
+                    (sum, payment) => sum + cents(payment.amount),
+                    0,
+                  )
+                : order.status === "REFUNDED"
+                  ? 0
+                  : due - remaining;
             return {
               id: order.id,
               code: order.code,
@@ -128,9 +143,7 @@ export async function OrderTable({
               dueDate: order.dueDate ?? "",
               overdue: isOverdue(order, today),
               due,
-              paid: ["REFUNDED", "CANCELLED"].includes(order.status)
-                ? 0
-                : due - remaining,
+              paid,
               balance: remaining,
               afterSalesOpen: order.afterSalesOpen,
               type: order.type,

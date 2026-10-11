@@ -1110,7 +1110,29 @@ test("manages one quick service for held service orders and retail checkout", as
   ).toHaveCount(0);
   await page.keyboard.press("Escape");
   await page.goto(serviceDetailUrl);
-  await page.getByText("Altre azioni", { exact: true }).click();
+  const secondaryActions = page.locator(".secondary-actions");
+  const moreActions = secondaryActions.getByText("Altre azioni", {
+    exact: true,
+  });
+  await expect(moreActions.locator("svg")).toHaveClass(
+    /lucide-ellipsis-vertical/,
+  );
+  await page.evaluate(() => {
+    window.print = () => {
+      document.body.dataset.printed = "true";
+    };
+  });
+  await moreActions.click();
+  const actionsMenu = secondaryActions.locator(".secondary-actions-menu");
+  const [triggerBox, menuBox] = await Promise.all([
+    moreActions.boundingBox(),
+    actionsMenu.boundingBox(),
+  ]);
+  expect(Math.abs(triggerBox!.width - menuBox!.width)).toBeLessThanOrEqual(1);
+  await actionsMenu.getByRole("button", { name: "Stampa" }).click();
+  await expect(page.locator("body")).toHaveAttribute("data-printed", "true");
+  await expect(secondaryActions).not.toHaveAttribute("open", "");
+  await moreActions.click();
   await page
     .getByRole("button", {
       name: "Elimina definitivamente la scheda",

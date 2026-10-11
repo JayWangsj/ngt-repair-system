@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { MoreHorizontal, Trash2 } from "lucide-react";
+import { MoreVertical, Printer, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { deleteWorkOrderAction } from "@/app/actions";
 import { useMessages } from "./language";
@@ -27,16 +27,27 @@ export function ServiceOrderActions({
     <>
       <details className="secondary-actions">
         <summary aria-label={it.moreActions}>
-          <MoreHorizontal size={18} />
+          <MoreVertical size={18} />
           {it.moreActions}
         </summary>
-        <button
-          type="button"
-          className="danger-text"
-          onClick={() => setOpen(true)}
-        >
-          <Trash2 size={16} /> {it.deleteServiceOrder}
-        </button>
+        <div className="secondary-actions-menu">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.currentTarget.closest("details")?.removeAttribute("open");
+              window.print();
+            }}
+          >
+            <Printer size={16} /> {it.print}
+          </button>
+          <button
+            type="button"
+            className="danger-text"
+            onClick={() => setOpen(true)}
+          >
+            <Trash2 size={16} /> {it.deleteServiceOrder}
+          </button>
+        </div>
       </details>
       {open && (
         <FormDialog

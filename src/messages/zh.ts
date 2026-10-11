@@ -686,6 +686,7 @@ export const zh: typeof it = {
   batchManage: "批量管理",
   finishBatch: "完成管理",
   moreActions: "更多操作",
+  print: "打印",
   addProject: "维修项目",
   editRule: "编辑",
   newRule: "新增报价",

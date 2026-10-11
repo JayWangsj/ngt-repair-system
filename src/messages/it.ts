@@ -763,6 +763,7 @@ export const it = {
   batchManage: "Gestisci selezione",
   finishBatch: "Fine selezione",
   moreActions: "Altre azioni",
+  print: "Stampa",
   addProject: "Intervento",
   editRule: "Modifica",
   newRule: "Nuova regola",

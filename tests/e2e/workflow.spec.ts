@@ -1231,6 +1231,50 @@ test("workspace and print views use the shared NGT brand", async ({ page }) => {
   await expect(page.locator(".sidebar")).toBeHidden();
 });
 
+test("service order print renders mirrored copies from live order data", async ({
+  page,
+}) => {
+  await fillOrder(page);
+  const extraProject = `Pulizia connettore ${Date.now()}`;
+  await createRepairProject(page, extraProject, "25");
+  await save(page);
+
+  const code = (await page.locator(".page-header h1").innerText()).trim();
+  const printView = page.getByTestId("service-order-print");
+  const copies = printView.locator(".service-order-print-copy");
+  await expect(copies).toHaveCount(2);
+  await expect(copies.nth(0)).toContainText("COPIA CLIENTE");
+  await expect(copies.nth(1)).toContainText("COPIA NEGOZIO");
+  await expect(copies.nth(0)).toContainText(code);
+  await expect(copies.nth(1)).toContainText(code);
+  await expect(copies.nth(0).locator(".service-order-print-line")).toHaveCount(
+    2,
+  );
+  await expect(copies.nth(0)).toContainText("sostituzione display");
+  await expect(copies.nth(0)).toContainText(extraProject);
+  await expect(copies.nth(0).locator(".service-order-print-notes")).toHaveCount(
+    0,
+  );
+  await expect(copies.nth(1).locator(".service-order-print-notes")).toHaveCount(
+    1,
+  );
+
+  await page.emulateMedia({ media: "print" });
+  await expect(printView).toBeVisible();
+  await expect(page.locator(".detail-grid")).toBeHidden();
+  await expect(page.locator(".print-brand-header")).toBeHidden();
+  const [leftBox, rightBox] = await Promise.all([
+    copies.nth(0).boundingBox(),
+    copies.nth(1).boundingBox(),
+  ]);
+  expect(Math.abs(leftBox!.width - rightBox!.width)).toBeLessThanOrEqual(1);
+  expect(rightBox!.x).toBeGreaterThan(leftBox!.x + leftBox!.width);
+  const printablePageHeight = (196 / 25.4) * 96;
+  expect(Math.max(leftBox!.height, rightBox!.height)).toBeLessThanOrEqual(
+    printablePageHeight + 1,
+  );
+});
+
 test("dashboard animates on entry and data changes while respecting reduced motion", async ({
   page,
 }) => {

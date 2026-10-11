@@ -38,6 +38,7 @@ import { CompleteInspectionButton } from "@/components/inspection-quote";
 import { getBusinessDay } from "@/lib/business-date";
 import { WorkOrderRepairSummary } from "@/components/work-order-repair-summary";
 import { ServiceOrderActions } from "@/components/service-order-actions";
+import { ServiceOrderPrint } from "@/components/service-order-print";
 
 type TimelineEvent = {
   id: string;
@@ -178,6 +179,90 @@ export default async function Detail({
       warrantyProgress(item.warrantyStart, item.warrantyDays, today),
     ]),
   );
+  const printDevices =
+    order.type === "QUICK_SERVICE" && order.relatedDevices.length
+      ? order.relatedDevices.map(({ device }) => ({
+          name: `${device.brand} ${device.model}`,
+          imei: device.imei,
+        }))
+      : [
+          {
+            name: `${order.device.brand} ${order.device.model}`,
+            imei: order.device.imei,
+          },
+        ];
+  const printInterventions = [
+    ...order.items.map((item) => ({
+      label: item.project,
+      amount: money(cents(item.final)),
+    })),
+    ...(totals.inspectionTotal > 0
+      ? [
+          {
+            label: it.inspectionFeeLabel,
+            amount: money(totals.inspectionTotal),
+          },
+        ]
+      : []),
+    ...order.products.map((product) => ({
+      label: `${product.productName} × ${product.quantity}`,
+      amount: money(cents(product.unitPrice) * product.quantity),
+    })),
+    ...(totals.afterSalesTotal > 0
+      ? [
+          {
+            label: it.afterSales.feeEvent,
+            amount: money(totals.afterSalesTotal),
+          },
+        ]
+      : []),
+  ];
+  const printView = (
+    <ServiceOrderPrint
+      messages={it}
+      code={orderCode(order.code)}
+      acceptedAt={dateTime(order.createdAt)}
+      expectedAt={
+        order.type === "QUICK_SERVICE"
+          ? order.expectedAt?.replace("T", " ") || "—"
+          : dateOnly(order.afterSalesDueDate ?? order.dueDate)
+      }
+      customerName={order.customerName || order.device.customer.name}
+      customerPhone={order.device.customer.phone}
+      devices={printDevices}
+      appearance={order.appearance || order.device.appearance}
+      accessories={order.accessories || order.device.accessories}
+      problem={[
+        faultLabel(order.fault, locale),
+        order.faultNote,
+        order.inspectionResult,
+        order.notes,
+      ].filter(Boolean)}
+      interventions={printInterventions}
+      discount={totals.discount > 0 ? money(totals.discount) : undefined}
+      vat={order.includeVat ? money(totals.vat) : undefined}
+      total={money(currentDue)}
+      paid={money(received)}
+      remaining={money(remaining)}
+      paymentStatus={
+        ["REFUNDED", "CANCELLED"].includes(order.status)
+          ? it.status[order.status]
+          : remaining === 0
+            ? it.printOrder.settled
+            : it.printOrder.outstanding
+      }
+      paymentMethods={[
+        ...new Set(
+          order.payments
+            .filter((payment) => payment.kind !== "REFUND")
+            .map((payment) => it.methods[payment.method]),
+        ),
+      ]}
+      warranties={order.items
+        .filter((item) => item.warrantyDays > 0)
+        .map((item) => ({ project: item.project, days: item.warrantyDays }))}
+    />
+  );
 
   if (order.type === "QUICK_SERVICE")
     return (
@@ -292,6 +377,7 @@ export default async function Detail({
             </section>
           </div>
         </div>
+        {printView}
       </>
     );
 
@@ -1026,6 +1112,7 @@ export default async function Detail({
           )}
         </div>
       </div>
+      {printView}
     </>
   );
 }

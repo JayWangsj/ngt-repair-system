@@ -196,6 +196,9 @@ small {
 .print-brand-header {
   display: none;
 }
+.service-order-print {
+  display: none;
+}
 .nav-label {
   font-size: 10px;
   letter-spacing: 1.6px;
@@ -2899,6 +2902,238 @@ details[open] > summary {
     width: 210px;
     height: auto;
   }
+  .main-content:has(.service-order-print) {
+    max-width: none;
+  }
+  .main-content:has(> .service-order-print) > :not(.service-order-print) {
+    display: none !important;
+  }
+  .service-order-print {
+    display: block;
+    page: service-order;
+    color: #181818;
+    font-size: 8.5pt;
+    line-height: 1.25;
+    print-color-adjust: exact;
+  }
+  .service-order-print-sheet {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12mm;
+    min-height: 190mm;
+  }
+  .service-order-print-cut {
+    position: absolute;
+    inset: 0 auto 0 50%;
+    border-left: 0.3mm dashed #8b8b8b;
+    transform: translateX(-50%);
+  }
+  .service-order-print-cut span {
+    position: absolute;
+    top: 0;
+    left: 0;
+    padding: 0 1mm;
+    background: #fff;
+    font-size: 11pt;
+    transform: translateX(-50%);
+  }
+  .service-order-print-copy {
+    display: flex;
+    min-width: 0;
+    min-height: 190mm;
+    flex-direction: column;
+    break-inside: auto;
+  }
+  .service-order-print-header {
+    display: flex;
+    min-height: 13mm;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6mm;
+    border-bottom: 0.6mm solid #e0b900;
+    padding-bottom: 2mm;
+  }
+  .service-order-print-header > strong {
+    flex: 0 0 auto;
+    font-size: 9pt;
+    letter-spacing: 0.05em;
+  }
+  .service-order-print-logo {
+    width: 43mm;
+    height: auto;
+  }
+  .service-order-print-title {
+    display: block;
+    margin: 3mm 0 1.5mm;
+    font-size: 17pt;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  .service-order-print-meta {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: 5mm;
+  }
+  .service-order-print-meta > strong {
+    font-size: 8.5pt;
+  }
+  .service-order-print-meta > strong span {
+    margin-left: 1.5mm;
+    font-size: 11pt;
+  }
+  .service-order-print-meta dl {
+    min-width: 53mm;
+    margin: 0;
+  }
+  .service-order-print-meta dl > div {
+    display: grid;
+    grid-template-columns: minmax(25mm, 1fr) auto;
+    gap: 2mm;
+  }
+  .service-order-print-meta dt {
+    font-weight: 700;
+  }
+  .service-order-print-meta dd {
+    margin: 0;
+    text-align: right;
+  }
+  .service-order-print-section {
+    margin-top: 2.5mm;
+    border: 0.25mm solid #6f6f6f;
+    break-inside: avoid;
+  }
+  .service-order-print-section h2 {
+    margin: 0;
+    border-bottom: 0.25mm solid #858585;
+    padding: 1mm 2.5mm;
+    background: #ececec;
+    color: #181818;
+    font-size: 8pt;
+    line-height: 1.2;
+    letter-spacing: 0.04em;
+  }
+  .service-order-print-field {
+    display: grid;
+    grid-template-columns: 37mm minmax(0, 1fr);
+    min-height: 5mm;
+    border-top: 0.2mm solid #b6b6b6;
+  }
+  .service-order-print-section h2 + .service-order-print-field,
+  .service-order-print-device:first-of-type
+    > .service-order-print-field:first-child {
+    border-top: 0;
+  }
+  .service-order-print-field > strong,
+  .service-order-print-field > span {
+    padding: 1mm 2.5mm;
+    overflow-wrap: anywhere;
+  }
+  .service-order-print-field > strong {
+    border-right: 0.2mm solid #b6b6b6;
+    font-weight: 500;
+  }
+  .service-order-print-problem p {
+    min-height: 5mm;
+    margin: 0;
+    padding: 1.2mm 2.5mm;
+    color: #181818;
+    overflow-wrap: anywhere;
+  }
+  .service-order-print-problem p + p {
+    border-top: 0.2mm solid #d0d0d0;
+  }
+  .service-order-print-interventions {
+    border-bottom: 0;
+  }
+  .service-order-print-interventions table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+  .service-order-print-interventions th,
+  .service-order-print-interventions td {
+    border-right: 0.2mm solid #b6b6b6;
+    border-bottom: 0.2mm solid #8d8d8d;
+    padding: 1.2mm 2.5mm;
+    text-align: left;
+    vertical-align: top;
+    overflow-wrap: anywhere;
+  }
+  .service-order-print-interventions th:last-child,
+  .service-order-print-interventions td:last-child {
+    width: 28mm;
+    border-right: 0;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .service-order-print-interventions thead th {
+    background: #f7f7f7;
+    font-size: 7.5pt;
+  }
+  .service-order-print-interventions tfoot th {
+    text-align: right;
+  }
+  .service-order-print-balance th,
+  .service-order-print-balance td {
+    background: #ededed;
+    font-weight: 700;
+  }
+  .service-order-print-payments .service-order-print-field {
+    grid-template-columns: 40mm minmax(0, 1fr);
+  }
+  .service-order-print-notes > div {
+    min-height: 7mm;
+  }
+  .service-order-print-signatures {
+    margin-top: auto;
+  }
+  .service-order-print-warranties {
+    display: grid;
+    gap: 0.6mm;
+    min-height: 6mm;
+    padding: 1.2mm 2.5mm;
+    font-size: 7.5pt;
+  }
+  .service-order-print-signature-lines {
+    display: grid;
+    grid-template-columns: 1fr 1fr 0.7fr;
+    gap: 6mm;
+    padding: 7mm 2.5mm 1.2mm;
+  }
+  .service-order-print-signature-lines span {
+    border-top: 0.25mm solid #222;
+    padding-top: 1mm;
+    font-size: 7pt;
+  }
+  .service-order-print.is-dense {
+    font-size: 8pt;
+  }
+  .service-order-print.is-dense .service-order-print-section {
+    margin-top: 2mm;
+  }
+  .service-order-print.is-compact {
+    font-size: 7.4pt;
+  }
+  .service-order-print.is-compact .service-order-print-title {
+    margin-top: 2mm;
+    font-size: 14pt;
+  }
+  .service-order-print.is-compact .service-order-print-section {
+    margin-top: 1.5mm;
+  }
+  .service-order-print.is-compact .service-order-print-field > strong,
+  .service-order-print.is-compact .service-order-print-field > span,
+  .service-order-print.is-compact .service-order-print-interventions th,
+  .service-order-print.is-compact .service-order-print-interventions td {
+    padding-block: 0.8mm;
+  }
+}
+
+@page service-order {
+  size: A4 landscape;
+  margin: 7mm;
 }
 
 .service-mode-switch {

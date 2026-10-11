@@ -221,11 +221,7 @@ export default async function Dashboard({
 
   return (
     <DashboardMotion fingerprint={fingerprint} locale={locale}>
-      <PageHeader
-        title={it.today}
-        description={it.dashboardDescription}
-        action
-      />
+      <PageHeader title={it.today} description={it.dashboardDescription} />
       <form className="date-strip dashboard-date-filter">
         <span className="live-dot" />
         <span>

@@ -376,6 +376,12 @@ test("single operator opens every business page without login", async ({
   ).toHaveCount(0);
   await page.goto("/");
   await expect(
+    page.getByRole("link", {
+      name: "Nuova scheda di servizio",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await expect(
     page.getByRole("link", { name: "Andamento", exact: true }),
   ).toHaveCount(0);
   await expect(
@@ -451,16 +457,87 @@ test("manages one quick service for held service orders and retail checkout", as
   await expect(
     page.getByRole("button", { name: "Servizio rapido", exact: true }),
   ).toHaveClass(/active/);
-  await chooseBusinessOption(page, "Cliente", "Cliente Playwright");
-  await page.getByLabel("Apple iPhone 13", { exact: true }).check();
+  const modeSwitch = await page.locator(".service-mode-switch").boundingBox();
+  expect(modeSwitch!.width).toBeLessThanOrEqual(410);
+  await chooseBusinessOption(page, "Cerca cliente", "Cliente Playwright");
+  await expect(page.locator(".selected-customer-summary")).toContainText(
+    "Cliente Playwright",
+  );
+  await page.locator(".quick-service-device-card.is-add").click();
+  const devicePicker = page.getByRole("dialog", {
+    name: "Dispositivi associati",
+  });
+  await expect(
+    devicePicker.getByRole("button", {
+      name: "Nuovo dispositivo",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await devicePicker
+    .getByRole("button", { name: "Nuovo dispositivo", exact: true })
+    .click();
+  const newDeviceDialog = page.getByRole("dialog", {
+    name: "Nuovo dispositivo",
+  });
+  await chooseBusinessOption(page, "Marca", "Apple", newDeviceDialog);
+  await chooseBusinessOption(page, "Modello", "iPhone 14", newDeviceDialog);
+  await newDeviceDialog
+    .getByLabel("IMEI (facoltativo)", { exact: true })
+    .fill("QUICK-SERVICE-TEST");
+  await newDeviceDialog
+    .getByRole("button", { name: "Salva", exact: true })
+    .click();
+  await expect(newDeviceDialog).toHaveCount(0);
+  await expect(
+    page.locator(".quick-service-device-card").first(),
+  ).toContainText("Apple iPhone 14");
+  await page.locator(".quick-service-device-card.is-add").click();
+  const updatedDevicePicker = page.getByRole("dialog", {
+    name: "Dispositivi associati",
+  });
+  await updatedDevicePicker
+    .locator(".quick-service-device-option")
+    .filter({ hasText: "Apple iPhone 13" })
+    .locator('input[type="checkbox"]')
+    .check();
+  await updatedDevicePicker
+    .getByRole("button", { name: "Conferma selezione", exact: true })
+    .click();
+  await expect(page.locator(".quick-service-device-card")).toHaveCount(3);
   await page
     .locator(".quick-service-choice")
     .filter({ hasText: serviceName })
     .locator('input[type="checkbox"]')
     .check();
-  await page
-    .getByLabel("Completamento previsto", { exact: true })
-    .fill("2099-12-31T18:30");
+  const expectedDate = page.getByLabel("Data", { exact: true });
+  await page.evaluate(() => {
+    const input = document.querySelector<HTMLInputElement>(
+      '.quick-service-schedule input[type="date"]',
+    );
+    if (!input) return;
+    Object.defineProperty(input, "showPicker", {
+      value: () => {
+        (
+          window as Window & { quickDatePickerOpened?: number }
+        ).quickDatePickerOpened =
+          ((window as Window & { quickDatePickerOpened?: number })
+            .quickDatePickerOpened ?? 0) + 1;
+      },
+    });
+  });
+  const expectedDateBox = await expectedDate.boundingBox();
+  await expectedDate.click({
+    position: { x: 8, y: expectedDateBox!.height / 2 },
+  });
+  expect(
+    await page.evaluate(
+      () =>
+        (window as Window & { quickDatePickerOpened?: number })
+          .quickDatePickerOpened,
+    ),
+  ).toBe(1);
+  await expectedDate.fill("2099-12-31");
+  await page.getByLabel("Ora", { exact: true }).fill("18:30");
   await page
     .getByRole("button", {
       name: "Crea scheda di servizio rapido",

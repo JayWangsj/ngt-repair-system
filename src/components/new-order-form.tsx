@@ -1,21 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Search,
-  Trash2,
-  UserRound,
-  X,
-} from "lucide-react";
+import { Check, ChevronDown, Search, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   createOrderAction,
-  customerAction,
   deleteDeviceCatalogOptionAction,
-  lookupCustomerAction,
 } from "@/app/actions";
 import {
   brands,
@@ -44,7 +34,6 @@ import {
 } from "./business-select";
 import {
   Field,
-  FormDialog,
   ItemsEditor,
   quoteItemsValid,
   type CategoryView,
@@ -54,20 +43,13 @@ import { type FaultCatalogItem } from "./fault-catalog-manager";
 import { FaultSelector } from "./fault-selector";
 import { useLanguage, useMessages } from "./language";
 import { Button } from "./ui/button";
+import { ensureComfortableInteractionSpace } from "@/lib/comfortable-scroll";
 import {
-  ensureComfortableInteractionSpace,
-  focusComfortably,
-} from "@/lib/comfortable-scroll";
+  CustomerPicker,
+  type CustomerDetail,
+  type CustomerOption,
+} from "./customer-picker";
 
-type CustomerOption = {
-  id: string;
-  name: string;
-  phone: string;
-  phones: { phone: string }[];
-};
-type CustomerDetail = Awaited<
-  ReturnType<typeof import("@/app/actions").lookupCustomerAction>
->;
 type Item = {
   project: string;
   final: string;
@@ -212,19 +194,7 @@ export function NewOrderWizard({
   const [requestId] = useState(() => crypto.randomUUID());
   const [selectedStep, setSelectedStep] = useState<number | null>(0);
   const [expandedStep, setExpandedStep] = useState<number | null>(0);
-  const [customerId, setCustomerId] = useState("");
   const [customer, setCustomer] = useState<CustomerDetail>(null);
-  const [choosingCustomer, setChoosingCustomer] = useState(false);
-  const [newCustomer, setNewCustomer] = useState(false);
-  const [customerQuery, setCustomerQuery] = useState("");
-  const [newCustomerName, setNewCustomerName] = useState("");
-  const [newCustomerPhone, setNewCustomerPhone] = useState("");
-  const [newCustomerPending, setNewCustomerPending] = useState(false);
-  const newCustomerNameInput = useRef<HTMLInputElement>(null);
-  const newCustomerPhoneInput = useRef<HTMLInputElement>(null);
-  const newCustomerFocus = useRef<"name" | "phone">("phone");
-  const [duplicateCustomer, setDuplicateCustomer] =
-    useState<CustomerDetail>(null);
   const [deviceId, setDeviceId] = useState("");
   const [autoMatchedDevice, setAutoMatchedDevice] = useState(false);
   const [category, setCategory] = useState<Category>("PHONE");
@@ -317,7 +287,7 @@ export function NewOrderWizard({
     if (!result.ok) return setError(result.error);
     setHiddenCatalog((current) => [...current, input]);
   }
-  const validCustomer = !!customerId && !!customer;
+  const validCustomer = !!customer;
   const validDevice = !!category && !!brand.trim() && !!model.trim();
   const validFault =
     inspectionMode || selectedFaults.length > 0 || customFaults.length > 0;
@@ -374,17 +344,13 @@ export function NewOrderWizard({
     setModel("");
     setImei("");
   }
-  function clearCustomerSelection() {
-    setCustomerId("");
-    setCustomer(null);
-    setCustomerQuery("");
-    setChoosingCustomer(true);
-    setNewCustomerName("");
-    setNewCustomerPhone("");
-    setDuplicateCustomer(null);
+  function changeCustomer(next: CustomerDetail) {
+    setCustomer(next);
     clearDevice();
-    setSelectedStep(0);
-    setExpandedStep(0);
+    if (!next) {
+      setSelectedStep(0);
+      setExpandedStep(0);
+    }
   }
   function matchCustomerDevice(
     nextCategory: Category,
@@ -418,60 +384,6 @@ export function NewOrderWizard({
   }
   function leaveInspection() {
     if (inspectionMode) setInspectionMode(false);
-  }
-  async function selectCustomer(id: string) {
-    const selected = customers.find((candidate) => candidate.id === id);
-    if (!selected) {
-      return clearCustomerSelection();
-    }
-    const detail = await lookupCustomerAction(selected.phone);
-    if (!detail) return;
-    setCustomerId(id);
-    setCustomer(detail);
-    setChoosingCustomer(false);
-    setCustomerQuery("");
-    clearDevice();
-  }
-
-  function openCustomerDialog(query: string) {
-    const value = query.trim();
-    const looksLikePhone = /^[+\d\s().-]{6,}$/.test(value);
-    setCustomerQuery(value);
-    setNewCustomerName(looksLikePhone ? "" : value);
-    setNewCustomerPhone(looksLikePhone ? value : "");
-    newCustomerFocus.current = looksLikePhone ? "name" : "phone";
-    setDuplicateCustomer(null);
-    setNewCustomer(true);
-  }
-  async function saveNewCustomer() {
-    if (newCustomerPending) return;
-    setNewCustomerPending(true);
-    setError("");
-    try {
-      const existing = await lookupCustomerAction(newCustomerPhone);
-      if (existing) {
-        setDuplicateCustomer(existing);
-        return;
-      }
-      const result = await customerAction(null, {
-        name: newCustomerName,
-        phone: newCustomerPhone,
-        additionalPhones: [],
-      });
-      if (!result.ok) return setError(result.error);
-      if (!result.id) return setError(it.connectionError);
-      const created = await lookupCustomerAction(newCustomerPhone);
-      if (!created) return setError(it.connectionError);
-      setCustomerId(created.id);
-      setCustomer(created);
-      setChoosingCustomer(false);
-      setCustomerQuery("");
-      setNewCustomer(false);
-      clearDevice();
-      router.refresh();
-    } finally {
-      setNewCustomerPending(false);
-    }
   }
   async function submit() {
     if (pending) return;
@@ -527,17 +439,6 @@ export function NewOrderWizard({
     validQuote ? "completed" : validStep2 ? "in-progress" : "not-started",
     safeCents(deposit) > 0 ? "completed" : "not-started",
   ] as const;
-  useEffect(() => {
-    if (!newCustomer) return;
-    const frame = requestAnimationFrame(() => {
-      const input =
-        newCustomerFocus.current === "name"
-          ? newCustomerNameInput.current
-          : newCustomerPhoneInput.current;
-      focusComfortably(input, { select: true });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [newCustomer]);
   useEffect(() => {
     const values = [validCustomer, validStep2, validQuote];
     const completedIndex = values.findIndex(
@@ -604,65 +505,12 @@ export function NewOrderWizard({
             }
             summaryError={!validCustomer && expandedStep !== 0}
           >
-            {!customer || choosingCustomer ? (
-              <Field label={`${it.searchCustomer} *`}>
-                <SearchableCombobox
-                  value={customerId || customerQuery}
-                  onChange={(id) => void selectCustomer(id)}
-                  onQueryChange={setCustomerQuery}
-                  ariaLabel={it.searchCustomer}
-                  placeholder={it.customerSearchPlaceholder}
-                  searchPlaceholder={it.customerSearchPlaceholder}
-                  emptyText={it.noCustomerMatches}
-                  autoFocusQuery={choosingCustomer ? customer?.name : undefined}
-                  customLabel={it.addCustomer}
-                  onCustom={openCustomerDialog}
-                  creationControls="no-match"
-                  clearable
-                  groups={[
-                    {
-                      options: customers.map((entry) => ({
-                        value: entry.id,
-                        label: entry.name,
-                        secondary: entry.phone,
-                        keywords: entry.phones
-                          .map((phone) => phone.phone)
-                          .join(" "),
-                      })),
-                    },
-                  ]}
-                />
-              </Field>
-            ) : (
-              <div
-                className="selection-summary selected-customer-summary is-actionable"
-                onClick={(event) => {
-                  if ((event.target as HTMLElement).closest("button")) return;
-                  clearCustomerSelection();
-                }}
-              >
-                <span className="selection-summary-icon is-customer">
-                  <UserRound size={19} aria-hidden="true" />
-                </span>
-                <div className="selection-summary-copy">
-                  <strong>{customer.name}</strong>
-                  <small>{customer.phone}</small>
-                </div>
-                <button
-                  type="button"
-                  className="summary-action"
-                  onClick={() => {
-                    clearCustomerSelection();
-                  }}
-                >
-                  <span>{it.reselect}</span>
-                  <ChevronRight size={15} aria-hidden="true" />
-                </button>
-              </div>
-            )}
-            {touched && !validCustomer && (
-              <p className="field-error">{it.selectCustomerError}</p>
-            )}
+            <CustomerPicker
+              customers={customers}
+              customer={customer}
+              onChange={changeCustomer}
+              invalid={touched && !validCustomer}
+            />
           </StepCard>
 
           <StepCard
@@ -1166,80 +1014,6 @@ export function NewOrderWizard({
           </footer>
         </aside>
       </div>
-      {newCustomer && (
-        <FormDialog
-          title={it.addCustomer}
-          onClose={() => setNewCustomer(false)}
-        >
-          <form
-            className="dialog-form"
-            data-form-dialog-body
-            onSubmit={(event) => {
-              event.preventDefault();
-              void saveNewCustomer();
-            }}
-          >
-            <Field label={`${it.name} *`}>
-              <input
-                ref={newCustomerNameInput}
-                required
-                maxLength={120}
-                value={newCustomerName}
-                onChange={(event) => setNewCustomerName(event.target.value)}
-              />
-            </Field>
-            <Field label={`${it.phone} *`}>
-              <input
-                ref={newCustomerPhoneInput}
-                required
-                type="tel"
-                maxLength={30}
-                value={newCustomerPhone}
-                onChange={(event) => {
-                  setNewCustomerPhone(event.target.value);
-                  setDuplicateCustomer(null);
-                }}
-              />
-            </Field>
-            {duplicateCustomer && (
-              <div className="message warning duplicate-customer">
-                <strong>{it.customerFound}</strong>
-                <span>{duplicateCustomer.name}</span>
-                <small>{duplicateCustomer.phone}</small>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setCustomerId(duplicateCustomer.id);
-                    setCustomer(duplicateCustomer);
-                    setChoosingCustomer(false);
-                    setCustomerQuery("");
-                    setNewCustomer(false);
-                  }}
-                >
-                  {it.useExistingCustomer}
-                </Button>
-              </div>
-            )}
-            {error && (
-              <p className="message error">{translateError(error, locale)}</p>
-            )}
-            <div className="dialog-actions">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={newCustomerPending}
-                onClick={() => setNewCustomer(false)}
-              >
-                {it.cancel}
-              </Button>
-              <Button disabled={newCustomerPending}>
-                {newCustomerPending ? it.saving : it.saveCustomer}
-              </Button>
-            </div>
-          </form>
-        </FormDialog>
-      )}
     </>
   );
 }

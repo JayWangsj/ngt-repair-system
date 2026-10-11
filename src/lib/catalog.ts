@@ -28,14 +28,13 @@ export function normalizeModel(value: string, catalog: string[] = []) {
   if (exact) return exact;
   let model = value.trim().replace(/[\s-]+/g, " ");
   if (!model) return "";
-  const iphone = model.match(/^iphone\s*(.*)$/i);
+  const iphone = model.match(/^i\s*phone\s*(.*)$/i);
   if (iphone) {
     const suffix = iphone[1].trim();
-    model = `iPhone ${
-      suffix.includes(" ")
-        ? suffix
-        : suffix.replace(/(pro|max|ultra|plus|mini|duo)/gi, " $1 ")
-    }`;
+    model = `iPhone ${suffix.replace(
+      /(pro|max|ultra|plus|mini|duo)/gi,
+      " $1 ",
+    )}`;
   }
   const knownSeries = ["Galaxy", "Pixel", "Xperia", "Moto", "Redmi Note"];
   const series = knownSeries.find((name) =>

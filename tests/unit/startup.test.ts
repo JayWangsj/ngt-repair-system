@@ -142,6 +142,12 @@ describe("Windows persistent startup", () => {
       "$databaseKey = [System.IO.Path]::GetFullPath($data)",
     );
     expect(common).toContain('$ErrorActionPreference = "SilentlyContinue"');
+    expect(common).toContain("$knownDatabasePaths");
+    expect(common).toContain('$databaseProcess.Name -ne "postgres.exe"');
+    expect(common).toContain(
+      "$databaseProcess.CommandLine.IndexOf($databasePath",
+    );
+    expect(common).toContain("Stop-Process -Id $databaseProcessId -Force");
     expect(installer).toContain('"releases\\v" + $release.version');
     expect(installer).toContain('"--max-old-space-size=1536"');
     expect(packager).toContain("--config.node-linker=hoisted");

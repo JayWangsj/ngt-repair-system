@@ -108,26 +108,54 @@ function Stop-NgtStudioProcesses {
   }
 
   $stoppedDatabases = @{}
+  $knownDatabasePaths = @()
   foreach ($stateDirectory in $stateDirectories) {
     if (-not [bool](Get-NetTCPConnection -LocalPort 55432 -State Listen -ErrorAction SilentlyContinue)) {
       break
     }
     $runtimeFile = Join-Path $stateDirectory "database-runtime-location.txt"
     $dataFile = Join-Path $stateDirectory "database-location.txt"
-    if ((Test-Path -LiteralPath $runtimeFile) -and (Test-Path -LiteralPath $dataFile)) {
-      $runtime = (Get-Content -LiteralPath $runtimeFile -Raw).Trim()
+    if (Test-Path -LiteralPath $dataFile) {
       $data = (Get-Content -LiteralPath $dataFile -Raw).Trim()
       $databaseKey = [System.IO.Path]::GetFullPath($data).TrimEnd("\").ToLowerInvariant()
-      $pgCtl = Join-Path $runtime "bin\pg_ctl.exe"
-      if (-not $stoppedDatabases.ContainsKey($databaseKey) -and (Test-Path -LiteralPath $pgCtl) -and (Test-Path -LiteralPath $data)) {
+      if (-not $stoppedDatabases.ContainsKey($databaseKey) -and (Test-Path -LiteralPath $data)) {
         $stoppedDatabases[$databaseKey] = $true
-        $previousErrorActionPreference = $ErrorActionPreference
-        $ErrorActionPreference = "SilentlyContinue"
-        try {
-          & $pgCtl -D $data -m fast stop 2>$null
-        } finally {
-          $ErrorActionPreference = $previousErrorActionPreference
+        $knownDatabasePaths += @([System.IO.Path]::GetFullPath($data).TrimEnd("\"))
+        if (Test-Path -LiteralPath $runtimeFile) {
+          $runtime = (Get-Content -LiteralPath $runtimeFile -Raw).Trim()
+          $pgCtl = Join-Path $runtime "bin\pg_ctl.exe"
+          if (Test-Path -LiteralPath $pgCtl) {
+            $previousErrorActionPreference = $ErrorActionPreference
+            $ErrorActionPreference = "SilentlyContinue"
+            try {
+              & $pgCtl -D $data -m fast stop 2>$null
+            } finally {
+              $ErrorActionPreference = $previousErrorActionPreference
+            }
+          }
         }
+      }
+    }
+  }
+
+  if ([bool](Get-NetTCPConnection -LocalPort 55432 -State Listen -ErrorAction SilentlyContinue) -and
+      $knownDatabasePaths.Count -gt 0 -and
+      (Get-Command Get-CimInstance -ErrorAction SilentlyContinue)) {
+    $databaseConnections = Get-NetTCPConnection -LocalPort 55432 -State Listen -ErrorAction SilentlyContinue
+    foreach ($databaseProcessId in @($databaseConnections | Select-Object -ExpandProperty OwningProcess -Unique)) {
+      $databaseProcess = Get-CimInstance Win32_Process -Filter ("ProcessId = " + $databaseProcessId) -ErrorAction SilentlyContinue
+      if (-not $databaseProcess -or $databaseProcess.Name -ne "postgres.exe" -or -not $databaseProcess.CommandLine) {
+        continue
+      }
+      $ownsKnownData = $false
+      foreach ($databasePath in $knownDatabasePaths) {
+        if ($databaseProcess.CommandLine.IndexOf($databasePath, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+          $ownsKnownData = $true
+          break
+        }
+      }
+      if ($ownsKnownData) {
+        Stop-Process -Id $databaseProcessId -Force -ErrorAction SilentlyContinue
       }
     }
   }

@@ -17,4 +17,5 @@ if ($existing) {
 }
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description "Starts and monitors the isolated NGT test preview." -Force | Out-Null
 Start-ScheduledTask -TaskName $taskName
+& (Join-Path $PSScriptRoot "install-windows-preview-shortcut.ps1")
 Write-Output "NGT test preview startup task installed and started."

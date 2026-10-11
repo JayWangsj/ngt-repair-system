@@ -52,6 +52,14 @@ describe("Windows persistent startup", () => {
       "utf8",
     );
     const testDatabase = await readFile("scripts/windows-test-db.mjs", "utf8");
+    const shortcutInstaller = await readFile(
+      "scripts/install-windows-preview-shortcut.ps1",
+      "utf8",
+    );
+    const desktopLauncher = await readFile(
+      "scripts/windows-preview-desktop-launcher.cs",
+      "utf8",
+    );
     expect(service).toContain('"test.env"');
     expect(service).toContain('$env:PORT = "3236"');
     expect(service).toContain('"scripts/windows-test-db.mjs" -Port 55433');
@@ -67,6 +75,18 @@ describe("Windows persistent startup", () => {
     expect(installer).toContain("New-ScheduledTaskTrigger -AtLogOn");
     expect(launcher).toContain("shell.Run command, 0, False");
     expect(uninstaller).toContain("Unregister-ScheduledTask");
+    expect(installer).toContain("install-windows-preview-shortcut.ps1");
+    expect(shortcutInstaller).toContain("/target:winexe");
+    expect(shortcutInstaller).toContain("/win32icon:$iconPath");
+    expect(shortcutInstaller).toContain("0x6D4B, 0x8BD5, 0x7CFB, 0x7EDF");
+    expect(shortcutInstaller).not.toContain('"NGT 测试系统.lnk"');
+    expect(shortcutInstaller).toContain("$shortcut.TargetPath = $launcherPath");
+    expect(shortcutInstaller).toContain('$shortcut.Arguments = ""');
+    expect(shortcutInstaller).toContain(
+      '$shortcut.IconLocation = "$launcherPath,0"',
+    );
+    expect(desktopLauncher).toContain('FileName = "http://127.0.0.1:3236/"');
+    expect(desktopLauncher).toContain("UseShellExecute = true");
   });
 
   it("keeps studio data outside versioned releases and packages updates at home", async () => {

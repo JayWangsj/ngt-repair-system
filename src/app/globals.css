@@ -7556,6 +7556,7 @@ summary.record-icon::-webkit-details-marker {
 .inventory-product-cell {
   width: 20%;
   min-width: 210px;
+  overflow: hidden;
 }
 .inventory-category-cell {
   width: 13%;
@@ -7819,17 +7820,50 @@ summary.record-icon::-webkit-details-marker {
 }
 .product-name {
   display: flex;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
   align-items: center;
   gap: 7px;
+  overflow: hidden;
 }
-.product-name strong {
+.product-name-viewport {
+  display: block;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.product-name-viewport strong {
+  display: inline-block;
+  min-width: 0;
+  white-space: nowrap;
+}
+.product-name-viewport[data-overflowing="true"]:hover strong {
+  will-change: transform;
+  animation: product-name-scroll var(--product-name-duration) ease-in-out 300ms
+    infinite alternate;
 }
 .product-name svg {
+  flex: 0 0 auto;
   color: #d69a00;
+}
+@keyframes product-name-scroll {
+  0%,
+  10% {
+    transform: translateX(0);
+  }
+  90%,
+  100% {
+    transform: translateX(calc(-1 * var(--product-name-travel)));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="always"])
+    .product-name-viewport[data-overflowing="true"]:hover
+    strong {
+    animation: none;
+  }
 }
 .inventory-table tbody td:first-child input[type="checkbox"] {
   width: 18px;

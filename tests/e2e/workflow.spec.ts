@@ -1836,6 +1836,10 @@ test("creates and edits a product directly in the inventory row", async ({
   ).toBeLessThan(2);
   const repairPartRow = page.getByRole("row", { name: /Batteria Test/ });
   await expect(repairPartRow).toContainText("Riparazione");
+  await expect(repairPartRow.locator(".product-name-viewport")).toHaveAttribute(
+    "data-overflowing",
+    "false",
+  );
   await expect(repairPartRow.locator("td").nth(5)).toHaveText("—");
   await repairPartRow.click();
   await expect(repairPartRow.locator("td").nth(5).locator("input")).toHaveCount(
@@ -1878,9 +1882,16 @@ test("creates and edits a product directly in the inventory row", async ({
   const row = page.getByRole("row", { name: new RegExp(productName) });
   await expect(row).toContainText("Vendita");
   await expect(row).toContainText("4");
+  const nameViewport = row.locator(".product-name-viewport");
+  await expect(nameViewport).toHaveAttribute("data-overflowing", "true");
+  await expect(nameViewport).toHaveAttribute("title", productName);
+  await expect(row.locator(".inventory-product-cell")).toHaveCSS(
+    "overflow",
+    "hidden",
+  );
   const productAndCategory = await row.evaluate((element) => {
     const name = element
-      .querySelector(".product-name strong")!
+      .querySelector(".product-name-viewport")!
       .getBoundingClientRect();
     const category = element
       .querySelector(".inventory-category-cell")!
@@ -1890,6 +1901,23 @@ test("creates and edits a product directly in the inventory row", async ({
   expect(productAndCategory.nameRight).toBeLessThanOrEqual(
     productAndCategory.categoryLeft,
   );
+  await nameViewport.hover();
+  const scrollingName = nameViewport.locator("strong");
+  await expect(scrollingName).toHaveCSS(
+    "animation-name",
+    "product-name-scroll",
+  );
+  await expect
+    .poll(() =>
+      scrollingName.evaluate((element) => getComputedStyle(element).transform),
+    )
+    .not.toBe("none");
+  await page.mouse.move(0, 0);
+  await expect
+    .poll(() =>
+      scrollingName.evaluate((element) => getComputedStyle(element).transform),
+    )
+    .toBe("none");
   await expect(row.getByText("Cronologia", { exact: true })).toHaveCount(0);
   await expect(row.locator(".inventory-quantity-cell")).toHaveText(["0", "4"]);
   await expect(row.locator(".inventory-quantity-cell input")).toHaveCount(0);

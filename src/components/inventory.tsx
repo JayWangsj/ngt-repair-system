@@ -70,6 +70,46 @@ type ProductCompatibility = {
   project: string;
 };
 
+function ProductName({ name, favorite }: { name: string; favorite: boolean }) {
+  const viewport = useRef<HTMLSpanElement>(null);
+  const text = useRef<HTMLElement>(null);
+
+  useLayoutEffect(() => {
+    const viewportElement = viewport.current;
+    const textElement = text.current;
+    if (!viewportElement || !textElement) return;
+
+    function measure() {
+      if (!viewportElement || !textElement) return;
+      const travel = Math.max(
+        0,
+        Math.ceil(textElement.scrollWidth - viewportElement.clientWidth),
+      );
+      viewportElement.dataset.overflowing = String(travel > 0);
+      textElement.style.setProperty("--product-name-travel", `${travel}px`);
+      textElement.style.setProperty(
+        "--product-name-duration",
+        `${Math.max(4, travel / 28 + 2)}s`,
+      );
+    }
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewportElement);
+    observer.observe(textElement);
+    return () => observer.disconnect();
+  }, [name]);
+
+  return (
+    <span className="product-name">
+      {favorite && <Star size={14} fill="currentColor" />}
+      <span ref={viewport} className="product-name-viewport" title={name}>
+        <strong ref={text}>{name}</strong>
+      </span>
+    </span>
+  );
+}
+
 function ProductCompatibilityDialog({
   product,
   onClose,
@@ -963,12 +1003,10 @@ export function InventoryWorkspace({
                           />
                         </div>
                       ) : (
-                        <span className="product-name">
-                          {product.favorite && (
-                            <Star size={14} fill="currentColor" />
-                          )}
-                          <strong>{product.name}</strong>
-                        </span>
+                        <ProductName
+                          name={product.name}
+                          favorite={product.favorite}
+                        />
                       )}
                     </td>
                     <td className="inventory-category-cell">

@@ -118,8 +118,28 @@ button:disabled:active {
 a,
 button {
   transition:
-    background 0.15s,
-    color 0.15s;
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    color 150ms ease-out,
+    box-shadow 150ms ease-out;
+}
+button,
+a.button,
+[role="button"] {
+  transition-duration: 150ms !important;
+  transition-timing-function: ease-out !important;
+}
+button:not(:disabled):is(:hover, :active),
+a[href]:is(:hover, :active),
+[role="button"]:is(:hover, :active) {
+  transform: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  button,
+  a.button,
+  [role="button"] {
+    transition: none !important;
+  }
 }
 h1,
 h2,
@@ -216,8 +236,11 @@ small {
   cursor: pointer;
 }
 .sidebar-toggle:hover {
-  background: var(--soft);
+  background: #fff8d9;
   color: var(--ink);
+}
+.sidebar-toggle:active {
+  background: #ffe99d;
 }
 .sidebar-resizer {
   position: absolute;
@@ -265,9 +288,13 @@ small {
   background: var(--soft);
   color: var(--teal);
   font-weight: 600;
+  box-shadow: inset 2px 0 #e0ac00;
 }
 .nav-item:hover {
-  background: #f1f5f3;
+  background: #fff8d9;
+}
+.nav-item:active {
+  background: #ffe99d;
 }
 .sidebar-bottom {
   margin-top: auto;
@@ -374,16 +401,18 @@ small {
 .button-primary,
 .button-danger {
   transition:
-    transform var(--motion-fast) var(--ease-ui),
-    background var(--motion-base) var(--ease-ui),
-    border-color var(--motion-base) var(--ease-ui);
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    color 150ms ease-out,
+    box-shadow 150ms ease-out;
 }
 .button-outline,
 .button-ghost {
   transition:
-    transform var(--motion-fast) var(--ease-ui),
-    background var(--motion-base) var(--ease-ui),
-    border-color var(--motion-base) var(--ease-ui);
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    color 150ms ease-out,
+    box-shadow 150ms ease-out;
 }
 
 /* A single semantic palette is shared by badges, dropdown triggers and options. */
@@ -442,22 +471,6 @@ small {
   --status-bg: #f4f6f7;
   --status-bg-hover: #eceff1;
 }
-.button-primary:hover,
-.button-danger:hover {
-  transform: translateY(-1px) scale(1.02);
-}
-.button-primary:active,
-.button-danger:active {
-  transform: translateY(0) scale(0.98);
-}
-.button-outline:hover,
-.button-ghost:hover {
-  transform: translateY(-1px) scale(1.015);
-}
-.button-outline:active,
-.button-ghost:active {
-  transform: translateY(0) scale(0.985);
-}
 .button-primary {
   background: var(--teal);
   color: white;
@@ -466,6 +479,9 @@ small {
 .button-primary:hover {
   background: var(--teal-dark);
 }
+.button-primary:active {
+  background: #d5a80c;
+}
 .button-outline {
   background: white;
   border-color: #dce3e1;
@@ -473,6 +489,10 @@ small {
 }
 .button-outline:hover {
   background: #f3f7f5;
+}
+.button-outline:active,
+.button-ghost:active {
+  background: #ffe99d;
 }
 .button-ghost {
   background: transparent;
@@ -816,14 +836,11 @@ td small {
   padding: 3px;
   text-align: right;
   cursor: pointer;
-  transition:
-    transform 160ms ease,
-    color 160ms ease;
+  transition: color 150ms ease-out;
 }
 .order-payment-trigger:hover,
 .order-payment-trigger:focus-visible {
   color: var(--teal);
-  transform: translateX(-2px);
 }
 .order-payment-trigger small {
   max-width: none;
@@ -851,8 +868,8 @@ td small {
 .customer-back,
 .back-link {
   transition:
-    transform 160ms ease,
-    color 160ms ease;
+    background-color 150ms ease-out,
+    color 150ms ease-out;
 }
 .order-link:hover,
 .order-link:focus-visible,
@@ -864,7 +881,7 @@ td small {
 .customer-back:focus-visible,
 .back-link:hover,
 .back-link:focus-visible {
-  transform: translateX(2px);
+  color: #6e5200;
 }
 .bottom-grid {
   display: grid;
@@ -1399,27 +1416,20 @@ textarea {
   font-size: 10px;
   white-space: nowrap;
   cursor: pointer;
-  transform: translateY(0) scale(1);
   transition:
-    transform 180ms var(--ease-ui),
-    border-color 180ms var(--ease-ui),
-    background 180ms var(--ease-ui),
-    box-shadow 180ms var(--ease-ui);
+    border-color 150ms ease-out,
+    background-color 150ms ease-out,
+    box-shadow 150ms ease-out;
 }
 .status-dropdown-trigger:hover:not(:disabled),
 .status-dropdown-trigger:focus-visible {
   border-color: color-mix(in srgb, var(--status-color) 42%, white);
   background: var(--status-bg-hover);
   box-shadow: 0 3px 9px color-mix(in srgb, var(--status-color) 10%, transparent);
-  transform: translateY(-1px) scale(1.015);
 }
 .status-dropdown.is-open .status-dropdown-trigger {
   border-color: color-mix(in srgb, var(--status-color) 48%, white);
   background: var(--status-bg-hover);
-  transform: translateY(0) scale(1.01);
-}
-.status-dropdown-trigger:active:not(:disabled) {
-  transform: translateY(0) scale(0.98);
 }
 .status-dropdown-trigger:disabled {
   cursor: default;
@@ -1626,10 +1636,7 @@ textarea {
   font-size: 17px;
   font-weight: 650;
   text-align: left;
-  transition: transform var(--motion-base) var(--ease-ui);
-}
-.order-card-toggle:hover:not(:disabled) {
-  transform: scale(1.002);
+  transition: color 150ms ease-out;
 }
 .order-card-toggle h2 {
   margin: 0;
@@ -3278,17 +3285,25 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
   justify-content: center;
   gap: 8px;
   min-height: 44px;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 8px;
   color: var(--muted);
-  background: var(--surface);
+  background: transparent;
   font-weight: 700;
   cursor: pointer;
 }
+.service-mode-switch button:hover {
+  background: #fff8d9;
+  color: var(--ink);
+}
+.service-mode-switch button:active {
+  background: #ffe99d;
+}
 .service-mode-switch button.active {
   color: var(--ink);
-  border-color: #f0c92b;
-  background: #fbd72e;
+  border-color: transparent;
+  background: #ffed9b;
+  box-shadow: inset 0 -2px #e0ac00;
 }
 .quick-service-order-form,
 .catalog-manager,
@@ -3513,7 +3528,6 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
   background: #fff9e8;
   box-shadow: 0 2px 6px rgb(128 96 0 / 8%);
   color: #6d5510;
-  transform: translateY(-1px);
 }
 .quick-service-remove {
   width: 28px;
@@ -3802,7 +3816,7 @@ details.secondary-actions {
     transform var(--motion-base) var(--ease-ui);
 }
 .new-order-back:hover {
-  transform: translateX(-2px);
+  background: #fff8d9;
 }
 .new-order-layout {
   display: grid;
@@ -4084,9 +4098,8 @@ details.secondary-actions {
   left: 0;
   height: 1px;
   background: currentColor;
-  transform: scaleX(0);
-  transform-origin: left;
-  transition: transform 170ms ease-out;
+  opacity: 0;
+  transition: opacity 150ms ease-out;
 }
 .selection-summary .summary-action span {
   color: inherit;
@@ -4101,7 +4114,7 @@ details.secondary-actions {
 }
 .summary-action:hover span::after,
 .summary-action:focus-visible span::after {
-  transform: scaleX(1);
+  opacity: 1;
 }
 .summary-action:hover svg,
 .summary-action:focus-visible svg {
@@ -4111,7 +4124,7 @@ details.secondary-actions {
   color: #a06f00;
 }
 .selection-summary.is-actionable:hover .summary-action span::after {
-  transform: scaleX(1);
+  opacity: 1;
 }
 .selection-summary.is-actionable:hover .summary-action svg {
   transform: translateX(4px);
@@ -4631,14 +4644,22 @@ details.secondary-actions {
   border: 0;
   border-radius: 9px;
   padding: 8px 13px;
-  background: #f6f3e9;
+  background: transparent;
   color: var(--muted);
   white-space: nowrap;
 }
+.retail-tabs button:hover {
+  background: #fff8d9;
+  color: var(--ink);
+}
+.retail-tabs button:active {
+  background: #ffe99d;
+}
 .retail-tabs button.active {
-  background: var(--soft);
+  background: #ffed9b;
   color: var(--ink);
   font-weight: 650;
+  box-shadow: inset 0 -2px #e0ac00;
 }
 .retail-product-grid {
   display: grid;
@@ -4664,7 +4685,6 @@ details.secondary-actions {
 .retail-product-card:not(:disabled):hover {
   border-color: #e4bd3a;
   box-shadow: 0 10px 28px rgb(91 69 0 / 8%);
-  transform: translateY(-1px);
 }
 .retail-product-card:disabled {
   cursor: not-allowed;
@@ -5062,9 +5082,8 @@ details.secondary-actions {
   height: 1px;
   background: currentColor;
   content: "";
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  opacity: 0;
+  transition: opacity 150ms ease-out;
 }
 .fault-manager-trigger svg {
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -5075,7 +5094,7 @@ details.secondary-actions {
 }
 .fault-manager-trigger:hover > span::after,
 .fault-manager-trigger:focus-visible > span::after {
-  transform: scaleX(1);
+  opacity: 1;
 }
 .fault-manager-trigger:hover svg,
 .fault-manager-trigger:focus-visible svg {
@@ -5432,17 +5451,15 @@ details.secondary-actions {
   align-items: center;
   border-color: rgb(191 128 20 / 45%);
   transition:
-    transform var(--motion-base) var(--ease-ui),
-    border-color var(--motion-base) var(--ease-ui),
-    box-shadow var(--motion-base) var(--ease-ui),
-    background var(--motion-base) var(--ease-ui);
+    border-color 150ms ease-out,
+    box-shadow 150ms ease-out,
+    background-color 150ms ease-out;
 }
 .settings-entry.dashboard-action-link {
   color: var(--ink);
 }
 .settings-entry.dashboard-action-link:hover,
 .settings-entry.dashboard-action-link:focus-visible {
-  transform: translateY(-1px) scale(1.003);
   border-color: #e7c95a;
   box-shadow: 0 7px 18px #8060000c;
   background: #fffefb;
@@ -6148,7 +6165,6 @@ details.secondary-actions {
   text-overflow: ellipsis;
 }
 .business-select-create:hover:not(:disabled) {
-  transform: translateY(-1px) scale(1.01);
   border-color: #c99e10;
   background: #fff9e9;
   box-shadow: 0 4px 10px rgb(116 91 11 / 10%);
@@ -6160,7 +6176,7 @@ details.secondary-actions {
   box-shadow: 0 5px 12px rgb(116 91 11 / 14%);
 }
 .business-select-create:active:not(:disabled) {
-  transform: scale(0.98);
+  background: #ffe99d;
 }
 .business-combobox-chevron {
   width: 36px;
@@ -6758,7 +6774,6 @@ details.secondary-actions {
 }
 .inline-rule-value:hover,
 .inline-rule-value:focus-visible {
-  transform: translateX(2px);
   background: var(--surface-hover, #f5f7f7);
 }
 .price-rule-row .inline-rule-value:hover,
@@ -7206,8 +7221,30 @@ details summary:hover {
   display: inline-flex;
   padding: 9px 14px;
   margin-bottom: 18px;
+  border-color: transparent;
+  background: transparent;
   font-size: 13px;
   font-weight: 600;
+}
+.back-link.button:hover,
+.back-link.button:focus-visible,
+.customer-back.button:hover,
+.customer-back.button:focus-visible,
+.retail-sales-trigger.button:hover,
+.retail-sales-trigger.button:focus-visible {
+  border-color: transparent;
+  background: #fff8d9;
+  color: #574200;
+}
+.back-link.button:active,
+.customer-back.button:active,
+.retail-sales-trigger.button:active {
+  background: #ffe99d;
+}
+.retail-sales-trigger.button {
+  border-color: transparent;
+  background: transparent;
+  color: #574200;
 }
 details summary {
   width: fit-content;
@@ -7339,7 +7376,6 @@ summary.record-icon::-webkit-details-marker {
 .order-link:hover,
 .order-link:focus-visible {
   color: #a66b00;
-  transform: translateX(2px);
 }
 .order-link svg {
   flex-shrink: 0;
@@ -7477,16 +7513,15 @@ summary.record-icon::-webkit-details-marker {
   height: 2px;
   border-radius: 999px;
   background: #f0a400;
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition: transform 240ms ease-out;
+  opacity: 0;
+  transition: opacity 150ms ease-out;
 }
 .inventory-history-arrow {
   flex: 0 0 auto;
   color: #7c8985;
   transition:
-    color 200ms ease-out 240ms,
-    transform 200ms ease-out 240ms;
+    color 150ms ease-out 240ms,
+    transform 150ms ease-out 240ms;
 }
 .inventory-history-preview {
   display: grid;
@@ -7531,7 +7566,7 @@ summary.record-icon::-webkit-details-marker {
 }
 .inventory-history-card:hover .inventory-history-title-underline,
 .inventory-history-card:focus-visible .inventory-history-title-underline {
-  transform: scaleX(1);
+  opacity: 1;
 }
 .inventory-history-card:hover .inventory-history-arrow,
 .inventory-history-card:focus-visible .inventory-history-arrow {
@@ -7870,14 +7905,6 @@ summary.record-icon::-webkit-details-marker {
     animation: none;
   }
 }
-.inventory-table tbody td:first-child input[type="checkbox"] {
-  width: 18px;
-  min-width: 18px;
-  height: 18px;
-  min-height: 18px;
-  aspect-ratio: 1;
-  padding: 0;
-}
 .inventory-category-field {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 36px;
@@ -8079,15 +8106,11 @@ summary.record-icon::-webkit-details-marker {
   height: 1px;
   background: currentColor;
   content: "";
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  opacity: 0;
+  transition: opacity 150ms ease-out;
 }
 .dashboard-action-link .dashboard-link-label::after {
-  opacity: 0;
-  transition:
-    opacity 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: opacity 150ms ease-out;
 }
 .order-list-body .order-link:hover,
 .order-list-body .order-link:focus-visible,
@@ -8115,7 +8138,6 @@ summary.record-icon::-webkit-details-marker {
 .dashboard-action-link:hover .dashboard-link-label::after,
 .dashboard-action-link:focus-visible .dashboard-link-label::after {
   opacity: 1;
-  transform: scaleX(1);
 }
 .order-list-body .order-code-link svg,
 .order-list-body .order-customer-link svg,
@@ -8429,11 +8451,11 @@ summary.record-icon::-webkit-details-marker {
 @media (prefers-reduced-motion: reduce) {
   html:not([data-motion="always"]) .inventory-history-arrow {
     transition:
-      color 180ms ease-out 260ms,
-      transform 180ms ease-out 260ms;
+      color 150ms ease-out 260ms,
+      transform 150ms ease-out 260ms;
   }
   html:not([data-motion="always"]) .inventory-history-title-underline {
-    transition: transform 260ms ease-out;
+    transition: none;
   }
   html:not([data-motion="always"])
     .inventory-history-card:hover

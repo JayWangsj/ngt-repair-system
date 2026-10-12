@@ -324,9 +324,12 @@ export function NewProductDialogButton({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button onClick={() => setOpen(true)}>
+      <Button
+        aria-label={it.inventory.newProduct}
+        onClick={() => setOpen(true)}
+      >
         <Plus size={18} />
-        {it.inventory.newProduct}
+        {it.inventory.newProductAction}
       </Button>
       {open && (
         <FormDialog
@@ -858,6 +861,7 @@ export function InventoryWorkspace({
           <table className="inventory-table">
             <thead>
               <tr>
+                <th className="inventory-status-cell">{it.inventory.status}</th>
                 {batchMode && (
                   <th className="inventory-selection">
                     <input
@@ -914,7 +918,6 @@ export function InventoryWorkspace({
                 <th className="inventory-stepper-cell">
                   {it.inventory.minimumStock}
                 </th>
-                <th className="inventory-status-cell">{it.inventory.status}</th>
               </tr>
             </thead>
             <tbody>
@@ -959,6 +962,13 @@ export function InventoryWorkspace({
                       });
                     }}
                   >
+                    <td className="inventory-status-cell">
+                      <span
+                        className={`stock-badge stock-${productStatus.toLowerCase()}`}
+                      >
+                        {statusLabel(productStatus)}
+                      </span>
+                    </td>
                     {batchMode && (
                       <td className="inventory-selection">
                         <input
@@ -1151,13 +1161,6 @@ export function InventoryWorkspace({
                       ) : (
                         product.minStock
                       )}
-                    </td>
-                    <td className="inventory-status-cell">
-                      <span
-                        className={`stock-badge stock-${productStatus.toLowerCase()}`}
-                      >
-                        {statusLabel(productStatus)}
-                      </span>
                     </td>
                   </tr>
                 );

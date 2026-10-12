@@ -4230,13 +4230,14 @@ export function PriceList({
           <p>{it.priceDescription}</p>
         </div>
         <Button
+          aria-label={it.newRule}
           onClick={() => {
             setSaved(false);
             setCreating({});
           }}
         >
           <Plus size={18} />
-          {it.newRule}
+          {it.newRuleAction}
         </Button>
       </header>
       <div className="filters price-filters price-list-controls">
@@ -4569,13 +4570,14 @@ export function NewCustomerDialog() {
   return (
     <div>
       <Button
+        aria-label={it.addCustomer}
         onClick={() => {
           setSaved(false);
           setOpen(true);
         }}
       >
         <Plus size={18} />
-        {it.addCustomer}
+        {it.addCustomerAction}
       </Button>
       <Message success={saved} />
       {open && (

@@ -748,14 +748,19 @@ test("manages one quick service for held service orders and retail checkout", as
   await expect(
     page.getByRole("button", { name: "Servizio rapido", exact: true }),
   ).toHaveClass(/active/);
+  const repairMode = page.getByRole("button", {
+    name: "Servizio di riparazione",
+    exact: true,
+  });
+  await repairMode.hover();
+  await expect(repairMode).toHaveCSS("background-color", "rgb(255, 248, 217)");
+  await expect(repairMode).toHaveCSS("transform", "none");
   const modeSwitch = await page.locator(".service-mode-switch").boundingBox();
   expect(modeSwitch!.width).toBeLessThanOrEqual(410);
   const quickFormWidth = await page
     .locator(".quick-service-order-form")
     .evaluate((element) => element.getBoundingClientRect().width);
-  await page
-    .getByRole("button", { name: "Servizio di riparazione", exact: true })
-    .click();
+  await repairMode.click();
   const repairFormWidth = await page
     .locator(".order-wizard")
     .evaluate((element) => element.getBoundingClientRect().width);
@@ -1287,8 +1292,22 @@ test("desktop sidebar resizes, collapses and restores its saved width", async ({
   expect(brandBox).not.toBeNull();
   expect(toggleBox).not.toBeNull();
   expect(toggleBox!.x).toBeGreaterThanOrEqual(brandBox!.x + brandBox!.width);
+  const collapse = page.getByRole("button", {
+    name: "Riduci barra laterale",
+  });
+  await expect(collapse).toHaveAttribute("title", "Riduci barra laterale");
+  await collapse.hover();
+  await expect(collapse).toHaveCSS("background-color", "rgb(255, 248, 217)");
+  await expect(collapse).toHaveCSS("transform", "none");
+  const inventoryNav = page.getByRole("link", { name: "Magazzino" });
+  await inventoryNav.hover();
+  await expect(inventoryNav).toHaveCSS(
+    "background-color",
+    "rgb(255, 248, 217)",
+  );
+  await expect(inventoryNav).toHaveCSS("transform", "none");
 
-  await page.getByRole("button", { name: "Riduci barra laterale" }).click();
+  await collapse.click();
   await expect
     .poll(async () => Math.round((await sidebar.boundingBox())?.width || 0))
     .toBe(64);
@@ -1351,11 +1370,7 @@ test("settings opens system update as a separate page", async ({ page }) => {
   );
   await entry.hover();
   await expect(entry).toHaveCSS("border-top-color", "rgb(231, 201, 90)");
-  await expect
-    .poll(() =>
-      entry.evaluate((element) => getComputedStyle(element).transform),
-    )
-    .not.toBe("none");
+  await expect(entry).toHaveCSS("transform", "none");
   await expect
     .poll(() =>
       arrow.evaluate((element) => getComputedStyle(element).transform),
@@ -1363,11 +1378,9 @@ test("settings opens system update as a separate page", async ({ page }) => {
     .not.toBe("none");
   await expect
     .poll(() =>
-      label.evaluate(
-        (element) => getComputedStyle(element, "::after").transform,
-      ),
+      label.evaluate((element) => getComputedStyle(element, "::after").opacity),
     )
-    .toBe("matrix(1, 0, 0, 1, 0, 0)");
+    .toBe("1");
   await entry.click();
   await expect(page).toHaveURL(/\/settings\/system-update$/);
   await expect
@@ -1382,6 +1395,11 @@ test("settings opens system update as a separate page", async ({ page }) => {
   await expect(
     page.getByRole("link", { name: "Torna alle impostazioni" }),
   ).toHaveClass(/back-link/);
+  const back = page.getByRole("link", { name: "Torna alle impostazioni" });
+  const content = page.locator(".settings-detail-page");
+  expect((await back.boundingBox())!.x).toBe((await content.boundingBox())!.x);
+  await back.hover();
+  await expect(back).toHaveCSS("transform", "none");
 });
 
 test("service order print renders mirrored copies from live order data", async ({
@@ -1723,6 +1741,12 @@ test("table columns keep matching alignment and geometry while editing", async (
   await page.goto("/inventory");
   const inventoryRow = page.locator(".inventory-table tbody tr").first();
   await expect(inventoryRow).toBeVisible();
+  await expect(page.locator(".inventory-table thead th").first()).toHaveClass(
+    /inventory-status-cell/,
+  );
+  await expect(inventoryRow.locator("td").first()).toHaveClass(
+    /inventory-status-cell/,
+  );
   await expectMatchingColumn(
     page.locator("th.inventory-stepper-cell").first(),
     inventoryRow.locator("td.inventory-stepper-cell").first(),
@@ -1836,6 +1860,9 @@ test("creates and edits a product directly in the inventory row", async ({
   });
   await expect(searchBox).toBeVisible();
   await expect(manageBatch).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Nuovo prodotto" }),
+  ).toContainText("Prodotto");
   expect(
     Math.abs(
       (await searchBox.boundingBox())!.y - (await manageBatch.boundingBox())!.y,
@@ -1847,11 +1874,13 @@ test("creates and edits a product directly in the inventory row", async ({
     "data-overflowing",
     "false",
   );
-  await expect(repairPartRow.locator("td").nth(5)).toHaveText("—");
+  await expect(
+    repairPartRow.locator("td.inventory-price-cell").last(),
+  ).toHaveText("—");
   await repairPartRow.click();
-  await expect(repairPartRow.locator("td").nth(5).locator("input")).toHaveCount(
-    0,
-  );
+  await expect(
+    repairPartRow.locator("td.inventory-price-cell").last().locator("input"),
+  ).toHaveCount(0);
   await page.getByRole("heading", { name: "Magazzino" }).click();
 
   await page.getByRole("button", { name: "Nuovo prodotto" }).click();
@@ -1963,9 +1992,9 @@ test("creates and edits a product directly in the inventory row", async ({
     .poll(() =>
       historyCard
         .locator(".inventory-history-title-underline")
-        .evaluate((element) => getComputedStyle(element).transform),
+        .evaluate((element) => getComputedStyle(element).opacity),
     )
-    .toBe("matrix(0, 0, 0, 1, 0, 0)");
+    .toBe("0");
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
     "transform",
     "none",
@@ -2009,9 +2038,9 @@ test("creates and edits a product directly in the inventory row", async ({
     .poll(() =>
       historyCard
         .locator(".inventory-history-title-underline")
-        .evaluate((element) => getComputedStyle(element).transform),
+        .evaluate((element) => getComputedStyle(element).opacity),
     )
-    .toBe("matrix(1, 0, 0, 1, 0, 0)");
+    .toBe("1");
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
     "transform",
     "matrix(1, 0, 0, 1, 8, 0)",
@@ -2030,10 +2059,10 @@ test("creates and edits a product directly in the inventory row", async ({
     .toBe("1.4s");
   await expect(
     historyCard.locator(".inventory-history-title-underline"),
-  ).toHaveCSS("transition-duration", "0.26s");
+  ).toHaveCSS("transition-duration", "0s");
   await expect(
     historyCard.locator(".inventory-history-title-underline"),
-  ).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+  ).toHaveCSS("opacity", "1");
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
     "transition-delay",
     "0.26s, 0.26s",
@@ -2064,6 +2093,13 @@ test("creates and edits a product directly in the inventory row", async ({
   await movementDialog.getByRole("button", { name: "Chiudi" }).click();
 
   await manageBatch.click();
+  await expect(
+    inventoryMain.locator(".inventory-table thead th").first(),
+  ).toHaveClass(/inventory-status-cell/);
+  await expect(row.locator("td").first()).toHaveClass(/inventory-status-cell/);
+  await expect(
+    inventoryMain.locator(".inventory-table thead th").nth(1),
+  ).toHaveClass(/inventory-selection/);
   const deleteBatch = batchControls.getByRole("button", {
     name: "Elimina",
     exact: true,

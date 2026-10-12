@@ -86,6 +86,7 @@ export const it = {
   batchLimit: "Seleziona al massimo 500 clienti per volta.",
   priceSearch: "Cerca marca, modello o intervento",
   addCustomer: "Nuovo cliente",
+  addCustomerAction: "Cliente",
   confirmCustomer: "Conferma cliente",
   addCustomerPrompt: "Cliente non presente. Aggiungerlo alla rubrica?",
   customerConfirmed: "Dati cliente confermati",
@@ -194,6 +195,7 @@ export const it = {
     description:
       "Prodotti retail e ricambi, con disponibilità e movimenti sempre tracciati.",
     newProduct: "Nuovo prodotto",
+    newProductAction: "Prodotto",
     productCount: "Prodotti",
     stockTotal: "Unità in magazzino",
     stockCost: "Costo del magazzino",
@@ -851,6 +853,7 @@ export const it = {
   addProject: "Intervento",
   editRule: "Modifica",
   newRule: "Nuova regola",
+  newRuleAction: "Preventivo",
   scope: "Marca / serie / modello",
   generic: "Tutti i dispositivi",
   cost: "Costo (€), facoltativo",

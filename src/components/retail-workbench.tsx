@@ -200,6 +200,7 @@ export function RetailWorkbench({
         </div>
         <Button
           variant="outline"
+          className="retail-sales-trigger"
           onClick={() => setDialog({ view: "history" })}
         >
           <ClipboardList size={18} />

@@ -196,6 +196,8 @@ async function enterBusinessValue(
     .locator("xpath=ancestor::*[contains(@class, 'business-combobox-control')]")
     .locator(".business-select-create")
     .click();
+  await expect(panel).not.toBeVisible();
+  await expect(combobox).toHaveValue(value);
   await combobox.press("Escape");
 }
 async function fillOrder(
@@ -5992,6 +5994,12 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.getByLabel("Cerca", { exact: true }).fill("iPhone 13");
   const rows = page.locator(".price-rule-row");
+  await expect(
+    page
+      .locator(".price-tree-heading-brand")
+      .filter({ hasText: "Apple" })
+      .locator('[data-brand-icon="logo"]'),
+  ).toHaveAttribute("aria-label", "Apple");
   await page
     .getByRole("button", { name: "Intervento", exact: true })
     .last()
@@ -6022,9 +6030,17 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
   expect(Math.abs(searchBoxPosition!.y - batchButtonPosition!.y)).toBeLessThan(
     8,
   );
+  const ruleListPosition = await page
+    .locator(".rule-list")
+    .first()
+    .boundingBox();
+  const modelHeadingPosition = await page
+    .locator(".price-tree-heading-model")
+    .first()
+    .boundingBox();
   expect(
-    (await page.locator(".rule-list").first().boundingBox())!.width,
-  ).toBeLessThanOrEqual(720);
+    Math.abs(ruleListPosition!.width - modelHeadingPosition!.width),
+  ).toBeLessThan(2);
   const row = rows.first();
   await expect(row).toBeVisible();
   const rowPosition = await row.boundingBox();
@@ -6039,15 +6055,21 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
   const pricePosition = await row
     .locator("button.inline-rule-suggested")
     .boundingBox();
-  expect(pricePosition!.x - projectPosition!.x).toBeLessThan(560);
+  const actionsPosition = await actions.boundingBox();
+  expect(pricePosition!.x).toBeGreaterThan(
+    projectPosition!.x + projectPosition!.width,
+  );
+  expect(pricePosition!.x + pricePosition!.width).toBeLessThanOrEqual(
+    actionsPosition!.x + 1,
+  );
   await page.mouse.move(0, 0);
   await expect(
     actions.getByRole("button", { name: "Modifica preventivo" }),
   ).toHaveCSS("opacity", "0");
   await row.hover();
   await expect(row).toHaveClass(/business-list-row/);
-  await expect(row).toHaveCSS("background-color", "rgb(255, 249, 232)");
-  await expect(row).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, -1)");
+  await expect(row).toHaveCSS("background-color", "rgb(255, 251, 234)");
+  await expect(row).toHaveCSS("transform", "none");
   await expect(
     actions.getByRole("button", { name: "Modifica preventivo" }),
   ).toHaveCSS("opacity", "1");
@@ -6063,7 +6085,7 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
   expect(hoveredPricePosition!.width).toBe(pricePosition!.width);
   await row.click({ position: { x: 3, y: 3 } });
   await expect(row).toHaveClass(/order-row-active/);
-  await expect(row).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
+  await expect(row).toHaveCSS("transform", "none");
   await expect(row.locator("input.inline-rule-project")).toBeVisible();
   await expect(row.locator("input.inline-rule-suggested")).toBeVisible();
   const activeRowPosition = await row.boundingBox();

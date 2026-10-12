@@ -36,8 +36,32 @@ import {
   ChevronRight,
   Package,
   Pencil,
+  Smartphone,
   Wrench,
 } from "lucide-react";
+import type { SimpleIcon } from "simple-icons";
+import {
+  siAcer,
+  siApple,
+  siAsus,
+  siDell,
+  siFitbit,
+  siGarmin,
+  siGoogle,
+  siHonor,
+  siHp,
+  siHuawei,
+  siLenovo,
+  siMotorola,
+  siMsi,
+  siNokia,
+  siOneplus,
+  siOppo,
+  siSamsung,
+  siSony,
+  siVivo,
+  siXiaomi,
+} from "simple-icons";
 import { Button } from "./ui/button";
 import { BatchControls } from "./ui/batch-controls";
 import { QuantityStepper } from "./ui/quantity-stepper";
@@ -4107,6 +4131,103 @@ export function DeviceForm({
     </ActionForm>
   );
 }
+const priceBrandIcons: Record<string, SimpleIcon> = {
+  acer: siAcer,
+  apple: siApple,
+  asus: siAsus,
+  dell: siDell,
+  fitbit: siFitbit,
+  garmin: siGarmin,
+  google: siGoogle,
+  honor: siHonor,
+  hp: siHp,
+  huawei: siHuawei,
+  lenovo: siLenovo,
+  motorola: siMotorola,
+  msi: siMsi,
+  nokia: siNokia,
+  oneplus: siOneplus,
+  oppo: siOppo,
+  samsung: siSamsung,
+  sony: siSony,
+  vivo: siVivo,
+  xiaomi: siXiaomi,
+};
+
+function PriceBrandMark({ brand }: { brand: string }) {
+  const brandKey = brand.trim().toLocaleLowerCase("it");
+  if (brandKey === "microsoft") {
+    return (
+      <svg
+        className="price-brand-logo"
+        data-brand-icon="logo"
+        viewBox="0 0 24 24"
+        role="img"
+        aria-label="Microsoft"
+      >
+        <path fill="#f35325" d="M1 1h10v10H1z" />
+        <path fill="#81bc06" d="M13 1h10v10H13z" />
+        <path fill="#05a6f0" d="M1 13h10v10H1z" />
+        <path fill="#ffba08" d="M13 13h10v10H13z" />
+      </svg>
+    );
+  }
+  if (brandKey === "nintendo") {
+    return (
+      <svg
+        className="price-brand-logo price-brand-logo-wide"
+        data-brand-icon="logo"
+        viewBox="0 0 32 24"
+        role="img"
+        aria-label="Nintendo"
+      >
+        <rect x="1" y="4" width="30" height="16" rx="8" fill="#e60012" />
+        <text
+          x="16"
+          y="14"
+          fill="#fff"
+          fontSize="5.5"
+          fontWeight="700"
+          textAnchor="middle"
+        >
+          Nintendo
+        </text>
+      </svg>
+    );
+  }
+  if (brandKey === "realme") {
+    return (
+      <span
+        className="price-brand-wordmark price-brand-realme"
+        data-brand-icon="logo"
+        aria-label="realme"
+      >
+        realme
+      </span>
+    );
+  }
+  const icon = priceBrandIcons[brandKey];
+  if (!icon) {
+    return (
+      <span className="price-brand-fallback" data-brand-icon="fallback">
+        {brand.trim().charAt(0).toLocaleUpperCase("it") || "·"}
+      </span>
+    );
+  }
+  return (
+    <svg
+      className="price-brand-logo"
+      data-brand-icon="logo"
+      viewBox="0 0 24 24"
+      role="img"
+      aria-label={icon.title}
+      style={{ color: `#${icon.hex === "FFFFFF" ? "111111" : icon.hex}` }}
+    >
+      <path fill="currentColor" d={icon.path} />
+    </svg>
+  );
+}
+
 export function PriceList({
   rules,
   repairProducts,
@@ -4183,10 +4304,21 @@ export function PriceList({
         aria-controls={"group-" + key}
         onClick={() => toggle(key)}
       >
-        <span aria-hidden="true">
-          {query.trim() || expanded.includes(key) ? "▾" : "▸"}
-        </span>{" "}
-        {label}
+        <ChevronRight
+          className="price-tree-chevron"
+          size={17}
+          aria-hidden="true"
+        />
+        <span className="price-tree-level-icon" aria-hidden="true">
+          {level === "brand" ? (
+            <PriceBrandMark brand={label} />
+          ) : level === "category" ? (
+            <Smartphone size={18} />
+          ) : (
+            <Package size={18} />
+          )}
+        </span>
+        <span className="price-tree-label">{label}</span>
       </button>
       {initial && (
         <Button

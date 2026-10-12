@@ -3716,48 +3716,18 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
 
   await page.getByRole("button", { name: "中文", exact: true }).click();
   await page.goto("/settings/quick-services");
-  await page.getByRole("button", { name: "管理快速服务", exact: true }).click();
-  const chineseServiceManager = page.getByRole("dialog", {
-    name: "管理快速服务",
-  });
+  const chineseServiceManager = page.locator(".catalog-manager");
   await expect(chineseServiceManager).toBeVisible();
+  await expect(page.locator(".settings-card > h2")).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: "无法加载数据", exact: true }),
   ).toHaveCount(0);
-  await chineseServiceManager
-    .getByRole("button", { name: "关闭", exact: true })
-    .click();
   await page.goto("/settings/language");
   await page.getByRole("button", { name: "Italiano", exact: true }).click();
   await page.goto("/settings/quick-services");
 
-  await page
-    .getByRole("button", { name: "Gestisci servizi rapidi", exact: true })
-    .click();
-  const serviceManager = page.getByRole("dialog", {
-    name: "Gestisci servizi rapidi",
-  });
-  const serviceManagerClose = serviceManager.getByRole("button", {
-    name: "Chiudi",
-    exact: true,
-  });
-  await expect(serviceManagerClose).toHaveCSS(
-    "border-top-color",
-    "rgba(0, 0, 0, 0)",
-  );
-  await expect(serviceManagerClose).toHaveCSS(
-    "background-color",
-    "rgba(0, 0, 0, 0)",
-  );
-  await serviceManagerClose.hover();
-  await expect(serviceManagerClose).toHaveCSS(
-    "border-top-color",
-    "rgba(0, 0, 0, 0)",
-  );
-  await expect(serviceManagerClose).toHaveCSS(
-    "background-color",
-    "rgb(255, 247, 214)",
-  );
+  const serviceManager = page.locator(".catalog-manager");
+  await expect(serviceManager).toBeVisible();
   const firstServiceRow = serviceManager
     .locator(".catalog-manager-row")
     .first();
@@ -3793,7 +3763,7 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   await expect(serviceDeleteDialog).toContainText(
     "Le vendite e le schede esistenti conserveranno nome e prezzo.",
   );
-  await expect(page.getByRole("dialog")).toHaveCount(2);
+  await expect(page.getByRole("dialog")).toHaveCount(1);
   await serviceDeleteDialog
     .getByRole("button", { name: "Annulla", exact: true })
     .click();
@@ -3831,16 +3801,11 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   await serviceEditor
     .getByRole("button", { name: "Annulla", exact: true })
     .click();
-  await serviceManager
-    .getByRole("button", { name: "Chiudi", exact: true })
-    .click();
 
   await page.goto("/settings/device-models");
-  await page
-    .getByRole("button", { name: "Gestisci modelli", exact: true })
-    .click();
-  const modelManager = page.getByRole("dialog", { name: "Modelli salvati" });
-  const firstGroup = modelManager.locator(".model-manager section").first();
+  const modelManager = page.locator(".model-manager");
+  await expect(modelManager).toBeVisible();
+  const firstGroup = modelManager.locator("section").first();
   const firstHeading = firstGroup.locator(".model-group-heading");
   await expect(firstHeading).toHaveAttribute("aria-expanded", "true");
   await expect(firstHeading.locator("small")).toHaveCount(0);
@@ -3849,7 +3814,7 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   await expect(firstGroup.locator(".model-group-items")).toHaveCount(0);
   await firstHeading.click();
 
-  const groups = modelManager.locator(".model-manager section");
+  const groups = modelManager.locator("section");
   let editableGroup: Locator | null = null;
   for (let index = 0; index < (await groups.count()); index += 1) {
     const group = groups.nth(index);
@@ -3866,11 +3831,11 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   const modelInput = editableGroup!.getByLabel("Nuovo nome", { exact: true });
   await expect(modelInput).toBeFocused();
   await modelInput.fill(duplicateModel);
-  await modelManager.locator(".dialog-heading h2").click();
+  await page.locator(".page-header h1").click();
   await expect(modelManager.getByRole("alert")).toContainText("esiste già");
   const temporaryModel = "iPhone 18 Pro Max";
   await modelInput.fill("iphone18promax");
-  await modelManager.locator(".dialog-heading h2").click();
+  await page.locator(".page-header h1").click();
   await expect(
     editableGroup!.getByRole("button", {
       name: temporaryModel,
@@ -3883,21 +3848,16 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   await editableGroup!
     .getByLabel("Nuovo nome", { exact: true })
     .fill(originalModel);
-  await modelManager.locator(".dialog-heading h2").click();
+  await page.locator(".page-header h1").click();
   await expect(
     editableGroup!.getByRole("button", { name: originalModel, exact: true }),
   ).toBeVisible();
-  await modelManager
-    .getByRole("button", { name: "Chiudi", exact: true })
-    .click();
-
   await page.goto("/settings/fault-catalog");
-  await page
-    .getByRole("button", { name: "Gestisci problemi", exact: true })
-    .click();
-  const faultManager = page.getByRole("dialog", {
-    name: "Gestisci problemi",
-  });
+  const faultManager = page.locator(".fault-manager");
+  await expect(faultManager).toBeVisible();
+  await expect(
+    faultManager.getByRole("button", { name: "Tipo dispositivo" }),
+  ).toBeVisible();
   const rows = faultManager.locator(".fault-manager-row");
   await page.mouse.move(0, 0);
   const otherDelete = rows.nth(1).locator(".fault-delete-button");
@@ -3917,12 +3877,7 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   const initiallyEnabled = await faultSwitch.isChecked();
   await faultSwitch.click();
   await expect(otherDelete).toHaveCSS("opacity", "0");
-  await expect(
-    faultManager.locator(".dialog-actions").getByRole("button", {
-      name: "Chiudi",
-      exact: true,
-    }),
-  ).toHaveCSS("opacity", "1");
+  await expect(faultManager.locator(".dialog-actions")).toHaveCount(0);
   await page.waitForLoadState("networkidle");
   await faultSwitch.click();
   await expect(faultSwitch).toBeChecked({ checked: initiallyEnabled });

@@ -11,6 +11,7 @@ import {
 import { categories, type Category } from "@/lib/catalog";
 import { useLanguage, useMessages } from "./language";
 import { FormDialog } from "./forms";
+import { SimpleSelect } from "./business-select";
 import { Button } from "./ui/button";
 import { focusComfortably } from "@/lib/comfortable-scroll";
 
@@ -68,16 +69,18 @@ export function FaultCatalogManager({
   initialCategory = "PHONE",
   triggerLabel,
   onChanged,
+  embedded = false,
 }: {
   items: FaultCatalogItem[];
   initialCategory?: string;
   triggerLabel?: string;
   onChanged?: (items: FaultCatalogItem[]) => void;
+  embedded?: boolean;
 }) {
   const it = useMessages();
   const { locale } = useLanguage();
   const router = useRouter();
-  const category = initialCategory;
+  const [category, setCategory] = useState(initialCategory);
   const [open, setOpen] = useState(false);
   const [drafts, setDrafts] = useState(items);
   const [query, setQuery] = useState("");
@@ -293,146 +296,175 @@ export function FaultCatalogManager({
     router.refresh();
   }
 
+  const manager = (
+    <div
+      className={`fault-manager ${embedded ? "settings-inline-manager" : ""}`.trim()}
+      data-form-dialog-body={embedded ? undefined : true}
+    >
+      {embedded && (
+        <SimpleSelect
+          value={category}
+          onChange={(nextCategory) => {
+            setCategory(nextCategory);
+            setQuery("");
+            setSettledQuery("");
+            setEditingId("");
+            setError("");
+          }}
+          placeholder={it.deviceType}
+          ariaLabel={it.deviceType}
+          options={Object.entries(categories).map(([value, labels]) => ({
+            value,
+            label: labels[locale === "zh" ? 1 : 0],
+          }))}
+        />
+      )}
+      <div className="catalog-toolbar fault-manager-toolbar">
+        <label className="fault-search">
+          <Search size={15} />
+          <input
+            value={query}
+            placeholder={it.faultSearch}
+            onChange={(event) => {
+              search(event.target.value);
+              setError("");
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void createFault();
+              }
+            }}
+          />
+        </label>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!canAdd}
+          onClick={() => void createFault()}
+        >
+          <Plus size={16} /> {it.addFault}
+        </Button>
+      </div>
+      <div className="fault-manager-list" role="table">
+        <div className="fault-manager-header" role="row">
+          <span aria-hidden="true" />
+          <span>{it.faultName}</span>
+          <span className="fault-manager-status">{it.statusLabel}</span>
+          <span aria-hidden="true" />
+        </div>
+        {visible.map((item) => (
+          <div
+            className="fault-manager-row"
+            key={item.id}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={() => {
+              void move(dragId, item.id);
+              setDragId("");
+            }}
+          >
+            <span
+              className="fault-drag-handle"
+              draggable
+              onDragStart={() => setDragId(item.id)}
+            >
+              <GripVertical size={16} aria-hidden="true" />
+            </span>
+            {editingId === item.id ? (
+              <input
+                ref={editingInput}
+                className="fault-inline-name"
+                maxLength={120}
+                value={editingName}
+                onChange={(event) => setEditingName(event.target.value)}
+                onBlur={() => void saveName(item)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    void saveName(item);
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    cancellingName.current = true;
+                    setEditingName(item.name);
+                    setEditingId("");
+                    setError("");
+                  }
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                className="fault-name-button"
+                onClick={() => {
+                  cancellingName.current = false;
+                  setEditingId(item.id);
+                  setEditingName(item.name);
+                  setError("");
+                }}
+              >
+                {item.name}
+              </button>
+            )}
+            <label className="fault-enabled-switch">
+              <input
+                type="checkbox"
+                checked={!item.hidden}
+                onChange={() => void toggle(item)}
+              />
+              <span>{item.hidden ? it.disabledState : it.enabledState}</span>
+            </label>
+            <button
+              type="button"
+              className="fault-delete-button"
+              aria-label={`${it.remove} ${item.name}`}
+              onClick={() => void remove(item)}
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <p className="fault-drag-hint">{it.faultDragHint}</p>
+      {error && <p className="message error">{error}</p>}
+      {!embedded && (
+        <div className="dialog-actions">
+          <Button type="button" variant="outline" onClick={closeManager}>
+            {it.close}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <>
-      <button
-        type="button"
-        className="fault-manager-trigger"
-        onClick={openManager}
-      >
-        <span>{triggerLabel ?? it.manageFaults}</span>
-        <ChevronRight size={14} aria-hidden="true" />
-      </button>
-      {open && (
-        <FormDialog
-          title={it.manageFaults}
-          subtitle={it.manageFaultsFor.replace(
-            "{device}",
-            categories[category as Category]?.[locale === "zh" ? 1 : 0] ??
-              category,
-          )}
-          onClose={closeManager}
+      {!embedded && (
+        <button
+          type="button"
+          className="fault-manager-trigger"
+          onClick={openManager}
         >
-          <div className="fault-manager" data-form-dialog-body>
-            <div className="catalog-toolbar fault-manager-toolbar">
-              <label className="fault-search">
-                <Search size={15} />
-                <input
-                  value={query}
-                  placeholder={it.faultSearch}
-                  onChange={(event) => {
-                    search(event.target.value);
-                    setError("");
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      void createFault();
-                    }
-                  }}
-                />
-              </label>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!canAdd}
-                onClick={() => void createFault()}
-              >
-                <Plus size={16} /> {it.addFault}
-              </Button>
-            </div>
-            <div className="fault-manager-list" role="table">
-              <div className="fault-manager-header" role="row">
-                <span aria-hidden="true" />
-                <span>{it.faultName}</span>
-                <span className="fault-manager-status">{it.statusLabel}</span>
-                <span aria-hidden="true" />
-              </div>
-              {visible.map((item) => (
-                <div
-                  className="fault-manager-row"
-                  key={item.id}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => {
-                    void move(dragId, item.id);
-                    setDragId("");
-                  }}
-                >
-                  <span
-                    className="fault-drag-handle"
-                    draggable
-                    onDragStart={() => setDragId(item.id)}
-                  >
-                    <GripVertical size={16} aria-hidden="true" />
-                  </span>
-                  {editingId === item.id ? (
-                    <input
-                      ref={editingInput}
-                      className="fault-inline-name"
-                      maxLength={120}
-                      value={editingName}
-                      onChange={(event) => setEditingName(event.target.value)}
-                      onBlur={() => void saveName(item)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          void saveName(item);
-                        }
-                        if (event.key === "Escape") {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          cancellingName.current = true;
-                          setEditingName(item.name);
-                          setEditingId("");
-                          setError("");
-                        }
-                      }}
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      className="fault-name-button"
-                      onClick={() => {
-                        cancellingName.current = false;
-                        setEditingId(item.id);
-                        setEditingName(item.name);
-                        setError("");
-                      }}
-                    >
-                      {item.name}
-                    </button>
-                  )}
-                  <label className="fault-enabled-switch">
-                    <input
-                      type="checkbox"
-                      checked={!item.hidden}
-                      onChange={() => void toggle(item)}
-                    />
-                    <span>
-                      {item.hidden ? it.disabledState : it.enabledState}
-                    </span>
-                  </label>
-                  <button
-                    type="button"
-                    className="fault-delete-button"
-                    aria-label={`${it.remove} ${item.name}`}
-                    onClick={() => void remove(item)}
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              ))}
-            </div>
-            <p className="fault-drag-hint">{it.faultDragHint}</p>
-            {error && <p className="message error">{error}</p>}
-            <div className="dialog-actions">
-              <Button type="button" variant="outline" onClick={closeManager}>
-                {it.close}
-              </Button>
-            </div>
-          </div>
-        </FormDialog>
+          <span>{triggerLabel ?? it.manageFaults}</span>
+          <ChevronRight size={14} aria-hidden="true" />
+        </button>
       )}
+      {embedded
+        ? manager
+        : open && (
+            <FormDialog
+              title={it.manageFaults}
+              subtitle={it.manageFaultsFor.replace(
+                "{device}",
+                categories[category as Category]?.[locale === "zh" ? 1 : 0] ??
+                  category,
+              )}
+              onClose={closeManager}
+            >
+              {manager}
+            </FormDialog>
+          )}
     </>
   );
 }

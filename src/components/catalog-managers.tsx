@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import {
   deleteQuickServiceAction,
   renameDeviceModelAction,
@@ -118,7 +118,6 @@ export function QuickServiceEditor({
 
 export function QuickServiceManager({ items }: { items: QuickServiceView[] }) {
   const it = useMessages();
-  const [open, setOpen] = useState(false);
   const [drafts, setDrafts] = useState(items);
   const [editing, setEditing] = useState<QuickServiceView | null>(null);
   const [deleting, setDeleting] = useState<QuickServiceView | null>(null);
@@ -174,88 +173,73 @@ export function QuickServiceManager({ items }: { items: QuickServiceView[] }) {
 
   return (
     <>
-      <button
-        type="button"
-        className="fault-manager-trigger"
-        onClick={() => setOpen(true)}
-      >
-        <span>{it.quickService.manage}</span>
-        <ChevronRight size={14} aria-hidden="true" />
-      </button>
-      {open && (
-        <FormDialog
-          title={it.quickService.manage}
-          onClose={() => setOpen(false)}
-        >
-          <div className="catalog-manager" data-form-dialog-body>
-            {drafts.length ? (
-              <div className="catalog-manager-list">
-                {drafts.map((item) => (
-                  <div
-                    className="catalog-manager-row business-list-row"
-                    key={item.id}
-                    onClick={() => editor(item)}
-                  >
-                    <span>
-                      <strong>{item.name}</strong>
-                      <small>{item.notes || "—"}</small>
-                    </span>
-                    <span>{decimal(item.defaultPrice)}</span>
-                    <label
-                      className="fault-enabled-switch"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={item.enabled}
-                        disabled={pending}
-                        onChange={() => void toggle(item)}
-                      />
-                      <span>
-                        {item.enabled ? it.enabledState : it.disabledState}
-                      </span>
-                    </label>
-                    <span className="record-actions">
-                      <RecordIcon
-                        kind="edit"
-                        label={`${it.edit} ${item.name}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          editor(item);
-                        }}
-                      />
-                      <RecordIcon
-                        kind="delete"
-                        label={`${it.quickService.delete} ${item.name}`}
-                        disabled={pending}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setError("");
-                          setDeleting(item);
-                        }}
-                      />
-                    </span>
-                  </div>
-                ))}
+      <div className="catalog-manager settings-inline-manager">
+        {drafts.length ? (
+          <div className="catalog-manager-list">
+            {drafts.map((item) => (
+              <div
+                className="catalog-manager-row business-list-row"
+                key={item.id}
+                onClick={() => editor(item)}
+              >
+                <span>
+                  <strong>{item.name}</strong>
+                  <small>{item.notes || "—"}</small>
+                </span>
+                <span>{decimal(item.defaultPrice)}</span>
+                <label
+                  className="fault-enabled-switch"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <input
+                    type="checkbox"
+                    checked={item.enabled}
+                    disabled={pending}
+                    onChange={() => void toggle(item)}
+                  />
+                  <span>
+                    {item.enabled ? it.enabledState : it.disabledState}
+                  </span>
+                </label>
+                <span className="record-actions">
+                  <RecordIcon
+                    kind="edit"
+                    label={`${it.edit} ${item.name}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      editor(item);
+                    }}
+                  />
+                  <RecordIcon
+                    kind="delete"
+                    label={`${it.quickService.delete} ${item.name}`}
+                    disabled={pending}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setError("");
+                      setDeleting(item);
+                    }}
+                  />
+                </span>
               </div>
-            ) : (
-              <p className="muted">{it.quickService.noServices}</p>
-            )}
-            <button
-              type="button"
-              className="quick-service-service-add"
-              onClick={() => editor()}
-            >
-              <Plus size={18} /> {it.quickService.new}
-            </button>
-            {error && !deleting && (
-              <p className="message error" role="alert">
-                {error}
-              </p>
-            )}
+            ))}
           </div>
-        </FormDialog>
-      )}
+        ) : (
+          <p className="muted">{it.quickService.noServices}</p>
+        )}
+        <button
+          type="button"
+          className="quick-service-service-add"
+          onClick={() => editor()}
+        >
+          <Plus size={18} /> {it.quickService.new}
+        </button>
+        {error && !deleting && (
+          <p className="message error" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
       {editing && (
         <FormDialog
           title={editing.id ? it.edit : it.quickService.new}
@@ -330,7 +314,6 @@ export function QuickServiceManager({ items }: { items: QuickServiceView[] }) {
 
 export function DeviceModelManager({ items }: { items: SavedModelView[] }) {
   const it = useMessages();
-  const [open, setOpen] = useState(false);
   const [drafts, setDrafts] = useState(items);
   const [editing, setEditing] = useState<SavedModelView | null>(null);
   const [replacement, setReplacement] = useState("");
@@ -413,103 +396,81 @@ export function DeviceModelManager({ items }: { items: SavedModelView[] }) {
   }
 
   return (
-    <>
-      <button
-        type="button"
-        className="fault-manager-trigger"
-        onClick={() => setOpen(true)}
-      >
-        <span>{it.modelCatalog.manage}</span>
-        <ChevronRight size={14} aria-hidden="true" />
-      </button>
-      {open && (
-        <FormDialog
-          title={it.modelCatalog.title}
-          subtitle={it.modelCatalog.description}
-          onClose={() => {
-            setEditing(null);
-            setError("");
-            setOpen(false);
-          }}
-        >
-          <div className="model-manager" data-form-dialog-body>
-            {groups.map((group) => (
-              <section key={group.key}>
-                <button
-                  type="button"
-                  className="model-group-heading"
-                  aria-expanded={!collapsed.has(group.key)}
-                  onClick={() =>
-                    setCollapsed((current) => {
-                      const next = new Set(current);
-                      if (next.has(group.key)) next.delete(group.key);
-                      else next.add(group.key);
-                      return next;
-                    })
-                  }
-                >
-                  <span>
-                    <strong>{group.brand}</strong>
-                  </span>
-                  <ChevronDown size={17} aria-hidden="true" />
-                </button>
-                {!collapsed.has(group.key) && (
-                  <div className="model-group-items">
-                    {group.items.map((item) =>
-                      editing === item ? (
-                        <input
-                          ref={editingInput}
-                          className="model-inline-name"
-                          key={`${item.category}:${item.model}`}
-                          value={replacement}
-                          disabled={pending}
-                          aria-label={it.modelCatalog.replacement}
-                          onChange={(event) => {
-                            setReplacement(event.target.value);
-                            setError("");
-                          }}
-                          onBlur={save}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              event.currentTarget.blur();
-                            }
-                            if (event.key === "Escape") {
-                              event.preventDefault();
-                              cancelling.current = true;
-                              setEditing(null);
-                              setError("");
-                            }
-                          }}
-                        />
-                      ) : (
-                        <button
-                          type="button"
-                          className="model-name-button"
-                          key={`${item.category}:${item.model}`}
-                          onClick={() => {
-                            cancelling.current = false;
-                            setEditing(item);
-                            setReplacement(item.model);
-                            setError("");
-                          }}
-                        >
-                          {item.model}
-                        </button>
-                      ),
-                    )}
-                  </div>
-                )}
-              </section>
-            ))}
-            {error && (
-              <p className="message error" role="alert">
-                {error}
-              </p>
-            )}
-          </div>
-        </FormDialog>
+    <div className="model-manager settings-inline-manager">
+      {groups.map((group) => (
+        <section key={group.key}>
+          <button
+            type="button"
+            className="model-group-heading"
+            aria-expanded={!collapsed.has(group.key)}
+            onClick={() =>
+              setCollapsed((current) => {
+                const next = new Set(current);
+                if (next.has(group.key)) next.delete(group.key);
+                else next.add(group.key);
+                return next;
+              })
+            }
+          >
+            <span>
+              <strong>{group.brand}</strong>
+            </span>
+            <ChevronDown size={17} aria-hidden="true" />
+          </button>
+          {!collapsed.has(group.key) && (
+            <div className="model-group-items">
+              {group.items.map((item) =>
+                editing === item ? (
+                  <input
+                    ref={editingInput}
+                    className="model-inline-name"
+                    key={`${item.category}:${item.model}`}
+                    value={replacement}
+                    disabled={pending}
+                    aria-label={it.modelCatalog.replacement}
+                    onChange={(event) => {
+                      setReplacement(event.target.value);
+                      setError("");
+                    }}
+                    onBlur={save}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        event.currentTarget.blur();
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        cancelling.current = true;
+                        setEditing(null);
+                        setError("");
+                      }
+                    }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    className="model-name-button"
+                    key={`${item.category}:${item.model}`}
+                    onClick={() => {
+                      cancelling.current = false;
+                      setEditing(item);
+                      setReplacement(item.model);
+                      setError("");
+                    }}
+                  >
+                    {item.model}
+                  </button>
+                ),
+              )}
+            </div>
+          )}
+        </section>
+      ))}
+      {error && (
+        <p className="message error" role="alert">
+          {error}
+        </p>
       )}
-    </>
+    </div>
   );
 }

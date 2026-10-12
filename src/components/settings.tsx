@@ -332,34 +332,25 @@ export function BusinessDateSettings({
 }
 
 export function QuickServiceSettings({ items }: { items: QuickServiceView[] }) {
-  const it = useMessages();
   return (
     <section className="panel padded settings-card">
-      <h2>{it.quickService.title}</h2>
-      <p>{it.quickService.description}</p>
       <QuickServiceManager items={items} />
     </section>
   );
 }
 
 export function DeviceModelSettings({ items }: { items: SavedModelView[] }) {
-  const it = useMessages();
   return (
     <section className="panel padded settings-card">
-      <h2>{it.modelCatalog.title}</h2>
-      <p>{it.modelCatalog.description}</p>
       <DeviceModelManager items={items} />
     </section>
   );
 }
 
 export function FaultCatalogSettings({ items }: { items: FaultCatalogItem[] }) {
-  const it = useMessages();
   return (
     <section className="panel padded settings-card">
-      <h2>{it.faultCatalog}</h2>
-      <p>{it.faultCatalogDescription}</p>
-      <FaultCatalogManager items={items} triggerLabel={it.manageFaults} />
+      <FaultCatalogManager items={items} embedded />
     </section>
   );
 }

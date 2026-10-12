@@ -6000,10 +6000,14 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
       .filter({ hasText: "Apple" })
       .locator('[data-brand-icon="logo"]'),
   ).toHaveAttribute("aria-label", "Apple");
-  await page
+  const addProject = page
     .getByRole("button", { name: "Intervento", exact: true })
-    .last()
-    .click();
+    .last();
+  await expect(addProject).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(addProject).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
+  await addProject.hover();
+  await expect(addProject).toHaveCSS("background-color", "rgb(255, 245, 201)");
+  await addProject.click();
   const createDialog = page.getByRole("dialog");
   await enterBusinessValue(
     page,
@@ -6030,6 +6034,13 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
   expect(Math.abs(searchBoxPosition!.y - batchButtonPosition!.y)).toBeLessThan(
     8,
   );
+  await expect(batchButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(batchButton).toHaveCSS(
+    "border-top-color",
+    "rgba(0, 0, 0, 0)",
+  );
+  await batchButton.hover();
+  await expect(batchButton).toHaveCSS("background-color", "rgb(255, 245, 201)");
   const ruleListPosition = await page
     .locator(".rule-list")
     .first()
@@ -6146,9 +6157,21 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
     name: "Seleziona Apple",
     exact: true,
   });
+  const categorySelection = page.getByRole("checkbox", {
+    name: "Seleziona Telefono",
+    exact: true,
+  });
   await changed.getByRole("checkbox").check();
   await expect(modelSelection).toHaveJSProperty("indeterminate", true);
+  await expect(categorySelection).toHaveJSProperty("indeterminate", true);
   await expect(brandSelection).toHaveJSProperty("indeterminate", true);
+  await expect(brandSelection).toHaveAttribute("aria-checked", "mixed");
+  await expect(brandSelection).toHaveCSS("background-color", "rgb(251, 215, 46)");
+  expect(
+    await brandSelection.evaluate(
+      (checkbox) => getComputedStyle(checkbox, "::before").transform,
+    ),
+  ).toBe("matrix(1, 0, 0, 1, 0, 0)");
   await expect(page.locator(".price-batch-toolbar")).toContainText(
     "1 interventi selezionati",
   );

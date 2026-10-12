@@ -39,7 +39,8 @@ export function BatchControls({
   if (!active)
     return (
       <Button
-        variant="outline"
+        variant="ghost"
+        className="batch-control-button"
         aria-pressed="false"
         disabled={pending}
         onClick={onStart}
@@ -56,7 +57,8 @@ export function BatchControls({
       </span>
       {showSelectAll && (
         <Button
-          variant="outline"
+          variant="ghost"
+          className="batch-control-button"
           disabled={pending || !hasItems}
           onClick={onSelectAll}
         >
@@ -64,15 +66,20 @@ export function BatchControls({
         </Button>
       )}
       <Button
-        variant="outline"
-        className="button-danger"
+        variant="ghost"
+        className="button-danger batch-control-button batch-control-danger"
         disabled={!selectedCount || pending || deleteDisabled}
         onClick={onDelete}
       >
         <Trash2 size={17} aria-hidden="true" />
         {deleteLabel}
       </Button>
-      <Button variant="outline" disabled={pending} onClick={onFinish}>
+      <Button
+        variant="ghost"
+        className="batch-control-button"
+        disabled={pending}
+        onClick={onFinish}
+      >
         <X size={17} aria-hidden="true" />
         {finishLabel}
       </Button>

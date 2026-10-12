@@ -72,6 +72,18 @@ input[type="checkbox"]:checked {
 input[type="checkbox"]:checked::before {
   transform: rotate(-45deg) scale(1);
 }
+input[type="checkbox"]:indeterminate {
+  border-color: #f2c717;
+  background: #fbd72e;
+}
+input[type="checkbox"]:indeterminate::before {
+  width: 9px;
+  height: 3px;
+  border: 0;
+  border-radius: 999px;
+  background: #26302c;
+  transform: scale(1);
+}
 input[type="checkbox"]:focus-visible {
   outline: 2px solid rgb(210 174 33 / 45%);
   outline-offset: 2px;
@@ -6927,7 +6939,7 @@ details.secondary-actions {
   padding: 6px 10px;
   flex-shrink: 0;
 }
-.price-add-project {
+.price-add-project.button {
   border-color: transparent;
   background: transparent;
   color: #5d4700;
@@ -6936,12 +6948,12 @@ details.secondary-actions {
     border-color 150ms ease-out,
     color 150ms ease-out;
 }
-.price-add-project:hover {
+.price-add-project.button:hover {
   border-color: transparent;
   background: #fff5c9;
   color: #332700;
 }
-.price-add-project:active {
+.price-add-project.button:active {
   background: #ffedaa;
 }
 .price-batch-toolbar {
@@ -7409,6 +7421,34 @@ details summary {
 .button-ghost.danger-text {
   color: #ab4444;
   border-color: #d58a87;
+}
+.batch-control-button.button {
+  min-height: 36px;
+  padding: 7px 10px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: #5d625f;
+}
+.batch-control-button.button:hover,
+.batch-control-button.button:focus-visible {
+  border-color: transparent;
+  background: #fff5c9;
+  color: #332700;
+}
+.batch-control-button.button:active {
+  background: #ffedaa;
+}
+.batch-control-button.batch-control-danger {
+  border-color: transparent;
+  background: transparent;
+  color: #ab4444;
+}
+.batch-control-button.batch-control-danger:hover,
+.batch-control-button.batch-control-danger:focus-visible {
+  border-color: transparent;
+  background: #fbe9e8;
+  color: #913737;
 }
 
 /* Compact, accessible record actions: targets stay still on hover. */

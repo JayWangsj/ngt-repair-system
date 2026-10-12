@@ -4619,6 +4619,7 @@ function PriceTreeCheckbox({
       className="price-tree-checkbox"
       type="checkbox"
       aria-label={label}
+      aria-checked={indeterminate ? "mixed" : checked}
       checked={checked}
       disabled={disabled || ids.length === 0}
       onChange={(event) => onChange(ids, event.target.checked)}

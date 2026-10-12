@@ -203,7 +203,8 @@ small {
 .sidebar-toggle {
   position: absolute;
   top: 24px;
-  right: 8px;
+  right: -14px;
+  z-index: 1;
   width: 28px;
   height: 28px;
   display: grid;

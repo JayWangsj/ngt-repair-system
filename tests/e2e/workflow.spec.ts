@@ -1280,6 +1280,13 @@ test("desktop sidebar resizes, collapses and restores its saved width", async ({
   await expect
     .poll(async () => Math.round((await sidebar.boundingBox())?.width || 0))
     .toBe(300);
+  const brandBox = await page.locator(".brand").boundingBox();
+  const toggleBox = await page
+    .getByRole("button", { name: "Riduci barra laterale" })
+    .boundingBox();
+  expect(brandBox).not.toBeNull();
+  expect(toggleBox).not.toBeNull();
+  expect(toggleBox!.x).toBeGreaterThanOrEqual(brandBox!.x + brandBox!.width);
 
   await page.getByRole("button", { name: "Riduci barra laterale" }).click();
   await expect

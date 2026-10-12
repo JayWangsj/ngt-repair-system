@@ -6054,10 +6054,7 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
     8,
   );
   await expect(batchButton).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-  await expect(batchButton).toHaveCSS(
-    "border-top-color",
-    "rgba(0, 0, 0, 0)",
-  );
+  await expect(batchButton).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
   await batchButton.hover();
   await expect(batchButton).toHaveCSS("background-color", "rgb(255, 245, 201)");
   const ruleListPosition = await page
@@ -6185,7 +6182,10 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
   await expect(categorySelection).toHaveJSProperty("indeterminate", true);
   await expect(brandSelection).toHaveJSProperty("indeterminate", true);
   await expect(brandSelection).toHaveAttribute("aria-checked", "mixed");
-  await expect(brandSelection).toHaveCSS("background-color", "rgb(251, 215, 46)");
+  await expect(brandSelection).toHaveCSS(
+    "background-color",
+    "rgb(251, 215, 46)",
+  );
   expect(
     await brandSelection.evaluate(
       (checkbox) => getComputedStyle(checkbox, "::before").transform,

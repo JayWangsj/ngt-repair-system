@@ -1369,6 +1369,13 @@ test("settings opens system update as a separate page", async ({ page }) => {
     "position",
     "relative",
   );
+  await expect
+    .poll(() =>
+      label.evaluate(
+        (element) => getComputedStyle(element, "::after").transform,
+      ),
+    )
+    .toBe("matrix(0, 0, 0, 1, 0, 0)");
   await entry.hover();
   await expect(entry).toHaveCSS("border-top-color", "rgb(231, 201, 90)");
   await expect(entry).toHaveCSS("transform", "none");
@@ -1379,9 +1386,11 @@ test("settings opens system update as a separate page", async ({ page }) => {
     .not.toBe("none");
   await expect
     .poll(() =>
-      label.evaluate((element) => getComputedStyle(element, "::after").opacity),
+      label.evaluate(
+        (element) => getComputedStyle(element, "::after").transform,
+      ),
     )
-    .toBe("1");
+    .toBe("matrix(1, 0, 0, 1, 0, 0)");
   await entry.click();
   await expect(page).toHaveURL(/\/settings\/system-update$/);
   const settingsHeader = page.locator(".settings-detail-page > .page-header");
@@ -2006,9 +2015,9 @@ test("creates and edits a product directly in the inventory row", async ({
     .poll(() =>
       historyCard
         .locator(".inventory-history-title-underline")
-        .evaluate((element) => getComputedStyle(element).opacity),
+        .evaluate((element) => getComputedStyle(element).transform),
     )
-    .toBe("0");
+    .toBe("matrix(0, 0, 0, 1, 0, 0)");
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
     "transform",
     "none",
@@ -2052,9 +2061,9 @@ test("creates and edits a product directly in the inventory row", async ({
     .poll(() =>
       historyCard
         .locator(".inventory-history-title-underline")
-        .evaluate((element) => getComputedStyle(element).opacity),
+        .evaluate((element) => getComputedStyle(element).transform),
     )
-    .toBe("1");
+    .toBe("matrix(1, 0, 0, 1, 0, 0)");
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
     "transform",
     "matrix(1, 0, 0, 1, 8, 0)",
@@ -2076,7 +2085,7 @@ test("creates and edits a product directly in the inventory row", async ({
   ).toHaveCSS("transition-duration", "0s");
   await expect(
     historyCard.locator(".inventory-history-title-underline"),
-  ).toHaveCSS("opacity", "1");
+  ).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 0)");
   await expect(historyCard.locator(".inventory-history-arrow")).toHaveCSS(
     "transition-delay",
     "0.26s, 0.26s",
@@ -3286,6 +3295,12 @@ test("completes a retail sale and opens its immutable receipt", async ({
   });
   await expect(retailQuantity).toHaveValue("2");
   await expect(retailQuantity).toHaveCSS("text-align", "center");
+  const clearCart = page.getByRole("button", { name: "Svuota", exact: true });
+  await expect(clearCart).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(clearCart).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
+  await clearCart.hover();
+  await expect(clearCart).toHaveCSS("background-color", "rgb(255, 240, 238)");
+  await expect(clearCart).toHaveCSS("transform", "none");
   await cartRow.hover();
   const removeProduct = cartRow.getByRole("button", {
     name: "Rimuovi Cavo USB-C Test",

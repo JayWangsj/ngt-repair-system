@@ -4103,8 +4103,9 @@ details.secondary-actions {
   left: 0;
   height: 1px;
   background: currentColor;
-  opacity: 0;
-  transition: opacity 150ms ease-out;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 150ms ease-out;
 }
 .selection-summary .summary-action span {
   color: inherit;
@@ -4119,7 +4120,7 @@ details.secondary-actions {
 }
 .summary-action:hover span::after,
 .summary-action:focus-visible span::after {
-  opacity: 1;
+  transform: scaleX(1);
 }
 .summary-action:hover svg,
 .summary-action:focus-visible svg {
@@ -4129,7 +4130,7 @@ details.secondary-actions {
   color: #a06f00;
 }
 .selection-summary.is-actionable:hover .summary-action span::after {
-  opacity: 1;
+  transform: scaleX(1);
 }
 .selection-summary.is-actionable:hover .summary-action svg {
   transform: translateX(4px);
@@ -5097,8 +5098,9 @@ details.secondary-actions {
   height: 1px;
   background: currentColor;
   content: "";
-  opacity: 0;
-  transition: opacity 150ms ease-out;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 150ms ease-out;
 }
 .fault-manager-trigger svg {
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -5109,7 +5111,7 @@ details.secondary-actions {
 }
 .fault-manager-trigger:hover > span::after,
 .fault-manager-trigger:focus-visible > span::after {
-  opacity: 1;
+  transform: scaleX(1);
 }
 .fault-manager-trigger:hover svg,
 .fault-manager-trigger:focus-visible svg {
@@ -7379,6 +7381,20 @@ summary.record-icon::-webkit-details-marker {
 .retail-remove:active:not(:disabled) {
   background: #fbdedb;
 }
+.retail-clear.button {
+  border-color: transparent;
+  background: transparent;
+  color: #8e3935;
+}
+.retail-clear.button:hover:not(:disabled),
+.retail-clear.button:focus-visible {
+  border-color: transparent;
+  background: #fff0ee;
+  color: #a64642;
+}
+.retail-clear.button:active:not(:disabled) {
+  background: #fbdedb;
+}
 .record-icon:focus-visible,
 .x-icon-button:focus-visible,
 .dialog-close:focus-visible,
@@ -7539,8 +7555,9 @@ summary.record-icon::-webkit-details-marker {
   height: 2px;
   border-radius: 999px;
   background: #f0a400;
-  opacity: 0;
-  transition: opacity 150ms ease-out;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform 150ms ease-out;
 }
 .inventory-history-arrow {
   flex: 0 0 auto;
@@ -7592,7 +7609,7 @@ summary.record-icon::-webkit-details-marker {
 }
 .inventory-history-card:hover .inventory-history-title-underline,
 .inventory-history-card:focus-visible .inventory-history-title-underline {
-  opacity: 1;
+  transform: scaleX(1);
 }
 .inventory-history-card:hover .inventory-history-arrow,
 .inventory-history-card:focus-visible .inventory-history-arrow {
@@ -8133,10 +8150,16 @@ summary.record-icon::-webkit-details-marker {
   background: currentColor;
   content: "";
   opacity: 0;
-  transition: opacity 150ms ease-out;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition:
+    opacity 150ms ease-out,
+    transform 150ms ease-out;
 }
 .dashboard-action-link .dashboard-link-label::after {
-  transition: opacity 150ms ease-out;
+  transition:
+    opacity 150ms ease-out,
+    transform 150ms ease-out;
 }
 .order-list-body .order-link:hover,
 .order-list-body .order-link:focus-visible,
@@ -8164,6 +8187,7 @@ summary.record-icon::-webkit-details-marker {
 .dashboard-action-link:hover .dashboard-link-label::after,
 .dashboard-action-link:focus-visible .dashboard-link-label::after {
   opacity: 1;
+  transform: scaleX(1);
 }
 .order-list-body .order-code-link svg,
 .order-list-body .order-customer-link svg,
@@ -8481,6 +8505,14 @@ summary.record-icon::-webkit-details-marker {
       transform 150ms ease-out 260ms;
   }
   html:not([data-motion="always"]) .inventory-history-title-underline {
+    transition: none;
+  }
+  html:not([data-motion="always"]) .summary-action span::after,
+  html:not([data-motion="always"]) .fault-manager-trigger > span::after,
+  html:not([data-motion="always"])
+    .dashboard-action-link
+    .dashboard-link-label::after,
+  html:not([data-motion="always"]) .order-link > span::after {
     transition: none;
   }
   html:not([data-motion="always"])

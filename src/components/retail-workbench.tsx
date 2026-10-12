@@ -332,6 +332,7 @@ export function RetailWorkbench({
             {count > 0 && (
               <Button
                 variant="ghost"
+                className="retail-clear"
                 onClick={() => {
                   setCart({});
                   setServiceCart({});

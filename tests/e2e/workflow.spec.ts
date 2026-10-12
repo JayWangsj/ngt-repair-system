@@ -1206,12 +1206,25 @@ test("manages one quick service for held service orders and retail checkout", as
   });
   await expect(editServicePrice).toContainText("29,90 €");
   await expect(editServicePrice).toHaveCSS("white-space", "nowrap");
+  const servicePricePencil = editServicePrice.locator("svg");
+  const servicePriceAmount = editServicePrice.locator("span");
+  await page.mouse.move(0, 0);
+  await expect(servicePricePencil).toHaveCSS("opacity", "0");
+  const servicePriceAmountRestBox = await servicePriceAmount.boundingBox();
+  await editServicePrice.hover();
+  await expect(servicePricePencil).toHaveCSS("opacity", "1");
+  const servicePriceAmountHoverBox = await servicePriceAmount.boundingBox();
+  expect(servicePriceAmountHoverBox!.x).toBeLessThan(
+    servicePriceAmountRestBox!.x,
+  );
   const serviceRow = page
     .locator(".retail-cart-row")
     .filter({ hasText: serviceName });
-  const [serviceDisplayBox, serviceRowBox] = await Promise.all([
+  const serviceNameElement = serviceRow.locator(":scope > div > strong");
+  const [serviceDisplayBox, serviceRowBox, serviceNameBox] = await Promise.all([
     editServicePrice.boundingBox(),
     serviceRow.boundingBox(),
+    serviceNameElement.boundingBox(),
   ]);
   expect(
     Math.abs(
@@ -1230,6 +1243,9 @@ test("manages one quick service for held service orders and retail checkout", as
     .filter({ hasText: serviceName });
   const priceFieldBox = await priceField.boundingBox();
   const cartRowBox = await cartRow.boundingBox();
+  const editingServiceNameBox = await serviceNameElement.boundingBox();
+  expect(editingServiceNameBox!.height).toBe(serviceNameBox!.height);
+  expect(priceFieldBox!.width).toBe(serviceDisplayBox!.width);
   expect(priceFieldBox!.x).toBeGreaterThan(
     cartRowBox!.x + cartRowBox!.width / 2,
   );
@@ -3411,7 +3427,11 @@ test("completes a retail sale and opens its immutable receipt", async ({
     name: "Modifica sconto",
     exact: true,
   });
-  await expect(discountButton.locator("svg")).toBeVisible();
+  const discountPencil = discountButton.locator("svg");
+  await page.mouse.move(0, 0);
+  await expect(discountPencil).toHaveCSS("opacity", "0");
+  await discountButton.hover();
+  await expect(discountPencil).toHaveCSS("opacity", "1");
   const [subtotalBox, discountBox] = await Promise.all([
     subtotalAmount.boundingBox(),
     discountButton.boundingBox(),

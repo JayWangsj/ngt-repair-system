@@ -3804,8 +3804,9 @@ details.secondary-actions {
 .retail-service-price-display {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   justify-self: end;
-  gap: 7px;
+  width: 130px;
   min-height: 36px;
   padding: 6px 8px;
   color: var(--ink);
@@ -3814,6 +3815,25 @@ details.secondary-actions {
   white-space: nowrap;
   cursor: pointer;
 }
+.retail-service-price-display svg,
+.retail-discount-display svg {
+  width: 0;
+  opacity: 0;
+  margin-left: 0;
+  overflow: hidden;
+  transition:
+    width 150ms ease-out,
+    margin-left 150ms ease-out,
+    opacity 150ms ease-out;
+}
+.retail-service-price-display:hover svg,
+.retail-service-price-display:focus-visible svg,
+.retail-discount-display:hover svg,
+.retail-discount-display:focus-visible svg {
+  width: 14px;
+  margin-left: 7px;
+  opacity: 1;
+}
 .retail-service-price-display:hover,
 .retail-service-price-display:focus-visible {
   color: #765900;
@@ -3821,7 +3841,8 @@ details.secondary-actions {
   border-radius: 8px;
 }
 .retail-service-price {
-  width: 100%;
+  flex: 1 1 auto;
+  width: 0;
   min-width: 0;
   min-height: 36px;
   text-align: right;
@@ -4895,7 +4916,8 @@ details.secondary-actions {
   white-space: nowrap;
 }
 .retail-discount-field input {
-  width: 100%;
+  flex: 1 1 auto;
+  width: 0;
   min-width: 0;
   min-height: 36px;
   text-align: right;
@@ -4905,9 +4927,11 @@ details.secondary-actions {
 }
 .retail-discount-display {
   display: inline-flex;
+  justify-content: flex-end;
+  width: 130px;
   min-height: 36px;
   align-items: center;
-  gap: 7px;
+  gap: 0;
   padding: 6px 8px;
   border: 0;
   border-radius: 8px;
@@ -4920,6 +4944,12 @@ details.secondary-actions {
 .retail-discount-display:focus-visible {
   background: var(--soft);
   color: #765900;
+}
+@media (prefers-reduced-motion: reduce) {
+  .retail-service-price-display svg,
+  .retail-discount-display svg {
+    transition: none;
+  }
 }
 .retail-total,
 .retail-receipt-total {

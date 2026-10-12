@@ -271,6 +271,7 @@ export const it = {
     products: "prodotti",
     unitPrice: "Prezzo unitario",
     editPrice: "Modifica prezzo",
+    editDiscount: "Modifica sconto",
     quantity: "Quantità",
     subtotal: "Subtotale",
     discount: "Sconto",

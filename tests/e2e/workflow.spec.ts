@@ -1206,6 +1206,20 @@ test("manages one quick service for held service orders and retail checkout", as
   });
   await expect(editServicePrice).toContainText("29,90 €");
   await expect(editServicePrice).toHaveCSS("white-space", "nowrap");
+  const serviceRow = page
+    .locator(".retail-cart-row")
+    .filter({ hasText: serviceName });
+  const [serviceDisplayBox, serviceRowBox] = await Promise.all([
+    editServicePrice.boundingBox(),
+    serviceRow.boundingBox(),
+  ]);
+  expect(
+    Math.abs(
+      serviceDisplayBox!.x +
+        serviceDisplayBox!.width -
+        (serviceRowBox!.x + serviceRowBox!.width),
+    ),
+  ).toBeLessThanOrEqual(1);
   await editServicePrice.click();
   const servicePrice = page.getByLabel(`${serviceName} Prezzo unitario`, {
     exact: true,
@@ -1220,6 +1234,25 @@ test("manages one quick service for held service orders and retail checkout", as
     cartRowBox!.x + cartRowBox!.width / 2,
   );
   await expect(priceField).toHaveCSS("justify-self", "end");
+  await expect(priceField).toHaveCSS("flex-direction", "row");
+  const [serviceInputBox, currencyBox] = await Promise.all([
+    servicePrice.boundingBox(),
+    priceField.locator(":scope > span[aria-hidden='true']").boundingBox(),
+  ]);
+  expect(
+    Math.abs(
+      serviceInputBox!.y +
+        serviceInputBox!.height / 2 -
+        (currencyBox!.y + currencyBox!.height / 2),
+    ),
+  ).toBeLessThanOrEqual(2);
+  expect(
+    Math.abs(
+      priceFieldBox!.x +
+        priceFieldBox!.width -
+        (cartRowBox!.x + cartRowBox!.width),
+    ),
+  ).toBeLessThanOrEqual(1);
   await expect(cartRow.locator(":scope > b")).toHaveCount(0);
   await servicePrice.fill("24.50");
   await page.getByRole("button", { name: /Conferma incasso 24,50 €/ }).click();
@@ -2115,6 +2148,18 @@ test("creates and edits a product directly in the inventory row", async ({
   });
   const movementMonth = movementDialog.getByLabel("Mese", { exact: true });
   await expect(movementMonth).toHaveAttribute("type", "month");
+  const movementClose = movementDialog.getByRole("button", { name: "Chiudi" });
+  const [movementMonthBox, movementCloseBox] = await Promise.all([
+    movementMonth.boundingBox(),
+    movementClose.boundingBox(),
+  ]);
+  expect(movementMonthBox!.width).toBeLessThanOrEqual(180);
+  expect(movementMonthBox!.x + movementMonthBox!.width).toBeLessThan(
+    movementCloseBox!.x,
+  );
+  expect(
+    movementCloseBox!.x - (movementMonthBox!.x + movementMonthBox!.width),
+  ).toBeLessThanOrEqual(16);
   const currentMovementMonth = await movementMonth.inputValue();
   await expect(movementDialog).toContainText(productName);
   await expect(movementDialog).toContainText("4 → 6");
@@ -3266,6 +3311,16 @@ test("sales history uses a monthly filter", async ({ page }) => {
   const period = dialog.getByLabel("Mese");
   await expect(period).toHaveAttribute("type", "month");
   await expect(period).toHaveCSS("cursor", "pointer");
+  const close = dialog.getByRole("button", { name: "Chiudi" });
+  const [periodBox, closeBox] = await Promise.all([
+    period.boundingBox(),
+    close.boundingBox(),
+  ]);
+  expect(periodBox!.width).toBeLessThanOrEqual(180);
+  expect(periodBox!.x + periodBox!.width).toBeLessThan(closeBox!.x);
+  expect(closeBox!.x - (periodBox!.x + periodBox!.width)).toBeLessThanOrEqual(
+    16,
+  );
   await period.fill("2025-01");
   await expect(dialog).toContainText("Nessuna vendita registrata.");
   await period.fill(new Date().toISOString().slice(0, 7));
@@ -3301,6 +3356,7 @@ test("completes a retail sale and opens its immutable receipt", async ({
   await page.goto("/retail");
   const products = page.locator(".retail-product-grid");
   const cable = products.getByRole("button", { name: /Cavo USB-C Test/ });
+  await expect(cable.locator("[data-category-icon='cable']")).toBeVisible();
   await cable.click();
   await cable.click();
   const cartRow = page.locator(".retail-cart-row");
@@ -3347,7 +3403,36 @@ test("completes a retail sale and opens its immutable receipt", async ({
     products.getByRole("button", { name: /Cover esaurita Test/ }),
   ).toBeDisabled();
   await expect(page.getByRole("button", { name: "Bonifico" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Carta", exact: true }).click();
+  const subtotalAmount = page
+    .locator(".retail-totals > div")
+    .first()
+    .locator("strong");
+  const discountButton = page.getByRole("button", {
+    name: "Modifica sconto",
+    exact: true,
+  });
+  await expect(discountButton.locator("svg")).toBeVisible();
+  const [subtotalBox, discountBox] = await Promise.all([
+    subtotalAmount.boundingBox(),
+    discountButton.boundingBox(),
+  ]);
+  expect(
+    Math.abs(
+      subtotalBox!.x +
+        subtotalBox!.width -
+        (discountBox!.x + discountBox!.width),
+    ),
+  ).toBeLessThanOrEqual(1);
+  await discountButton.click();
+  const discountInput = page.getByLabel("Sconto", { exact: true });
+  await expect(discountInput).toBeVisible();
+  await discountInput.fill("0");
+  await discountInput.press("Tab");
+  await expect(discountButton).toBeVisible();
+  const cardMethod = page.getByRole("button", { name: "Carta", exact: true });
+  await expect(cardMethod.locator("svg")).toBeVisible();
+  await cardMethod.click();
+  await expect(cardMethod).toHaveClass(/active/);
   await page.getByRole("button", { name: /Conferma incasso.*24,00/ }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("status")).toContainText("Vendita completata");
@@ -3744,7 +3829,7 @@ test("system update page checks a private release and shows real progress", asyn
 test("system update page offers browser fallback and confirms authorization", async ({
   page,
 }) => {
-  let authorizationStarted = false;
+  let authorizationStarts = 0;
   let authorizationPolls = 0;
   await page.route("**/api/system-update", (route) =>
     route.fulfill({
@@ -3760,7 +3845,7 @@ test("system update page offers browser fallback and confirms authorization", as
   );
   await page.route("**/api/system-update/auth", (route) => {
     if (route.request().method() === "POST") {
-      authorizationStarted = true;
+      authorizationStarts += 1;
       return route.fulfill({
         status: 202,
         contentType: "application/json",
@@ -3799,7 +3884,7 @@ test("system update page offers browser fallback and confirms authorization", as
   await page
     .getByRole("button", { name: "Autorizza GitHub", exact: true })
     .click();
-  await expect.poll(() => authorizationStarted).toBe(true);
+  await expect.poll(() => authorizationStarts).toBe(1);
   await expect(page.locator(".github-auth-fallback")).toContainText(
     "ABCD-1234",
   );
@@ -3807,6 +3892,14 @@ test("system update page offers browser fallback and confirms authorization", as
     page.getByRole("link", { name: "Apri autorizzazione" }),
   ).toHaveAttribute("href", "https://github.com/login/device");
   await expect(page.locator(".system-update-page")).toContainText(
+    "GitHub autorizzato. L'accesso al repository privato è stato verificato.",
+  );
+  await page
+    .getByRole("button", { name: "Autorizza GitHub", exact: true })
+    .click();
+  await expect.poll(() => authorizationStarts).toBe(1);
+  await expect(page.locator(".github-auth-fallback")).toHaveCount(0);
+  await expect(page.locator(".system-update-feedback")).toContainText(
     "GitHub autorizzato. L'accesso al repository privato è stato verificato.",
   );
 });

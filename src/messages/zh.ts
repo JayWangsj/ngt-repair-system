@@ -231,6 +231,7 @@ export const zh: typeof it = {
     products: "件商品",
     unitPrice: "单价",
     editPrice: "修改价格",
+    editDiscount: "修改折扣",
     quantity: "数量",
     subtotal: "小计",
     discount: "折扣",

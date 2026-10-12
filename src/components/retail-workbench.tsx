@@ -1,13 +1,23 @@
 "use client";
 import { useMemo, useState, useTransition } from "react";
 import {
+  Banknote,
+  BatteryCharging,
+  Boxes,
+  Cable,
   Check,
+  CircleEllipsis,
   ClipboardList,
+  CreditCard,
+  Headphones,
+  Package,
   Pencil,
-  ShoppingBag,
-  Sparkles,
+  PlugZap,
+  ShieldCheck,
+  Smartphone,
   Star,
   Trash2,
+  Wrench,
   X,
 } from "lucide-react";
 import { createRetailSaleAction } from "@/app/actions";
@@ -39,6 +49,29 @@ type RetailQuickService = {
   defaultPrice: number;
 };
 const quickServiceFilter = "__quick_services__";
+
+function productCategoryIcon(category: string, name: string) {
+  const value = `${category} ${name}`.trim().toLocaleLowerCase();
+  if (/cav|cable|线/.test(value)) return { Icon: Cable, kind: "cable" };
+  if (/batter|电池/.test(value))
+    return { Icon: BatteryCharging, kind: "battery" };
+  if (/carica|charger|aliment|plug|充电|电源/.test(value))
+    return { Icon: PlugZap, kind: "charger" };
+  if (/cuff|audio|headphone|耳机/.test(value))
+    return { Icon: Headphones, kind: "audio" };
+  if (/cover|custodia|case|保护|手机壳/.test(value))
+    return { Icon: ShieldCheck, kind: "case" };
+  if (/usato|used|smartphone|telefono|phone|二手|手机/.test(value))
+    return { Icon: Smartphone, kind: "device" };
+  if (/accessor|配件/.test(value)) return { Icon: Boxes, kind: "accessory" };
+  return { Icon: Package, kind: "product" };
+}
+
+const paymentIcons = {
+  CASH: Banknote,
+  CARD: CreditCard,
+  OTHER: CircleEllipsis,
+};
 
 type RetailDialog =
   | { view: "history" }
@@ -78,6 +111,7 @@ export function RetailWorkbench({
   const [serviceCart, setServiceCart] = useState<Record<string, string>>({});
   const [editingServicePrice, setEditingServicePrice] = useState("");
   const [discount, setDiscount] = useState("0");
+  const [editingDiscount, setEditingDiscount] = useState(false);
   const [method, setMethod] =
     useState<(typeof creatablePaymentMethods)[number]>("CASH");
   const [sales, setSales] = useState(initialSales);
@@ -244,7 +278,7 @@ export function RetailWorkbench({
                   setFavorites(false);
                 }}
               >
-                <Sparkles size={15} />
+                <Wrench size={15} aria-hidden="true" />
                 {it.quickService.title}
               </button>
               {categories.map((item) => (
@@ -264,6 +298,10 @@ export function RetailWorkbench({
           <div className="retail-product-grid">
             {filtered.map((product) => {
               const unavailable = product.stockQuantity <= 0;
+              const { Icon, kind } = productCategoryIcon(
+                product.category,
+                product.name,
+              );
               return (
                 <button
                   className="retail-product-card"
@@ -280,8 +318,11 @@ export function RetailWorkbench({
                       fill="currentColor"
                     />
                   )}
-                  <span className="retail-product-icon">
-                    <ShoppingBag size={24} />
+                  <span
+                    className="retail-product-icon"
+                    data-category-icon={kind}
+                  >
+                    <Icon size={24} aria-hidden="true" />
                   </span>
                   <strong>{product.name}</strong>
                   <small>{product.category}</small>
@@ -305,8 +346,11 @@ export function RetailWorkbench({
                   }))
                 }
               >
-                <span className="retail-product-icon">
-                  <Sparkles size={24} />
+                <span
+                  className="retail-product-icon"
+                  data-category-icon="service"
+                >
+                  <Wrench size={24} aria-hidden="true" />
                 </span>
                 <strong>{service.name}</strong>
                 <small>{service.notes || it.quickService.title}</small>
@@ -435,15 +479,33 @@ export function RetailWorkbench({
               <span>{it.retail.subtotal}</span>
               <strong>{money(combinedSubtotal)}</strong>
             </div>
-            <label>
+            <div className="retail-discount-row">
               <span>{it.retail.discount}</span>
-              <input
-                aria-label={it.retail.discount}
-                inputMode="decimal"
-                value={discount}
-                onChange={(event) => setDiscount(event.target.value)}
-              />
-            </label>
+              {editingDiscount ? (
+                <label className="retail-discount-field is-editing">
+                  <span className="sr-only">{it.retail.discount}</span>
+                  <input
+                    autoFocus
+                    aria-label={it.retail.discount}
+                    inputMode="decimal"
+                    value={discount}
+                    onChange={(event) => setDiscount(event.target.value)}
+                    onBlur={() => setEditingDiscount(false)}
+                  />
+                  <span aria-hidden="true">€</span>
+                </label>
+              ) : (
+                <button
+                  type="button"
+                  className="retail-discount-display"
+                  aria-label={it.retail.editDiscount}
+                  onClick={() => setEditingDiscount(true)}
+                >
+                  <span>{money(discountCents)}</span>
+                  <Pencil size={14} aria-hidden="true" />
+                </button>
+              )}
+            </div>
             <div className="retail-total">
               <span>{it.retail.total}</span>
               <strong>{money(total)}</strong>
@@ -451,16 +513,20 @@ export function RetailWorkbench({
           </div>
           <fieldset className="payment-methods">
             <legend>{it.retail.paymentMethod}</legend>
-            {creatablePaymentMethods.map((value) => (
-              <button
-                type="button"
-                className={method === value ? "active" : ""}
-                key={value}
-                onClick={() => setMethod(value)}
-              >
-                {it.methods[value]}
-              </button>
-            ))}
+            {creatablePaymentMethods.map((value) => {
+              const PaymentIcon = paymentIcons[value];
+              return (
+                <button
+                  type="button"
+                  className={method === value ? "active" : ""}
+                  key={value}
+                  onClick={() => setMethod(value)}
+                >
+                  <PaymentIcon size={17} aria-hidden="true" />
+                  {it.methods[value]}
+                </button>
+              );
+            })}
           </fieldset>
           {error && <p className="message error">{error}</p>}
           <Button

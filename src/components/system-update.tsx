@@ -127,6 +127,12 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
   }
 
   async function beginGitHubLogin() {
+    if (info?.installed && !info.authRequired) {
+      setGitHubAuth(null);
+      setError("");
+      setMessage(it.updateLoginSuccess);
+      return;
+    }
     setPending(true);
     setError("");
     setMessage(it.updateLoginOpening);

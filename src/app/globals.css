@@ -3047,6 +3047,9 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
   }
   .service-order-print {
     display: block;
+    width: 100%;
+    max-width: 277mm;
+    margin: 0 auto;
     page: service-order;
     color: #181818;
     font-size: 8.5pt;
@@ -3057,8 +3060,12 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
     position: relative;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12mm;
+    gap: 10mm;
+    height: 190mm;
     min-height: 190mm;
+    max-height: 190mm;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
   }
   .service-order-print-cut {
     position: absolute;
@@ -3078,9 +3085,11 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
   .service-order-print-copy {
     display: flex;
     min-width: 0;
-    min-height: 190mm;
+    min-height: 0;
+    height: 100%;
     flex-direction: column;
-    break-inside: auto;
+    break-inside: avoid-page;
+    page-break-inside: avoid;
   }
   .service-order-print-header {
     display: flex;
@@ -3278,7 +3287,7 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
 
 @page service-order {
   size: A4 landscape;
-  margin: 7mm;
+  margin: 10mm;
 }
 
 .service-mode-switch {

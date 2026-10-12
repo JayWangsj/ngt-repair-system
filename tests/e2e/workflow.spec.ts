@@ -1488,10 +1488,29 @@ test("service order print renders mirrored copies from live order data", async (
   ]);
   expect(Math.abs(leftBox!.width - rightBox!.width)).toBeLessThanOrEqual(1);
   expect(rightBox!.x).toBeGreaterThan(leftBox!.x + leftBox!.width);
-  const printablePageHeight = (196 / 25.4) * 96;
+  const printSheet = printView.locator(".service-order-print-sheet");
+  const printSheetBox = await printSheet.boundingBox();
+  const printablePageWidth = (277 / 25.4) * 96;
+  const printablePageHeight = (190 / 25.4) * 96;
+  expect(printSheetBox!.width).toBeLessThanOrEqual(printablePageWidth + 1);
+  expect(printSheetBox!.height).toBeLessThanOrEqual(printablePageHeight + 1);
   expect(Math.max(leftBox!.height, rightBox!.height)).toBeLessThanOrEqual(
     printablePageHeight + 1,
   );
+  expect(
+    await copies.evaluateAll((elements) =>
+      elements.every(
+        (element) => element.scrollHeight <= element.clientHeight + 1,
+      ),
+    ),
+  ).toBe(true);
+  const pdf = await page.pdf({
+    format: "A4",
+    landscape: true,
+    printBackground: true,
+    preferCSSPageSize: true,
+  });
+  expect(pdf.toString("latin1").match(/\/Type\s*\/Page\b/g)).toHaveLength(1);
 });
 
 test("dashboard animates on entry and data changes while respecting reduced motion", async ({

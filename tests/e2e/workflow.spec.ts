@@ -2145,6 +2145,8 @@ test("repair list exposes month, status, due-date and payment controls", async (
 
   const customerLink = row.locator(".order-customer-link");
   const customerUnderline = customerLink.locator("span");
+  await expect(customerUnderline).toHaveCSS("overflow-x", "clip");
+  await expect(customerUnderline).toHaveCSS("overflow-y", "visible");
   expect(
     await customerUnderline.evaluate(
       (text) => getComputedStyle(text, "::after").transform,

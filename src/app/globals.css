@@ -7599,7 +7599,7 @@ summary.record-icon::-webkit-details-marker {
 .order-list-body .order-link > span,
 .order-list-body td > strong {
   min-width: 0;
-  overflow: hidden;
+  overflow: clip visible;
   text-overflow: ellipsis;
 }
 .order-list-body td > strong {

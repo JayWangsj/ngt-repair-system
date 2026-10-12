@@ -1228,6 +1228,13 @@ test("manages one quick service for held service orders and retail checkout", as
   ]);
   expect(
     Math.abs(
+      servicePriceAmountRestBox!.x +
+        servicePriceAmountRestBox!.width -
+        (serviceRowBox!.x + serviceRowBox!.width),
+    ),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(
       serviceDisplayBox!.x +
         serviceDisplayBox!.width -
         (serviceRowBox!.x + serviceRowBox!.width),
@@ -3383,6 +3390,17 @@ test("completes a retail sale and opens its immutable receipt", async ({
   await expect(retailQuantity).toHaveValue("2");
   await expect(retailQuantity).toHaveCSS("text-align", "center");
   const clearCart = page.getByRole("button", { name: "Svuota", exact: true });
+  const [clearCartBox, productTotalBox] = await Promise.all([
+    clearCart.boundingBox(),
+    cartRow.locator(":scope > b").boundingBox(),
+  ]);
+  expect(
+    Math.abs(
+      clearCartBox!.x +
+        clearCartBox!.width -
+        (productTotalBox!.x + productTotalBox!.width),
+    ),
+  ).toBeLessThanOrEqual(1);
   await expect(clearCart).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(clearCart).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
   await clearCart.hover();
@@ -3423,26 +3441,38 @@ test("completes a retail sale and opens its immutable receipt", async ({
     .locator(".retail-totals > div")
     .first()
     .locator("strong");
+  const [productTotalAlignedBox, subtotalAlignedBox] = await Promise.all([
+    cartRow.locator(":scope > b").boundingBox(),
+    subtotalAmount.boundingBox(),
+  ]);
+  expect(
+    Math.abs(
+      productTotalAlignedBox!.x +
+        productTotalAlignedBox!.width -
+        (subtotalAlignedBox!.x + subtotalAlignedBox!.width),
+    ),
+  ).toBeLessThanOrEqual(1);
   const discountButton = page.getByRole("button", {
     name: "Modifica sconto",
     exact: true,
   });
   const discountPencil = discountButton.locator("svg");
+  const discountAmount = discountButton.locator("span");
   await page.mouse.move(0, 0);
   await expect(discountPencil).toHaveCSS("opacity", "0");
-  await discountButton.hover();
-  await expect(discountPencil).toHaveCSS("opacity", "1");
-  const [subtotalBox, discountBox] = await Promise.all([
+  const [subtotalBox, discountAmountBox] = await Promise.all([
     subtotalAmount.boundingBox(),
-    discountButton.boundingBox(),
+    discountAmount.boundingBox(),
   ]);
   expect(
     Math.abs(
       subtotalBox!.x +
         subtotalBox!.width -
-        (discountBox!.x + discountBox!.width),
+        (discountAmountBox!.x + discountAmountBox!.width),
     ),
   ).toBeLessThanOrEqual(1);
+  await discountButton.hover();
+  await expect(discountPencil).toHaveCSS("opacity", "1");
   await discountButton.click();
   const discountInput = page.getByLabel("Sconto", { exact: true });
   await expect(discountInput).toBeVisible();

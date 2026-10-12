@@ -3808,7 +3808,7 @@ details.secondary-actions {
   justify-self: end;
   width: 130px;
   min-height: 36px;
-  padding: 6px 8px;
+  padding: 6px 0;
   color: var(--ink);
   font-size: 14px;
   font-weight: 700;
@@ -4794,6 +4794,7 @@ details.secondary-actions {
 }
 .retail-cart .section-heading {
   align-items: flex-start;
+  padding-right: 0;
 }
 .retail-cart .section-heading h2 {
   margin-bottom: 2px;
@@ -4932,7 +4933,7 @@ details.secondary-actions {
   min-height: 36px;
   align-items: center;
   gap: 0;
-  padding: 6px 8px;
+  padding: 6px 0;
   border: 0;
   border-radius: 8px;
   background: transparent;

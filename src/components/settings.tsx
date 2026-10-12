@@ -1,15 +1,22 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   CalendarDays,
   ChevronRight,
+  CircleAlert,
+  DatabaseBackup,
   Download,
+  FlaskConical,
+  Languages,
   RefreshCw,
+  Smartphone,
   Sparkles,
-  Upload,
   Trash2,
+  Upload,
+  Wrench,
 } from "lucide-react";
 import { clearDataAction, updateBusinessClockAction } from "@/app/actions";
 import { LanguageSwitch, useMessages } from "./language";
@@ -24,7 +31,6 @@ import {
   isAlwaysMotionEnabled,
   setAlwaysMotionEnabled,
 } from "@/lib/motion-preference";
-import { TestTools } from "./test-tools";
 import {
   readOrderViewportFollow,
   writeOrderViewportFollow,
@@ -36,36 +42,122 @@ import {
   type SavedModelView,
 } from "./catalog-managers";
 
-export function SettingsTools({
+function SettingsEntry({
+  href,
+  icon,
+  title,
+  description,
+  className = "",
+}: {
+  href: string;
+  icon: ReactNode;
+  title: string;
+  description: string;
+  className?: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className={`panel padded settings-card settings-entry dashboard-action-link ${className}`.trim()}
+    >
+      <span className="settings-entry-icon" aria-hidden="true">
+        {icon}
+      </span>
+      <span className="settings-entry-copy">
+        <strong className="dashboard-link-label">{title}</strong>
+        <small>{description}</small>
+      </span>
+      <ChevronRight size={20} aria-hidden="true" />
+    </Link>
+  );
+}
+
+export function SettingsOverview({
   currentVersion,
   testToolsEnabled,
-  faultOptions,
-  clock,
-  today,
-  quickServices,
-  savedModels,
 }: {
   currentVersion: string;
   testToolsEnabled: boolean;
-  faultOptions: FaultCatalogItem[];
-  clock: { mode: "SYSTEM" | "MANUAL"; manualDate: string };
-  today: string;
-  quickServices: QuickServiceView[];
-  savedModels: SavedModelView[];
 }) {
   const it = useMessages();
-  const router = useRouter();
-  const input = useRef<HTMLInputElement>(null);
-  const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
-  const [clockPending, setClockPending] = useState(false);
-  const [dateMode, setDateMode] = useState(clock.mode);
-  const [manualDate, setManualDate] = useState(clock.manualDate || today);
-  const [savedClock, setSavedClock] = useState({
-    mode: clock.mode,
-    manualDate: clock.manualDate || today,
-  });
+  return (
+    <div className="settings-grid settings-overview">
+      <SettingsEntry
+        href="/settings/language"
+        icon={<Languages size={20} />}
+        title={it.language}
+        description={it.languageSettingsHelp}
+      />
+      <SettingsEntry
+        href="/settings/interface-motion"
+        icon={<Sparkles size={20} />}
+        title={it.interfaceMotion}
+        description={it.interfaceMotionHelp}
+      />
+      {testToolsEnabled && (
+        <SettingsEntry
+          href="/settings/test-tools"
+          icon={<FlaskConical size={20} />}
+          title={it.testTools}
+          description={it.testToolsHelp}
+        />
+      )}
+      <SettingsEntry
+        href="/settings/business-date"
+        icon={<CalendarDays size={20} />}
+        title={it.businessDate}
+        description={it.businessDateHelp}
+      />
+      <SettingsEntry
+        href="/settings/system-update"
+        icon={<RefreshCw size={20} />}
+        title={it.systemUpdate}
+        description={`${it.currentVersion}: ${currentVersion}`}
+        className="system-update-entry"
+      />
+      <SettingsEntry
+        href="/settings/quick-services"
+        icon={<Wrench size={20} />}
+        title={it.quickService.title}
+        description={it.quickService.description}
+      />
+      <SettingsEntry
+        href="/settings/device-models"
+        icon={<Smartphone size={20} />}
+        title={it.modelCatalog.title}
+        description={it.modelCatalog.description}
+      />
+      <SettingsEntry
+        href="/settings/fault-catalog"
+        icon={<CircleAlert size={20} />}
+        title={it.faultCatalog}
+        description={it.faultCatalogDescription}
+      />
+      <SettingsEntry
+        href="/settings/data"
+        icon={<DatabaseBackup size={20} />}
+        title={it.dataManagement}
+        description={it.dataManagementHelp}
+      />
+    </div>
+  );
+}
+
+export function LanguageSettings() {
+  const it = useMessages();
+  return (
+    <section className="panel padded settings-card">
+      <div className="settings-card-title">
+        <Languages size={19} aria-hidden="true" />
+        <h2>{it.language}</h2>
+      </div>
+      <LanguageSwitch />
+    </section>
+  );
+}
+
+export function MotionSettings() {
+  const it = useMessages();
   const [alwaysMotion, setAlwaysMotion] = useState(false);
   const [followOrderMotion, setFollowOrderMotion] = useState(true);
 
@@ -87,6 +179,78 @@ export function SettingsTools({
     setFollowOrderMotion(enabled);
   }
 
+  return (
+    <section className="panel padded settings-card motion-settings">
+      <div className="settings-card-title">
+        <Sparkles size={19} aria-hidden="true" />
+        <h2>{it.interfaceMotion}</h2>
+      </div>
+      <div className="settings-action">
+        <div>
+          <strong>{it.alwaysPlayMotion}</strong>
+          <p>{it.motionPreferenceHelp}</p>
+        </div>
+        <div className="motion-setting-control">
+          <span>{alwaysMotion ? it.motionAlways : it.motionSystem}</span>
+          <button
+            type="button"
+            className="motion-switch"
+            role="switch"
+            aria-checked={alwaysMotion}
+            aria-label={it.alwaysPlayMotion}
+            onClick={() => changeMotionPreference(!alwaysMotion)}
+          >
+            <span aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+      <div className="settings-action">
+        <div>
+          <strong>{it.followRepairRowMotion}</strong>
+          <p>{it.followRepairRowMotionHelp}</p>
+        </div>
+        <div className="motion-setting-control">
+          <span>
+            {followOrderMotion ? it.motionFollowOn : it.motionFollowOff}
+          </span>
+          <button
+            type="button"
+            className="motion-switch"
+            role="switch"
+            aria-checked={followOrderMotion}
+            aria-label={it.followRepairRowMotion}
+            onClick={() => changeOrderMotionFollow(!followOrderMotion)}
+          >
+            <span aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function BusinessDateSettings({
+  clock,
+  today,
+}: {
+  clock: { mode: "SYSTEM" | "MANUAL"; manualDate: string };
+  today: string;
+}) {
+  const it = useMessages();
+  const router = useRouter();
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [clockPending, setClockPending] = useState(false);
+  const [dateMode, setDateMode] = useState(clock.mode);
+  const [manualDate, setManualDate] = useState(clock.manualDate || today);
+  const [savedClock, setSavedClock] = useState({
+    mode: clock.mode,
+    manualDate: clock.manualDate || today,
+  });
+  const clockChanged =
+    dateMode !== savedClock.mode ||
+    (dateMode === "MANUAL" && manualDate !== savedClock.manualDate);
+
   async function saveClock() {
     if (clockPending || !clockChanged) return;
     setClockPending(true);
@@ -106,9 +270,107 @@ export function SettingsTools({
     setClockPending(false);
   }
 
-  const clockChanged =
-    dateMode !== savedClock.mode ||
-    (dateMode === "MANUAL" && manualDate !== savedClock.manualDate);
+  return (
+    <section className="panel padded settings-card business-date-settings">
+      <div className="settings-card-title">
+        <CalendarDays size={19} aria-hidden="true" />
+        <h2>{it.businessDate}</h2>
+      </div>
+      <p>{it.businessDateHelp}</p>
+      <div className="settings-date-form">
+        <Field label={it.dateMode}>
+          <SimpleSelect
+            value={dateMode}
+            onChange={(value) =>
+              setDateMode(value === "MANUAL" ? "MANUAL" : "SYSTEM")
+            }
+            ariaLabel={it.dateMode}
+            placeholder={it.systemDate}
+            options={[
+              { value: "SYSTEM", label: it.systemDate },
+              { value: "MANUAL", label: it.manualDate },
+            ]}
+          />
+        </Field>
+        {dateMode === "MANUAL" && (
+          <Field label={it.manualDate}>
+            <DatePicker
+              value={manualDate}
+              onChange={(event) => setManualDate(event.target.value)}
+            />
+          </Field>
+        )}
+        <div className="business-date-current">
+          <span>{it.currentBusinessDate}</span>
+          <strong>{today.split("-").reverse().join("/")}</strong>
+        </div>
+        <Button
+          type="button"
+          className="settings-date-save"
+          disabled={
+            clockPending ||
+            !clockChanged ||
+            (dateMode === "MANUAL" && !manualDate)
+          }
+          onClick={() => void saveClock()}
+        >
+          {it.save}
+        </Button>
+      </div>
+      {message && (
+        <p className="message success" role="status">
+          {message}
+        </p>
+      )}
+      {error && (
+        <p className="message error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
+  );
+}
+
+export function QuickServiceSettings({ items }: { items: QuickServiceView[] }) {
+  const it = useMessages();
+  return (
+    <section className="panel padded settings-card">
+      <h2>{it.quickService.title}</h2>
+      <p>{it.quickService.description}</p>
+      <QuickServiceManager items={items} />
+    </section>
+  );
+}
+
+export function DeviceModelSettings({ items }: { items: SavedModelView[] }) {
+  const it = useMessages();
+  return (
+    <section className="panel padded settings-card">
+      <h2>{it.modelCatalog.title}</h2>
+      <p>{it.modelCatalog.description}</p>
+      <DeviceModelManager items={items} />
+    </section>
+  );
+}
+
+export function FaultCatalogSettings({ items }: { items: FaultCatalogItem[] }) {
+  const it = useMessages();
+  return (
+    <section className="panel padded settings-card">
+      <h2>{it.faultCatalog}</h2>
+      <p>{it.faultCatalogDescription}</p>
+      <FaultCatalogManager items={items} triggerLabel={it.manageFaults} />
+    </section>
+  );
+}
+
+export function DataSettings() {
+  const it = useMessages();
+  const router = useRouter();
+  const input = useRef<HTMLInputElement>(null);
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
   async function exportFile() {
     setPending(true);
@@ -181,11 +443,7 @@ export function SettingsTools({
       };
       if (!response.ok) throw new Error(result.error || it.connectionError);
       setMessage(
-        it.importSuccess +
-          " " +
-          String(result.imported ?? 0) +
-          " / " +
-          String(result.skipped ?? 0),
+        `${it.importSuccess} ${String(result.imported ?? 0)} / ${String(result.skipped ?? 0)}`,
       );
       router.refresh();
     } catch (cause) {
@@ -214,206 +472,73 @@ export function SettingsTools({
   }
 
   return (
-    <div className="settings-grid">
-      <section className="panel padded settings-card">
-        <h2>{it.language}</h2>
-        <LanguageSwitch />
-      </section>
-      <section className="panel padded settings-card motion-settings">
-        <div className="settings-card-title">
-          <Sparkles size={19} aria-hidden="true" />
-          <h2>{it.interfaceMotion}</h2>
+    <section className="panel padded settings-card">
+      <h2>{it.dataManagement}</h2>
+      <div className="settings-action">
+        <div>
+          <strong>{it.exportData}</strong>
+          <p>{it.exportHelp}</p>
         </div>
-        <div className="settings-action">
-          <div>
-            <strong>{it.alwaysPlayMotion}</strong>
-            <p>{it.motionPreferenceHelp}</p>
-          </div>
-          <div className="motion-setting-control">
-            <span>{alwaysMotion ? it.motionAlways : it.motionSystem}</span>
-            <button
-              type="button"
-              className="motion-switch"
-              role="switch"
-              aria-checked={alwaysMotion}
-              aria-label={it.alwaysPlayMotion}
-              onClick={() => changeMotionPreference(!alwaysMotion)}
-            >
-              <span aria-hidden="true" />
-            </button>
-          </div>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pending}
+          onClick={() => void exportFile()}
+        >
+          <Download size={17} />
+          {it.exportData}
+        </Button>
+      </div>
+      <div className="settings-action">
+        <div>
+          <strong>{it.importData}</strong>
+          <p>{it.importHelp}</p>
         </div>
-        <div className="settings-action">
-          <div>
-            <strong>{it.followRepairRowMotion}</strong>
-            <p>{it.followRepairRowMotionHelp}</p>
-          </div>
-          <div className="motion-setting-control">
-            <span>
-              {followOrderMotion ? it.motionFollowOn : it.motionFollowOff}
-            </span>
-            <button
-              type="button"
-              className="motion-switch"
-              role="switch"
-              aria-checked={followOrderMotion}
-              aria-label={it.followRepairRowMotion}
-              onClick={() => changeOrderMotionFollow(!followOrderMotion)}
-            >
-              <span aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-      </section>
-      {testToolsEnabled && <TestTools />}
-      <section className="panel padded settings-card business-date-settings">
-        <div className="settings-card-title">
-          <CalendarDays size={19} aria-hidden="true" />
-          <h2>{it.businessDate}</h2>
-        </div>
-        <p>{it.businessDateHelp}</p>
-        <div className="settings-date-form">
-          <Field label={it.dateMode}>
-            <SimpleSelect
-              value={dateMode}
-              onChange={(value) =>
-                setDateMode(value === "MANUAL" ? "MANUAL" : "SYSTEM")
-              }
-              ariaLabel={it.dateMode}
-              placeholder={it.systemDate}
-              options={[
-                { value: "SYSTEM", label: it.systemDate },
-                { value: "MANUAL", label: it.manualDate },
-              ]}
-            />
-          </Field>
-          {dateMode === "MANUAL" && (
-            <Field label={it.manualDate}>
-              <DatePicker
-                value={manualDate}
-                onChange={(event) => setManualDate(event.target.value)}
-              />
-            </Field>
-          )}
-          <div className="business-date-current">
-            <span>{it.currentBusinessDate}</span>
-            <strong>{today.split("-").reverse().join("/")}</strong>
-          </div>
-          <Button
-            type="button"
-            className="settings-date-save"
-            disabled={
-              clockPending ||
-              !clockChanged ||
-              (dateMode === "MANUAL" && !manualDate)
-            }
-            onClick={() => void saveClock()}
-          >
-            {it.save}
-          </Button>
-        </div>
-      </section>
-      <Link
-        href="/settings/system-update"
-        className="panel padded settings-card system-update-entry"
-      >
-        <span className="system-update-entry-icon" aria-hidden="true">
-          <RefreshCw size={20} />
-        </span>
-        <span>
-          <strong>{it.systemUpdate}</strong>
-          <small>
-            {it.currentVersion}: {currentVersion}
-          </small>
-        </span>
-        <ChevronRight size={20} aria-hidden="true" />
-      </Link>
-      <section className="panel padded settings-card">
-        <h2>{it.quickService.title}</h2>
-        <p>{it.quickService.description}</p>
-        <QuickServiceManager items={quickServices} />
-      </section>
-      <section className="panel padded settings-card">
-        <h2>{it.modelCatalog.title}</h2>
-        <p>{it.modelCatalog.description}</p>
-        <DeviceModelManager items={savedModels} />
-      </section>
-      <section className="panel padded settings-card">
-        <h2>{it.faultCatalog}</h2>
-        <p>{it.faultCatalogDescription}</p>
-        <FaultCatalogManager
-          items={faultOptions}
-          triggerLabel={it.manageFaults}
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pending}
+          onClick={() => input.current?.click()}
+        >
+          <Upload size={17} />
+          {it.chooseBackup}
+        </Button>
+        <input
+          ref={input}
+          className="sr-only"
+          type="file"
+          accept="application/json,.json"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void importFile(file);
+          }}
         />
-      </section>
-      <section className="panel padded settings-card">
-        <h2>{it.dataManagement}</h2>
-        <div className="settings-action">
-          <div>
-            <strong>{it.exportData}</strong>
-            <p>{it.exportHelp}</p>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={pending}
-            onClick={() => void exportFile()}
-          >
-            <Download size={17} />
-            {it.exportData}
-          </Button>
+      </div>
+      <div className="settings-action danger-zone">
+        <div>
+          <strong>{it.clearData}</strong>
+          <p>{it.clearDataHelp}</p>
         </div>
-        <div className="settings-action">
-          <div>
-            <strong>{it.importData}</strong>
-            <p>{it.importHelp}</p>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={pending}
-            onClick={() => input.current?.click()}
-          >
-            <Upload size={17} />
-            {it.chooseBackup}
-          </Button>
-          <input
-            ref={input}
-            className="sr-only"
-            type="file"
-            accept="application/json,.json"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void importFile(file);
-            }}
-          />
-        </div>
-        <div className="settings-action danger-zone">
-          <div>
-            <strong>{it.clearData}</strong>
-            <p>{it.clearDataHelp}</p>
-          </div>
-          <Button
-            type="button"
-            variant="danger"
-            disabled={pending}
-            onClick={() => void clearAll()}
-          >
-            <Trash2 size={17} />
-            {it.clearData}
-          </Button>
-        </div>
-        {message && (
-          <p className="message success" role="status">
-            {message}
-          </p>
-        )}
-        {error && (
-          <p className="message error" role="alert">
-            {error}
-          </p>
-        )}
-      </section>
-    </div>
+        <Button
+          type="button"
+          variant="danger"
+          disabled={pending}
+          onClick={() => void clearAll()}
+        >
+          <Trash2 size={17} />
+          {it.clearData}
+        </Button>
+      </div>
+      {message && (
+        <p className="message success" role="status">
+          {message}
+        </p>
+      )}
+      {error && (
+        <p className="message error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
   );
 }

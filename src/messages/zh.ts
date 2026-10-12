@@ -365,8 +365,10 @@ export const zh: typeof it = {
   viewDetails: "查看详情",
   editProject: "查看／修改维修项目",
   settingsDescription: "管理语言、当前日期、数据备份和恢复。",
+  languageSettingsHelp: "选择系统界面使用的语言。",
   language: "语言",
   interfaceMotion: "界面动画",
+  interfaceMotionHelp: "管理界面动画和维修列表的移动效果。",
   alwaysPlayMotion: "始终播放界面动画",
   motionPreferenceHelp:
     "开启后忽略 Windows 的“减少动态效果”；关闭后遵循系统设置。",
@@ -463,6 +465,7 @@ export const zh: typeof it = {
   autoCheckUpdates: "启动时自动检查更新",
   autoCheckUpdatesHelp: "仅检查并提示新版本，不会自动下载或安装。",
   dataManagement: "数据管理",
+  dataManagementHelp: "导出、导入或清除系统数据。",
   exportData: "导出数据",
   exportHelp: "下载可供后续版本继续导入的备份文件。",
   importData: "导入数据",

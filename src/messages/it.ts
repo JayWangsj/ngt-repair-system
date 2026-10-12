@@ -413,8 +413,11 @@ export const it = {
   viewDetails: "Vedi dettagli",
   editProject: "Vedi / modifica intervento",
   settingsDescription: "Lingua, data di lavoro, backup e gestione dei dati.",
+  languageSettingsHelp: "Scegli la lingua usata nell'interfaccia.",
   language: "Lingua",
   interfaceMotion: "Animazioni interfaccia",
+  interfaceMotionHelp:
+    "Gestisci le animazioni dell'interfaccia e il movimento dell'elenco riparazioni.",
   alwaysPlayMotion: "Riproduci sempre le animazioni",
   motionPreferenceHelp:
     "Se attivo, ignora la riduzione delle animazioni di Windows; se disattivo, segue il sistema.",
@@ -524,6 +527,7 @@ export const it = {
   autoCheckUpdatesHelp:
     "Controlla e segnala soltanto le nuove versioni, senza scaricarle o installarle.",
   dataManagement: "Dati",
+  dataManagementHelp: "Esporta, importa o cancella i dati del sistema.",
   exportData: "Esporta dati",
   exportHelp: "Scarica un file compatibile con le versioni future.",
   importData: "Importa dati",

@@ -709,12 +709,8 @@ test("single operator opens every business page without login", async ({
     page.getByRole("dialog", { name: "Andamento", exact: true }),
   ).toBeVisible();
   await page.goto("/settings");
-  await expect(
-    page.getByRole("group", { name: "Lingua / 语言", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Cancella tutti i dati", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("link", { name: /Lingua/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Dati / })).toBeVisible();
   await page.goto("/orders");
   await expect(
     page.getByRole("link", {
@@ -1319,10 +1315,63 @@ test("desktop sidebar resizes, collapses and restores its saved width", async ({
 
 test("settings opens system update as a separate page", async ({ page }) => {
   await page.goto("/settings");
+  const entries = page.locator(".settings-entry");
+  await expect(entries).toHaveCount(9);
+  await expect
+    .poll(() =>
+      entries.evaluateAll((items) =>
+        items.map((item) => item.getAttribute("href")),
+      ),
+    )
+    .toEqual([
+      "/settings/language",
+      "/settings/interface-motion",
+      "/settings/test-tools",
+      "/settings/business-date",
+      "/settings/system-update",
+      "/settings/quick-services",
+      "/settings/device-models",
+      "/settings/fault-catalog",
+      "/settings/data",
+    ]);
   const entry = page.locator(".system-update-entry");
   await expect(entry).toContainText("Versione corrente");
+  const label = entry.locator(".dashboard-link-label");
+  const arrow = entry.locator("svg").last();
+  await expect(label, "title underline starts collapsed").toHaveCSS(
+    "position",
+    "relative",
+  );
+  await entry.hover();
+  await expect(entry).toHaveCSS("border-top-color", "rgb(231, 201, 90)");
+  await expect
+    .poll(() =>
+      entry.evaluate((element) => getComputedStyle(element).transform),
+    )
+    .not.toBe("none");
+  await expect
+    .poll(() =>
+      arrow.evaluate((element) => getComputedStyle(element).transform),
+    )
+    .not.toBe("none");
+  await expect
+    .poll(() =>
+      label.evaluate(
+        (element) => getComputedStyle(element, "::after").transform,
+      ),
+    )
+    .toBe("matrix(1, 0, 0, 1, 0, 0)");
   await entry.click();
   await expect(page).toHaveURL(/\/settings\/system-update$/);
+  await expect
+    .poll(() =>
+      page
+        .locator(".settings-detail-page")
+        .evaluate((element) =>
+          Math.round(element.getBoundingClientRect().width),
+        ),
+    )
+    .toBeLessThanOrEqual(920);
   await expect(
     page.getByRole("link", { name: "Torna alle impostazioni" }),
   ).toHaveClass(/back-link/);
@@ -1725,7 +1774,7 @@ test("settings can force interface animations when Windows reduces motion", asyn
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/settings");
+  await page.goto("/settings/interface-motion");
   const motionSwitch = page.getByRole("switch", {
     name: "Riproduci sempre le animazioni",
   });
@@ -1748,7 +1797,7 @@ test("settings can force interface animations when Windows reduces motion", asyn
 
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-motion", "always");
-  await page.goto("/settings");
+  await page.goto("/settings/interface-motion");
   await expect(motionSwitch).toHaveAttribute("aria-checked", "true");
   await motionSwitch.click();
   await expect(motionSwitch).toHaveAttribute("aria-checked", "false");
@@ -2701,7 +2750,7 @@ test("repair list animates a row reordered by a local status change", async ({
   await page.reload();
   await expect(olderRow).not.toHaveClass(/order-row-status-highlight/);
 
-  await page.goto("/settings");
+  await page.goto("/settings/interface-motion");
   const viewportFollowSwitch = page.getByRole("switch", {
     name: "Segui lo spostamento della riparazione",
   });
@@ -3314,7 +3363,7 @@ test("discount and IVA persist without polluting historical prices", async ({
   await page.reload();
   await expect(page.locator(".balance-card>strong")).toContainText("83,70");
   const detailUrl = page.url();
-  await page.goto("/settings");
+  await page.goto("/settings/language");
   await page.getByRole("button", { name: "中文", exact: true }).click();
   await page.goto(detailUrl);
   await expect(
@@ -3325,7 +3374,7 @@ test("discount and IVA persist without polluting historical prices", async ({
   await expect(page.getByRole("main").getByRole("alert")).toContainText(
     "超过待收余额",
   );
-  await page.goto("/settings");
+  await page.goto("/settings/language");
   await page.getByRole("button", { name: "Italiano", exact: true }).click();
   await page.goto("/orders/new");
   await chooseBusinessOption(page, "Cerca cliente", "Cliente Playwright");
@@ -3347,10 +3396,10 @@ test("discount and IVA persist without polluting historical prices", async ({
 test("language switching from settings persists across business pages", async ({
   page,
 }) => {
-  await page.goto("/settings");
+  await page.goto("/settings/language");
   await page.getByRole("button", { name: "中文", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "设置", exact: true }),
+    page.getByRole("heading", { name: "语言", exact: true }).first(),
   ).toBeVisible();
   await page.goto("/orders/new");
   await expect(
@@ -3359,7 +3408,7 @@ test("language switching from settings persists across business pages", async ({
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
-  await page.goto("/settings");
+  await page.goto("/settings/language");
   await page.getByRole("button", { name: "Italiano", exact: true }).click();
   await page.goto("/orders/new");
   await expect(
@@ -3372,7 +3421,7 @@ test("language switching from settings persists across business pages", async ({
 test("settings applies a manual business date and can return to system time", async ({
   page,
 }) => {
-  await page.goto("/settings");
+  await page.goto("/settings/business-date");
   const dateSettings = page.locator(".business-date-settings");
   await chooseBusinessOption(
     page,
@@ -3399,7 +3448,7 @@ test("settings applies a manual business date and can return to system time", as
     manualDate.boundingBox(),
     saveClock.boundingBox(),
   ]);
-  await page.route("**/settings", async (route) => {
+  await page.route("**/settings/business-date", async (route) => {
     if (route.request().method() === "POST")
       await new Promise((resolve) => setTimeout(resolve, 300));
     await route.continue();
@@ -3433,7 +3482,7 @@ test("settings applies a manual business date and can return to system time", as
     expect(boxesAfter[index]!.x).toBeCloseTo(boxesBefore[index]!.x, 0);
     expect(boxesAfter[index]!.width).toBeCloseTo(boxesBefore[index]!.width, 0);
   }
-  await page.unroute("**/settings");
+  await page.unroute("**/settings/business-date");
 
   await page.goto("/");
   await expect(
@@ -3448,7 +3497,7 @@ test("settings applies a manual business date and can return to system time", as
     page.getByLabel("Consegna prevista", { exact: true }),
   ).toHaveAttribute("min", "2031-04-12");
 
-  await page.goto("/settings");
+  await page.goto("/settings/business-date");
   const resetSettings = page.locator(".business-date-settings");
   await expect(
     resetSettings.getByRole("button", { name: "Salva", exact: true }),
@@ -3635,9 +3684,10 @@ test("system update page offers browser fallback and confirms authorization", as
 test("settings catalogs reuse stable inline and dialog interactions", async ({
   page,
 }) => {
-  await page.goto("/settings");
+  await page.goto("/settings/language");
 
   await page.getByRole("button", { name: "中文", exact: true }).click();
+  await page.goto("/settings/quick-services");
   await page.getByRole("button", { name: "管理快速服务", exact: true }).click();
   const chineseServiceManager = page.getByRole("dialog", {
     name: "管理快速服务",
@@ -3649,7 +3699,9 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   await chineseServiceManager
     .getByRole("button", { name: "关闭", exact: true })
     .click();
+  await page.goto("/settings/language");
   await page.getByRole("button", { name: "Italiano", exact: true }).click();
+  await page.goto("/settings/quick-services");
 
   await page
     .getByRole("button", { name: "Gestisci servizi rapidi", exact: true })
@@ -3755,6 +3807,7 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
     .getByRole("button", { name: "Chiudi", exact: true })
     .click();
 
+  await page.goto("/settings/device-models");
   await page
     .getByRole("button", { name: "Gestisci modelli", exact: true })
     .click();
@@ -3810,6 +3863,7 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
     .getByRole("button", { name: "Chiudi", exact: true })
     .click();
 
+  await page.goto("/settings/fault-catalog");
   await page
     .getByRole("button", { name: "Gestisci problemi", exact: true })
     .click();
@@ -4606,7 +4660,7 @@ test("price editor and mobile yellow layout support both languages", async ({
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/settings");
+  await page.goto("/settings/language");
   await page.getByRole("button", { name: "中文", exact: true }).click();
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "今日工作台" })).toBeVisible();
@@ -6095,7 +6149,7 @@ test("price editor keeps deletion inside batch management", async ({
 test("settings exports data and re-import skips existing records", async ({
   page,
 }) => {
-  await page.goto("/settings");
+  await page.goto("/settings/data");
   await page.evaluate(() =>
     Object.defineProperty(window, "showSaveFilePicker", {
       configurable: true,
@@ -6665,7 +6719,7 @@ test("new product identifies the missing required field", async ({ page }) => {
 test("test tools generate linked data and persist repair motion tuning", async ({
   page,
 }) => {
-  await page.goto("/settings");
+  await page.goto("/settings/test-tools");
   const tools = page.locator(".test-tools-settings");
   await expect(
     tools.getByRole("heading", { name: "Strumenti di test" }),

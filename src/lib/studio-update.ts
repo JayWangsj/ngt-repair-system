@@ -66,7 +66,8 @@ function launchProcess(
 
 async function readJson<T>(filePath: string): Promise<T | null> {
   try {
-    return JSON.parse(await readFile(filePath, "utf8")) as T;
+    const contents = await readFile(filePath, "utf8");
+    return JSON.parse(contents.replace(/^\uFEFF/, "")) as T;
   } catch {
     return null;
   }

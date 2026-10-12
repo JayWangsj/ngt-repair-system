@@ -68,6 +68,41 @@ describe("studio update", () => {
     });
   });
 
+  it("reads Windows PowerShell JSON files with a UTF-8 BOM", async () => {
+    const { root, installRoot } = await studioRoot();
+    await Promise.all([
+      writeFile(
+        path.join(root, "studio-release.json"),
+        `\uFEFF${JSON.stringify({ version: "1.11.57" })}`,
+      ),
+      writeFile(
+        path.join(root, ".local", "studio.json"),
+        `\uFEFF${JSON.stringify({
+          installRoot,
+          repository: "JayWangsj/ngt-repair-system",
+        })}`,
+      ),
+      writeFile(
+        path.join(installRoot, "update-status.json"),
+        `\uFEFF${JSON.stringify({ status: "checking" })}`,
+      ),
+    ]);
+
+    const result = await checkStudioUpdate({
+      root,
+      run: async () => {
+        throw new Error("not authenticated");
+      },
+    });
+
+    expect(result).toMatchObject({
+      installed: true,
+      currentVersion: "1.11.57",
+      authRequired: true,
+      status: { status: "checking" },
+    });
+  });
+
   it("detects a newer private release after authorization", async () => {
     const { root } = await studioRoot();
     const calls: string[][] = [];

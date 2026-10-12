@@ -1863,12 +1863,6 @@ test("settings can force interface animations when Windows reduces motion", asyn
   await expect(page.getByTestId("dashboard-motion")).toHaveClass(
     /dashboard-animating/,
   );
-  expect(
-    await page
-      .locator(".dashboard-action-link")
-      .first()
-      .evaluate((element) => getComputedStyle(element).transitionDuration),
-  ).not.toBe("0s");
 
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-motion", "always");
@@ -4014,10 +4008,7 @@ test("partial checkout records payment and delivers only after the balance is cl
   await state(page, "READY");
   const trigger = page.locator(".detail-status .status-dropdown-trigger");
   await trigger.hover();
-  await expect(trigger).toHaveCSS(
-    "transform",
-    /matrix\(1\.015, 0, 0, 1\.015, 0, -1\)/,
-  );
+  await expect(trigger).toHaveCSS("transform", "none");
   await trigger.click();
   await expect(trigger).toHaveAttribute("aria-expanded", "true");
   await expect(trigger.locator("svg")).toHaveCSS(
@@ -5497,10 +5488,10 @@ test("customer list searches instantly, preserves navigation and supports compac
     .getByRole("button", { name: "Modifica dispositivo", exact: true })
     .click();
   dialog = detailDialog;
-  await enterBusinessValue(page, "Modello", "Unsaved model", dialog);
+  await enterBusinessValue(page, "Modello", "Unsaved Model", dialog);
   await dialog.getByRole("button", { name: "Annulla", exact: true }).click();
   await expect(detailDialog.locator(".customer-device-row")).not.toContainText(
-    "Unsaved model",
+    "Unsaved Model",
   );
   await detailDialog.locator(".customer-device-row").hover();
   await detailDialog

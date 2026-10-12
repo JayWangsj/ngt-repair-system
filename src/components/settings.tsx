@@ -489,16 +489,18 @@ export function SettingsTools({
             )}
           </div>
         </div>
-        {updateMessage && (
-          <p className="message success" role="status">
-            {updateMessage}
-          </p>
-        )}
-        {updateError && (
-          <p className="message error" role="alert">
-            {updateError}
-          </p>
-        )}
+        <div className="system-update-feedback" aria-live="polite">
+          {updateMessage && (
+            <p className="message success" role="status">
+              {updateMessage}
+            </p>
+          )}
+          {updateError && (
+            <p className="message error" role="alert">
+              {updateError}
+            </p>
+          )}
+        </div>
         {updateConfirmationOpen && updateInfo?.latestVersion && (
           <FormDialog
             title={it.updateConfirmTitle}

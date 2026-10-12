@@ -107,6 +107,13 @@ try {
     -Value $application.Id -Encoding ascii
 
   Wait-NgtStudioHealth
+  $updateInfo = Invoke-RestMethod `
+    -Uri "http://127.0.0.1:3000/api/system-update" `
+    -Method Get `
+    -TimeoutSec 35
+  if (-not $updateInfo.installed) {
+    throw "Studio package update check did not recognize the installed release."
+  }
   Write-Output "Studio package smoke test passed."
 } catch {
   Write-SmokeLogs

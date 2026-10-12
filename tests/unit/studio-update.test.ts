@@ -103,6 +103,27 @@ describe("studio update", () => {
     });
   });
 
+  it("uses the installed studio root after the standalone server changes directories", async () => {
+    const { root } = await studioRoot();
+    const previousRoot = process.env.NGT_STUDIO_ROOT;
+    process.env.NGT_STUDIO_ROOT = root;
+    try {
+      const result = await checkStudioUpdate({
+        run: async () => {
+          throw new Error("not authenticated");
+        },
+      });
+      expect(result).toMatchObject({
+        installed: true,
+        currentVersion: "1.11.57",
+        authRequired: true,
+      });
+    } finally {
+      if (previousRoot === undefined) delete process.env.NGT_STUDIO_ROOT;
+      else process.env.NGT_STUDIO_ROOT = previousRoot;
+    }
+  });
+
   it("detects a newer private release after authorization", async () => {
     const { root } = await studioRoot();
     const calls: string[][] = [];

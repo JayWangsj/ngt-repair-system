@@ -10,7 +10,11 @@ await cp("public", ".next/standalone/public", { recursive: true });
 const child = spawn(process.execPath, [".next/standalone/server.js"], {
   stdio: "inherit",
   windowsHide: true,
-  env: { ...process.env, HOSTNAME: process.env.APP_HOST || "127.0.0.1" },
+  env: {
+    ...process.env,
+    HOSTNAME: process.env.APP_HOST || "127.0.0.1",
+    NGT_STUDIO_ROOT: process.cwd(),
+  },
 });
 child.on("error", (error) => {
   console.error(error);

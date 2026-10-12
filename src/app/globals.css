@@ -5246,6 +5246,7 @@ details.secondary-actions {
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 10px;
+  min-width: 370px;
 }
 .motion-setting-control {
   display: flex;
@@ -5307,6 +5308,12 @@ details.secondary-actions {
 .system-update-check-button:active {
   min-width: 213px;
   transform: none;
+}
+.system-update-feedback {
+  min-height: 57px;
+}
+.system-update-feedback .message {
+  margin: 14px 0 0;
 }
 .test-tools-settings {
   border-color: rgb(31 119 103 / 28%);
@@ -5411,6 +5418,7 @@ details.secondary-actions {
   }
   .settings-update-actions {
     display: grid;
+    min-width: 0;
   }
   .motion-setting-control {
     justify-content: space-between;

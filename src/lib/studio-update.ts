@@ -113,10 +113,14 @@ function statusPath(installRoot: string) {
   return path.join(installRoot, "update-status.json");
 }
 
+function resolveStudioRoot(root?: string) {
+  return root || process.env.NGT_STUDIO_ROOT || process.cwd();
+}
+
 export async function getStudioUpdateStatus(
-  root = process.cwd(),
+  root?: string,
 ): Promise<StudioUpdateStatus> {
-  const { config } = await getStudioContext(root);
+  const { config } = await getStudioContext(resolveStudioRoot(root));
   if (!config?.installRoot) return { status: "idle" };
   return (
     (await readJson<StudioUpdateStatus>(statusPath(config.installRoot))) || {
@@ -128,7 +132,7 @@ export async function getStudioUpdateStatus(
 export async function checkStudioUpdate(
   options: { root?: string; run?: CommandRunner } = {},
 ): Promise<StudioUpdateInfo> {
-  const root = options.root || process.cwd();
+  const root = resolveStudioRoot(options.root);
   const run = options.run || runCommand;
   const context = await getStudioContext(root);
   const status = await getStudioUpdateStatus(root);
@@ -184,7 +188,7 @@ export async function checkStudioUpdate(
 export async function startGitHubLogin(
   options: { root?: string; launch?: ProcessLauncher } = {},
 ) {
-  const root = options.root || process.cwd();
+  const root = resolveStudioRoot(options.root);
   const context = await getStudioContext(root);
   if (!context.release?.version) throw new Error("studio_not_installed");
   const githubCli = resolveGitHubCli(root);
@@ -201,7 +205,7 @@ export async function startGitHubLogin(
 export async function startStudioUpdate(
   options: { root?: string; launch?: ProcessLauncher } = {},
 ) {
-  const root = options.root || process.cwd();
+  const root = resolveStudioRoot(options.root);
   const context = await getStudioContext(root);
   if (!context.release?.version || !context.config?.installRoot) {
     throw new Error("studio_not_installed");

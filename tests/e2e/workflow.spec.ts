@@ -3508,23 +3508,38 @@ test("settings keeps the update card stable and offers authorization", async ({
   const updateCard = page.locator(".system-update-settings");
   const nextCard = page.locator(".system-update-settings + .settings-card");
   const checkButton = updateCard.locator(".system-update-check-button");
+  await page.waitForTimeout(250);
+  const initialCard = await updateCard.boundingBox();
+  const initialButton = await checkButton.boundingBox();
+  const initialNextCardTop = await nextCard.evaluate(
+    (element) => (element as HTMLElement).offsetTop,
+  );
   await checkButton.click();
   await expect(updateCard).toContainText(
     "Per controllare gli aggiornamenti, autorizza GitHub una sola volta.",
   );
   const beforeCard = await updateCard.boundingBox();
   const beforeButton = await checkButton.boundingBox();
-  const beforeNextCard = await nextCard.boundingBox();
+  const beforeNextCardTop = await nextCard.evaluate(
+    (element) => (element as HTMLElement).offsetTop,
+  );
+  expect(
+    Math.abs((beforeCard?.height || 0) - (initialCard?.height || 0)),
+  ).toBeLessThan(1);
+  expect(beforeButton?.width).toBe(initialButton?.width);
+  expect(Math.abs(beforeNextCardTop - initialNextCardTop)).toBeLessThan(1);
 
   await checkButton.click();
   await expect(checkButton).toContainText("Controllo…");
   await expect.poll(() => checkCount).toBe(2);
   const checkingCard = await updateCard.boundingBox();
   const checkingButton = await checkButton.boundingBox();
-  const checkingNextCard = await nextCard.boundingBox();
+  const checkingNextCardTop = await nextCard.evaluate(
+    (element) => (element as HTMLElement).offsetTop,
+  );
   expect(checkingCard?.height).toBe(beforeCard?.height);
   expect(checkingButton?.width).toBe(beforeButton?.width);
-  expect(checkingNextCard?.y).toBe(beforeNextCard?.y);
+  expect(checkingNextCardTop).toBe(beforeNextCardTop);
 
   releaseSecondCheck();
   await expect(checkButton).toContainText("Controlla aggiornamenti");

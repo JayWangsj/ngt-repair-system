@@ -1,11 +1,11 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   CalendarDays,
-  Copy,
+  ChevronRight,
   Download,
-  ExternalLink,
   RefreshCw,
   Sparkles,
   Upload,
@@ -15,7 +15,7 @@ import { clearDataAction, updateBusinessClockAction } from "@/app/actions";
 import { LanguageSwitch, useMessages } from "./language";
 import { Button } from "./ui/button";
 import { DatePicker, SimpleSelect } from "./business-select";
-import { Field, FormDialog } from "./forms";
+import { Field } from "./forms";
 import {
   FaultCatalogManager,
   type FaultCatalogItem,
@@ -66,22 +66,6 @@ export function SettingsTools({
     mode: clock.mode,
     manualDate: clock.manualDate || today,
   });
-  const [updatePending, setUpdatePending] = useState(false);
-  const [updateInfo, setUpdateInfo] = useState<{
-    installed: boolean;
-    currentVersion: string;
-    authRequired: boolean;
-    updateAvailable: boolean;
-    latestVersion?: string;
-  } | null>(null);
-  const [updateMessage, setUpdateMessage] = useState("");
-  const [updateError, setUpdateError] = useState("");
-  const [updateConfirmationOpen, setUpdateConfirmationOpen] = useState(false);
-  const [githubAuth, setGitHubAuth] = useState<{
-    status: "opening" | "waiting";
-    verificationUrl?: string;
-    userCode?: string;
-  } | null>(null);
   const [alwaysMotion, setAlwaysMotion] = useState(false);
   const [followOrderMotion, setFollowOrderMotion] = useState(true);
 
@@ -101,201 +85,6 @@ export function SettingsTools({
   function changeOrderMotionFollow(enabled: boolean) {
     writeOrderViewportFollow(enabled);
     setFollowOrderMotion(enabled);
-  }
-
-  async function beginGitHubLogin() {
-    setUpdatePending(true);
-    setUpdateError("");
-    setUpdateMessage(it.updateLoginOpening);
-    try {
-      const response = await fetch("/api/system-update/auth", {
-        method: "POST",
-      });
-      const result = (await response.json()) as {
-        status?: string;
-        verificationUrl?: string;
-        userCode?: string;
-        error?: string;
-      };
-      if (!response.ok) throw new Error(result.error || it.updateLoginFailed);
-      setGitHubAuth({
-        status: result.status === "waiting" ? "waiting" : "opening",
-        verificationUrl: result.verificationUrl,
-        userCode: result.userCode,
-      });
-      await monitorGitHubLogin();
-    } catch (cause) {
-      setUpdateMessage("");
-      setUpdateError(
-        cause instanceof Error ? cause.message : it.updateLoginFailed,
-      );
-      setUpdatePending(false);
-    }
-  }
-
-  async function monitorGitHubLogin() {
-    for (let attempt = 0; attempt < 900; attempt += 1) {
-      await new Promise((resolve) => window.setTimeout(resolve, 1000));
-      try {
-        const response = await fetch("/api/system-update/auth", {
-          cache: "no-store",
-        });
-        const result = (await response.json()) as {
-          status?: string;
-          message?: string;
-          verificationUrl?: string;
-          userCode?: string;
-          error?: string;
-        };
-        if (!response.ok) throw new Error(result.error || it.updateLoginFailed);
-        if (result.status === "success") {
-          setGitHubAuth(null);
-          setUpdateInfo((current) =>
-            current ? { ...current, authRequired: false } : current,
-          );
-          setUpdateMessage(it.updateLoginSuccess);
-          setUpdatePending(false);
-          return;
-        }
-        if (result.status === "failed") {
-          setUpdateMessage("");
-          setUpdateError(
-            result.message
-              ? `${it.updateLoginFailed} ${result.message}`
-              : it.updateLoginFailed,
-          );
-          setUpdatePending(false);
-          return;
-        }
-        const status = result.status === "waiting" ? "waiting" : "opening";
-        setGitHubAuth({
-          status,
-          verificationUrl: result.verificationUrl,
-          userCode: result.userCode,
-        });
-        setUpdateMessage(
-          status === "waiting" ? it.updateLoginWaiting : it.updateLoginOpening,
-        );
-      } catch (cause) {
-        setUpdateMessage("");
-        setUpdateError(
-          cause instanceof Error ? cause.message : it.updateLoginFailed,
-        );
-        setUpdatePending(false);
-        return;
-      }
-    }
-    setUpdateMessage("");
-    setUpdateError(it.updateLoginTimeout);
-    setUpdatePending(false);
-  }
-
-  async function copyGitHubAuth(value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      setUpdateMessage(it.updateLoginCopied);
-      setUpdateError("");
-    } catch {
-      setUpdateError(it.updateLoginCopyFailed);
-    }
-  }
-
-  async function checkForUpdates() {
-    setUpdatePending(true);
-    try {
-      const response = await fetch("/api/system-update", { cache: "no-store" });
-      const result = (await response.json()) as {
-        installed?: boolean;
-        currentVersion?: string;
-        authRequired?: boolean;
-        updateAvailable?: boolean;
-        latestVersion?: string;
-      };
-      if (!response.ok) throw new Error(it.updateCheckFailed);
-      const info = {
-        installed: Boolean(result.installed),
-        currentVersion: result.currentVersion || currentVersion,
-        authRequired: Boolean(result.authRequired),
-        updateAvailable: Boolean(result.updateAvailable),
-        latestVersion: result.latestVersion,
-      };
-      setUpdateInfo(info);
-      setUpdateError("");
-      if (!info.installed) {
-        setUpdateMessage(it.updateInstalledOnly);
-      } else if (info.authRequired) {
-        setUpdateMessage(it.updateAuthRequired);
-      } else if (info.updateAvailable) {
-        setUpdateMessage(
-          it.updateAvailable.replace(
-            "{version}",
-            info.latestVersion || currentVersion,
-          ),
-        );
-      } else {
-        setUpdateMessage(it.updateCurrent);
-      }
-    } catch (cause) {
-      setUpdateMessage("");
-      setUpdateError(
-        cause instanceof Error ? cause.message : it.updateCheckFailed,
-      );
-    } finally {
-      setUpdatePending(false);
-    }
-  }
-
-  async function monitorUpdate() {
-    for (let attempt = 0; attempt < 600; attempt += 1) {
-      await new Promise((resolve) => window.setTimeout(resolve, 2000));
-      try {
-        const response = await fetch("/api/system-update/status", {
-          cache: "no-store",
-        });
-        if (!response.ok) continue;
-        const result = (await response.json()) as {
-          status?: string;
-          message?: string;
-        };
-        if (result.status === "failed") {
-          setUpdatePending(false);
-          setUpdateError(result.message || it.updateFailed);
-          return;
-        }
-        if (result.status === "complete") {
-          window.location.reload();
-          return;
-        }
-        if (result.status === "backing-up") {
-          setUpdateMessage(it.updateBackingUp);
-        } else if (result.status === "installing") {
-          setUpdateMessage(it.updateInstalling);
-        } else if (result.status === "downloading") {
-          setUpdateMessage(it.updateDownloading);
-        }
-      } catch {
-        // The local server is expected to be briefly unavailable while switching versions.
-      }
-    }
-    setUpdatePending(false);
-    setUpdateError(it.updateTimeout);
-  }
-
-  async function installUpdate() {
-    const latestVersion = updateInfo?.latestVersion;
-    if (!latestVersion) return;
-    setUpdateConfirmationOpen(false);
-    setUpdatePending(true);
-    setUpdateError("");
-    setUpdateMessage(it.updateStarting);
-    try {
-      const response = await fetch("/api/system-update", { method: "POST" });
-      if (!response.ok) throw new Error(it.updateFailed);
-      await monitorUpdate();
-    } catch (cause) {
-      setUpdatePending(false);
-      setUpdateError(cause instanceof Error ? cause.message : it.updateFailed);
-    }
   }
 
   async function saveClock() {
@@ -524,136 +313,21 @@ export function SettingsTools({
           </Button>
         </div>
       </section>
-      <section className="panel padded settings-card system-update-settings">
-        <div className="settings-card-title">
-          <RefreshCw size={19} aria-hidden="true" />
-          <h2>{it.systemUpdate}</h2>
-        </div>
-        <div className="settings-action">
-          <div>
-            <strong>
-              {it.currentVersion}:{" "}
-              {updateInfo?.currentVersion || currentVersion}
-            </strong>
-            <p>{it.systemUpdateHelp}</p>
-            {updateInfo?.latestVersion && (
-              <p>
-                {it.latestVersion}: {updateInfo.latestVersion}
-              </p>
-            )}
-          </div>
-          <div className="settings-update-actions">
-            <Button
-              type="button"
-              variant="outline"
-              className="system-update-check-button"
-              disabled={updatePending}
-              onClick={() => void checkForUpdates()}
-            >
-              <RefreshCw size={17} />
-              {updatePending ? it.checkingUpdates : it.checkForUpdates}
-            </Button>
-            {updateInfo?.authRequired && (
-              <Button
-                type="button"
-                disabled={updatePending}
-                onClick={() => void beginGitHubLogin()}
-              >
-                {it.authorizeGitHub}
-              </Button>
-            )}
-            {updateInfo?.updateAvailable && (
-              <Button
-                type="button"
-                disabled={updatePending}
-                onClick={() => setUpdateConfirmationOpen(true)}
-              >
-                <Download size={17} />
-                {it.updateNow}
-              </Button>
-            )}
-          </div>
-        </div>
-        <div className="system-update-feedback" aria-live="polite">
-          {updateMessage && (
-            <p className="message success" role="status">
-              {updateMessage}
-            </p>
-          )}
-          {updateError && (
-            <p className="message error" role="alert">
-              {updateError}
-            </p>
-          )}
-          {githubAuth?.verificationUrl && (
-            <div className="github-auth-fallback">
-              <span>{it.updateLoginFallback}</span>
-              <div>
-                <Button asChild variant="outline">
-                  <a
-                    href={githubAuth.verificationUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <ExternalLink size={16} />
-                    {it.updateLoginOpenLink}
-                  </a>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() =>
-                    void copyGitHubAuth(
-                      githubAuth.userCode || githubAuth.verificationUrl || "",
-                    )
-                  }
-                >
-                  <Copy size={16} />
-                  {githubAuth.userCode || it.updateLoginCopyLink}
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-        {updateConfirmationOpen && updateInfo?.latestVersion && (
-          <FormDialog
-            title={it.updateConfirmTitle}
-            onClose={() => setUpdateConfirmationOpen(false)}
-          >
-            <form
-              className="dialog-form confirm-update-dialog"
-              data-form-dialog-body
-              onSubmit={(event) => {
-                event.preventDefault();
-                void installUpdate();
-              }}
-            >
-              <div className="confirm-update-icon" aria-hidden="true">
-                <Download size={22} />
-              </div>
-              <p>
-                {it.updateConfirm.replace(
-                  "{version}",
-                  updateInfo.latestVersion,
-                )}
-              </p>
-              <div className="dialog-actions">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setUpdateConfirmationOpen(false)}
-                >
-                  {it.cancel}
-                </Button>
-                <Button type="submit">
-                  <Download size={17} />
-                  {it.updateNow}
-                </Button>
-              </div>
-            </form>
-          </FormDialog>
-        )}
-      </section>
+      <Link
+        href="/settings/system-update"
+        className="panel padded settings-card system-update-entry"
+      >
+        <span className="system-update-entry-icon" aria-hidden="true">
+          <RefreshCw size={20} />
+        </span>
+        <span>
+          <strong>{it.systemUpdate}</strong>
+          <small>
+            {it.currentVersion}: {currentVersion}
+          </small>
+        </span>
+        <ChevronRight size={20} aria-hidden="true" />
+      </Link>
       <section className="panel padded settings-card">
         <h2>{it.quickService.title}</h2>
         <p>{it.quickService.description}</p>

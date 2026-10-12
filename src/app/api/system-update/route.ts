@@ -6,8 +6,10 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     return Response.json(await checkStudioUpdate());
-  } catch {
-    return Response.json({ error: "update_check_failed" }, { status: 502 });
+  } catch (cause) {
+    const error =
+      cause instanceof Error ? cause.message : "update_check_failed";
+    return Response.json({ error }, { status: 502 });
   }
 }
 

@@ -1244,7 +1244,7 @@ test("business statistics keeps the open balance summary without the unpaid list
 test("workspace and print views use the shared NGT brand", async ({ page }) => {
   await page.goto("/");
 
-  const sidebarLogo = page.locator(".sidebar .brand-logo");
+  const sidebarLogo = page.locator(".sidebar .brand-logo-full");
   await expect(sidebarLogo).toBeVisible();
   await expect(sidebarLogo).toHaveAttribute(
     "src",
@@ -1258,6 +1258,74 @@ test("workspace and print views use the shared NGT brand", async ({ page }) => {
   await page.emulateMedia({ media: "print" });
   await expect(page.locator(".print-brand-header")).toBeVisible();
   await expect(page.locator(".sidebar")).toBeHidden();
+});
+
+test("desktop sidebar resizes, collapses and restores its saved width", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  await page.evaluate(() => {
+    localStorage.removeItem("ngt-sidebar-width");
+    localStorage.removeItem("ngt-sidebar-collapsed");
+  });
+  await page.reload();
+
+  const sidebar = page.locator(".sidebar");
+  const resizer = page.getByRole("separator", {
+    name: "Ridimensiona barra laterale",
+  });
+  const handle = await resizer.boundingBox();
+  expect(handle).not.toBeNull();
+  await page.mouse.move(handle!.x + 4, handle!.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(handle!.x + 64, handle!.y + 200, { steps: 5 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => Math.round((await sidebar.boundingBox())?.width || 0))
+    .toBe(300);
+
+  await page.getByRole("button", { name: "Riduci barra laterale" }).click();
+  await expect
+    .poll(async () => Math.round((await sidebar.boundingBox())?.width || 0))
+    .toBe(64);
+  await expect(page.locator(".nav-item-label").first()).toBeHidden();
+  await page.reload();
+  await expect
+    .poll(async () => Math.round((await sidebar.boundingBox())?.width || 0))
+    .toBe(64);
+  await page.getByRole("button", { name: "Espandi barra laterale" }).click();
+  await expect
+    .poll(async () => Math.round((await sidebar.boundingBox())?.width || 0))
+    .toBe(300);
+
+  await page.setViewportSize({ width: 800, height: 800 });
+  await expect(resizer).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "Riduci barra laterale" }),
+  ).toBeHidden();
+  await expect
+    .poll(async () => {
+      const width = Math.round((await sidebar.boundingBox())?.width || 0);
+      const shellWidth = await page
+        .locator(".app-shell")
+        .evaluate((element) =>
+          Math.round(element.getBoundingClientRect().width),
+        );
+      return width === shellWidth;
+    })
+    .toBe(true);
+});
+
+test("settings opens system update as a separate page", async ({ page }) => {
+  await page.goto("/settings");
+  const entry = page.locator(".system-update-entry");
+  await expect(entry).toContainText("Versione corrente");
+  await entry.click();
+  await expect(page).toHaveURL(/\/settings\/system-update$/);
+  await expect(
+    page.getByRole("link", { name: "Torna alle impostazioni" }),
+  ).toHaveClass(/back-link/);
 });
 
 test("service order print renders mirrored copies from live order data", async ({
@@ -3404,10 +3472,11 @@ test("settings applies a manual business date and can return to system time", as
   ).toBeVisible();
   await expect(resetClock).toBeDisabled();
 });
-test("settings checks a private release and confirms before updating", async ({
+test("system update page checks a private release and shows real progress", async ({
   page,
 }) => {
   let updateStarted = false;
+  let statusPolls = 0;
   await page.route("**/api/system-update", async (route) => {
     if (route.request().method() === "POST") {
       updateStarted = true;
@@ -3426,34 +3495,51 @@ test("settings checks a private release and confirms before updating", async ({
         authRequired: false,
         updateAvailable: true,
         latestVersion: "1.11.58",
+        releaseNotes: "Correzioni e miglioramenti",
+        publishedAt: "2026-10-04T12:00:00Z",
+        downloadSize: 240000000,
       }),
     });
   });
-  await page.route("**/api/system-update/status", (route) =>
-    route.fulfill({
+  await page.route("**/api/system-update/status", (route) => {
+    statusPolls += 1;
+    return route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
-        status: "failed",
-        message: "Aggiornamento di prova interrotto.",
-      }),
-    }),
-  );
+      body: JSON.stringify(
+        statusPolls === 1
+          ? {
+              status: "downloading",
+              stage: "downloading",
+              bytesDownloaded: 120000000,
+              totalBytes: 240000000,
+              bytesPerSecond: 8000000,
+              etaSeconds: 15,
+              progressKnown: true,
+            }
+          : {
+              status: "failed",
+              stage: "verifying",
+              message: "Aggiornamento di prova interrotto.",
+            },
+      ),
+    });
+  });
 
-  await page.goto("/settings");
+  await page.goto("/settings/system-update");
   const italianButton = page.getByRole("button", {
     name: "Italiano",
     exact: true,
   });
   if (await italianButton.isVisible()) await italianButton.click();
-  const updateCard = page.locator(".system-update-settings");
-  await updateCard
-    .getByRole("button", { name: "Controlla aggiornamenti", exact: true })
-    .click();
-  await expect(updateCard).toContainText("Nuova versione disponibile: 1.11.58");
-  await expect(updateCard).toContainText("Ultima versione: 1.11.58");
+  await expect(
+    page.getByRole("link", { name: "Torna alle impostazioni" }),
+  ).toBeVisible();
+  const releaseCard = page.locator(".update-release-card");
+  await expect(releaseCard).toContainText("v1.11.58");
+  await expect(releaseCard).toContainText("Correzioni e miglioramenti");
 
-  await updateCard
+  await releaseCard
     .getByRole("button", { name: "Aggiorna ora", exact: true })
     .click();
   const confirmation = page.getByRole("dialog");
@@ -3463,24 +3549,27 @@ test("settings checks a private release and confirms before updating", async ({
     .getByRole("button", { name: "Aggiorna ora", exact: true })
     .click();
   await expect.poll(() => updateStarted).toBe(true);
-  await expect(updateCard.getByRole("alert")).toContainText(
+  await expect(page.locator(".update-progress-track")).toHaveAttribute(
+    "aria-valuenow",
+    "50",
+  );
+  await expect(page.locator(".download-progress-meta")).toContainText(
+    "7.6 MB/s",
+  );
+  await expect(page.locator(".update-error")).toContainText(
     "Aggiornamento di prova interrotto.",
   );
+  await expect(
+    page.getByText("Verifica pacchetto", { exact: true }).locator(".."),
+  ).toHaveClass(/failed/);
 });
-test("settings keeps the update card stable and offers authorization", async ({
+test("system update page offers browser fallback and confirms authorization", async ({
   page,
 }) => {
-  let checkCount = 0;
   let authorizationStarted = false;
   let authorizationPolls = 0;
-  let releaseSecondCheck = () => {};
-  const secondCheck = new Promise<void>((resolve) => {
-    releaseSecondCheck = resolve;
-  });
-  await page.route("**/api/system-update", async (route) => {
-    checkCount += 1;
-    if (checkCount === 2) await secondCheck;
-    return route.fulfill({
+  await page.route("**/api/system-update", (route) =>
+    route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
@@ -3489,8 +3578,8 @@ test("settings keeps the update card stable and offers authorization", async ({
         authRequired: true,
         updateAvailable: false,
       }),
-    });
-  });
+    }),
+  );
   await page.route("**/api/system-update/auth", (route) => {
     if (route.request().method() === "POST") {
       authorizationStarted = true;
@@ -3520,59 +3609,26 @@ test("settings keeps the update card stable and offers authorization", async ({
     });
   });
 
-  await page.goto("/settings");
+  await page.goto("/settings/system-update");
   const italianButton = page.getByRole("button", {
     name: "Italiano",
     exact: true,
   });
   if (await italianButton.isVisible()) await italianButton.click();
-  const updateCard = page.locator(".system-update-settings");
-  const nextCard = page.locator(".system-update-settings + .settings-card");
-  const checkButton = updateCard.locator(".system-update-check-button");
-  await page.waitForTimeout(250);
-  const initialCard = await updateCard.boundingBox();
-  const initialButton = await checkButton.boundingBox();
-  const initialNextCardTop = await nextCard.evaluate(
-    (element) => (element as HTMLElement).offsetTop,
-  );
-  await checkButton.click();
-  await expect(updateCard).toContainText(
+  await expect(page.locator(".system-update-page")).toContainText(
     "Per controllare gli aggiornamenti, autorizza GitHub una sola volta.",
   );
-  const beforeCard = await updateCard.boundingBox();
-  const beforeButton = await checkButton.boundingBox();
-  const beforeNextCardTop = await nextCard.evaluate(
-    (element) => (element as HTMLElement).offsetTop,
-  );
-  expect(
-    Math.abs((beforeCard?.height || 0) - (initialCard?.height || 0)),
-  ).toBeLessThan(1);
-  expect(beforeButton?.width).toBe(initialButton?.width);
-  expect(Math.abs(beforeNextCardTop - initialNextCardTop)).toBeLessThan(1);
-
-  await checkButton.click();
-  await expect(checkButton).toContainText("Controllo…");
-  await expect.poll(() => checkCount).toBe(2);
-  const checkingCard = await updateCard.boundingBox();
-  const checkingButton = await checkButton.boundingBox();
-  const checkingNextCardTop = await nextCard.evaluate(
-    (element) => (element as HTMLElement).offsetTop,
-  );
-  expect(checkingCard?.height).toBe(beforeCard?.height);
-  expect(checkingButton?.width).toBe(beforeButton?.width);
-  expect(checkingNextCardTop).toBe(beforeNextCardTop);
-
-  releaseSecondCheck();
-  await expect(checkButton).toContainText("Controlla aggiornamenti");
-  await updateCard
+  await page
     .getByRole("button", { name: "Autorizza GitHub", exact: true })
     .click();
   await expect.poll(() => authorizationStarted).toBe(true);
-  await expect(updateCard).toContainText("ABCD-1234");
+  await expect(page.locator(".github-auth-fallback")).toContainText(
+    "ABCD-1234",
+  );
   await expect(
-    updateCard.getByRole("link", { name: "Apri autorizzazione" }),
+    page.getByRole("link", { name: "Apri autorizzazione" }),
   ).toHaveAttribute("href", "https://github.com/login/device");
-  await expect(updateCard).toContainText(
+  await expect(page.locator(".system-update-page")).toContainText(
     "GitHub autorizzato. L'accesso al repository privato è stato verificato.",
   );
 });

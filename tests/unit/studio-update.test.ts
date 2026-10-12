@@ -162,8 +162,16 @@ describe("studio update", () => {
             args[0] === "release"
               ? JSON.stringify({
                   tagName: "v1.11.58",
+                  name: "NGT 1.11.58",
+                  body: "Correzioni e miglioramenti",
                   url: "https://github.com/example/release",
                   publishedAt: "2026-10-04T12:00:00Z",
+                  assets: [
+                    {
+                      name: "ngt-studio-windows-v1.11.58.zip",
+                      size: 240_000_000,
+                    },
+                  ],
                 })
               : "",
           stderr: "",
@@ -176,7 +184,11 @@ describe("studio update", () => {
       authRequired: false,
       updateAvailable: true,
       latestVersion: "1.11.58",
+      releaseName: "NGT 1.11.58",
+      releaseNotes: "Correzioni e miglioramenti",
+      downloadSize: 240_000_000,
     });
+    expect(calls[1]).toContain("tagName,name,body,url,publishedAt,assets");
   });
 
   it("advances browser authorization and verifies private release access", async () => {

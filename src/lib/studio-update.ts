@@ -44,11 +44,21 @@ export type StudioUpdateStatus = {
     | "queued"
     | "checking"
     | "downloading"
+    | "downloaded"
+    | "verifying"
     | "backing-up"
     | "installing"
+    | "validating"
     | "complete"
     | "failed";
   message?: string;
+  stage?: string;
+  latestVersion?: string;
+  bytesDownloaded?: number;
+  totalBytes?: number;
+  bytesPerSecond?: number;
+  etaSeconds?: number;
+  progressKnown?: boolean;
   updatedAt?: string;
 };
 
@@ -59,7 +69,10 @@ export type StudioUpdateInfo = {
   updateAvailable: boolean;
   latestVersion?: string;
   releaseUrl?: string;
+  releaseName?: string;
+  releaseNotes?: string;
   publishedAt?: string;
+  downloadSize?: number;
   status?: StudioUpdateStatus;
 };
 
@@ -82,7 +95,10 @@ function runCommand(executable: string, args: string[]) {
       args,
       { timeout: 30_000, windowsHide: true },
       (error, stdout, stderr) => {
-        if (error) return reject(error);
+        if (error) {
+          const detail = stderr.trim();
+          return reject(new Error(detail || error.message));
+        }
         resolve({ stdout, stderr });
       },
     );
@@ -264,14 +280,22 @@ export async function checkStudioUpdate(
     "--repo",
     context.repository,
     "--json",
-    "tagName,url,publishedAt",
+    "tagName,name,body,url,publishedAt,assets",
   ]);
   const latest = JSON.parse(result.stdout) as {
     tagName: string;
+    name?: string;
+    body?: string;
     url?: string;
     publishedAt?: string;
+    assets?: { name?: string; size?: number }[];
   };
   const latestVersion = normalizeVersion(latest.tagName);
+  const studioArchive = latest.assets?.find(
+    (asset) =>
+      typeof asset.name === "string" &&
+      /^ngt-studio-windows-.*\.zip$/i.test(asset.name),
+  );
   return {
     installed: true,
     currentVersion: context.currentVersion,
@@ -279,7 +303,11 @@ export async function checkStudioUpdate(
     updateAvailable: compareVersions(latestVersion, context.currentVersion) > 0,
     latestVersion,
     releaseUrl: latest.url,
+    releaseName: latest.name,
+    releaseNotes: latest.body?.trim() || undefined,
     publishedAt: latest.publishedAt,
+    downloadSize:
+      typeof studioArchive?.size === "number" ? studioArchive.size : undefined,
     status,
   };
 }

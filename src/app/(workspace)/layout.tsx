@@ -4,6 +4,7 @@ import { Sidebar } from "@/components/sidebar";
 import { BusinessDayProvider } from "@/components/business-date";
 import { getBusinessDay } from "@/lib/business-date";
 import { BrandLogo } from "@/components/brand-logo";
+import { UpdateStartupCheck } from "@/components/update-startup-check";
 export const dynamic = "force-dynamic";
 export default async function WorkspaceLayout({
   children,
@@ -19,6 +20,7 @@ export default async function WorkspaceLayout({
     <BusinessDayProvider today={today}>
       <div className="app-shell">
         <Sidebar />
+        <UpdateStartupCheck />
         <main className="main-content">
           <header className="print-brand-header">
             <BrandLogo className="print-brand-logo" />

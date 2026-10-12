@@ -205,6 +205,16 @@ describe("Windows persistent startup", () => {
     expect(updater).toContain("Get-FileHash");
     expect(updater).toContain("backup-windows-studio.ps1");
     expect(updater).toContain("Wait-NgtStudioHealth");
+    expect(updater).toContain('Write-NgtUpdateStatus "downloading"');
+    expect(updater).toContain("bytesDownloaded");
+    expect(updater).toContain("bytesPerSecond");
+    expect(updater).toContain('Write-NgtUpdateStatus "verifying"');
+    expect(updater).toContain('Write-NgtUpdateStatus "backing-up"');
+    expect(updater).toContain('Write-NgtUpdateStatus "installing"');
+    expect(updater).toContain('Write-NgtUpdateStatus "validating"');
+    expect(updater.indexOf('Write-NgtUpdateStatus "backing-up"')).toBeLessThan(
+      updater.indexOf('Write-NgtUpdateStatus "installing"'),
+    );
     expect(workflow).toContain('tags:\n      - "v*"');
     expect(workflow).toContain("runs-on: windows-2022");
     expect(workflow).toContain("--config.node-linker=hoisted");

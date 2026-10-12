@@ -16,6 +16,27 @@ type ProcessLauncher = (
   args: string[],
   options: Parameters<typeof spawn>[2],
 ) => { unref: () => void };
+type AuthProcess = {
+  stdin: { write: (value: string) => boolean; end: () => void };
+  stdout: NodeJS.ReadableStream;
+  stderr: NodeJS.ReadableStream;
+  once: {
+    (event: "error", listener: (error: Error) => void): unknown;
+    (event: "close", listener: (code: number | null) => void): unknown;
+  };
+  kill: () => boolean;
+  unref: () => void;
+};
+type AuthProcessLauncher = (
+  executable: string,
+  args: string[],
+  options: {
+    cwd: string;
+    env: NodeJS.ProcessEnv;
+    stdio: ["pipe", "pipe", "pipe"];
+    windowsHide: boolean;
+  },
+) => AuthProcess;
 
 export type StudioUpdateStatus = {
   status:
@@ -42,6 +63,18 @@ export type StudioUpdateInfo = {
   status?: StudioUpdateStatus;
 };
 
+export type GitHubLoginStatus = {
+  status: "idle" | "opening" | "waiting" | "success" | "failed";
+  message?: string;
+  verificationUrl?: string;
+  userCode?: string;
+  updatedAt?: string;
+};
+
+const githubDeviceUrl = "https://github.com/login/device";
+const activeGitHubLogins = new Map<string, AuthProcess>();
+const authStatusWrites = new Map<string, Promise<void>>();
+
 function runCommand(executable: string, args: string[]) {
   return new Promise<CommandResult>((resolve, reject) => {
     execFile(
@@ -62,6 +95,14 @@ function launchProcess(
   options: Parameters<typeof spawn>[2],
 ) {
   return spawn(executable, args, options);
+}
+
+function launchAuthProcess(
+  executable: string,
+  args: string[],
+  options: Parameters<AuthProcessLauncher>[2],
+) {
+  return spawn(executable, args, options) as AuthProcess;
 }
 
 async function readJson<T>(filePath: string): Promise<T | null> {
@@ -113,6 +154,52 @@ function statusPath(installRoot: string) {
   return path.join(installRoot, "update-status.json");
 }
 
+function authStatusPath(installRoot: string) {
+  return path.join(installRoot, "github-auth-status.json");
+}
+
+function writeGitHubLoginStatus(
+  installRoot: string,
+  status: GitHubLoginStatus,
+) {
+  const filePath = authStatusPath(installRoot);
+  const previous = authStatusWrites.get(filePath) || Promise.resolve();
+  const next = previous
+    .catch(() => undefined)
+    .then(async () => {
+      await writeFile(
+        filePath,
+        JSON.stringify({ ...status, updatedAt: new Date().toISOString() }),
+        "utf8",
+      );
+    });
+  authStatusWrites.set(filePath, next);
+  void next.then(
+    () => {
+      if (authStatusWrites.get(filePath) === next)
+        authStatusWrites.delete(filePath);
+    },
+    () => {
+      if (authStatusWrites.get(filePath) === next)
+        authStatusWrites.delete(filePath);
+    },
+  );
+  return next;
+}
+
+function cleanGitHubOutput(value: string) {
+  return value
+    .replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/\r/g, "")
+    .trim();
+}
+
+function githubFailureMessage(output: string, fallback: string) {
+  const cleaned = cleanGitHubOutput(output);
+  if (!cleaned) return fallback;
+  return cleaned.split("\n").filter(Boolean).slice(-3).join(" ");
+}
+
 function resolveStudioRoot(root?: string) {
   return root || process.env.NGT_STUDIO_ROOT || process.cwd();
 }
@@ -124,6 +211,18 @@ export async function getStudioUpdateStatus(
   if (!config?.installRoot) return { status: "idle" };
   return (
     (await readJson<StudioUpdateStatus>(statusPath(config.installRoot))) || {
+      status: "idle",
+    }
+  );
+}
+
+export async function getGitHubLoginStatus(
+  root?: string,
+): Promise<GitHubLoginStatus> {
+  const { config } = await getStudioContext(resolveStudioRoot(root));
+  if (!config?.installRoot) return { status: "idle" };
+  return (
+    (await readJson<GitHubLoginStatus>(authStatusPath(config.installRoot))) || {
       status: "idle",
     }
   );
@@ -186,20 +285,147 @@ export async function checkStudioUpdate(
 }
 
 export async function startGitHubLogin(
-  options: { root?: string; launch?: ProcessLauncher } = {},
+  options: {
+    root?: string;
+    launch?: AuthProcessLauncher;
+    run?: CommandRunner;
+    timeoutMs?: number;
+  } = {},
 ) {
   const root = resolveStudioRoot(options.root);
   const context = await getStudioContext(root);
-  if (!context.release?.version) throw new Error("studio_not_installed");
+  if (!context.release?.version || !context.config?.installRoot) {
+    throw new Error("studio_not_installed");
+  }
+  const installRoot = context.config.installRoot;
+  if (activeGitHubLogins.has(root)) return getGitHubLoginStatus(root);
+
   const githubCli = resolveGitHubCli(root);
-  const quote = (value: string) => `'${value.replaceAll("'", "''")}'`;
-  const command = `Start-Process -FilePath ${quote(githubCli)} -WorkingDirectory ${quote(root)} -ArgumentList @('auth','login','--hostname','github.com','--web','--clipboard','--git-protocol','https')`;
-  const child = (options.launch || launchProcess)(
-    "powershell.exe",
-    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
-    { cwd: root, detached: true, stdio: "ignore", windowsHide: true },
+  const initialStatus: GitHubLoginStatus = {
+    status: "opening",
+    verificationUrl: githubDeviceUrl,
+  };
+  await writeGitHubLoginStatus(installRoot, initialStatus);
+
+  const child = (options.launch || launchAuthProcess)(
+    githubCli,
+    [
+      "auth",
+      "login",
+      "--hostname",
+      "github.com",
+      "--web",
+      "--clipboard",
+      "--git-protocol",
+      "https",
+      "--scopes",
+      "repo",
+    ],
+    {
+      cwd: root,
+      env: process.env,
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true,
+    },
   );
+  activeGitHubLogins.set(root, child);
   child.unref();
+
+  let output = "";
+  let finished = false;
+  let userCode: string | undefined;
+  const rememberOutput = (chunk: unknown) => {
+    output = `${output}${String(chunk)}`.slice(-16_384);
+    const nextCode = cleanGitHubOutput(output).match(
+      /\b[A-Z0-9]{4}-[A-Z0-9]{4}\b/,
+    )?.[0];
+    if (nextCode && nextCode !== userCode) {
+      userCode = nextCode;
+      void writeGitHubLoginStatus(installRoot, {
+        status: "waiting",
+        verificationUrl: githubDeviceUrl,
+        userCode,
+      });
+    }
+  };
+  child.stdout.on("data", rememberOutput);
+  child.stderr.on("data", rememberOutput);
+
+  // GitHub CLI waits for interactive confirmation before opening the browser
+  // and starting device-code polling. The installed studio has no console, so
+  // accept the default HTTPS credential prompt and the browser prompt here.
+  child.stdin.write("\n\n");
+
+  const finish = async (status: GitHubLoginStatus) => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(timeout);
+    activeGitHubLogins.delete(root);
+    child.stdin.end();
+    await writeGitHubLoginStatus(installRoot, status);
+  };
+  const timeout = setTimeout(
+    () => {
+      child.kill();
+      void finish({
+        status: "failed",
+        message: "GitHub authorization timed out before it was completed.",
+        verificationUrl: githubDeviceUrl,
+        userCode,
+      });
+    },
+    options.timeoutMs ?? 15 * 60_000,
+  );
+  timeout.unref();
+
+  child.once("error", (error) => {
+    void finish({
+      status: "failed",
+      message: error.message,
+      verificationUrl: githubDeviceUrl,
+      userCode,
+    });
+  });
+  child.once("close", (code) => {
+    void (async () => {
+      if (code !== 0) {
+        await finish({
+          status: "failed",
+          message: githubFailureMessage(
+            output,
+            `GitHub CLI exited with code ${code ?? "unknown"}.`,
+          ),
+          verificationUrl: githubDeviceUrl,
+          userCode,
+        });
+        return;
+      }
+      try {
+        const run = options.run || runCommand;
+        await run(githubCli, ["auth", "status", "--hostname", "github.com"]);
+        await run(githubCli, [
+          "release",
+          "view",
+          "--repo",
+          context.repository,
+          "--json",
+          "tagName",
+        ]);
+        await finish({ status: "success" });
+      } catch (cause) {
+        await finish({
+          status: "failed",
+          message:
+            cause instanceof Error
+              ? `GitHub authorization completed, but the private repository is not accessible: ${cause.message}`
+              : "GitHub authorization completed, but the private repository is not accessible.",
+          verificationUrl: githubDeviceUrl,
+          userCode,
+        });
+      }
+    })();
+  });
+  return initialStatus;
 }
 
 export async function startStudioUpdate(

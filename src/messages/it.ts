@@ -472,9 +472,20 @@ export const it = {
     "L'aggiornamento automatico è disponibile solo nella versione installata per lo studio.",
   updateAuthRequired:
     "Per controllare gli aggiornamenti, autorizza GitHub una sola volta.",
-  updateLoginOpened:
-    "Completa l'autorizzazione nella finestra aperta, quindi controlla di nuovo gli aggiornamenti.",
-  updateLoginFailed: "Impossibile avviare l'autorizzazione GitHub.",
+  updateLoginOpening: "Apertura della pagina di autorizzazione GitHub…",
+  updateLoginWaiting:
+    "Completa l'autorizzazione su GitHub; il risultato verrà verificato automaticamente.",
+  updateLoginSuccess:
+    "GitHub autorizzato. L'accesso al repository privato è stato verificato.",
+  updateLoginFailed: "Autorizzazione GitHub non riuscita.",
+  updateLoginTimeout: "Tempo scaduto per l'autorizzazione GitHub. Riprova.",
+  updateLoginFallback:
+    "Se il browser non si apre automaticamente, usa questi dati:",
+  updateLoginOpenLink: "Apri autorizzazione",
+  updateLoginCopyLink: "Copia link",
+  updateLoginCopied: "Dati di autorizzazione copiati.",
+  updateLoginCopyFailed:
+    "Copia automatica non riuscita. Seleziona manualmente il link o il codice.",
   updateCheckFailed: "Impossibile controllare gli aggiornamenti. Riprova.",
   updateNow: "Aggiorna ora",
   updateConfirmTitle: "Conferma aggiornamento",

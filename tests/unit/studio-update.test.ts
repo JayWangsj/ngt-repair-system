@@ -1,15 +1,41 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { EventEmitter } from "node:events";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { PassThrough, Writable } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   checkStudioUpdate,
   compareVersions,
+  getGitHubLoginStatus,
   startGitHubLogin,
   startStudioUpdate,
 } from "../../src/lib/studio-update";
 
 const temporaryRoots: string[] = [];
+
+function authProcess() {
+  const events = new EventEmitter();
+  let input = "";
+  const stdin = new Writable({
+    write(chunk, _encoding, callback) {
+      input += chunk.toString();
+      callback();
+    },
+  });
+  return {
+    process: {
+      stdin,
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      once: events.once.bind(events),
+      kill: () => true,
+      unref() {},
+    },
+    emit: events.emit.bind(events),
+    input: () => input,
+  };
+}
 
 async function studioRoot() {
   const root = await mkdtemp(path.join(tmpdir(), "ngt-studio-update-"));
@@ -153,23 +179,58 @@ describe("studio update", () => {
     });
   });
 
-  it("launches visible browser authorization and a detached update process", async () => {
+  it("advances browser authorization and verifies private release access", async () => {
     const { root, installRoot } = await studioRoot();
+    const child = authProcess();
     const launches: { executable: string; args: string[] }[] = [];
-    const launch = (executable: string, args: string[]) => {
-      launches.push({ executable, args });
-      return { unref() {} };
-    };
-    await startGitHubLogin({ root, launch });
-    await startStudioUpdate({ root, launch });
-    expect(launches[0].executable).toBe("powershell.exe");
-    expect(launches[0].args).toContain("-Command");
-    expect(launches[0].args.at(-1)).toContain("Start-Process");
-    expect(launches[0].args.at(-1)).toContain("--clipboard");
-    expect(launches[0].args.at(-1)).toContain("--web");
-    expect(launches[1].executable).toBe("powershell.exe");
+    const calls: string[][] = [];
+    await startGitHubLogin({
+      root,
+      launch: (executable, args) => {
+        launches.push({ executable, args });
+        return child.process;
+      },
+      run: async (_executable, args) => {
+        calls.push(args);
+        return { stdout: "", stderr: "" };
+      },
+    });
+    expect(launches[0].executable).toBe(path.join(root, "runtime", "gh.exe"));
+    expect(launches[0].args).toContain("--clipboard");
+    expect(launches[0].args).toContain("--web");
+    expect(launches[0].args).toContain("repo");
+    expect(child.input()).toBe("\n\n");
+
+    child.process.stderr.write(
+      "First copy your one-time code: ABCD-1234\nPress Enter to open https://github.com/login/device in your browser...",
+    );
+    await expect
+      .poll(() => getGitHubLoginStatus(root))
+      .toMatchObject({
+        status: "waiting",
+        userCode: "ABCD-1234",
+        verificationUrl: "https://github.com/login/device",
+      });
+    child.emit("close", 0);
+    await expect
+      .poll(() => getGitHubLoginStatus(root))
+      .toMatchObject({
+        status: "success",
+      });
+    expect(calls[0]).toEqual(["auth", "status", "--hostname", "github.com"]);
+    expect(calls[1]).toContain("JayWangsj/ngt-repair-system");
+
+    const updateLaunches: { executable: string; args: string[] }[] = [];
+    await startStudioUpdate({
+      root,
+      launch: (executable, args) => {
+        updateLaunches.push({ executable, args });
+        return { unref() {} };
+      },
+    });
+    expect(updateLaunches[0].executable).toBe("powershell.exe");
     expect(
-      launches[1].args.some((argument) =>
+      updateLaunches[0].args.some((argument) =>
         argument.endsWith("update-windows-studio.ps1"),
       ),
     ).toBe(true);
@@ -177,5 +238,46 @@ describe("studio update", () => {
       await readFile(path.join(installRoot, "update-status.json"), "utf8"),
     ) as { status: string };
     expect(status.status).toBe("queued");
+  });
+
+  it("reports the GitHub CLI reason when authorization fails", async () => {
+    const { root } = await studioRoot();
+    const child = authProcess();
+    await startGitHubLogin({
+      root,
+      launch: () => child.process,
+    });
+    child.process.stderr.write("failed to open browser: no default app\n");
+    child.emit("close", 1);
+
+    await expect
+      .poll(() => getGitHubLoginStatus(root))
+      .toMatchObject({
+        status: "failed",
+        message: "failed to open browser: no default app",
+        verificationUrl: "https://github.com/login/device",
+      });
+  });
+
+  it("does not report success without private repository access", async () => {
+    const { root } = await studioRoot();
+    const child = authProcess();
+    await startGitHubLogin({
+      root,
+      launch: () => child.process,
+      run: async (_executable, args) => {
+        if (args[0] === "release") throw new Error("HTTP 404: Not Found");
+        return { stdout: "", stderr: "" };
+      },
+    });
+    child.emit("close", 0);
+
+    await expect
+      .poll(() => getGitHubLoginStatus(root))
+      .toMatchObject({
+        status: "failed",
+        message:
+          "GitHub authorization completed, but the private repository is not accessible: HTTP 404: Not Found",
+      });
   });
 });

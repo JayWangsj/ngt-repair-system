@@ -107,6 +107,20 @@ try {
     -Value $application.Id -Encoding ascii
 
   Wait-NgtStudioHealth
+  $githubCli = Get-NgtGitHubCli
+  $authHelp = & $githubCli auth login --help | Out-String
+  if (($LASTEXITCODE -ne 0) -or
+      (-not $authHelp.Contains("--web")) -or
+      (-not $authHelp.Contains("--clipboard"))) {
+    throw "Bundled GitHub CLI does not support browser device authorization."
+  }
+  $authStatus = Invoke-RestMethod `
+    -Uri "http://127.0.0.1:3000/api/system-update/auth" `
+    -Method Get `
+    -TimeoutSec 35
+  if ($authStatus.status -ne "idle") {
+    throw "Studio package GitHub authorization status endpoint is not ready."
+  }
   $updateInfo = Invoke-RestMethod `
     -Uri "http://127.0.0.1:3000/api/system-update" `
     -Method Get `

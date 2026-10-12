@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CalendarDays,
+  Copy,
   Download,
+  ExternalLink,
   RefreshCw,
   Sparkles,
   Upload,
@@ -75,6 +77,11 @@ export function SettingsTools({
   const [updateMessage, setUpdateMessage] = useState("");
   const [updateError, setUpdateError] = useState("");
   const [updateConfirmationOpen, setUpdateConfirmationOpen] = useState(false);
+  const [githubAuth, setGitHubAuth] = useState<{
+    status: "opening" | "waiting";
+    verificationUrl?: string;
+    userCode?: string;
+  } | null>(null);
   const [alwaysMotion, setAlwaysMotion] = useState(false);
   const [followOrderMotion, setFollowOrderMotion] = useState(true);
 
@@ -99,19 +106,97 @@ export function SettingsTools({
   async function beginGitHubLogin() {
     setUpdatePending(true);
     setUpdateError("");
+    setUpdateMessage(it.updateLoginOpening);
     try {
       const response = await fetch("/api/system-update/auth", {
         method: "POST",
       });
-      if (!response.ok) throw new Error(it.updateLoginFailed);
-      setUpdateMessage(it.updateLoginOpened);
+      const result = (await response.json()) as {
+        status?: string;
+        verificationUrl?: string;
+        userCode?: string;
+        error?: string;
+      };
+      if (!response.ok) throw new Error(result.error || it.updateLoginFailed);
+      setGitHubAuth({
+        status: result.status === "waiting" ? "waiting" : "opening",
+        verificationUrl: result.verificationUrl,
+        userCode: result.userCode,
+      });
+      await monitorGitHubLogin();
     } catch (cause) {
       setUpdateMessage("");
       setUpdateError(
         cause instanceof Error ? cause.message : it.updateLoginFailed,
       );
-    } finally {
       setUpdatePending(false);
+    }
+  }
+
+  async function monitorGitHubLogin() {
+    for (let attempt = 0; attempt < 900; attempt += 1) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      try {
+        const response = await fetch("/api/system-update/auth", {
+          cache: "no-store",
+        });
+        const result = (await response.json()) as {
+          status?: string;
+          message?: string;
+          verificationUrl?: string;
+          userCode?: string;
+          error?: string;
+        };
+        if (!response.ok) throw new Error(result.error || it.updateLoginFailed);
+        if (result.status === "success") {
+          setGitHubAuth(null);
+          setUpdateInfo((current) =>
+            current ? { ...current, authRequired: false } : current,
+          );
+          setUpdateMessage(it.updateLoginSuccess);
+          setUpdatePending(false);
+          return;
+        }
+        if (result.status === "failed") {
+          setUpdateMessage("");
+          setUpdateError(
+            result.message
+              ? `${it.updateLoginFailed} ${result.message}`
+              : it.updateLoginFailed,
+          );
+          setUpdatePending(false);
+          return;
+        }
+        const status = result.status === "waiting" ? "waiting" : "opening";
+        setGitHubAuth({
+          status,
+          verificationUrl: result.verificationUrl,
+          userCode: result.userCode,
+        });
+        setUpdateMessage(
+          status === "waiting" ? it.updateLoginWaiting : it.updateLoginOpening,
+        );
+      } catch (cause) {
+        setUpdateMessage("");
+        setUpdateError(
+          cause instanceof Error ? cause.message : it.updateLoginFailed,
+        );
+        setUpdatePending(false);
+        return;
+      }
+    }
+    setUpdateMessage("");
+    setUpdateError(it.updateLoginTimeout);
+    setUpdatePending(false);
+  }
+
+  async function copyGitHubAuth(value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setUpdateMessage(it.updateLoginCopied);
+      setUpdateError("");
+    } catch {
+      setUpdateError(it.updateLoginCopyFailed);
     }
   }
 
@@ -499,6 +584,35 @@ export function SettingsTools({
             <p className="message error" role="alert">
               {updateError}
             </p>
+          )}
+          {githubAuth?.verificationUrl && (
+            <div className="github-auth-fallback">
+              <span>{it.updateLoginFallback}</span>
+              <div>
+                <Button asChild variant="outline">
+                  <a
+                    href={githubAuth.verificationUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <ExternalLink size={16} />
+                    {it.updateLoginOpenLink}
+                  </a>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    void copyGitHubAuth(
+                      githubAuth.userCode || githubAuth.verificationUrl || "",
+                    )
+                  }
+                >
+                  <Copy size={16} />
+                  {githubAuth.userCode || it.updateLoginCopyLink}
+                </Button>
+              </div>
+            </div>
           )}
         </div>
         {updateConfirmationOpen && updateInfo?.latestVersion && (

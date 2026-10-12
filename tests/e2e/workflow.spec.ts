@@ -3472,6 +3472,7 @@ test("settings keeps the update card stable and offers authorization", async ({
 }) => {
   let checkCount = 0;
   let authorizationStarted = false;
+  let authorizationPolls = 0;
   let releaseSecondCheck = () => {};
   const secondCheck = new Promise<void>((resolve) => {
     releaseSecondCheck = resolve;
@@ -3491,11 +3492,31 @@ test("settings keeps the update card stable and offers authorization", async ({
     });
   });
   await page.route("**/api/system-update/auth", (route) => {
-    authorizationStarted = true;
+    if (route.request().method() === "POST") {
+      authorizationStarted = true;
+      return route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          started: true,
+          status: "opening",
+          verificationUrl: "https://github.com/login/device",
+        }),
+      });
+    }
+    authorizationPolls += 1;
     return route.fulfill({
-      status: 202,
+      status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ started: true }),
+      body: JSON.stringify(
+        authorizationPolls < 3
+          ? {
+              status: "waiting",
+              verificationUrl: "https://github.com/login/device",
+              userCode: "ABCD-1234",
+            }
+          : { status: "success" },
+      ),
     });
   });
 
@@ -3547,8 +3568,12 @@ test("settings keeps the update card stable and offers authorization", async ({
     .getByRole("button", { name: "Autorizza GitHub", exact: true })
     .click();
   await expect.poll(() => authorizationStarted).toBe(true);
+  await expect(updateCard).toContainText("ABCD-1234");
+  await expect(
+    updateCard.getByRole("link", { name: "Apri autorizzazione" }),
+  ).toHaveAttribute("href", "https://github.com/login/device");
   await expect(updateCard).toContainText(
-    "Completa l'autorizzazione nella finestra aperta",
+    "GitHub autorizzato. L'accesso al repository privato è stato verificato.",
   );
 });
 test("settings catalogs reuse stable inline and dialog interactions", async ({

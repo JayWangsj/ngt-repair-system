@@ -5315,6 +5315,21 @@ details.secondary-actions {
 .system-update-feedback .message {
   margin: 14px 0 0;
 }
+.github-auth-fallback {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.github-auth-fallback > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.github-auth-fallback .button {
+  min-height: 36px;
+}
 .test-tools-settings {
   border-color: rgb(31 119 103 / 28%);
   background: linear-gradient(180deg, #fbfffd, #fff 180px);

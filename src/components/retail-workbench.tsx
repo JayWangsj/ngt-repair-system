@@ -8,6 +8,7 @@ import {
   Sparkles,
   Star,
   Trash2,
+  X,
 } from "lucide-react";
 import { createRetailSaleAction } from "@/app/actions";
 import { cents, creatablePaymentMethods, decimal, money } from "@/lib/domain";
@@ -355,7 +356,7 @@ export function RetailWorkbench({
                       aria-label={`${it.retail.remove} ${item.name}`}
                       onClick={() => setQuantity(item, 0)}
                     >
-                      ×
+                      <X size={16} aria-hidden="true" />
                     </button>
                     <QuantityStepper
                       key={`${item.id}-${item.quantity}`}
@@ -387,7 +388,7 @@ export function RetailWorkbench({
                         })
                       }
                     >
-                      ×
+                      <X size={16} aria-hidden="true" />
                     </button>
                     {editingServicePrice === item.id ? (
                       <label className="retail-service-price-field is-editing">

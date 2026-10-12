@@ -3378,8 +3378,9 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
 }
 .quick-service-device-card.is-add {
   justify-content: center;
-  border-style: dashed;
-  color: var(--muted);
+  border-color: #b8ae8d;
+  background: #fffdf5;
+  color: #574200;
   cursor: pointer;
 }
 .quick-service-picker {
@@ -3515,19 +3516,23 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
 .quick-service-picker-add,
 .quick-service-service-add {
   transition:
-    background-color var(--motion-base) var(--ease-ui),
-    border-color var(--motion-base) var(--ease-ui),
-    box-shadow var(--motion-base) var(--ease-ui),
-    color var(--motion-base) var(--ease-ui),
-    transform var(--motion-base) var(--ease-ui);
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    box-shadow 150ms ease-out,
+    color 150ms ease-out;
 }
 .quick-service-device-card.is-add:hover:not(:disabled),
 .quick-service-picker-add:hover:not(:disabled),
 .quick-service-service-add:hover:not(:disabled) {
   border-color: #e4b600;
-  background: #fff9e8;
+  background: #fff8d9;
   box-shadow: 0 2px 6px rgb(128 96 0 / 8%);
   color: #6d5510;
+}
+.quick-service-device-card.is-add:active:not(:disabled),
+.quick-service-picker-add:active:not(:disabled),
+.quick-service-service-add:active:not(:disabled) {
+  background: #ffe99d;
 }
 .quick-service-remove {
   width: 28px;
@@ -4763,6 +4768,15 @@ details.secondary-actions {
   background: transparent;
   color: var(--muted);
 }
+.retail-cart-row > .retail-remove {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  align-self: center;
+  justify-self: end;
+  place-items: center;
+  padding: 0;
+}
 .number-stepper {
   display: grid;
   grid-template-columns: 42px minmax(56px, 1fr) 42px;
@@ -4798,6 +4812,7 @@ details.secondary-actions {
   border-right: 1px solid var(--line);
   border-left: 1px solid var(--line);
   background: var(--surface);
+  text-align: center;
 }
 .number-stepper input:focus {
   position: relative;
@@ -5317,12 +5332,15 @@ details.secondary-actions {
 }
 .settings-detail-page {
   display: grid;
-  width: min(100%, 920px);
-  margin-inline: auto;
+  width: 100%;
   gap: 14px;
 }
 .settings-detail-page > .back-link {
   justify-self: start;
+}
+.settings-detail-page > :not(.back-link) {
+  width: min(100%, 920px);
+  margin-inline: auto;
 }
 .settings-detail-page > .page-header {
   align-items: flex-start;
@@ -7353,6 +7371,14 @@ summary.record-icon::-webkit-details-marker {
   border-color: transparent;
   background: #fff7d6;
 }
+.retail-remove:hover:not(:disabled),
+.retail-remove:focus-visible {
+  background: #fff0ee;
+  color: #a64642;
+}
+.retail-remove:active:not(:disabled) {
+  background: #fbdedb;
+}
 .record-icon:focus-visible,
 .x-icon-button:focus-visible,
 .dialog-close:focus-visible,
@@ -7630,15 +7656,15 @@ summary.record-icon::-webkit-details-marker {
   min-width: 82px;
 }
 .inventory-stepper-cell {
-  width: 118px;
-  min-width: 118px;
-  text-align: right;
+  width: 146px;
+  min-width: 146px;
+  text-align: center;
   font-variant-numeric: tabular-nums;
 }
 .inventory-quantity-cell {
   width: 70px;
   min-width: 70px;
-  text-align: right;
+  text-align: center;
   font-variant-numeric: tabular-nums;
 }
 .inventory-status-cell {
@@ -7689,7 +7715,7 @@ summary.record-icon::-webkit-details-marker {
 }
 .number-stepper.is-table {
   width: max-content;
-  margin-left: auto;
+  margin-inline: auto;
   grid-template-columns: 32px 52px 32px;
 }
 .number-stepper.is-table button,
@@ -7699,7 +7725,7 @@ summary.record-icon::-webkit-details-marker {
 }
 .number-stepper.is-table input,
 .retail-cart-row .number-stepper input {
-  text-align: right;
+  text-align: center;
   font-variant-numeric: tabular-nums;
 }
 .inventory-table .price-input {

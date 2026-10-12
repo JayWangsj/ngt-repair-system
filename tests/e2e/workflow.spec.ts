@@ -565,7 +565,7 @@ test("repair project picker selects multiple items and removes a summary on hove
   ]);
   expect(Math.abs(projectButtonWidth - projectEditorWidth)).toBeLessThan(1);
   await addProject.hover();
-  await expect(addProject).toHaveCSS("background-color", "rgb(255, 249, 232)");
+  await expect(addProject).toHaveCSS("background-color", "rgb(255, 248, 217)");
   await addProject.click();
   const picker = page.getByRole("dialog", {
     name: "Seleziona interventi",
@@ -785,8 +785,9 @@ test("manages one quick service for held service orders and retail checkout", as
   await addQuickDevice.hover();
   await expect(addQuickDevice).toHaveCSS(
     "background-color",
-    "rgb(255, 249, 232)",
+    "rgb(255, 248, 217)",
   );
+  await expect(addQuickDevice).toHaveCSS("transform", "none");
   await addQuickDevice.click();
   const devicePicker = page.getByRole("dialog", {
     name: "Dispositivi associati",
@@ -812,7 +813,7 @@ test("manages one quick service for held service orders and retail checkout", as
   await addPickerDevice.hover();
   await expect(addPickerDevice).toHaveCSS(
     "background-color",
-    "rgb(255, 249, 232)",
+    "rgb(255, 248, 217)",
   );
   await addPickerDevice.click();
   const newDeviceDialog = page.getByRole("dialog", {
@@ -952,7 +953,7 @@ test("manages one quick service for held service orders and retail checkout", as
   await addQuickService.hover();
   await expect(addQuickService).toHaveCSS(
     "background-color",
-    "rgb(255, 249, 232)",
+    "rgb(255, 248, 217)",
   );
   await addQuickService.click();
   const servicePicker = page.getByRole("dialog", {
@@ -1383,13 +1384,12 @@ test("settings opens system update as a separate page", async ({ page }) => {
     .toBe("1");
   await entry.click();
   await expect(page).toHaveURL(/\/settings\/system-update$/);
+  const settingsHeader = page.locator(".settings-detail-page > .page-header");
   await expect
     .poll(() =>
-      page
-        .locator(".settings-detail-page")
-        .evaluate((element) =>
-          Math.round(element.getBoundingClientRect().width),
-        ),
+      settingsHeader.evaluate((element) =>
+        Math.round(element.getBoundingClientRect().width),
+      ),
     )
     .toBeLessThanOrEqual(920);
   await expect(
@@ -1398,6 +1398,9 @@ test("settings opens system update as a separate page", async ({ page }) => {
   const back = page.getByRole("link", { name: "Torna alle impostazioni" });
   const content = page.locator(".settings-detail-page");
   expect((await back.boundingBox())!.x).toBe((await content.boundingBox())!.x);
+  expect((await settingsHeader.boundingBox())!.x).toBeGreaterThan(
+    (await back.boundingBox())!.x,
+  );
   await back.hover();
   await expect(back).toHaveCSS("transform", "none");
 });
@@ -1750,12 +1753,12 @@ test("table columns keep matching alignment and geometry while editing", async (
   await expectMatchingColumn(
     page.locator("th.inventory-stepper-cell").first(),
     inventoryRow.locator("td.inventory-stepper-cell").first(),
-    "right",
+    "center",
   );
   await expectMatchingColumn(
     page.locator("th.inventory-quantity-cell").first(),
     inventoryRow.locator("td.inventory-quantity-cell").first(),
-    "right",
+    "center",
   );
   await expectMatchingColumn(
     page.locator("th.inventory-status-cell"),
@@ -1776,8 +1779,19 @@ test("table columns keep matching alignment and geometry while editing", async (
   );
   await expect(stockCell.locator(".number-stepper input")).toHaveCSS(
     "text-align",
-    "right",
+    "center",
   );
+  const [stockHeaderBox, stockEditorBox] = await Promise.all([
+    page.locator("th.inventory-stepper-cell").first().boundingBox(),
+    stockCell.locator(".number-stepper").boundingBox(),
+  ]);
+  expect(
+    Math.abs(
+      stockHeaderBox!.x +
+        stockHeaderBox!.width / 2 -
+        (stockEditorBox!.x + stockEditorBox!.width / 2),
+    ),
+  ).toBeLessThan(1);
 
   await page.goto("/prices");
   await page.getByLabel("Cerca", { exact: true }).fill("iPhone 13");
@@ -3128,7 +3142,7 @@ test("diagnostic order saves faults, date and quote in one progressive flow", as
   await addInspectionProject.hover();
   await expect(addInspectionProject).toHaveCSS(
     "background-color",
-    "rgb(255, 249, 232)",
+    "rgb(255, 248, 217)",
   );
   await chooseRepairProjects(page, ["sostituzione display"], dialog);
   await expect(dialog.locator(".selected-project-summary")).toContainText(
@@ -3271,7 +3285,21 @@ test("completes a retail sale and opens its immutable receipt", async ({
     exact: true,
   });
   await expect(retailQuantity).toHaveValue("2");
-  await expect(retailQuantity).toHaveCSS("text-align", "right");
+  await expect(retailQuantity).toHaveCSS("text-align", "center");
+  await cartRow.hover();
+  const removeProduct = cartRow.getByRole("button", {
+    name: "Rimuovi Cavo USB-C Test",
+    exact: true,
+  });
+  const removeProductBox = await removeProduct.boundingBox();
+  expect(removeProductBox!.width).toBe(28);
+  expect(removeProductBox!.height).toBe(28);
+  await removeProduct.hover();
+  await expect(removeProduct).toHaveCSS(
+    "background-color",
+    "rgb(255, 240, 238)",
+  );
+  await expect(removeProduct).toHaveCSS("transform", "none");
   await retailQuantity.fill("");
   await expect(retailQuantity).toHaveValue("");
   await retailQuantity.fill("5");
@@ -3829,7 +3857,7 @@ test("settings catalogs reuse stable inline and dialog interactions", async ({
   });
   await expect(addService).toHaveClass(/quick-service-service-add/);
   await addService.hover();
-  await expect(addService).toHaveCSS("background-color", "rgb(255, 249, 232)");
+  await expect(addService).toHaveCSS("background-color", "rgb(255, 248, 217)");
   await addService.click();
   const serviceEditor = page.getByRole("dialog", { name: "Nuovo servizio" });
   await expect(serviceEditor.locator('input[type="checkbox"]')).toHaveCount(0);

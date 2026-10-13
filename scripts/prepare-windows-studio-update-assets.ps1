@@ -50,7 +50,7 @@ foreach ($archive in @($appArchive, $runtimeArchive)) {
 }
 $entries = & tar.exe -tf $appArchive
 if ($LASTEXITCODE -ne 0) { throw "Application update archive verification failed." }
-if ($entries | Where-Object { $_ -match "(^|/)runtime/" }) {
+if ($entries | Where-Object { $_ -match "^(\./)?runtime(/|$)" }) {
   throw "Application update archive unexpectedly includes the runtime."
 }
 Write-Output "Prepared application and reusable runtime release assets for v$version."

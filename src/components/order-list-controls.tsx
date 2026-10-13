@@ -23,6 +23,8 @@ import {
 import { useBusinessDay } from "./business-date";
 import { useMessages } from "./language";
 import { StatusDropdown, type StatusDropdownOrder } from "./status-dropdown";
+import { FormDialog, PaymentForm } from "./forms";
+import { Button } from "./ui/button";
 
 export type OrderListRow = {
   id: string;
@@ -34,6 +36,7 @@ export type OrderListRow = {
   projects: string;
   status: OrderStatus;
   dueDate: string;
+  expectedAt: string;
   overdue: boolean;
   lastUpdated: string;
   due: number;
@@ -124,19 +127,27 @@ function DueDateControl({
   const it = useMessages();
   const today = useBusinessDay();
   const router = useRouter();
-  const [value, setValue] = useState(row.dueDate);
+  const [value, setValue] = useState(
+    row.type === "QUICK_SERVICE" ? row.expectedAt : row.dueDate,
+  );
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
   const closed = ["COMPLETED", "REFUNDED", "CANCELLED"].includes(row.status);
+  const currentValue =
+    row.type === "QUICK_SERVICE" ? row.expectedAt : row.dueDate;
   if (!active || closed)
     return (
       <div className="order-static-value">
-        <span>{dateOnly(row.dueDate || null)}</span>
+        <span>
+          {row.type === "QUICK_SERVICE"
+            ? row.expectedAt.replace("T", " ") || dateOnly(row.dueDate || null)
+            : dateOnly(row.dueDate || null)}
+        </span>
         {row.overdue && <small>{it.overdue}</small>}
       </div>
     );
   function save() {
-    if (value === row.dueDate) return;
+    if (value === currentValue) return;
     startTransition(async () => {
       const result = await updateDueDateAction(row.id, value);
       if (!result.ok) return setError(result.error);
@@ -149,8 +160,8 @@ function DueDateControl({
       <input
         className="order-due-input"
         aria-label={it.dueDate}
-        type="date"
-        min={today}
+        type={row.type === "QUICK_SERVICE" ? "datetime-local" : "date"}
+        min={row.type === "QUICK_SERVICE" ? `${today}T00:00` : today}
         value={value}
         disabled={pending}
         onChange={(event) => setValue(event.target.value)}
@@ -173,8 +184,11 @@ function PaymentControl({
   const [value, setValue] = useState(decimal(row.paid));
   const [method, setMethod] = useState<"" | "CASH" | "CARD" | "OTHER">("");
   const [adjustmentReason, setAdjustmentReason] = useState("");
+  const [correcting, setCorrecting] = useState(false);
+  const [collecting, setCollecting] = useState(false);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const closed = ["COMPLETED", "REFUNDED", "CANCELLED"].includes(row.status);
   const parsed = Number(value.replace(",", "."));
   const changed =
     !Number.isFinite(parsed) || Math.round(parsed * 100) !== row.paid;
@@ -196,6 +210,8 @@ function PaymentControl({
       router.refresh();
     });
   }
+  const mayCollect = active && !closed && row.balance > 0;
+  const mayCorrect = active && !closed && !row.afterSalesOpen;
   return (
     <div className="order-payment-values">
       <span>
@@ -204,8 +220,7 @@ function PaymentControl({
       </span>
       <span>
         <small>{it.paid}</small>
-        {active &&
-        !["COMPLETED", "REFUNDED", "CANCELLED"].includes(row.status) ? (
+        {correcting && mayCorrect ? (
           <input
             aria-label={it.paid}
             value={value}
@@ -215,7 +230,6 @@ function PaymentControl({
               setValue(event.target.value);
               setError("");
             }}
-            onBlur={save}
           />
         ) : (
           <strong>{money(row.paid)}</strong>
@@ -225,9 +239,35 @@ function PaymentControl({
         <small>{it.balance}</small>
         <strong>{money(row.balance)}</strong>
       </span>
-      {active &&
-        !["COMPLETED", "REFUNDED", "CANCELLED"].includes(row.status) &&
-        changed && (
+      {mayCollect && (
+        <Button
+          type="button"
+          variant="outline"
+          className="order-payment-action"
+          onClick={(event) => {
+            event.stopPropagation();
+            setCollecting(true);
+          }}
+        >
+          {it.addPayment}
+        </Button>
+      )}
+      {mayCorrect && !correcting && (
+        <button
+          type="button"
+          className="order-payment-correction-toggle"
+          onClick={(event) => {
+            event.stopPropagation();
+            setValue(decimal(row.paid));
+            setCorrecting(true);
+            setError("");
+          }}
+        >
+          {it.paymentCorrection}
+        </button>
+      )}
+      {correcting && mayCorrect && (
+        <>
           <div className="order-payment-adjustment">
             <label>
               <span className="sr-only">{it.paymentMethod}</span>
@@ -257,12 +297,34 @@ function PaymentControl({
                   setAdjustmentReason(event.target.value);
                   setError("");
                 }}
-                onBlur={save}
               />
             </label>
           </div>
-        )}
+          <div className="order-payment-correction-actions">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => {
+                setValue(decimal(row.paid));
+                setCorrecting(false);
+                setError("");
+              }}
+            >
+              {it.cancel}
+            </Button>
+            <Button type="button" disabled={pending || !changed} onClick={save}>
+              {pending ? it.saving : it.save}
+            </Button>
+          </div>
+        </>
+      )}
       {error && <small className="inline-control-error">{error}</small>}
+      {collecting && (
+        <FormDialog title={it.addPayment} onClose={() => setCollecting(false)}>
+          <PaymentForm id={row.id} remaining={row.balance} />
+        </FormDialog>
+      )}
     </div>
   );
 }
@@ -749,7 +811,11 @@ export function OrderListBody({
             <td
               className={`order-inline-edit-cell order-due-cell${row.overdue ? " danger-text" : ""}`}
             >
-              <DueDateControl key={row.dueDate} row={row} active={active} />
+              <DueDateControl
+                key={row.expectedAt || row.dueDate}
+                row={row}
+                active={active}
+              />
             </td>
             <td className="order-updated-cell">{row.lastUpdated}</td>
             <td className="numeric order-inline-edit-cell order-payment-cell">

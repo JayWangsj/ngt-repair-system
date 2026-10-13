@@ -135,7 +135,9 @@ async function chooseRepairProjects(
     await page.waitForTimeout(250);
     await openStep(page, 2);
   }
-  const addProject = scope.locator(".quick-service-service-add");
+  const addProject = scope
+    .locator(".quick-service-service-add:visible")
+    .first();
   await addProject.click();
   const dialog = page.getByRole("dialog", {
     name: "Seleziona interventi",
@@ -742,6 +744,41 @@ test("single operator opens every business page without login", async ({
   await expect(page).toHaveURL(/\/$/);
 });
 
+test("switching repair and quick-service modes keeps both drafts", async ({
+  page,
+}) => {
+  await fillOrder(page);
+  const quickMode = page.getByRole("button", {
+    name: "Servizio rapido",
+    exact: true,
+  });
+  await quickMode.click();
+  await chooseBusinessOption(page, "Cerca cliente", "Cliente Playwright");
+  await page.getByLabel("Data", { exact: true }).fill("2099-12-30");
+  await page.getByLabel("Ora", { exact: true }).fill("17:45");
+
+  await page
+    .getByRole("button", { name: "Servizio di riparazione", exact: true })
+    .click();
+  await expect(
+    page
+      .locator(".service-mode-form-repair")
+      .getByLabel("Consegna prevista", { exact: true }),
+  ).toHaveValue("2099-12-31");
+
+  await quickMode.click();
+  const quickForm = page.locator(".service-mode-form-quick");
+  await expect(quickForm.locator(".selected-customer-summary")).toContainText(
+    "Cliente Playwright",
+  );
+  await expect(quickForm.getByLabel("Data", { exact: true })).toHaveValue(
+    "2099-12-30",
+  );
+  await expect(quickForm.getByLabel("Ora", { exact: true })).toHaveValue(
+    "17:45",
+  );
+});
+
 test("manages one quick service for held service orders and retail checkout", async ({
   page,
 }) => {
@@ -763,14 +800,12 @@ test("manages one quick service for held service orders and retail checkout", as
   await expect(repairMode).toHaveCSS("transform", "none");
   const modeSwitch = await page.locator(".service-mode-switch").boundingBox();
   expect(modeSwitch!.width).toBeLessThanOrEqual(410);
-  const quickFormWidth = await page
-    .locator(".quick-service-order-form")
-    .evaluate((element) => element.getBoundingClientRect().width);
   await repairMode.click();
   const repairFormWidth = await page
     .locator(".order-wizard")
     .evaluate((element) => element.getBoundingClientRect().width);
-  expect(Math.abs(quickFormWidth - repairFormWidth)).toBeLessThan(1);
+  expect(repairFormWidth).toBeGreaterThan(0);
+  await expect(page.locator(".quick-service-layout")).toBeHidden();
   await page
     .getByRole("button", { name: "Servizio rapido", exact: true })
     .click();
@@ -778,7 +813,15 @@ test("manages one quick service for held service orders and retail checkout", as
   await expect(page.locator(".selected-customer-summary")).toContainText(
     "Cliente Playwright",
   );
-  const quickLayout = page.locator(".new-order-layout");
+  await repairMode.click();
+  await expect(page.locator(".quick-service-layout")).toBeHidden();
+  await page
+    .getByRole("button", { name: "Servizio rapido", exact: true })
+    .click();
+  await expect(page.locator(".selected-customer-summary")).toContainText(
+    "Cliente Playwright",
+  );
+  const quickLayout = page.locator(".quick-service-layout");
   const layoutBeforeDialog = await quickLayout.evaluate((element) => {
     const rect = element.getBoundingClientRect();
     return { x: rect.x, width: rect.width };
@@ -907,9 +950,11 @@ test("manages one quick service for held service orders and retail checkout", as
     .getByRole("button", { name: "Conferma selezione", exact: true })
     .click();
   await expect(
-    page.locator(".quick-service-device-card").first(),
+    page.locator(".service-mode-form-quick .quick-service-device-card").first(),
   ).toContainText("Apple iPhone 14");
-  await page.locator(".quick-service-device-card.is-add").click();
+  await page
+    .locator(".service-mode-form-quick .quick-service-device-card.is-add")
+    .click();
   const updatedDevicePicker = page.getByRole("dialog", {
     name: "Dispositivi associati",
   });
@@ -933,8 +978,12 @@ test("manages one quick service for held service orders and retail checkout", as
   await updatedDevicePicker
     .getByRole("button", { name: "Annulla", exact: true })
     .click();
-  await expect(page.locator(".quick-service-device-card")).toHaveCount(2);
-  await page.locator(".quick-service-device-card.is-add").click();
+  await expect(
+    page.locator(".service-mode-form-quick .quick-service-device-card"),
+  ).toHaveCount(2);
+  await page
+    .locator(".service-mode-form-quick .quick-service-device-card.is-add")
+    .click();
   const confirmedDevicePicker = page.getByRole("dialog", {
     name: "Dispositivi associati",
   });
@@ -946,9 +995,11 @@ test("manages one quick service for held service orders and retail checkout", as
   await confirmedDevicePicker
     .getByRole("button", { name: "Conferma selezione", exact: true })
     .click();
-  await expect(page.locator(".quick-service-device-card")).toHaveCount(3);
+  await expect(
+    page.locator(".service-mode-form-quick .quick-service-device-card"),
+  ).toHaveCount(3);
   const firstDeviceCard = page
-    .locator(".quick-service-device-card:not(.is-add)")
+    .locator(".service-mode-form-quick .quick-service-device-card:not(.is-add)")
     .first();
   const removeDevice = firstDeviceCard.getByRole("button", {
     name: /Rimuovi Apple iPhone/,
@@ -1046,7 +1097,9 @@ test("manages one quick service for held service orders and retail checkout", as
   await page.locator(".selected-project-summary").hover();
   await expect(removeService).toHaveCSS("opacity", "1");
   await expect(
-    page.locator(".quick-service-device-card .quick-service-picker-icon"),
+    page.locator(
+      ".service-mode-form-quick .quick-service-device-card .quick-service-picker-icon",
+    ),
   ).toHaveCount(2);
   const editQuote = page.getByRole("button", {
     name: "Modifica dati Preventivo attuale",
@@ -1130,6 +1183,15 @@ test("manages one quick service for held service orders and retail checkout", as
     "background-color",
     "rgb(223, 245, 236)",
   );
+  await quickOrderRow.click();
+  const expectedAtInput = quickOrderRow.getByLabel("Consegna prevista", {
+    exact: true,
+  });
+  await expect(expectedAtInput).toHaveAttribute("type", "datetime-local");
+  await expectedAtInput.fill("2099-12-30T17:45");
+  await expectedAtInput.press("Tab");
+  await page.getByRole("heading", { name: "Schede di servizio" }).click();
+  await expect(quickOrderRow).toContainText("2099-12-30 17:45");
   await page.evaluate(() => {
     const tag = document.createElement("span");
     tag.className = "order-type-tag order-type-repair e2e-repair-tag";
@@ -1154,6 +1216,9 @@ test("manages one quick service for held service orders and retail checkout", as
   ).toHaveCount(0);
   await page.keyboard.press("Escape");
   await page.goto(serviceDetailUrl);
+  await expect(page.locator(".detail-status")).toContainText(
+    "2099-12-30 17:45",
+  );
   const secondaryActions = page.locator(".secondary-actions");
   const moreActions = secondaryActions.getByText("Altre azioni", {
     exact: true,
@@ -2531,6 +2596,46 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await expect(row).toContainText("30,00 €");
   await expect(row).toContainText("30/11/2099");
 });
+test("repair list separates explicit collection from payment correction", async ({
+  page,
+}) => {
+  await fillOrder(page, { manual: true });
+  await save(page);
+  const orderPath = new URL(page.url()).pathname;
+  await page.goto("/orders");
+  const row = page.locator(`tbody tr:has(a[href="${orderPath}"])`);
+  await row.click();
+  await row
+    .getByRole("button", { name: "Registra incasso", exact: true })
+    .click();
+  const paymentDialog = page.getByRole("dialog", {
+    name: "Registra incasso",
+    exact: true,
+  });
+  await paymentDialog.getByLabel("Importo (€)", { exact: true }).fill("15");
+  await paymentDialog
+    .getByRole("button", { name: "Registra incasso", exact: true })
+    .click();
+  await expect(paymentDialog).toHaveCount(0);
+  await expect(row.locator(".order-payment-values")).toContainText("15,00 €");
+
+  await row
+    .getByRole("button", { name: "Correggi totale incassato", exact: true })
+    .click();
+  const paid = row.getByLabel("Incassato", { exact: true });
+  await paid.fill("10");
+  await paid.press("Tab");
+  await expect(row.locator(".inline-control-error")).toHaveCount(0);
+  await row
+    .getByLabel("Metodo di pagamento", { exact: true })
+    .selectOption("CARD");
+  await row
+    .getByLabel("Motivo della modifica", { exact: true })
+    .fill("Rettifica test");
+  await row.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(row.locator(".order-payment-values")).toContainText("10,00 €");
+});
+
 test("repair list animates a row reordered by a local status change", async ({
   page,
 }) => {
@@ -3041,8 +3146,8 @@ test("repair list delivery uses the shared checkout and refreshes the row", asyn
     .getByRole("option", { name: "Consegnato", exact: true })
     .click();
   const dialog = page.getByRole("dialog", { name: "Incassa e consegna" });
-  await expect(dialog.getByLabel("Importo (€)", { exact: true })).toHaveValue(
-    "100.00",
+  await expect(dialog.getByLabel("Importo (€)", { exact: true })).toHaveCount(
+    0,
   );
   await dialog
     .getByRole("button", { name: /Incassa e consegna/ })
@@ -4222,30 +4327,17 @@ test("manual quote saves automatically and rejects overpayment", async ({
   await page.getByLabel("Cerca", { exact: true }).fill("fotocamera");
   await expect(page.getByText(/fotocamera/i).first()).toBeVisible();
 });
-test("partial checkout records payment and delivers only after the balance is cleared", async ({
+test("partial collection stays separate from delivery checkout", async ({
   page,
 }) => {
   await fillOrder(page);
   await save(page);
   await state(page, "READY");
-  const trigger = page.locator(".detail-status .status-dropdown-trigger");
-  await trigger.hover();
-  await expect(trigger).toHaveCSS("transform", "none");
-  await trigger.click();
-  await expect(trigger).toHaveAttribute("aria-expanded", "true");
-  await expect(trigger.locator("svg")).toHaveCSS(
-    "transform",
-    "matrix(-1, 0, 0, -1, 0, 0)",
-  );
-  await expect(
-    page
-      .locator(".status-dropdown-menu")
-      .getByRole("option", { name: "Da ritirare", exact: true }),
-  ).toHaveCount(0);
-  await trigger.click();
+  const paymentCard = page.locator(".payments-card");
   await page.getByLabel("Importo (€)", { exact: true }).fill("99");
-  await page.getByLabel("Nome di chi ritira", { exact: true }).fill("Cliente");
-  await page.getByRole("button", { name: /Registra incasso/ }).click();
+  await paymentCard
+    .getByRole("button", { name: "Registra incasso", exact: true })
+    .click();
   await expect(
     page.locator(".detail-status .status-dropdown-trigger"),
   ).toHaveText(/Da ritirare/);
@@ -4254,14 +4346,11 @@ test("partial checkout records payment and delivers only after the balance is cl
   await expect(
     page.locator(".detail-status .status-dropdown-trigger"),
   ).toHaveText(/Da ritirare/);
-  await expect(page.getByLabel("Importo (€)", { exact: true })).toHaveValue(
-    "1.00",
-  );
   await page.locator(".detail-status .status-dropdown-trigger").click();
   await page.getByRole("option", { name: "Consegnato", exact: true }).click();
   const checkout = page.getByRole("dialog", { name: "Incassa e consegna" });
-  await expect(checkout.getByLabel("Importo (€)", { exact: true })).toHaveValue(
-    "1.00",
+  await expect(checkout.getByLabel("Importo (€)", { exact: true })).toHaveCount(
+    0,
   );
   await checkout.getByRole("button", { name: /Incassa e consegna/ }).click();
   await expect(
@@ -4297,6 +4386,55 @@ test("zero balance delivery uses the lightweight confirmation dialog", async ({
     page.locator(".detail-status .status-dropdown-trigger"),
   ).toHaveText(/Consegnato/);
 });
+
+test("detail edits require an explicit save and protect navigation", async ({
+  page,
+}) => {
+  await fillOrder(page);
+  await save(page);
+  const orderPath = new URL(page.url()).pathname;
+  const details = page.getByTestId("details-card");
+  await details.locator(".order-card-heading").click();
+  await details
+    .getByRole("button", { name: "Modifica dati", exact: true })
+    .click();
+  await details
+    .getByLabel("Consegna prevista", { exact: true })
+    .fill("2099-12-30");
+
+  await page.getByTestId("history-card").locator(".order-card-heading").click();
+  await expect(details).toHaveClass(/is-editing/);
+  await details.getByRole("button", { name: "Annulla", exact: true }).click();
+  await page.goto("/orders");
+  const row = page.locator(`tbody tr:has(a[href="${orderPath}"])`);
+  await expect(row).toContainText("31/12/2099");
+
+  await page.goto(orderPath);
+  await details.locator(".order-card-heading").click();
+  await details
+    .getByRole("button", { name: "Modifica dati", exact: true })
+    .click();
+  await details
+    .getByLabel("Consegna prevista", { exact: true })
+    .fill("2099-12-30");
+  await page.locator(".back-link").click();
+  const leaveDialog = page.getByRole("dialog", {
+    name: "Modifiche non salvate",
+    exact: true,
+  });
+  await leaveDialog
+    .getByRole("button", { name: "Continua a modificare", exact: true })
+    .click();
+  await expect(details).toHaveClass(/is-editing/);
+  await page.locator(".back-link").click();
+  await page
+    .getByRole("dialog", { name: "Modifiche non salvate", exact: true })
+    .getByRole("button", { name: "Salva ed esci", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/orders$/);
+  await expect(row).toContainText("30/12/2099");
+});
+
 test("repair detail cards lock history and keep post-sale finance auditable", async ({
   page,
 }) => {
@@ -5388,7 +5526,7 @@ test("native quote choices populate prices, clear on model changes and discounts
   await openStep(page, 2);
   await expect(projectSummary).toHaveCount(0);
   await expect(createProject).toHaveCount(0);
-  await page.locator(".quick-service-service-add").click();
+  await page.locator(".quick-service-service-add:visible").click();
   projectPicker = page.getByRole("dialog", { name: "Seleziona interventi" });
   await expect(projectPicker).toContainText("sostituzione batteria");
   await expect(projectPicker).toContainText("120,00 €");

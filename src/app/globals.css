@@ -8533,6 +8533,29 @@ summary.record-icon::-webkit-details-marker {
   min-height: 30px;
   padding: 4px 6px;
 }
+.order-payment-action,
+.order-payment-correction-actions .button {
+  min-height: 30px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.order-payment-correction-toggle {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.order-payment-correction-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
 .order-balance-value {
   color: var(--muted);
   font-size: 11px;

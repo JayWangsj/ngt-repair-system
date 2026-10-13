@@ -14,6 +14,7 @@ import {
   cents,
   dateTime,
   isOverdue,
+  promisedDate,
   settlement,
   type OrderStatus,
 } from "@/lib/domain";
@@ -142,7 +143,8 @@ export async function OrderTable({
                 ? it.inspectionPending
                 : order.items.map((item) => item.project).join(", "),
               status: order.status,
-              dueDate: order.dueDate ?? "",
+              dueDate: promisedDate(order) ?? "",
+              expectedAt: order.expectedAt ?? "",
               overdue: isOverdue(order, today),
               lastUpdated: dateTime(order.updatedAt),
               due,

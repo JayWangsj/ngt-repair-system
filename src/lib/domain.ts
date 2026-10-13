@@ -271,14 +271,35 @@ export function isDiagnosticFault(values: string[]) {
     ["da diagnosticare", "故障待检测"].includes(value.trim().toLowerCase()),
   );
 }
+export function promisedDate(order: {
+  dueDate: string | null;
+  type?: string;
+  expectedAt?: string | null;
+  afterSalesOpen?: boolean;
+  afterSalesDueDate?: string | null;
+}) {
+  if (order.type === "QUICK_SERVICE")
+    return order.expectedAt?.slice(0, 10) ?? order.dueDate ?? null;
+  if (order.afterSalesOpen) return order.afterSalesDueDate ?? null;
+  return order.dueDate ?? null;
+}
+
 export function isOverdue(
-  order: { status: string; dueDate: string | null },
+  order: {
+    status: string;
+    dueDate: string | null;
+    type?: string;
+    expectedAt?: string | null;
+    afterSalesOpen?: boolean;
+    afterSalesDueDate?: string | null;
+  },
   today = romeDay(),
 ) {
+  const dueDate = promisedDate(order);
   return (
     !["COMPLETED", "REFUNDED", "CANCELLED"].includes(order.status) &&
-    !!order.dueDate &&
-    order.dueDate < today
+    !!dueDate &&
+    dueDate < today
   );
 }
 export const money = (amount: number) =>

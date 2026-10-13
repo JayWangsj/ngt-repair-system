@@ -379,9 +379,7 @@ export const it = {
     confirmDelivery: "Conferma consegna",
     deliveryTime: "Data e ora di consegna",
     checkoutDescription:
-      "Un incasso parziale mantiene la scheda da ritirare; il saldo completo conclude la consegna.",
-    checkoutAmountRange:
-      "Inserisci un importo valido entro il saldo da pagare.",
+      "Incassa e consegna salda tutto il residuo; per un incasso parziale usa il modulo pagamenti, lasciando la scheda da ritirare.",
   },
   kinds: {
     DEPOSIT: "Acconto",
@@ -551,6 +549,7 @@ export const it = {
   chooseBackup: "Scegli file di backup",
   newOrder: "Nuova scheda di servizio",
   save: "Salva",
+  saveAndLeave: "Salva ed esci",
   saving: "Salvataggio…",
   saved: "Operazione completata.",
   noPriceResults: "Nessun preventivo trovato.",
@@ -568,6 +567,10 @@ export const it = {
   customPriceInvalidHint:
     "Il prezzo non può essere 0. Inserisci un prezzo valido.",
   cancel: "Annulla",
+  continueEditing: "Continua a modificare",
+  discardAndLeave: "Scarta le modifiche ed esci",
+  unsavedChangesTitle: "Modifiche non salvate",
+  unsavedChangesHelp: "Come vuoi procedere prima di uscire?",
   close: "Chiudi",
   search: "Cerca",
   all: "Tutti",
@@ -606,6 +609,7 @@ export const it = {
   choosePaymentMethod: "Seleziona il metodo",
   paymentAdjustmentReason: "Motivo della modifica",
   paymentAdjustmentDetailsRequired: "Seleziona il metodo e indica il motivo.",
+  paymentCorrection: "Correggi totale incassato",
   balance: "Da pagare",
   dueDate: "Consegna prevista",
   diagnosticFee: "Costo diagnosi (€)",

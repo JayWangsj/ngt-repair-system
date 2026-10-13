@@ -10,6 +10,7 @@ import {
   dateTime,
   money,
   orderCode,
+  promisedDate,
   settlement,
   warrantyProgress,
 } from "@/lib/domain";
@@ -229,7 +230,7 @@ export default async function Detail({
       expectedAt={
         order.type === "QUICK_SERVICE"
           ? order.expectedAt?.replace("T", " ") || "—"
-          : dateOnly(order.afterSalesDueDate ?? order.dueDate)
+          : dateOnly(promisedDate(order))
       }
       customerName={order.customerName || order.device.customer.name}
       customerPhone={order.device.customer.phone}
@@ -582,7 +583,7 @@ export default async function Detail({
           {it.created}: {dateTime(order.createdAt)}
         </span>
         <span>
-          {it.dueDate}: {dateOnly(order.afterSalesDueDate ?? order.dueDate)}
+          {it.dueDate}: {dateOnly(promisedDate(order))}
         </span>
       </div>
       {order.status === "COMPLETED" && (
@@ -730,7 +731,7 @@ export default async function Detail({
               )}
               <div>
                 <dt>{it.dueDate}</dt>
-                <dd>{dateOnly(order.dueDate)}</dd>
+                <dd>{dateOnly(promisedDate(order))}</dd>
               </div>
               <div>
                 <dt>{it.notes}</dt>
@@ -1085,7 +1086,7 @@ export default async function Detail({
               <p className="muted">{it.noPayments}</p>
             )}
             {remaining > 0 &&
-              !["READY", "COMPLETED", "REFUNDED", "CANCELLED"].includes(
+              !["COMPLETED", "REFUNDED", "CANCELLED"].includes(
                 order.status,
               ) && (
                 <PaymentForm key={remaining} id={id} remaining={remaining} />

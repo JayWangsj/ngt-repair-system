@@ -15,6 +15,7 @@ import {
   matchRule,
   normalizePhone,
   romeDay,
+  promisedDate,
   settlement,
   statuses,
   total,
@@ -251,6 +252,34 @@ describe("Italian localization and validation", () => {
     ).toBe(false);
     expect(
       isOverdue({ status: "READY", dueDate: "2026-01-02" }, "2026-01-02"),
+    ).toBe(false);
+  });
+  it("uses one promised date for repair, quick service, and open after-sales", () => {
+    expect(
+      promisedDate({
+        dueDate: "2026-01-01",
+        type: "REPAIR",
+        afterSalesOpen: true,
+        afterSalesDueDate: "2026-01-05",
+      }),
+    ).toBe("2026-01-05");
+    expect(
+      promisedDate({
+        dueDate: "2026-01-01",
+        type: "QUICK_SERVICE",
+        expectedAt: "2026-01-06T18:30",
+      }),
+    ).toBe("2026-01-06");
+    expect(
+      isOverdue(
+        {
+          status: "REWORKING",
+          dueDate: "2026-01-01",
+          afterSalesOpen: true,
+          afterSalesDueDate: "2026-01-05",
+        },
+        "2026-01-04",
+      ),
     ).toBe(false);
   });
   it("rejects ambiguous quote scopes", () => {

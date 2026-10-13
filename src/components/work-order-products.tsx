@@ -226,7 +226,6 @@ export function WorkOrderCheckout({
   customerName,
   onClose,
   onSuccess,
-  requireDelivery = false,
   refreshOnSuccess = true,
 }: {
   orderId: string;
@@ -236,20 +235,14 @@ export function WorkOrderCheckout({
   customerName: string;
   onClose?: () => void;
   onSuccess?: (order: StatusMutationSnapshot) => void;
-  requireDelivery?: boolean;
   refreshOnSuccess?: boolean;
 }) {
   const it = useMessages();
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
-  const [amount, setAmount] = useState(decimal(remaining));
+  const [requestId] = useState(() => crypto.randomUUID());
   const [method, setMethod] = useState("CASH");
-  let enteredAmount = 0;
-  try {
-    enteredAmount = cents(amount || "0");
-  } catch {}
   const now = () => {
     const date = new Date();
     return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
@@ -260,19 +253,7 @@ export function WorkOrderCheckout({
     event.preventDefault();
     setError("");
     const data = new FormData(event.currentTarget);
-    const submittedAmount = String(data.get("amount") ?? "0");
-    let submittedCents: number;
-    try {
-      submittedCents = cents(submittedAmount);
-      if (submittedCents < 0 || submittedCents > remaining)
-        return setError(it.orderProducts.checkoutAmountRange);
-      if (remaining > 0 && submittedCents === 0)
-        return setError(it.orderProducts.checkoutAmountRange);
-      if (requireDelivery && submittedCents !== remaining)
-        return setError(it.orderProducts.checkoutAmountRange);
-    } catch {
-      return setError(it.validationError);
-    }
+    const submittedAmount = decimal(remaining);
     setPending(true);
     try {
       const result = await submitCheckout(
@@ -289,11 +270,6 @@ export function WorkOrderCheckout({
       );
       if (!result.ok) return setError(result.error);
       if (!result.data) return setError(it.connectionError);
-      const delivered = submittedCents === remaining;
-      if (!delivered) {
-        setRequestId(crypto.randomUUID());
-        setAmount(decimal(remaining - submittedCents));
-      }
       onClose?.();
       onSuccess?.(result.data);
       if (refreshOnSuccess) router.refresh();
@@ -325,36 +301,23 @@ export function WorkOrderCheckout({
           <dd>{money(remaining)}</dd>
         </div>
       </dl>
+      <input type="hidden" name="amount" value={decimal(remaining)} />
       {remaining > 0 && (
-        <>
-          <label>
-            <span>{it.amount}</span>
-            <input
-              className="payment-amount-input"
-              name="amount"
-              inputMode="decimal"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              required
-            />
-          </label>
-          <label>
-            <span>{it.paymentMethod}</span>
-            <SimpleSelect
-              name="method"
-              value={method}
-              onChange={setMethod}
-              placeholder={it.selectOption}
-              ariaLabel={it.paymentMethod}
-              options={creatablePaymentMethods.map((option) => ({
-                value: option,
-                label: it.methods[option],
-              }))}
-            />
-          </label>
-        </>
+        <label>
+          <span>{it.paymentMethod}</span>
+          <SimpleSelect
+            name="method"
+            value={method}
+            onChange={setMethod}
+            placeholder={it.selectOption}
+            ariaLabel={it.paymentMethod}
+            options={creatablePaymentMethods.map((option) => ({
+              value: option,
+              label: it.methods[option],
+            }))}
+          />
+        </label>
       )}
-      {remaining === 0 && <input type="hidden" name="amount" value="0" />}
       <label>
         <span>{it.pickedUpBy}</span>
         <input name="pickedUpBy" defaultValue={customerName} required />
@@ -385,9 +348,7 @@ export function WorkOrderCheckout({
             ? it.saving
             : remaining === 0
               ? it.orderProducts.confirmDelivery
-              : enteredAmount < remaining
-                ? `${it.orderProducts.collectPayment} · ${money(enteredAmount)}`
-                : `${it.orderProducts.checkout} · ${money(remaining)}`}
+              : `${it.orderProducts.checkout} · ${money(remaining)}`}
         </Button>
       </div>
     </form>

@@ -80,7 +80,26 @@ export default async function Orders({
   if (attention === "overdue")
     filters.push(
       { status: { notIn: [...closedStatuses] } },
-      { dueDate: { lt: today } },
+      {
+        OR: [
+          { type: "QUICK_SERVICE", expectedAt: { lt: `${today}T00:00` } },
+          {
+            type: "QUICK_SERVICE",
+            expectedAt: null,
+            dueDate: { lt: today },
+          },
+          {
+            type: "REPAIR",
+            afterSalesOpen: true,
+            afterSalesDueDate: { lt: today },
+          },
+          {
+            type: "REPAIR",
+            afterSalesOpen: false,
+            dueDate: { lt: today },
+          },
+        ],
+      },
     );
   if (attention === "unpaid")
     filters.push({ status: { notIn: [...closedStatuses] } });

@@ -351,6 +351,7 @@ describe("PostgreSQL workflow", () => {
       notes: "Controllare il connettore",
       dueDate: "2099-12-31",
     });
+    await updateDueDate(staff, created.id, "2099-12-30");
     let order = await db.workOrder.findUniqueOrThrow({
       where: { id: created.id },
       include: orderInclude,
@@ -358,7 +359,8 @@ describe("PostgreSQL workflow", () => {
     expect(order).toMatchObject({
       status: "REWORKING",
       afterSalesOpen: true,
-      afterSalesDueDate: "2099-12-31",
+      afterSalesDueDate: "2099-12-30",
+      dueDate: delivered.dueDate,
     });
     expect(order.items[0].warrantyDays).toBe(90);
     expect(order.afterSalesFee.toString()).toBe("50");
@@ -1974,16 +1976,25 @@ describe("work order products and combined checkout", () => {
     ).rejects.toThrow("non registrati");
   });
 
-  it("records a partial checkout payment and delivers only after the balance is cleared", async () => {
+  it("keeps partial payments separate from delivery checkout", async () => {
     const order = await createOrder(staff, input({ deposit: "20" }));
     await changeStatus(staff, order.id, { status: "REPAIRING" });
     await changeStatus(staff, order.id, { status: "READY" });
 
-    await checkoutWorkOrder(staff, order.id, {
+    await expect(
+      checkoutWorkOrder(staff, order.id, {
+        requestId: randomUUID(),
+        amount: "79",
+        method: "CASH",
+        pickedUpBy: "Test Cliente",
+      }),
+    ).rejects.toThrow("saldare tutto il saldo");
+
+    await addPayment(staff, order.id, {
       requestId: randomUUID(),
       amount: "79",
       method: "CASH",
-      pickedUpBy: "Test Cliente",
+      kind: "BALANCE",
     });
 
     const partial = await db.workOrder.findUniqueOrThrow({
@@ -2487,6 +2498,14 @@ describe("quick service orders", () => {
       type: "QUICK_SERVICE",
       status: "RECEIVED",
       expectedAt: "2099-12-31T18:30",
+    });
+    await updateDueDate(staff, order.id, "2099-12-30T17:45");
+    const rescheduled = await db.workOrder.findUniqueOrThrow({
+      where: { id: order.id },
+    });
+    expect(rescheduled).toMatchObject({
+      expectedAt: "2099-12-30T17:45",
+      dueDate: "2099-12-30",
     });
     expect(saved.relatedDevices).toHaveLength(2);
     expect(saved.items[0].final.toString()).toBe("35");

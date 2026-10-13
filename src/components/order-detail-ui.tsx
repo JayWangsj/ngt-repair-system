@@ -11,8 +11,13 @@ import {
 } from "react";
 import { ChevronDown, ChevronRight, ChevronUp, Pencil } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "./ui/button";
-import { FormAutoSaveContext, FormCloseContext } from "./ui/form-close-context";
+import {
+  FormSaveContext,
+  FormCloseContext,
+  type FormSaveRegistration,
+} from "./ui/form-close-context";
 import {
   AfterSalesForm,
   FormDialog,
@@ -61,6 +66,7 @@ export function OrderDetailCard({
   testId?: string;
 }) {
   const it = useMessages();
+  const router = useRouter();
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [editing, setEditing] = useState(false);
   const [editSession, setEditSession] = useState(0);
@@ -71,8 +77,9 @@ export function OrderDetailCard({
   const heading = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
   const wasExpanded = useRef(expanded);
-  const saves = useRef(new Set<() => Promise<boolean>>());
+  const saves = useRef(new Set<FormSaveRegistration>());
   const [saving, setSaving] = useState(false);
+  const [leaveHref, setLeaveHref] = useState("");
   const editable = Boolean(edit) && !locked;
   const closeEdit = () => {
     setEditTarget(null);
@@ -84,9 +91,9 @@ export function OrderDetailCard({
     setEditTarget(target);
     setEditing(true);
   };
-  const registerSave = useCallback((handler: () => Promise<boolean>) => {
-    saves.current.add(handler);
-    return () => saves.current.delete(handler);
+  const registerSave = useCallback((registration: FormSaveRegistration) => {
+    saves.current.add(registration);
+    return () => saves.current.delete(registration);
   }, []);
   useEffect(() => {
     const justExpanded = expanded && !wasExpanded.current;
@@ -104,20 +111,18 @@ export function OrderDetailCard({
     return () => cancelAnimationFrame(frame);
   }, [expanded]);
   const saveAll = useCallback(async () => {
-    for (const save of saves.current) if (!(await save())) return false;
+    for (const registration of saves.current)
+      if (!(await registration.save())) return false;
     return true;
   }, []);
-  async function toggleExpanded() {
-    if (!expanded) return setExpanded(true);
-    if (!editing) return setExpanded(false);
-    if (saving) return;
-    setSaving(true);
-    const saved = await saveAll();
-    setSaving(false);
-    if (!saved) return;
-    setEditTarget(null);
-    setEditing(false);
-    setExpanded(false);
+  const hasUnsavedChanges = useCallback(
+    () =>
+      Array.from(saves.current).some((registration) => registration.isDirty()),
+    [],
+  );
+  function toggleExpanded() {
+    if (editing) return;
+    setExpanded((current) => !current);
   }
   async function submitEdit() {
     if (saving) return;
@@ -128,55 +133,53 @@ export function OrderDetailCard({
   }
   useEffect(() => {
     if (!editing) return;
-    async function outside(event: MouseEvent) {
+    function guardNavigation(event: MouseEvent) {
       const target = event.target;
-      if (!(target instanceof Node) || card.current?.contains(target)) return;
-      const clickTarget =
-        target instanceof HTMLElement ? target : target.parentElement;
-      const clickPosition = { x: event.clientX, y: event.clientY };
-      const actionTarget = clickTarget?.closest<HTMLElement>("button, a");
-      const targetCard =
-        actionTarget?.closest<HTMLElement>("[data-testid]")?.dataset.testid;
-      const targetLabel = actionTarget?.getAttribute("aria-label");
-      const continueOriginalClick =
-        actionTarget?.classList.contains("order-card-edit");
-      if (clickTarget?.closest("[data-prevent-card-autosave]")) return;
-      if (!continueOriginalClick) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
-      if (saving) return;
-      setSaving(true);
-      const saved = await saveAll();
-      setSaving(false);
-      if (!saved) return;
-      setEditTarget(null);
-      setEditing(false);
-      if (continueOriginalClick) return;
-      requestAnimationFrame(() => {
-        const targetScope = targetCard
-          ? document.querySelector<HTMLElement>(`[data-testid="${targetCard}"]`)
-          : null;
-        const nextTarget =
-          (targetLabel
-            ? Array.from(
-                targetScope?.querySelectorAll<HTMLElement>("[aria-label]") ??
-                  [],
-              ).find(
-                (candidate) =>
-                  candidate.getAttribute("aria-label") === targetLabel,
-              )
-            : null) ??
-          (document.elementFromPoint(
-            clickPosition.x,
-            clickPosition.y,
-          ) as HTMLElement | null);
-        nextTarget?.click();
-      });
+      if (!(target instanceof Element) || card.current?.contains(target))
+        return;
+      const link = target.closest<HTMLAnchorElement>("a[href]");
+      if (
+        !link ||
+        link.target === "_blank" ||
+        !hasUnsavedChanges() ||
+        new URL(link.href, window.location.href).origin !==
+          window.location.origin
+      )
+        return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setLeaveHref(`${link.pathname}${link.search}${link.hash}`);
     }
-    document.addEventListener("click", outside, true);
-    return () => document.removeEventListener("click", outside, true);
-  }, [editing, saveAll, saving]);
+    function guardUnload(event: BeforeUnloadEvent) {
+      if (!hasUnsavedChanges()) return;
+      event.preventDefault();
+      event.returnValue = "";
+    }
+    document.addEventListener("click", guardNavigation, true);
+    window.addEventListener("beforeunload", guardUnload);
+    return () => {
+      document.removeEventListener("click", guardNavigation, true);
+      window.removeEventListener("beforeunload", guardUnload);
+    };
+  }, [editing, hasUnsavedChanges]);
+  async function saveAndLeave() {
+    if (!leaveHref || saving) return;
+    setSaving(true);
+    const saved = await saveAll();
+    setSaving(false);
+    if (!saved) return;
+    const href = leaveHref;
+    closeEdit();
+    setLeaveHref("");
+    router.push(href);
+  }
+  function discardAndLeave() {
+    if (!leaveHref) return;
+    const href = leaveHref;
+    closeEdit();
+    setLeaveHref("");
+    router.push(href);
+  }
   return (
     <OrderDetailEditContext.Provider
       value={{
@@ -238,7 +241,7 @@ export function OrderDetailCard({
         >
           <div ref={body} className="order-card-body">
             {editing ? (
-              <FormAutoSaveContext.Provider value={registerSave}>
+              <FormSaveContext.Provider value={registerSave}>
                 <FormCloseContext.Provider value={closeEdit}>
                   {edit}
                   {persistent}
@@ -260,7 +263,7 @@ export function OrderDetailCard({
                     </Button>
                   </div>
                 </FormCloseContext.Provider>
-              </FormAutoSaveContext.Provider>
+              </FormSaveContext.Provider>
             ) : (
               <>
                 {children}
@@ -270,6 +273,40 @@ export function OrderDetailCard({
           </div>
         </div>
       </section>
+      {leaveHref && (
+        <FormDialog
+          title={it.unsavedChangesTitle}
+          onClose={() => setLeaveHref("")}
+          restoreFocusComfortably={false}
+        >
+          <p>{it.unsavedChangesHelp}</p>
+          <div className="dialog-actions">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saving}
+              onClick={() => setLeaveHref("")}
+            >
+              {it.continueEditing}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saving}
+              onClick={discardAndLeave}
+            >
+              {it.discardAndLeave}
+            </Button>
+            <Button
+              type="button"
+              disabled={saving}
+              onClick={() => void saveAndLeave()}
+            >
+              {saving ? it.saving : it.saveAndLeave}
+            </Button>
+          </div>
+        </FormDialog>
+      )}
     </OrderDetailEditContext.Provider>
   );
 }

@@ -31,6 +31,14 @@ export const dueDateInput = z
   )
   .default("");
 
+export const quickServiceExpectedAtInput = z
+  .string()
+  .trim()
+  .refine(
+    (value) => !value || /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value),
+    "Data e ora non valide",
+  );
+
 export const businessClockInput = z
   .object({
     mode: z.enum(["SYSTEM", "MANUAL"]),
@@ -290,13 +298,10 @@ export const quickServiceOrderInput = z.object({
     )
     .min(1)
     .max(30),
-  expectedAt: z
-    .string()
-    .trim()
-    .refine(
-      (value) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value),
-      "Data e ora non valide",
-    ),
+  expectedAt: quickServiceExpectedAtInput.refine(
+    Boolean,
+    "Data e ora non valide",
+  ),
 });
 
 export const renameDeviceModelInput = z.object({

@@ -28,6 +28,7 @@ import {
   orderInput,
   paymentInput,
   paidTotalInput,
+  quickServiceExpectedAtInput,
   productInput,
   productUpdateInput,
   inventoryAdjustmentInput,
@@ -931,18 +932,34 @@ export async function updateDueDate(
   id: string,
   raw: unknown,
 ) {
-  const dueDate = dueDateInput.parse(raw);
   return transact(async (tx) => {
+    const order = await tx.workOrder.findUniqueOrThrow({ where: { id } });
+    const expectedAt =
+      order.type === "QUICK_SERVICE"
+        ? quickServiceExpectedAtInput.parse(raw)
+        : null;
+    const dueDate =
+      order.type === "QUICK_SERVICE"
+        ? (expectedAt?.slice(0, 10) ?? "")
+        : dueDateInput.parse(raw);
     await assertDueDate(tx, dueDate);
     const actor = await currentActor(tx, actorInput);
-    const order = await tx.workOrder.findUniqueOrThrow({ where: { id } });
-    if (originalOrderLocked(order))
+    if (originalOrderLocked(order) && !order.afterSalesOpen)
       throw new BusinessError("La scheda è chiusa.");
+    const data = order.afterSalesOpen
+      ? { afterSalesDueDate: dueDate || null }
+      : order.type === "QUICK_SERVICE"
+        ? { dueDate: dueDate || null, expectedAt: expectedAt || null }
+        : { dueDate: dueDate || null };
     await tx.workOrder.update({
       where: { id },
-      data: { dueDate: dueDate || null },
+      data,
     });
-    await audit(tx, actor, id, "ORDER_DUE_DATE_UPDATED", { dueDate });
+    await audit(tx, actor, id, "ORDER_DUE_DATE_UPDATED", {
+      dueDate,
+      expectedAt,
+      afterSales: Boolean(order.afterSalesOpen),
+    });
   });
 }
 export async function replaceQuote(
@@ -2142,10 +2159,10 @@ export async function checkoutWorkOrder(
         "Ricambi non registrati: completa prima il controllo di magazzino.",
       );
     const remaining = balance(order.items, order.payments, order);
-    if (amount < 0 || (remaining > 0 && amount === 0))
-      throw new BusinessError("L'importo deve essere maggiore di zero.");
-    if (amount > remaining)
-      throw new BusinessError("L'importo supera il saldo da pagare.");
+    if (amount !== remaining)
+      throw new BusinessError(
+        "Per consegnare è necessario saldare tutto il saldo residuo.",
+      );
     if (amount > 0) {
       const rework = order.afterSalesOpen
         ? await tx.reworkSession.findFirst({
@@ -2201,11 +2218,6 @@ export async function checkoutWorkOrder(
         method: data.method,
       });
     }
-    if (remaining - amount > 0)
-      return tx.workOrder.findUniqueOrThrow({
-        where: { id: orderId },
-        include: { items: true, products: true, payments: true },
-      });
     assertDelivery(remaining - amount);
     const deliveredAt = data.pickedUpAt
       ? new Date(data.pickedUpAt)

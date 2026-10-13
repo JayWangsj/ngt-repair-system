@@ -90,6 +90,19 @@ export function NewServiceOrder({
     (service) => service.id in selectedServices,
   );
 
+  function changeMode(next: "REPAIR" | "QUICK_SERVICE") {
+    setMode(next);
+    if (next === "REPAIR") {
+      setChoosingDevices(false);
+      setChoosingServices(false);
+      setCreatingDevice(false);
+      setEditingDevice(null);
+      setDeletingDevice(null);
+      setCreatingService(false);
+      setEditingService(null);
+    }
+  }
+
   function changeCustomer(next: CustomerDetail) {
     setCustomer(next);
     setDeviceIds([]);
@@ -174,7 +187,7 @@ export function NewServiceOrder({
         <button
           type="button"
           className={mode === "REPAIR" ? "active" : ""}
-          onClick={() => setMode("REPAIR")}
+          onClick={() => changeMode("REPAIR")}
         >
           <Wrench size={17} aria-hidden="true" />
           {it.quickService.repairMode}
@@ -182,15 +195,19 @@ export function NewServiceOrder({
         <button
           type="button"
           className={mode === "QUICK_SERVICE" ? "active" : ""}
-          onClick={() => setMode("QUICK_SERVICE")}
+          onClick={() => changeMode("QUICK_SERVICE")}
         >
           <Zap size={17} aria-hidden="true" />
           {it.quickService.quickMode}
         </button>
       </div>
-      {mode === "REPAIR" ? (
-        repairForm
-      ) : (
+      <div className="service-mode-form-repair" hidden={mode !== "REPAIR"}>
+        {repairForm}
+      </div>
+      <div
+        className="service-mode-form-quick"
+        hidden={mode !== "QUICK_SERVICE"}
+      >
         <div className="new-order-layout quick-service-layout">
           <section className="panel padded quick-service-order-form service-order-form-column">
             <section className="quick-service-section">
@@ -683,7 +700,7 @@ export function NewServiceOrder({
             )}
           </section>
         </div>
-      )}
+      </div>
     </>
   );
 }

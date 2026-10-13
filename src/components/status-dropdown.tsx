@@ -325,7 +325,6 @@ export function StatusDropdown({
         onClose={() => setCheckoutOpen(false)}
         restoreFocusComfortably={false}
         onSuccess={settled}
-        requireDelivery
         orderId={order.id}
         due={currentOrder.due}
         paid={currentOrder.paid}

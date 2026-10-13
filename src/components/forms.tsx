@@ -65,7 +65,7 @@ import {
 import { Button } from "./ui/button";
 import { BatchControls } from "./ui/batch-controls";
 import { QuantityStepper } from "./ui/quantity-stepper";
-import { FormAutoSaveContext, FormCloseContext } from "./ui/form-close-context";
+import { FormSaveContext, FormCloseContext } from "./ui/form-close-context";
 import { useMessages, useLanguage } from "./language";
 import { translateError } from "@/lib/i18n";
 import { prefersReducedMotion } from "@/lib/motion-preference";
@@ -2738,7 +2738,7 @@ function ActionForm({
   const it = useMessages();
   const dialogClose = useContext(FormCloseContext);
   const closeDialog = onCancel ?? dialogClose;
-  const registerAutoSave = useContext(FormAutoSaveContext);
+  const registerSave = useContext(FormSaveContext);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -2771,7 +2771,7 @@ function ActionForm({
     (element: HTMLFormElement) => {
       if (activeSave.current) return activeSave.current;
       const current = snapshot(element);
-      if (registerAutoSave && current === initial.current)
+      if (registerSave && current === initial.current)
         return Promise.resolve(true);
       const request = (async () => {
         setPending(true);
@@ -2799,7 +2799,7 @@ function ActionForm({
       activeSave.current = request;
       return request;
     },
-    [action, onSuccess, registerAutoSave, router, snapshot],
+    [action, onSuccess, registerSave, router, snapshot],
   );
   useEffect(() => {
     if (!form.current || initialized.current) return;
@@ -2807,15 +2807,17 @@ function ActionForm({
     initial.current = snapshot(form.current);
   }, [snapshot]);
   useEffect(() => {
-    if (!registerAutoSave) return;
-    return registerAutoSave(() =>
-      form.current ? save(form.current) : Promise.resolve(true),
-    );
-  }, [registerAutoSave, save]);
+    if (!registerSave) return;
+    return registerSave({
+      save: () => (form.current ? save(form.current) : Promise.resolve(true)),
+      isDirty: () =>
+        Boolean(form.current && snapshot(form.current) !== initial.current),
+    });
+  }, [registerSave, save, snapshot]);
   async function handle(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (await save(event.currentTarget)) {
-      if (registerAutoSave) closeDialog?.();
+      if (registerSave) closeDialog?.();
     }
   }
   return (
@@ -2827,7 +2829,7 @@ function ActionForm({
     >
       {children}
       <Message error={error} success={success} />
-      {registerAutoSave ? null : closeDialog ? (
+      {registerSave ? null : closeDialog ? (
         <div className="dialog-actions">
           <Button
             type="button"

@@ -168,7 +168,7 @@ export const zh: typeof it = {
     allStatuses: "全部库存状态",
     compatibleDevices: "适配设备",
     editCompatibleDevices: "修改适配设备",
-    addCompatibility: "添加适配设备",
+    addCompatibility: "适配设备",
     allBrands: "全部品牌",
     allDeviceTypes: "全部设备类型",
     allModels: "全部型号",

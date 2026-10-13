@@ -207,7 +207,7 @@ export const it = {
     allStatuses: "Tutti gli stati",
     compatibleDevices: "Dispositivi compatibili",
     editCompatibleDevices: "Modifica dispositivi compatibili",
-    addCompatibility: "Aggiungi compatibilità",
+    addCompatibility: "Compatibilità",
     allBrands: "Tutte le marche",
     allDeviceTypes: "Tutti i tipi",
     allModels: "Tutti i modelli",

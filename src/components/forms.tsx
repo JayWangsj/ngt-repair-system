@@ -547,7 +547,7 @@ export function ProductCompatibilityFields({
       <Button
         type="button"
         variant="outline"
-        className="price-add-project"
+        className="add-device-action"
         onClick={() =>
           onChange([
             ...value,

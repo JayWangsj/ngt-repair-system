@@ -416,6 +416,10 @@ test("device step gates faults and advances only after faults and due date", asy
   });
 
   await expect(addDevice).toBeEnabled();
+  await expect(addDevice).toHaveClass(/add-device-action/);
+  await expect(addDevice).toHaveCSS("border-top-style", "dashed");
+  await addDevice.hover();
+  await expect(addDevice).toHaveCSS("background-color", "rgb(255, 248, 217)");
   await chooseRepairDevice(page, "Apple iPhone 13");
   const deviceSummary = card.locator(".repair-device-summary");
   const changeDevice = deviceSummary.getByRole("button", {
@@ -784,6 +788,8 @@ test("manages one quick service for held service orders and retail checkout", as
     exact: true,
   });
   await expect(addQuickDevice).toHaveCount(1);
+  await expect(addQuickDevice).toHaveClass(/add-device-action/);
+  await expect(addQuickDevice).toHaveCSS("border-top-style", "dashed");
   await addQuickDevice.hover();
   await expect(addQuickDevice).toHaveCSS(
     "background-color",
@@ -812,6 +818,8 @@ test("manages one quick service for held service orders and retail checkout", as
     name: "Dispositivo",
     exact: true,
   });
+  await expect(addPickerDevice).toHaveClass(/add-device-action/);
+  await expect(addPickerDevice).toHaveCSS("border-top-style", "dashed");
   await addPickerDevice.hover();
   await expect(addPickerDevice).toHaveCSS(
     "background-color",
@@ -5457,9 +5465,21 @@ test("creates a repair part from the quote and selects it immediately", async ({
   await expect(
     dialog.getByRole("combobox", { name: /Intervento/ }),
   ).toHaveValue("sostituzione display");
+  const addCompatibility = dialog.getByRole("button", {
+    name: "Compatibilità",
+    exact: true,
+  });
+  await expect(addCompatibility).toHaveClass(/add-device-action/);
+  await expect(addCompatibility).toHaveCSS("border-top-style", "dashed");
+  await addCompatibility.hover();
+  await expect(addCompatibility).toHaveCSS(
+    "background-color",
+    "rgb(255, 248, 217)",
+  );
+  const brandCombobox = dialog.getByRole("combobox", { name: "Marca" });
   await dialog
-    .getByRole("button", { name: "Espandi opzioni", exact: true })
-    .nth(1)
+    .getByRole("button", { name: "Apri opzioni", exact: true })
+    .first()
     .click();
   const appleOption = page
     .locator(".business-select-panel.is-entering")
@@ -5473,7 +5493,7 @@ test("creates a repair part from the quote and selects it immediately", async ({
   await expect(deleteApple).toHaveCSS("opacity", "0");
   await appleOption.hover();
   await expect(deleteApple).toHaveCSS("opacity", "1");
-  await dialog.getByRole("combobox", { name: "Marca" }).press("Escape");
+  await brandCombobox.press("Escape");
   await dialog.getByLabel("Costo", { exact: true }).fill("12");
   await dialog.getByLabel("Scorta iniziale", { exact: true }).fill("0");
   await dialog.getByLabel("Scorta minima", { exact: true }).fill("1");

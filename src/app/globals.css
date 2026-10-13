@@ -3403,9 +3403,6 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
 }
 .quick-service-device-card.is-add {
   justify-content: center;
-  border-color: #b8ae8d;
-  background: #fffdf5;
-  color: #574200;
   cursor: pointer;
 }
 .quick-service-picker {
@@ -3546,7 +3543,6 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
     box-shadow 150ms ease-out,
     color 150ms ease-out;
 }
-.quick-service-device-card.is-add:hover:not(:disabled),
 .quick-service-picker-add:hover:not(:disabled),
 .quick-service-service-add:hover:not(:disabled) {
   border-color: #e4b600;
@@ -3554,7 +3550,6 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
   box-shadow: 0 2px 6px rgb(128 96 0 / 8%);
   color: #6d5510;
 }
-.quick-service-device-card.is-add:active:not(:disabled),
 .quick-service-picker-add:active:not(:disabled),
 .quick-service-service-add:active:not(:disabled) {
   background: #ffe99d;
@@ -5097,6 +5092,46 @@ details.secondary-actions {
 .nav-item:hover,
 .button-outline:hover {
   background: #fff8d9;
+}
+.add-device-action {
+  width: 100%;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px dashed #e4b600;
+  border-radius: 10px;
+  background: #fffdf5;
+  color: #6d5510;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease-out,
+    border-color 150ms ease-out,
+    box-shadow 150ms ease-out,
+    color 150ms ease-out;
+}
+.quick-service-device-card.is-add.add-device-action {
+  grid-column: 1 / -1;
+}
+.add-device-action:hover:not(:disabled) {
+  border-color: #d7aa00;
+  background: #fff8d9;
+  box-shadow: 0 2px 6px rgb(128 96 0 / 8%);
+  color: #5d4700;
+}
+.add-device-action:active:not(:disabled) {
+  background: #ffe99d;
+}
+.add-device-action:focus-visible {
+  outline: 2px solid #d7aa00;
+  outline-offset: 2px;
+}
+.add-device-action:disabled {
+  cursor: not-allowed;
 }
 .insight,
 .teal {
@@ -7424,6 +7459,12 @@ details summary {
   background: #fffdf5;
   color: #574200;
   border-radius: 8px;
+}
+.button-outline.add-device-action {
+  border: 1px dashed #e4b600;
+  background: #fffdf5;
+  color: #6d5510;
+  border-radius: 10px;
 }
 .button-danger {
   border-color: #d58a87;

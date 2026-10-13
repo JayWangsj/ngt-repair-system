@@ -529,7 +529,7 @@ export function NewOrderWizard({
               <div className="quick-service-device-cards">
                 <button
                   type="button"
-                  className="quick-service-device-card is-add"
+                  className="quick-service-device-card is-add add-device-action"
                   disabled={!customer}
                   onClick={changeDevice}
                 >
@@ -629,7 +629,7 @@ export function NewOrderWizard({
                   </div>
                   <button
                     type="button"
-                    className="quick-service-picker-add"
+                    className="quick-service-picker-add add-device-action"
                     onClick={() => {
                       setChoosingDevice(false);
                       setCreatingDevice(true);

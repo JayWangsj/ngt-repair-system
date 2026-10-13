@@ -237,7 +237,7 @@ export function NewServiceOrder({
                 ))}
                 <button
                   type="button"
-                  className="quick-service-device-card is-add"
+                  className="quick-service-device-card is-add add-device-action"
                   disabled={!customer}
                   onClick={openDevicePicker}
                 >
@@ -420,7 +420,7 @@ export function NewServiceOrder({
                   </div>
                   <button
                     type="button"
-                    className="quick-service-picker-add"
+                    className="quick-service-picker-add add-device-action"
                     onClick={() => {
                       setChoosingDevices(false);
                       setCreatingDevice(true);

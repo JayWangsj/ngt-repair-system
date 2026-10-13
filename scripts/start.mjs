@@ -1,12 +1,21 @@
-import { cp } from "node:fs/promises";
+import { access, cp } from "node:fs/promises";
 import { spawn } from "node:child_process";
 try {
   process.loadEnvFile(".env");
 } catch (e) {
   if (e.code !== "ENOENT") throw e;
 }
-await cp(".next/static", ".next/standalone/.next/static", { recursive: true });
-await cp("public", ".next/standalone/public", { recursive: true });
+for (const [source, destination] of [
+  [".next/static", ".next/standalone/.next/static"],
+  ["public", ".next/standalone/public"],
+]) {
+  try {
+    await access(destination);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    await cp(source, destination, { recursive: true });
+  }
+}
 const child = spawn(process.execPath, [".next/standalone/server.js"], {
   stdio: "inherit",
   windowsHide: true,

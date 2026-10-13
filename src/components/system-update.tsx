@@ -64,6 +64,14 @@ function formatBytes(value?: number) {
   return `${amount >= 10 || unit === 0 ? amount.toFixed(0) : amount.toFixed(1)} ${units[unit]}`;
 }
 
+function formatEta(seconds: number, messages: ReturnType<typeof useMessages>) {
+  if (seconds < 60)
+    return messages.updateEtaShort.replace("{seconds}", `${seconds}`);
+  return messages.updateEtaFormat
+    .replace("{minutes}", `${Math.floor(seconds / 60)}`)
+    .replace("{seconds}", `${seconds % 60}`);
+}
+
 export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
   const it = useMessages();
   const [pending, setPending] = useState(false);
@@ -86,6 +94,7 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
   }, []);
 
   async function checkForUpdates(showResult = true) {
+    let resumeActiveUpdate = false;
     setPending(true);
     setError("");
     if (showResult) setMessage("");
@@ -108,7 +117,34 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
         status: result.status,
       };
       setInfo(next);
-      if (next.status) setStatus(next.status);
+      if (next.status) {
+        const statusMatchesRelease =
+          (!next.updateAvailable || next.status.status !== "complete") &&
+          (!next.status.latestVersion ||
+            next.status.latestVersion.replace(/^v/i, "") ===
+              next.latestVersion);
+        const nextStatus = statusMatchesRelease
+          ? next.status
+          : { status: "idle" };
+        setStatus(nextStatus);
+        const isActive = [
+          "queued",
+          "checking",
+          "downloading",
+          "downloaded",
+          "verifying",
+          "preparing-runtime",
+          "backing-up",
+          "installing",
+          "validating",
+          "rolling-back",
+        ].includes(nextStatus.status || "");
+        if (isActive) {
+          resumeActiveUpdate = true;
+          setPending(true);
+          void monitorUpdate();
+        }
+      }
       if (!next.installed) setMessage(it.updateInstalledOnly);
       else if (next.authRequired) setMessage(it.updateAuthRequired);
       else if (next.updateAvailable)
@@ -122,7 +158,7 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : it.updateCheckFailed);
     } finally {
-      setPending(false);
+      setPending(resumeActiveUpdate);
     }
   }
 
@@ -182,6 +218,7 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
           );
           setMessage(it.updateLoginSuccess);
           setPending(false);
+          await checkForUpdates();
           return;
         }
         if (result.status === "failed") {
@@ -304,18 +341,22 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
       "downloading",
       "downloaded",
       "verifying",
+      "preparing-runtime",
       "backing-up",
       "installing",
       "validating",
+      "rolling-back",
     ].includes(status.status || "");
   const stageOrder = [
     "checking",
     "downloading",
     "downloaded",
     "verifying",
+    "preparing-runtime",
     "backing-up",
     "installing",
     "validating",
+    "rolling-back",
     "complete",
   ];
   const currentStage = status.stage || status.status;
@@ -324,8 +365,7 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
   const total = status.totalBytes || info?.downloadSize || 0;
   const downloadComplete =
     downloaded > 0 && currentIndex >= stageOrder.indexOf("downloaded");
-  const showDownloadProgress =
-    status.status === "downloading" || downloadComplete;
+  const showDownloadProgress = status.status === "downloading";
   const progressKnown =
     total > 0 && (status.progressKnown === true || downloadComplete);
   const displayedDownloaded = downloadComplete ? total : downloaded;
@@ -335,32 +375,32 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
   const stages = [
     ["downloaded", it.updateStageDownloaded],
     ["verifying", it.updateStageVerifying],
+    ["preparing-runtime", it.updateStageRuntime],
     ["backing-up", it.updateStageBackup],
     ["installing", it.updateStageInstalling],
     ["validating", it.updateStageValidating],
+    ["rolling-back", it.updateStageRollback],
     ["complete", it.updateStageComplete],
   ];
   return (
     <div className="system-update-page">
-      {!info?.updateAvailable &&
-        !updateActive &&
-        status.status !== "failed" &&
-        status.status !== "complete" && (
-          <section className="panel padded update-overview">
-            <div className="update-version-block">
-              <span>{it.currentVersion}</span>
-              <strong>v{info?.currentVersion || currentVersion}</strong>
-              {!info?.authRequired && info && <small>{it.updateCurrent}</small>}
-            </div>
-            <div className="update-primary-actions">
-              <Button
-                type="button"
-                disabled={pending}
-                onClick={() => void checkForUpdates()}
-              >
-                <RefreshCw size={17} className={pending ? "spin" : undefined} />
-                {pending ? it.checkingUpdates : it.checkForUpdates}
-              </Button>
+      {info?.installed && (
+        <section className="panel padded update-overview">
+          <div className="update-version-block">
+            <span>{it.currentVersion}</span>
+            <strong>v{info?.currentVersion || currentVersion}</strong>
+            {!info?.authRequired && info && <small>{it.updateCurrent}</small>}
+          </div>
+          <div className="update-primary-actions">
+            <Button
+              type="button"
+              disabled={pending}
+              onClick={() => void checkForUpdates()}
+            >
+              <RefreshCw size={17} className={pending ? "spin" : undefined} />
+              {pending ? it.checkingUpdates : it.checkForUpdates}
+            </Button>
+            {info.authRequired && (
               <Button
                 type="button"
                 variant="outline"
@@ -370,9 +410,10 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
                 <GitBranch size={18} />
                 {it.authorizeGitHub}
               </Button>
-            </div>
-          </section>
-        )}
+            )}
+          </div>
+        </section>
+      )}
 
       <div className="system-update-feedback" aria-live="polite">
         {message && (
@@ -497,11 +538,16 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
                 {status.status === "downloading" &&
                   Boolean(status.etaSeconds) && (
                     <span>
-                      {it.updateEta}: {status.etaSeconds}s
+                      {it.updateEta}: {formatEta(status.etaSeconds || 0, it)}
                     </span>
                   )}
               </div>
             </div>
+          )}
+          {downloadComplete && !showDownloadProgress && (
+            <p className="download-progress-complete">
+              {it.updateStageDownloaded}
+            </p>
           )}
           <ol className="update-stage-list">
             {stages.map(([stage, label]) => {

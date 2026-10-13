@@ -102,6 +102,12 @@ describe("Windows persistent startup", () => {
       "scripts/build-windows-studio-package.ps1",
       "utf8",
     );
+    const runtime = await readFile("scripts/studio-runtime.ps1", "utf8");
+    const updateAssets = await readFile(
+      "scripts/prepare-windows-studio-update-assets.ps1",
+      "utf8",
+    );
+    const start = await readFile("scripts/start.mjs", "utf8");
     const materializedCopy = await readFile(
       "scripts/copy-directory-materialized.mjs",
       "utf8",
@@ -180,6 +186,20 @@ describe("Windows persistent startup", () => {
     expect(packager).toContain(
       "Studio archive is missing the generated Prisma client.",
     );
+    expect(packager).toContain("runtimeHash = $runtimeHash");
+    expect(runtime).toContain("Install-NgtSharedRuntime");
+    expect(runtime).toContain("New-Item -ItemType HardLink");
+    expect(runtime).toContain("Remove-NgtUnusedRuntimes");
+    expect(updateAssets).toContain("--exclude=runtime");
+    expect(updateAssets).toContain(
+      "$actualRuntimeHash -ne [string]$releaseMetadata.runtimeHash",
+    );
+    expect(updateAssets).toContain(
+      '[string]$PackageDirectory = ".local\\studio-package"',
+    );
+    expect(updateAssets).toContain(
+      '"ngt-studio-runtime-v" + $version + ".zip"',
+    );
     expect(materializedCopy).toContain("lstat(sourcePath)");
     expect(materializedCopy).toContain("readlink(sourcePath)");
     expect(packager).toContain('$runtimeDirectory "postgres"');
@@ -192,6 +212,14 @@ describe("Windows persistent startup", () => {
     expect(packager).toContain('".next\\standalone\\.env"');
     expect(packager).toContain("--frozen-lockfile");
     expect(packager).toContain("tar.exe -a -c");
+    expect(packager).toContain(
+      "sharp-libvips-(darwin|linux|freebsd|linuxmusl|win32-arm64)",
+    );
+    expect(packager).toContain(
+      'Get-ChildItem -LiteralPath $stage -File -Recurse -Filter "*.map"',
+    );
+    expect(start).toContain("await access(destination)");
+    expect(start).toContain('if (error.code !== "ENOENT") throw error;');
     expect(packager).toContain('$env:GITHUB_REF_TYPE -eq "tag"');
   });
 
@@ -208,6 +236,8 @@ describe("Windows persistent startup", () => {
     );
     expect(backup).toContain('"SHA256SUMS.txt"');
     expect(backup).toContain("Stop-NgtStudioProcesses");
+    expect(backup).toContain("$_.FullName.Substring($backupPrefix.Length)");
+    expect(backup).not.toContain("[System.IO.Path]::GetRelativePath");
     expect(updater).toContain('"release", "download"');
     expect(updater).toContain("Get-FileHash");
     expect(updater).toContain("backup-windows-studio.ps1");
@@ -220,6 +250,20 @@ describe("Windows persistent startup", () => {
     expect(updater).toContain('Write-NgtUpdateStatus "backing-up"');
     expect(updater).toContain('Write-NgtUpdateStatus "installing"');
     expect(updater).toContain('Write-NgtUpdateStatus "validating"');
+    expect(updater).toContain('Write-NgtUpdateStatus "preparing-runtime"');
+    expect(updater).toContain(
+      "Move-Item -LiteralPath $dataDirectory -Destination $failedDataDirectory",
+    );
+    expect(updater).toContain('Write-NgtUpdateStatus "rolling-back"');
+    expect(updater).toContain(
+      "An incomplete release directory needs manual review",
+    );
+    expect(updater).toContain(
+      "& tar.exe -xf $archive.FullName -C $stagingRoot",
+    );
+    expect(updater).toContain(
+      "Remove-Item -LiteralPath $downloadRoot -Recurse -Force -ErrorAction SilentlyContinue",
+    );
     expect(updater.indexOf('Write-NgtUpdateStatus "backing-up"')).toBeLessThan(
       updater.indexOf('Write-NgtUpdateStatus "installing"'),
     );
@@ -304,10 +348,16 @@ describe("Windows persistent startup", () => {
     expect(definition).toContain("uninstall-windows-studio.ps1");
     expect(definition).toContain("{autodesktop}");
     expect(definition).toContain("SetupIconFile={#IconPath}");
-    expect(definition).toContain('Source: "{#ArchivePath}"');
-    expect(definition).toContain("nocompression");
-    expect(definition).not.toContain("recursesubdirs");
+    expect(definition).toContain('Source: "{#PackageDirectory}\\*"');
+    expect(definition).toContain("recursesubdirs createallsubdirs");
+    expect(definition).not.toContain("ngt-studio-package.zip");
     expect(definition).toContain("UninstallDisplayIcon");
+    expect(definition).toContain(
+      "UninstallFilesDir={localappdata}\\NGT\\uninstall",
+    );
+    expect(definition).toContain(
+      'IconFilename: "{localappdata}\\NGT\\assets\\ngt-studio.ico"',
+    );
     expect(definition).toContain("IconFilename");
     expect(definition).toContain('Filename: "http://127.0.0.1:3000"');
     expect(definition).toContain(
@@ -326,15 +376,35 @@ describe("Windows persistent startup", () => {
     expect(packager).toContain('(Join-Path $runtimeDirectory "gh.exe")');
     expect(packager).toContain('"licenses\\github-cli.txt"');
     expect(workflow).toContain("build-windows-studio-installer.ps1");
-    expect(bootstrap).toContain("Expand-Archive");
-    expect(bootstrap).toContain("Remove-Item -LiteralPath $PackagePath");
+    expect(workflow).toContain("prepare-windows-studio-update-assets.ps1");
+    expect(workflow.indexOf("build-windows-studio-installer.ps1")).toBeLessThan(
+      workflow.indexOf("prepare-windows-studio-update-assets.ps1"),
+    );
+    expect(bootstrap).not.toContain("Expand-Archive");
+    expect(bootstrap).not.toContain("PackagePath");
     expect(bootstrap).toContain("install-windows-studio.ps1");
     expect(bootstrap).toContain("-InPlace");
     expect(bootstrap).toContain("Start-Transcript");
     expect(definition).toContain("install.log");
+    expect(bootstrap).toContain("Start-Transcript");
+    expect(
+      await readFile("scripts/install-windows-studio.ps1", "utf8"),
+    ).toContain('"health-validation"');
     expect(uninstaller).toContain("Stop-NgtStudioProcesses");
     expect(uninstaller).toContain("uninstall-windows-startup.ps1");
     expect(uninstaller).not.toContain("data-store");
+    const service = await readFile("scripts/windows-service.ps1", "utf8");
+    const startup = await readFile(
+      "scripts/install-windows-startup.ps1",
+      "utf8",
+    );
+    const installerScript = await readFile(
+      "scripts/install-windows-studio.ps1",
+      "utf8",
+    );
+    expect(service).toContain("studioConfig.activeRelease");
+    expect(startup).toContain('"NGT\\service\\windows-studio-launcher.vbs"');
+    expect(installerScript).toContain("activeRelease = $projectRoot");
     expect(icon.readUInt16LE(0)).toBe(0);
     expect(icon.readUInt16LE(2)).toBe(1);
     const iconCount = icon.readUInt16LE(4);

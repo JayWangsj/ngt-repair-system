@@ -1,19 +1,22 @@
 $ErrorActionPreference = "Stop"
 
-$projectRoot = Split-Path -Parent $PSScriptRoot
-$stateDirectory = Join-Path $projectRoot ".local"
+$installRoot = Split-Path -Parent $PSScriptRoot
+$stateDirectory = Join-Path $installRoot ".local"
 New-Item -ItemType Directory -Path $stateDirectory -Force | Out-Null
 Set-Content -LiteralPath (Join-Path $stateDirectory "supervisor.pid") -Value $PID -Encoding ascii
-Set-Location -LiteralPath $projectRoot
 
 $studioConfigPath = Join-Path $stateDirectory "studio.json"
 if (Test-Path -LiteralPath $studioConfigPath) {
   $studioConfig = Get-Content -LiteralPath $studioConfigPath -Raw | ConvertFrom-Json
-  if (-not $studioConfig.dataRoot) {
-    throw "Studio configuration is missing dataRoot."
+  if (-not $studioConfig.dataRoot -or -not $studioConfig.activeRelease) {
+    throw "Studio configuration is missing dataRoot or activeRelease."
   }
   $env:NGT_DATA_ROOT = [System.IO.Path]::GetFullPath([string]$studioConfig.dataRoot)
+  $projectRoot = [System.IO.Path]::GetFullPath([string]$studioConfig.activeRelease)
+} else {
+  throw "Studio configuration is missing. Run scripts/install-windows-studio.ps1 first."
 }
+Set-Location -LiteralPath $projectRoot
 
 $releaseNode = Join-Path $projectRoot "runtime\node.exe"
 $bundledNode = Join-Path $env:USERPROFILE ".cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe"

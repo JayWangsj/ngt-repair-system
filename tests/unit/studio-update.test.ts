@@ -83,7 +83,7 @@ describe("studio update", () => {
     const result = await checkStudioUpdate({
       root,
       run: async () => {
-        throw new Error("not authenticated");
+        throw new Error("You are not logged into any GitHub hosts.");
       },
     });
     expect(result).toMatchObject({
@@ -117,7 +117,7 @@ describe("studio update", () => {
     const result = await checkStudioUpdate({
       root,
       run: async () => {
-        throw new Error("not authenticated");
+        throw new Error("You are not logged into any GitHub hosts.");
       },
     });
 
@@ -136,7 +136,7 @@ describe("studio update", () => {
     try {
       const result = await checkStudioUpdate({
         run: async () => {
-          throw new Error("not authenticated");
+          throw new Error("You are not logged into any GitHub hosts.");
         },
       });
       expect(result).toMatchObject({
@@ -171,6 +171,9 @@ describe("studio update", () => {
                       name: "ngt-studio-windows-v1.11.58.zip",
                       size: 240_000_000,
                     },
+                    { name: "ngt-studio-windows-v1.11.58.zip.sha256" },
+                    { name: "ngt-studio-runtime-v1.11.58.zip" },
+                    { name: "ngt-studio-runtime-v1.11.58.zip.sha256" },
                   ],
                 })
               : "",
@@ -178,7 +181,13 @@ describe("studio update", () => {
         };
       },
     });
-    expect(calls[0]).toEqual(["auth", "status", "--hostname", "github.com"]);
+    expect(calls[0]).toEqual([
+      "auth",
+      "status",
+      "--hostname",
+      "github.com",
+      "--active",
+    ]);
     expect(calls[1]).toContain("JayWangsj/ngt-repair-system");
     expect(result).toMatchObject({
       authRequired: false,
@@ -189,6 +198,39 @@ describe("studio update", () => {
       downloadSize: 240_000_000,
     });
     expect(calls[1]).toContain("tagName,name,body,url,publishedAt,assets");
+  });
+
+  it("does not offer a release without both the archive and checksum", async () => {
+    const { root } = await studioRoot();
+    const result = await checkStudioUpdate({
+      root,
+      run: async (_executable, args) => ({
+        stdout:
+          args[0] === "release"
+            ? JSON.stringify({
+                tagName: "v1.11.58",
+                assets: [
+                  { name: "ngt-studio-windows-v1.11.58.zip" },
+                  { name: "ngt-studio-windows-v1.11.58.zip.sha256" },
+                ],
+              })
+            : "",
+        stderr: "",
+      }),
+    });
+    expect(result).toMatchObject({ updateAvailable: false });
+  });
+
+  it("does not treat GitHub CLI network errors as missing authorization", async () => {
+    const { root } = await studioRoot();
+    await expect(
+      checkStudioUpdate({
+        root,
+        run: async () => {
+          throw new Error("connection timed out");
+        },
+      }),
+    ).rejects.toThrow("connection timed out");
   });
 
   it("advances browser authorization and verifies private release access", async () => {
@@ -229,7 +271,13 @@ describe("studio update", () => {
       .toMatchObject({
         status: "success",
       });
-    expect(calls[0]).toEqual(["auth", "status", "--hostname", "github.com"]);
+    expect(calls[0]).toEqual([
+      "auth",
+      "status",
+      "--hostname",
+      "github.com",
+      "--active",
+    ]);
     expect(calls[1]).toContain("JayWangsj/ngt-repair-system");
 
     const updateLaunches: { executable: string; args: string[] }[] = [];
@@ -250,6 +298,9 @@ describe("studio update", () => {
       await readFile(path.join(installRoot, "update-status.json"), "utf8"),
     ) as { status: string };
     expect(status.status).toBe("queued");
+    await expect(startStudioUpdate({ root })).rejects.toThrow(
+      "studio_update_in_progress",
+    );
   });
 
   it("reports the GitHub CLI reason when authorization fails", async () => {

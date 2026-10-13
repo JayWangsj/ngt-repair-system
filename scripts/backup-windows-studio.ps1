@@ -37,8 +37,9 @@ try {
     }
   }
 
+  $backupPrefix = $backupRoot.TrimEnd("\") + "\"
   $manifest = Get-ChildItem -LiteralPath $backupRoot -File -Recurse | ForEach-Object {
-    $relative = [System.IO.Path]::GetRelativePath($backupRoot, $_.FullName)
+    $relative = $_.FullName.Substring($backupPrefix.Length)
     $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash
     "$hash  $relative"
   }

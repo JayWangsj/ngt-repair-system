@@ -1,7 +1,10 @@
 $ErrorActionPreference = "Stop"
 
 $taskName = "NGT Management System"
-$launcherScript = (Resolve-Path (Join-Path $PSScriptRoot "windows-studio-launcher.vbs")).Path
+$launcherScript = Join-Path $env:LOCALAPPDATA "NGT\service\windows-studio-launcher.vbs"
+if (-not (Test-Path -LiteralPath $launcherScript)) {
+  throw "Stable studio launcher is missing: $launcherScript"
+}
 $wscriptPath = Join-Path $env:WINDIR "System32\wscript.exe"
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $runValueName = "NGT Management System"

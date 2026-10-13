@@ -1,6 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { open, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { appVersion } from "./version";
 
@@ -46,9 +46,11 @@ export type StudioUpdateStatus = {
     | "downloading"
     | "downloaded"
     | "verifying"
+    | "preparing-runtime"
     | "backing-up"
     | "installing"
     | "validating"
+    | "rolling-back"
     | "complete"
     | "failed";
   message?: string;
@@ -216,6 +218,13 @@ function githubFailureMessage(output: string, fallback: string) {
   return cleaned.split("\n").filter(Boolean).slice(-3).join(" ");
 }
 
+function isGitHubAuthRequired(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /not logged in|not logged into|authentication (?:is )?required|token.{0,40}(?:expired|invalid|revoked)|(?:expired|invalid|revoked).{0,40}token|no authentication token/i.test(
+    message,
+  );
+}
+
 function resolveStudioRoot(root?: string) {
   return root || process.env.NGT_STUDIO_ROOT || process.cwd();
 }
@@ -263,8 +272,15 @@ export async function checkStudioUpdate(
 
   const githubCli = resolveGitHubCli(root);
   try {
-    await run(githubCli, ["auth", "status", "--hostname", "github.com"]);
-  } catch {
+    await run(githubCli, [
+      "auth",
+      "status",
+      "--hostname",
+      "github.com",
+      "--active",
+    ]);
+  } catch (cause) {
+    if (!isGitHubAuthRequired(cause)) throw cause;
     return {
       installed: true,
       currentVersion: context.currentVersion,
@@ -292,15 +308,26 @@ export async function checkStudioUpdate(
   };
   const latestVersion = normalizeVersion(latest.tagName);
   const studioArchive = latest.assets?.find(
-    (asset) =>
-      typeof asset.name === "string" &&
-      /^ngt-studio-windows-.*\.zip$/i.test(asset.name),
+    (asset) => asset.name === `ngt-studio-windows-${latest.tagName}.zip`,
+  );
+  const studioChecksum = latest.assets?.find(
+    (asset) => asset.name === `ngt-studio-windows-${latest.tagName}.zip.sha256`,
+  );
+  const runtimeArchive = latest.assets?.find(
+    (asset) => asset.name === `ngt-studio-runtime-${latest.tagName}.zip`,
+  );
+  const runtimeChecksum = latest.assets?.find(
+    (asset) => asset.name === `ngt-studio-runtime-${latest.tagName}.zip.sha256`,
   );
   return {
     installed: true,
     currentVersion: context.currentVersion,
     authRequired: false,
-    updateAvailable: compareVersions(latestVersion, context.currentVersion) > 0,
+    updateAvailable:
+      compareVersions(latestVersion, context.currentVersion) > 0 &&
+      Boolean(
+        studioArchive && studioChecksum && runtimeArchive && runtimeChecksum,
+      ),
     latestVersion,
     releaseUrl: latest.url,
     releaseName: latest.name,
@@ -430,7 +457,13 @@ export async function startGitHubLogin(
       }
       try {
         const run = options.run || runCommand;
-        await run(githubCli, ["auth", "status", "--hostname", "github.com"]);
+        await run(githubCli, [
+          "auth",
+          "status",
+          "--hostname",
+          "github.com",
+          "--active",
+        ]);
         await run(githubCli, [
           "release",
           "view",
@@ -464,20 +497,58 @@ export async function startStudioUpdate(
   if (!context.release?.version || !context.config?.installRoot) {
     throw new Error("studio_not_installed");
   }
+  const lockFile = path.join(context.config.installRoot, "update.lock");
+  try {
+    const handle = await open(lockFile, "wx");
+    await handle.writeFile(new Date().toISOString(), "utf8");
+    await handle.close();
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code !== "EEXIST") throw cause;
+    const existingStatus = await getStudioUpdateStatus(root);
+    const updatedAt = existingStatus.updatedAt
+      ? Date.parse(existingStatus.updatedAt)
+      : 0;
+    if (
+      [
+        "queued",
+        "checking",
+        "downloading",
+        "downloaded",
+        "verifying",
+        "preparing-runtime",
+        "backing-up",
+        "installing",
+        "validating",
+        "rolling-back",
+      ].includes(existingStatus.status) &&
+      Date.now() - updatedAt < 30 * 60 * 1000
+    ) {
+      throw new Error("studio_update_in_progress");
+    }
+    await unlink(lockFile).catch(() => undefined);
+    const handle = await open(lockFile, "wx");
+    await handle.writeFile(new Date().toISOString(), "utf8");
+    await handle.close();
+  }
   const status: StudioUpdateStatus = {
     status: "queued",
     updatedAt: new Date().toISOString(),
   };
-  await writeFile(
-    statusPath(context.config.installRoot),
-    JSON.stringify(status),
-    "utf8",
-  );
-  const script = path.join(root, "scripts", "update-windows-studio.ps1");
-  const child = (options.launch || launchProcess)(
-    "powershell.exe",
-    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script],
-    { cwd: root, detached: true, stdio: "ignore", windowsHide: true },
-  );
-  child.unref();
+  try {
+    await writeFile(
+      statusPath(context.config.installRoot),
+      JSON.stringify(status),
+      "utf8",
+    );
+    const script = path.join(root, "scripts", "update-windows-studio.ps1");
+    const child = (options.launch || launchProcess)(
+      "powershell.exe",
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script],
+      { cwd: root, detached: true, stdio: "ignore", windowsHide: true },
+    );
+    child.unref();
+  } catch (cause) {
+    await unlink(lockFile).catch(() => undefined);
+    throw cause;
+  }
 }

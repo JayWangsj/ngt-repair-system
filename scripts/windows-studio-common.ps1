@@ -71,9 +71,22 @@ function Stop-NgtStudioProcesses {
   }
 
   $stateDirectories = @($script:NgtStateDirectory)
+  $studioConfigFile = Join-Path $script:NgtStateDirectory "studio.json"
+  if (Test-Path -LiteralPath $studioConfigFile) {
+    $studioConfig = Get-Content -LiteralPath $studioConfigFile -Raw | ConvertFrom-Json
+    if ($studioConfig.installRoot) {
+      $stateDirectories += (Join-Path ([string]$studioConfig.installRoot) ".local")
+    }
+  }
   $releaseParent = Split-Path -Parent $script:NgtProjectRoot
   if ((Split-Path -Leaf $releaseParent) -eq "releases") {
     $stateDirectories += @(Get-ChildItem -LiteralPath $releaseParent -Directory -ErrorAction SilentlyContinue |
+      ForEach-Object { Join-Path $_.FullName ".local" } |
+      Where-Object { Test-Path -LiteralPath $_ })
+  }
+  $installedReleases = Join-Path $script:NgtProjectRoot "releases"
+  if (Test-Path -LiteralPath $installedReleases) {
+    $stateDirectories += @(Get-ChildItem -LiteralPath $installedReleases -Directory -ErrorAction SilentlyContinue |
       ForEach-Object { Join-Path $_.FullName ".local" } |
       Where-Object { Test-Path -LiteralPath $_ })
   }

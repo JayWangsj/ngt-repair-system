@@ -1,6 +1,5 @@
 param(
   [string]$OutputDirectory = "dist",
-  [string]$ArchivePath,
   [string]$CompilerPath
 )
 $ErrorActionPreference = "Stop"
@@ -13,16 +12,10 @@ $outputRoot = [System.IO.Path]::GetFullPath((Join-Path $projectRoot $OutputDirec
 $installerDefinition = Join-Path $projectRoot "installer\windows-studio.iss"
 $bootstrapPath = Join-Path $projectRoot "scripts\install-windows-studio-bootstrap.ps1"
 $iconPath = Join-Path $projectRoot "assets\ngt-studio.ico"
-if (-not $ArchivePath) {
-  $ArchivePath = Join-Path $outputRoot ("ngt-studio-windows-v" + $version + ".zip")
-} elseif ([System.IO.Path]::IsPathRooted($ArchivePath)) {
-  $ArchivePath = [System.IO.Path]::GetFullPath($ArchivePath)
-} else {
-  $ArchivePath = [System.IO.Path]::GetFullPath((Join-Path $projectRoot $ArchivePath))
-}
+$packageDirectory = Join-Path $projectRoot ".local\studio-package"
 
-if (-not (Test-Path -LiteralPath $ArchivePath)) {
-  throw "Studio package is missing. Run scripts/build-windows-studio-package.ps1 first."
+if (-not (Test-Path -LiteralPath (Join-Path $packageDirectory "studio-release.json"))) {
+  throw "Studio package directory is missing. Run scripts/build-windows-studio-package.ps1 first."
 }
 if (-not (Test-Path -LiteralPath $bootstrapPath)) {
   throw "Studio installer bootstrap is missing: $bootstrapPath"
@@ -56,11 +49,11 @@ if ((-not $CompilerPath) -or (-not (Test-Path -LiteralPath $CompilerPath))) {
 
 New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
 Write-Output "Inno Setup compiler: $CompilerPath"
-Write-Output "Installer archive: $ArchivePath"
+Write-Output "Installer package directory: $packageDirectory"
 Write-Output "Installer output: $outputRoot"
 & $CompilerPath `
   ("/DAppVersion=" + $version) `
-  ("/DArchivePath=" + $ArchivePath) `
+  ("/DPackageDirectory=" + $packageDirectory) `
   ("/DBootstrapPath=" + $bootstrapPath) `
   ("/DIconPath=" + $iconPath) `
   ("/DOutputDir=" + $outputRoot) `

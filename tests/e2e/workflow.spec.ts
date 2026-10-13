@@ -3885,21 +3885,17 @@ test("system update page checks a private release and shows real progress", asyn
   await expect(page.locator(".download-progress-meta")).toContainText(
     "7.6 MB/s",
   );
-  await expect(page.locator(".update-progress-track")).toHaveAttribute(
-    "aria-valuenow",
-    "100",
-  );
-  await expect(page.locator(".download-progress-heading")).toContainText(
+  await expect(page.locator(".download-progress-meta")).toContainText("15 s");
+  await expect(page.locator(".download-progress-complete")).toContainText(
     "Download completato",
   );
+  await expect(page.locator(".download-progress-track")).toHaveCount(0);
+  await expect(page.locator(".download-progress-meta")).toHaveCount(0);
   await expect(
     page
       .locator(".update-stage-list li")
       .filter({ hasText: "Download completato" }),
   ).toHaveClass(/complete/);
-  await expect(page.locator(".download-progress-meta")).not.toContainText(
-    "Velocità",
-  );
   await expect(page.locator(".update-error")).toContainText(
     "Aggiornamento di prova interrotto.",
   );
@@ -3907,11 +3903,9 @@ test("system update page checks a private release and shows real progress", asyn
     page.getByText("Verifica pacchetto", { exact: true }).locator(".."),
   ).toHaveClass(/failed/);
 });
-test("system update page offers browser fallback and confirms authorization", async ({
+test("system update keeps the check action visible when an old run completed", async ({
   page,
 }) => {
-  let authorizationStarts = 0;
-  let authorizationPolls = 0;
   await page.route("**/api/system-update", (route) =>
     route.fulfill({
       status: 200,
@@ -3919,7 +3913,40 @@ test("system update page offers browser fallback and confirms authorization", as
       body: JSON.stringify({
         installed: true,
         currentVersion: "1.11.57",
-        authRequired: true,
+        authRequired: false,
+        updateAvailable: true,
+        latestVersion: "1.11.58",
+        status: { status: "complete", latestVersion: "v1.11.57" },
+      }),
+    }),
+  );
+
+  await page.goto("/settings/system-update");
+  const italianButton = page.getByRole("button", {
+    name: "Italiano",
+    exact: true,
+  });
+  if (await italianButton.isVisible()) await italianButton.click();
+  await expect(
+    page.getByRole("button", { name: "Controlla aggiornamenti", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".update-release-card")).toContainText("v1.11.58");
+  await expect(page.locator(".update-progress-card")).toHaveCount(0);
+});
+test("system update page offers browser fallback and confirms authorization", async ({
+  page,
+}) => {
+  let authorizationStarts = 0;
+  let authorizationPolls = 0;
+  let githubAuthorized = false;
+  await page.route("**/api/system-update", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        installed: true,
+        currentVersion: "1.11.57",
+        authRequired: !githubAuthorized,
         updateAvailable: false,
       }),
     }),
@@ -3938,6 +3965,7 @@ test("system update page offers browser fallback and confirms authorization", as
       });
     }
     authorizationPolls += 1;
+    if (authorizationPolls >= 3) githubAuthorized = true;
     return route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -3973,16 +4001,13 @@ test("system update page offers browser fallback and confirms authorization", as
     page.getByRole("link", { name: "Apri autorizzazione" }),
   ).toHaveAttribute("href", "https://github.com/login/device");
   await expect(page.locator(".system-update-page")).toContainText(
-    "GitHub autorizzato. L'accesso al repository privato è stato verificato.",
+    "Il sistema è aggiornato.",
   );
-  await page
-    .getByRole("button", { name: "Autorizza GitHub", exact: true })
-    .click();
   await expect.poll(() => authorizationStarts).toBe(1);
   await expect(page.locator(".github-auth-fallback")).toHaveCount(0);
-  await expect(page.locator(".system-update-feedback")).toContainText(
-    "GitHub autorizzato. L'accesso al repository privato è stato verificato.",
-  );
+  await expect(
+    page.getByRole("button", { name: "Autorizza GitHub", exact: true }),
+  ).toHaveCount(0);
 });
 test("settings catalogs reuse stable inline and dialog interactions", async ({
   page,

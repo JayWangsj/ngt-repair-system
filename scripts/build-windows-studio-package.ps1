@@ -6,6 +6,7 @@ $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Set-Location -LiteralPath $projectRoot
+. (Join-Path $PSScriptRoot "studio-runtime.ps1")
 $standaloneBuild = Join-Path $BuildDirectory "standalone"
 if (-not (Test-Path -LiteralPath (Join-Path $standaloneBuild "server.js"))) {
   throw "Production build is missing. Run pnpm build first."
@@ -88,6 +89,15 @@ if (-not (Test-Path -LiteralPath (Join-Path $stage $requiredPrismaClient))) {
 }
 Copy-Item -LiteralPath (Join-Path $BuildDirectory "static") -Destination (Join-Path $stage ".next\static") -Recurse -Force
 Copy-Item -LiteralPath "public" -Destination (Join-Path $stage "public") -Recurse -Force
+$nonWindowsSharpPackages = Get-ChildItem -LiteralPath $stage -Directory -Recurse -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -match '^sharp-libvips-(darwin|linux|freebsd|linuxmusl|win32-arm64)' }
+foreach ($nativePackage in $nonWindowsSharpPackages) {
+  Remove-Item -LiteralPath $nativePackage.FullName -Recurse -Force
+}
+$sourceMaps = Get-ChildItem -LiteralPath $stage -File -Recurse -Filter "*.map" -ErrorAction SilentlyContinue
+foreach ($sourceMap in $sourceMaps) {
+  Remove-Item -LiteralPath $sourceMap.FullName -Force
+}
 $copiedEnvironment = Join-Path $stage ".next\standalone\.env"
 if (Test-Path -LiteralPath $copiedEnvironment) {
   Remove-Item -LiteralPath $copiedEnvironment -Force
@@ -101,6 +111,7 @@ $runtimeScripts = @(
   "backup-windows-studio.ps1",
   "install-windows-startup.ps1",
   "install-windows-studio.ps1",
+  "studio-runtime.ps1",
   "start.mjs",
   "uninstall-windows-startup.ps1",
   "uninstall-windows-studio.ps1",
@@ -193,9 +204,12 @@ New-Item -ItemType Directory -Path $licenseDirectory -Force | Out-Null
 Copy-Item -LiteralPath "licenses\github-cli.txt" `
   -Destination $licenseDirectory -Force
 
+$runtimeHash = Get-NgtRuntimeHash $runtimeDirectory
+
 @{
   version = $version
   commit = $commit
+  runtimeHash = $runtimeHash
   createdAt = (Get-Date).ToUniversalTime().ToString("o")
 } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stage "studio-release.json") -Encoding utf8
 
@@ -228,3 +242,4 @@ if (-not ($archiveEntries | Where-Object { $_ -like ("*" + $requiredPrismaClient
 $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
 Set-Content -LiteralPath ($archive + ".sha256") -Value ("$hash  " + (Split-Path $archive -Leaf)) -Encoding ascii
 Write-Output $archive
+Write-Output ("Excluded {0} source maps and {1} non-Windows Sharp packages." -f $sourceMaps.Count, $nonWindowsSharpPackages.Count)

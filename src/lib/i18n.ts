@@ -29,6 +29,14 @@ const errors: Record<string, string> = {
   "La scheda è annullata.": "维修单已取消。",
   "La riparazione non è pronta per la consegna.": "维修尚未进入待取机状态。",
   "I ricambi sono già stati contabilizzati.": "维修配件库存已经扣减。",
+  "Ricambi non registrati: completa prima il controllo di magazzino.":
+    "还有未登记扣减的维修配件，请先完成配件库存核对。",
+  "Per modificare i ricambi richiesti, riaprire prima la riparazione.":
+    "要修改所需维修配件，请先重新打开维修流程。",
+  "Verifica i ricambi non contabilizzati prima di modificare il preventivo.":
+    "报价修改前，请先核对尚未登记的维修配件。",
+  "L'incassato supera il nuovo totale: registra prima il rimborso.":
+    "已收金额超过删除商品后的新总额，请先登记退款。",
   "Il movimento di magazzino è già registrato.": "该商品的库存变动已经记录。",
   "Prodotto non disponibile.": "商品不可用。",
   "Scorte insufficienti o prodotto non disponibile.": "商品库存不足或不可用。",

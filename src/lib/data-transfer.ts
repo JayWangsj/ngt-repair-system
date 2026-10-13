@@ -23,6 +23,8 @@ import type {
   QuickService,
   RetailServiceItem,
   WorkOrderDevice,
+  InventoryCategory,
+  BusinessClock,
 } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { db } from "./db";
@@ -30,7 +32,7 @@ import { BusinessError, type Actor } from "./domain";
 import { normalizeBrand, normalizeModel } from "./catalog";
 
 export const BACKUP_FORMAT = "ngt-repair-data";
-export const BACKUP_VERSION = 8;
+export const BACKUP_VERSION = 9;
 
 type JsonRow<T> = {
   [K in keyof T]: T[K] extends Date
@@ -68,6 +70,8 @@ type BackupData = {
   quickServices: JsonRow<QuickService>[];
   retailServiceItems: JsonRow<RetailServiceItem>[];
   workOrderDevices: JsonRow<WorkOrderDevice>[];
+  inventoryCategories: JsonRow<InventoryCategory>[];
+  businessClock: JsonRow<BusinessClock> | null;
 };
 export type BackupFile = {
   format: typeof BACKUP_FORMAT;
@@ -131,6 +135,10 @@ function ensureBackup(value: unknown): BackupFile {
     (candidate.data as Partial<BackupData>).retailServiceItems ?? [];
   const workOrderDevices =
     (candidate.data as Partial<BackupData>).workOrderDevices ?? [];
+  const inventoryCategories =
+    (candidate.data as Partial<BackupData>).inventoryCategories ?? [];
+  const businessClock =
+    (candidate.data as Partial<BackupData>).businessClock ?? null;
   if (
     !Array.isArray(products) ||
     !Array.isArray(inventoryMovements) ||
@@ -145,7 +153,8 @@ function ensureBackup(value: unknown): BackupFile {
     !Array.isArray(productCompatibilities) ||
     !Array.isArray(quickServices) ||
     !Array.isArray(retailServiceItems) ||
-    !Array.isArray(workOrderDevices)
+    !Array.isArray(workOrderDevices) ||
+    !Array.isArray(inventoryCategories)
   )
     throw new BusinessError("File di backup incompleto.");
   return {
@@ -166,6 +175,8 @@ function ensureBackup(value: unknown): BackupFile {
       quickServices,
       retailServiceItems,
       workOrderDevices,
+      inventoryCategories,
+      businessClock,
     },
   };
 }
@@ -203,41 +214,51 @@ export async function exportBusinessData(): Promise<BackupFile> {
     quickServices,
     retailServiceItems,
     workOrderDevices,
-  ] = await Promise.all([
-    db.customer.findMany({ orderBy: { createdAt: "asc" } }),
-    db.customerPhone.findMany({ orderBy: { phone: "asc" } }),
-    db.device.findMany({ orderBy: { id: "asc" } }),
-    db.workOrder.findMany({ orderBy: { number: "asc" } }),
-    db.workOrderItem.findMany({ orderBy: { id: "asc" } }),
-    db.payment.findMany({ orderBy: { receivedAt: "asc" } }),
-    db.statusHistory.findMany({ orderBy: { createdAt: "asc" } }),
-    db.priceRule.findMany({
-      orderBy: [
-        { category: "asc" },
-        { brand: "asc" },
-        { model: "asc" },
-        { project: "asc" },
-      ],
-    }),
-    db.faultOption.findMany({ orderBy: [{ category: "asc" }, { key: "asc" }] }),
-    db.auditLog.findMany({ orderBy: { createdAt: "asc" } }),
-    db.product.findMany({ orderBy: { createdAt: "asc" } }),
-    db.inventoryMovement.findMany({ orderBy: { createdAt: "asc" } }),
-    db.retailSale.findMany({ orderBy: { number: "asc" } }),
-    db.retailSaleItem.findMany({ orderBy: { id: "asc" } }),
-    db.paymentAllocation.findMany({ orderBy: { id: "asc" } }),
-    db.workOrderProduct.findMany({ orderBy: { id: "asc" } }),
-    db.workOrderFault.findMany({ orderBy: { id: "asc" } }),
-    db.reworkSession.findMany({ orderBy: { createdAt: "asc" } }),
-    db.reworkItem.findMany({ orderBy: { id: "asc" } }),
-    db.deviceCatalogDeletion.findMany({ orderBy: { createdAt: "asc" } }),
-    db.productCompatibility.findMany({ orderBy: { id: "asc" } }),
-    db.quickService.findMany({ orderBy: { createdAt: "asc" } }),
-    db.retailServiceItem.findMany({ orderBy: { id: "asc" } }),
-    db.workOrderDevice.findMany({
-      orderBy: [{ orderId: "asc" }, { deviceId: "asc" }],
-    }),
-  ]);
+    inventoryCategories,
+    businessClock,
+  ] = await db.$transaction(
+    async (tx) =>
+      Promise.all([
+        tx.customer.findMany({ orderBy: { createdAt: "asc" } }),
+        tx.customerPhone.findMany({ orderBy: { phone: "asc" } }),
+        tx.device.findMany({ orderBy: { id: "asc" } }),
+        tx.workOrder.findMany({ orderBy: { number: "asc" } }),
+        tx.workOrderItem.findMany({ orderBy: { id: "asc" } }),
+        tx.payment.findMany({ orderBy: { receivedAt: "asc" } }),
+        tx.statusHistory.findMany({ orderBy: { createdAt: "asc" } }),
+        tx.priceRule.findMany({
+          orderBy: [
+            { category: "asc" },
+            { brand: "asc" },
+            { model: "asc" },
+            { project: "asc" },
+          ],
+        }),
+        tx.faultOption.findMany({
+          orderBy: [{ category: "asc" }, { key: "asc" }],
+        }),
+        tx.auditLog.findMany({ orderBy: { createdAt: "asc" } }),
+        tx.product.findMany({ orderBy: { createdAt: "asc" } }),
+        tx.inventoryMovement.findMany({ orderBy: { createdAt: "asc" } }),
+        tx.retailSale.findMany({ orderBy: { number: "asc" } }),
+        tx.retailSaleItem.findMany({ orderBy: { id: "asc" } }),
+        tx.paymentAllocation.findMany({ orderBy: { id: "asc" } }),
+        tx.workOrderProduct.findMany({ orderBy: { id: "asc" } }),
+        tx.workOrderFault.findMany({ orderBy: { id: "asc" } }),
+        tx.reworkSession.findMany({ orderBy: { createdAt: "asc" } }),
+        tx.reworkItem.findMany({ orderBy: { id: "asc" } }),
+        tx.deviceCatalogDeletion.findMany({ orderBy: { createdAt: "asc" } }),
+        tx.productCompatibility.findMany({ orderBy: { id: "asc" } }),
+        tx.quickService.findMany({ orderBy: { createdAt: "asc" } }),
+        tx.retailServiceItem.findMany({ orderBy: { id: "asc" } }),
+        tx.workOrderDevice.findMany({
+          orderBy: [{ orderId: "asc" }, { deviceId: "asc" }],
+        }),
+        tx.inventoryCategory.findMany({ orderBy: { createdAt: "asc" } }),
+        tx.businessClock.findUnique({ where: { id: "default" } }),
+      ]),
+    { isolationLevel: "RepeatableRead", timeout: 30000 },
+  );
   const data = JSON.parse(
     JSON.stringify({
       customers,
@@ -264,6 +285,8 @@ export async function exportBusinessData(): Promise<BackupFile> {
       quickServices,
       retailServiceItems,
       workOrderDevices,
+      inventoryCategories,
+      businessClock,
     }),
   ) as BackupData;
   return {
@@ -300,6 +323,8 @@ export async function clearBusinessData(actor: Actor) {
     await tx.quickService.deleteMany();
     await tx.faultOption.deleteMany();
     await tx.deviceCatalogDeletion.deleteMany();
+    await tx.inventoryCategory.deleteMany();
+    await tx.businessClock.deleteMany();
     await tx.$executeRawUnsafe(
       'ALTER SEQUENCE "WorkOrder_number_seq" RESTART WITH 1',
     );
@@ -323,6 +348,7 @@ export async function importBusinessData(
     const deviceIds = new Map<string, string>();
     const priceIds = new Map<string, string>();
     const orderIds = new Map<string, string>();
+    const existingOrderIds = new Set<string>();
     const saleIds = new Map<string, string>();
     const paymentIds = new Map<string, string>();
     const entityIds = new Map<string, string>();
@@ -330,6 +356,42 @@ export async function importBusinessData(
     const itemIds = new Map<string, string>();
     const reworkSessionIds = new Map<string, string>();
     const orderSourceIds = new Set(backup.data.orders.map((order) => order.id));
+
+    for (const source of backup.data.inventoryCategories) {
+      const existing = await tx.inventoryCategory.findFirst({
+        where: { OR: [{ id: source.id }, { name: source.name }] },
+      });
+      if (existing) skipped++;
+      else {
+        await tx.inventoryCategory.create({
+          data: {
+            id: source.id,
+            name: source.name,
+            repairOnly: source.repairOnly,
+            deletedAt: date(source.deletedAt),
+            createdAt: date(source.createdAt) ?? new Date(),
+          },
+        });
+        imported++;
+      }
+    }
+    if (backup.data.businessClock) {
+      const existing = await tx.businessClock.findUnique({
+        where: { id: backup.data.businessClock.id },
+      });
+      if (existing) skipped++;
+      else {
+        await tx.businessClock.create({
+          data: {
+            id: backup.data.businessClock.id,
+            mode: backup.data.businessClock.mode,
+            manualDate: backup.data.businessClock.manualDate,
+            updatedAt: date(backup.data.businessClock.updatedAt) ?? new Date(),
+          },
+        });
+        imported++;
+      }
+    }
 
     for (const source of backup.data.products) {
       const existing = await tx.product.findUnique({
@@ -655,6 +717,7 @@ export async function importBusinessData(
       });
       if (target) {
         skipped++;
+        existingOrderIds.add(source.id);
         orderIds.set(source.id, target.id);
         entityIds.set(source.id, target.id);
         continue;
@@ -712,6 +775,10 @@ export async function importBusinessData(
       entityIds.set(source.id, created.id);
     }
     for (const source of backup.data.workOrderDevices) {
+      if (existingOrderIds.has(source.orderId)) {
+        skipped++;
+        continue;
+      }
       const orderId = orderIds.get(source.orderId);
       const deviceId = deviceIds.get(source.deviceId);
       if (!orderId || !deviceId) {
@@ -728,6 +795,10 @@ export async function importBusinessData(
       }
     }
     for (const source of backup.data.items) {
+      if (existingOrderIds.has(source.orderId)) {
+        skipped++;
+        continue;
+      }
       const orderId = orderIds.get(source.orderId);
       if (!orderId) {
         skipped++;
@@ -772,6 +843,10 @@ export async function importBusinessData(
       itemIds.set(source.id, source.id);
     }
     for (const source of backup.data.reworkSessions) {
+      if (existingOrderIds.has(source.orderId)) {
+        skipped++;
+        continue;
+      }
       const orderId = orderIds.get(source.orderId);
       if (!orderId) {
         skipped++;
@@ -825,6 +900,10 @@ export async function importBusinessData(
       }
     }
     for (const source of backup.data.workOrderProducts) {
+      if (existingOrderIds.has(source.orderId)) {
+        skipped++;
+        continue;
+      }
       const orderId = orderIds.get(source.orderId);
       const product = await tx.product.findUnique({
         where: { id: source.productId },
@@ -858,6 +937,10 @@ export async function importBusinessData(
       }
     }
     for (const source of backup.data.payments) {
+      if (source.orderId && existingOrderIds.has(source.orderId)) {
+        skipped++;
+        continue;
+      }
       const orderId = source.orderId ? orderIds.get(source.orderId) : null;
       const saleId = source.saleId ? saleIds.get(source.saleId) : null;
       if ((!orderId && !saleId) || (orderId && saleId)) {
@@ -937,6 +1020,10 @@ export async function importBusinessData(
       }
     }
     for (const source of backup.data.histories) {
+      if (existingOrderIds.has(source.orderId)) {
+        skipped++;
+        continue;
+      }
       const orderId = orderIds.get(source.orderId);
       if (!orderId) {
         skipped++;
@@ -978,6 +1065,10 @@ export async function importBusinessData(
       faultIds.set(source.id, exists?.id ?? source.id);
     }
     for (const source of backup.data.workOrderFaults) {
+      if (existingOrderIds.has(source.orderId)) {
+        skipped++;
+        continue;
+      }
       const orderId = orderIds.get(source.orderId);
       if (!orderId) {
         skipped++;
@@ -1001,6 +1092,10 @@ export async function importBusinessData(
       }
     }
     for (const source of backup.data.audits) {
+      if (existingOrderIds.has(source.entityId)) {
+        skipped++;
+        continue;
+      }
       if (
         orderSourceIds.has(source.entityId) &&
         !entityIds.has(source.entityId)

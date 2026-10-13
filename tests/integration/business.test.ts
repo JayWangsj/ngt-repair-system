@@ -40,6 +40,7 @@ import {
   replaceQuote,
   savePriceRule,
   setPaidTotal,
+  removeWorkOrderProduct,
   setUserEnabled,
   updateOrder,
   updateDueDate,
@@ -254,6 +255,7 @@ describe("PostgreSQL workflow", () => {
       requestId: randomUUID(),
       amount: "100",
       method: "OTHER",
+      adjustmentReason: "Saldo saldato manualmente",
     });
     await changeStatus(owner, created.id, {
       status: "COMPLETED",
@@ -263,6 +265,51 @@ describe("PostgreSQL workflow", () => {
       (await db.workOrder.findUniqueOrThrow({ where: { id: created.id } }))
         .status,
     ).toBe("COMPLETED");
+  });
+  it("splits a manually corrected paid total between repair and retail", async () => {
+    const product = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Cover incassata",
+      category: "Cover",
+      usage: "RETAIL",
+      costPrice: "3",
+      salePrice: "20",
+      initialStock: 3,
+      minStock: 0,
+    });
+    const order = await createOrder(staff, input({ deposit: "0" }));
+    await addWorkOrderProduct(staff, order.id, {
+      productId: product.id,
+      kind: "RETAIL_ADDON",
+      quantity: 1,
+    });
+
+    await setPaidTotal(staff, order.id, {
+      requestId: randomUUID(),
+      amount: "110",
+      method: "CARD",
+      adjustmentReason: "Pagamento parziale registrato",
+    });
+
+    const payment = await db.payment.findFirstOrThrow({
+      where: { orderId: order.id },
+      include: { allocations: true },
+    });
+    expect(payment.method).toBe("CARD");
+    expect(
+      payment.allocations.map((line) => [line.source, line.amount.toString()]),
+    ).toEqual(
+      expect.arrayContaining([
+        ["REPAIR", "91.67"],
+        ["RETAIL", "18.33"],
+      ]),
+    );
+    const audit = await db.auditLog.findFirstOrThrow({
+      where: { entityId: order.id, action: "PAYMENT_TOTAL_SET" },
+    });
+    expect(audit.context).toMatchObject({
+      reason: "Pagamento parziale registrato",
+    });
   });
   it("locks delivered history and adds paid or free post-sale repairs independently", async () => {
     const created = await createOrder(staff, input({ deposit: "100" }));
@@ -664,6 +711,34 @@ describe("PostgreSQL workflow", () => {
       })),
     ).toEqual([{ source: "REPAIR", amount: "112.5" }]);
   });
+  it("allocates a diagnostic fee through the ordinary payment entry", async () => {
+    const order = await createOrder(
+      staff,
+      input({
+        inspectionMode: true,
+        faults: [],
+        fault: "",
+        items: [],
+        diagnosticFee: "12.50",
+        deposit: "0",
+      }),
+    );
+
+    await addPayment(staff, order.id, {
+      requestId: randomUUID(),
+      amount: "12.50",
+      method: "CARD",
+      kind: "BALANCE",
+    });
+    const payment = await db.payment.findFirstOrThrow({
+      where: { orderId: order.id },
+      include: { allocations: true },
+    });
+
+    expect(payment.allocations).toHaveLength(1);
+    expect(payment.allocations[0].source).toBe("REPAIR");
+    expect(payment.allocations[0].amount.toString()).toBe("12.5");
+  });
   it("uses optional quote parts to drive missing-parts status", async () => {
     const part = await createProduct(owner, {
       requestId: randomUUID(),
@@ -807,6 +882,26 @@ describe("PostgreSQL workflow", () => {
         })
       ).final.toString(),
     ).toBe("100");
+  });
+  it("preserves warranty settings when replacing a quote", async () => {
+    const order = await createOrder(staff, input({ deposit: "0" }));
+    const item = await db.workOrderItem.findFirstOrThrow({
+      where: { orderId: order.id },
+    });
+    await updateWarranty(staff, order.id, {
+      items: [{ id: item.id, days: 365, notes: "Display escluso da urti" }],
+    });
+
+    await replaceQuote(staff, order.id, [
+      { project: "Display", final: "95", adjustmentReason: "" },
+    ]);
+
+    const replacement = await db.workOrderItem.findFirstOrThrow({
+      where: { orderId: order.id },
+    });
+    expect(replacement.id).not.toBe(item.id);
+    expect(replacement.warrantyDays).toBe(365);
+    expect(replacement.warrantyNotes).toBe("Display escluso da urti");
   });
   it("saves missing normal prices automatically without a manual reason", async () => {
     const created = await createOrder(
@@ -1064,6 +1159,37 @@ describe("PostgreSQL workflow", () => {
     await expect(
       updateOrder(staff, order.id, { fault: "Edit" }),
     ).rejects.toThrow("chiusa");
+  });
+  it("updates the customer snapshot and associated device when changing customer", async () => {
+    const order = await createOrder(staff, input());
+    const previous = await db.workOrder.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { device: true },
+    });
+    const nextCustomer = await saveCustomer(owner, null, {
+      name: "Nuovo cliente",
+      phone: "333 777 8888",
+    });
+
+    await updateOrder(staff, order.id, {
+      customerId: nextCustomer.id,
+      fault: "Display rotto",
+    });
+
+    const updated = await db.workOrder.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { device: true, relatedDevices: true },
+    });
+    expect(updated.customerName).toBe("Nuovo cliente");
+    expect(updated.device.customerId).toBe(nextCustomer.id);
+    expect(updated.deviceId).not.toBe(previous.deviceId);
+    expect(updated.relatedDevices.map((device) => device.deviceId)).toEqual([
+      updated.deviceId,
+    ]);
+    expect(
+      (await db.device.findUniqueOrThrow({ where: { id: previous.deviceId } }))
+        .customerId,
+    ).not.toBe(nextCustomer.id);
   });
   it("cancels with retained payment history and zero current balance", async () => {
     const order = await createOrder(staff, input());
@@ -1738,6 +1864,116 @@ describe("work order products and combined checkout", () => {
     expect(new Set(lines.map((line) => line.contextKey)).size).toBe(2);
   });
 
+  it("does not add new repair-part reservations to a READY order", async () => {
+    const firstPart = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Ricambio iniziale",
+      category: "Ricambi",
+      usage: "REPAIR",
+      costPrice: "10",
+      salePrice: "0",
+      initialStock: 2,
+      minStock: 0,
+    });
+    const replacementPart = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Ricambio nuovo",
+      category: "Ricambi",
+      usage: "REPAIR",
+      costPrice: "12",
+      salePrice: "0",
+      initialStock: 2,
+      minStock: 0,
+    });
+    await savePriceRule(owner, null, {
+      brand: "Apple",
+      model: "iPhone 13",
+      project: "READY ricambio",
+      suggested: "40",
+      minutes: 30,
+      enabled: true,
+      requiredProductId: firstPart.id,
+      requiredQuantity: 1,
+    });
+    const order = await createOrder(
+      staff,
+      input({
+        deposit: "0",
+        items: [{ project: "READY ricambio", final: "40" }],
+      }),
+    );
+    await changeStatus(staff, order.id, { status: "READY" });
+
+    await expect(
+      replaceQuote(staff, order.id, {
+        items: [
+          {
+            project: "READY ricambio",
+            final: "45",
+            requiredProductId: replacementPart.id,
+            requiredQuantity: 1,
+          },
+        ],
+        orderDiscount: "0",
+        includeVat: false,
+      }),
+    ).rejects.toThrow("riaprire");
+    expect(
+      await db.workOrderProduct.count({
+        where: {
+          orderId: order.id,
+          productId: replacementPart.id,
+          consumedAt: null,
+        },
+      }),
+    ).toBe(0);
+    expect(
+      (await db.workOrder.findUniqueOrThrow({ where: { id: order.id } }))
+        .status,
+    ).toBe("READY");
+  });
+
+  it("blocks delivery while a repair part remains unconsumed", async () => {
+    const part = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Ricambio da verificare",
+      category: "Ricambi",
+      usage: "REPAIR",
+      costPrice: "10",
+      salePrice: "0",
+      initialStock: 2,
+      minStock: 0,
+    });
+    const order = await createOrder(staff, input({ deposit: "0" }));
+    await changeStatus(staff, order.id, { status: "READY" });
+    await db.workOrderProduct.create({
+      data: {
+        orderId: order.id,
+        productId: part.id,
+        productName: part.name,
+        category: part.category,
+        kind: "REPAIR_PART",
+        unitPrice: "0",
+        quantity: 1,
+      },
+    });
+
+    await expect(
+      checkoutWorkOrder(staff, order.id, {
+        requestId: randomUUID(),
+        amount: "0",
+        method: "CASH",
+        pickedUpBy: "Test Cliente",
+      }),
+    ).rejects.toThrow("non registrati");
+    await expect(
+      changeStatus(staff, order.id, {
+        status: "COMPLETED",
+        pickedUpBy: "Test Cliente",
+      }),
+    ).rejects.toThrow("non registrati");
+  });
+
   it("records a partial checkout payment and delivers only after the balance is cleared", async () => {
     const order = await createOrder(staff, input({ deposit: "20" }));
     await changeStatus(staff, order.id, { status: "REPAIRING" });
@@ -1859,6 +2095,36 @@ describe("work order products and combined checkout", () => {
         where: { referenceType: "WORK_ORDER", referenceId: order.id },
       }),
     ).toBe(2);
+  });
+
+  it("prevents removing an add-on after its value has been collected", async () => {
+    const addon = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Cover già pagata",
+      category: "Cover",
+      usage: "RETAIL",
+      costPrice: "3",
+      salePrice: "20",
+      initialStock: 2,
+      minStock: 0,
+    });
+    const order = await createOrder(staff, input({ deposit: "0" }));
+    const line = await addWorkOrderProduct(staff, order.id, {
+      productId: addon.id,
+      kind: "RETAIL_ADDON",
+      quantity: 1,
+    });
+    await setPaidTotal(staff, order.id, {
+      requestId: randomUUID(),
+      amount: "120",
+      method: "CASH",
+      adjustmentReason: "Pagamento completo",
+    });
+
+    await expect(
+      removeWorkOrderProduct(staff, order.id, line.id),
+    ).rejects.toThrow("incassato");
+    expect(await db.workOrderProduct.count({ where: { id: line.id } })).toBe(1);
   });
 
   it("reserves add-on stock across open work orders", async () => {
@@ -2041,6 +2307,39 @@ describe("retail checkout", () => {
     ).toBe(1);
   });
 
+  it("does not let a retail sale consume stock reserved by an open work order", async () => {
+    const product = await createProduct(owner, {
+      requestId: randomUUID(),
+      name: "Pellicola riservata",
+      category: "Pellicole",
+      usage: "RETAIL",
+      costPrice: "2",
+      salePrice: "10",
+      initialStock: 2,
+      minStock: 0,
+    });
+    const order = await createOrder(staff, input({ deposit: "0" }));
+    await addWorkOrderProduct(staff, order.id, {
+      productId: product.id,
+      kind: "RETAIL_ADDON",
+      quantity: 2,
+    });
+
+    await expect(
+      createRetailSale(staff, {
+        requestId: randomUUID(),
+        items: [{ productId: product.id, quantity: 1 }],
+        discount: "0",
+        method: "CASH",
+      }),
+    ).rejects.toThrow("insufficienti");
+    expect(await db.retailSale.count()).toBe(0);
+    expect(
+      (await db.product.findUniqueOrThrow({ where: { id: product.id } }))
+        .stockQuantity,
+    ).toBe(2);
+  });
+
   it("deletes a retail sale and restores its stock", async () => {
     const product = await createProduct(staff, {
       requestId: randomUUID(),
@@ -2076,6 +2375,11 @@ describe("retail checkout", () => {
     expect(
       await db.auditLog.count({
         where: { entityId: sale.id, action: "RETAIL_SALE_DELETED" },
+      }),
+    ).toBe(1);
+    expect(
+      await db.auditLog.count({
+        where: { entityId: sale.id, action: "RETAIL_SALE_COMPLETED" },
       }),
     ).toBe(1);
   });
@@ -2337,7 +2641,7 @@ describe("versioned data backup and merge import", () => {
     const backup = await exportBusinessData();
     expect(backup).toMatchObject({
       format: "ngt-repair-data",
-      version: 8,
+      version: 9,
     });
     expect(backup.data.orders).toHaveLength(1);
     expect(backup.data.payments.map((payment) => payment.kind).sort()).toEqual([
@@ -2350,6 +2654,11 @@ describe("versioned data backup and merge import", () => {
     expect(backup.data.retailSaleItems).toHaveLength(1);
     expect(backup.data.paymentAllocations).toHaveLength(2);
     expect(backup.data.workOrderProducts).toHaveLength(1);
+    expect(backup.data.inventoryCategories).toHaveLength(1);
+    expect(backup.data.businessClock).toMatchObject({
+      mode: "MANUAL",
+      manualDate: testBusinessDay,
+    });
 
     const conflict = structuredClone(backup);
     const originalOrderId = conflict.data.orders[0].id;
@@ -2390,6 +2699,8 @@ describe("versioned data backup and merge import", () => {
     expect(await db.customer.count()).toBe(0);
     expect(await db.product.count()).toBe(0);
     expect(await db.retailSale.count()).toBe(0);
+    expect(await db.inventoryCategory.count()).toBe(0);
+    expect(await db.businessClock.count()).toBe(0);
     expect(await db.user.count()).toBe(usersBefore);
 
     const first = await importBusinessData(owner, backup);
@@ -2403,6 +2714,10 @@ describe("versioned data backup and merge import", () => {
     expect(await db.retailSale.count()).toBe(1);
     expect(await db.paymentAllocation.count()).toBe(2);
     expect(await db.workOrderProduct.count()).toBe(1);
+    expect(await db.inventoryCategory.count()).toBe(1);
+    expect(
+      await db.businessClock.findUniqueOrThrow({ where: { id: "default" } }),
+    ).toMatchObject({ mode: "MANUAL", manualDate: testBusinessDay });
     expect((await db.device.findFirstOrThrow()).model).toBe(
       "iPhone 18 Pro Max",
     );
@@ -2412,6 +2727,26 @@ describe("versioned data backup and merge import", () => {
     expect(second.skipped).toBeGreaterThan(0);
     expect(await db.workOrder.count()).toBe(1);
     expect(await db.customer.count()).toBe(1);
+  });
+
+  it("does not append stale quote lines when merging a backup into an existing order", async () => {
+    const order = await createOrder(owner, input({ deposit: "0" }));
+    const backup = await exportBusinessData();
+    await replaceQuote(owner, order.id, [
+      {
+        project: "Display",
+        final: "120",
+        adjustmentReason: "Prezzo aggiornato",
+      },
+    ]);
+
+    await importBusinessData(owner, backup);
+
+    const currentItems = await db.workOrderItem.findMany({
+      where: { orderId: order.id },
+    });
+    expect(currentItems).toHaveLength(1);
+    expect(currentItems[0].final.toString()).toBe("120");
   });
 
   it("continues to accept version 1 backups without inventory arrays", async () => {

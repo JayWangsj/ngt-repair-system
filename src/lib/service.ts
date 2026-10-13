@@ -56,6 +56,38 @@ import {
 import { getBusinessDay } from "./business-date";
 
 type Tx = Prisma.TransactionClient;
+type Amount = string | { toString(): string };
+type PaymentOrder = {
+  type: string;
+  items: { final: Amount; discount?: Amount }[];
+  orderDiscount: Amount;
+  includeVat: boolean;
+  inspectionFee: Amount;
+  afterSalesFee: Amount;
+  products: { unitPrice: Amount; quantity: number; discount?: Amount }[];
+  payments: {
+    allocations: { source: string; amount: Amount }[];
+  }[];
+};
+function paymentBuckets(order: PaymentOrder) {
+  const repairSource =
+    order.type === "QUICK_SERVICE" ? "QUICK_SERVICE" : "REPAIR";
+  const repairDue = settlement(order.items, {
+    orderDiscount: order.orderDiscount,
+    includeVat: order.includeVat,
+    inspectionFee: order.inspectionFee,
+    afterSalesFee: order.afterSalesFee,
+  }).due;
+  const retailDue = settlement([], { products: order.products }).productTotal;
+  const allocations = order.payments.flatMap((payment) => payment.allocations);
+  const repairPaid = allocations
+    .filter((allocation) => allocation.source === repairSource)
+    .reduce((sum, allocation) => sum + cents(allocation.amount), 0);
+  const retailPaid = allocations
+    .filter((allocation) => allocation.source === "RETAIL")
+    .reduce((sum, allocation) => sum + cents(allocation.amount), 0);
+  return { repairDue, retailDue, repairPaid, retailPaid };
+}
 const lockedOrderStatuses = ["COMPLETED", "REWORKING", "REFUNDED", "CANCELLED"];
 function originalOrderLocked(order: {
   status: string;
@@ -319,6 +351,10 @@ async function snapshots(
     project: string;
     final: { toString(): string };
     ruleId: string | null;
+    warrantyStart: Date | null;
+    warrantyDays: number;
+    warrantyExpiresAt: Date | null;
+    warrantyNotes: string;
   }[],
 ) {
   const rules = await tx.priceRule.findMany({
@@ -396,6 +432,10 @@ async function snapshots(
         item.requiredProductId || !match?.rule.requiredProductId
           ? item.requiredQuantity
           : match.rule.requiredQuantity,
+      warrantyStart: oldItem?.warrantyStart ?? null,
+      warrantyDays: oldItem?.warrantyDays ?? 0,
+      warrantyExpiresAt: oldItem?.warrantyExpiresAt ?? null,
+      warrantyNotes: oldItem?.warrantyNotes ?? "",
     });
   }
   return results;
@@ -640,19 +680,37 @@ export async function updateOrder(actorInput: Actor, id: string, raw: unknown) {
     const actor = await currentActor(tx, actorInput);
     const order = await tx.workOrder.findUniqueOrThrow({
       where: { id },
-      include: { faults: true },
+      include: {
+        faults: true,
+        device: true,
+        relatedDevices: { include: { device: true } },
+      },
     });
     if (originalOrderLocked(order))
       throw new BusinessError("La scheda è chiusa.");
     const { customFaults, standardFaultIds, customerId, ...fields } = data;
     let deviceId = order.deviceId;
+    let customerName = order.customerName;
     if (customerId) {
-      const [customer, device] = await Promise.all([
-        tx.customer.findFirst({ where: { id: customerId, deletedAt: null } }),
-        tx.device.findUniqueOrThrow({ where: { id: order.deviceId } }),
-      ]);
+      const customer = await tx.customer.findFirst({
+        where: { id: customerId, deletedAt: null },
+      });
       if (!customer) throw new BusinessError("Cliente non disponibile.");
-      if (device.customerId !== customer.id) {
+      const associatedDevices = [
+        ...order.relatedDevices.map((related) => related.device),
+        order.device,
+      ];
+      const devices = [
+        ...new Map(
+          associatedDevices.map((device) => [device.id, device]),
+        ).values(),
+      ];
+      const replacementIds = new Map<string, string>();
+      for (const device of devices) {
+        if (device.customerId === customer.id) {
+          replacementIds.set(device.id, device.id);
+          continue;
+        }
         const clone = await tx.device.create({
           data: {
             customerId: customer.id,
@@ -665,7 +723,31 @@ export async function updateOrder(actorInput: Actor, id: string, raw: unknown) {
             accessories: device.accessories,
           },
         });
-        deviceId = clone.id;
+        replacementIds.set(device.id, clone.id);
+      }
+      deviceId = replacementIds.get(order.deviceId)!;
+      customerName = customer.name;
+      const previousRelatedIds = new Set(
+        order.relatedDevices.map((related) => related.deviceId),
+      );
+      const nextRelatedIds = new Set(
+        [...previousRelatedIds, order.deviceId].map(
+          (relatedId) => replacementIds.get(relatedId) ?? relatedId,
+        ),
+      );
+      if (
+        nextRelatedIds.size !== previousRelatedIds.size ||
+        [...nextRelatedIds].some(
+          (relatedId) => !previousRelatedIds.has(relatedId),
+        )
+      ) {
+        await tx.workOrderDevice.deleteMany({ where: { orderId: id } });
+        await tx.workOrderDevice.createMany({
+          data: [...nextRelatedIds].map((relatedId) => ({
+            orderId: id,
+            deviceId: relatedId,
+          })),
+        });
       }
     }
     if (standardFaultIds) {
@@ -728,6 +810,7 @@ export async function updateOrder(actorInput: Actor, id: string, raw: unknown) {
       data: {
         ...fields,
         deviceId,
+        customerName,
         ...(customFaults || standardFaultIds
           ? { fault: [...standardSnapshots, ...customSnapshots].join("; ") }
           : {}),
@@ -890,6 +973,38 @@ export async function replaceQuote(
       order.items,
     );
     const options = parsed ?? order;
+    const requiredParts = await requiredPartLines(tx, items);
+    if (order.status === "READY") {
+      const previousRequirements = new Map<string, number>();
+      for (const item of order.items)
+        if (item.requiredProductId)
+          previousRequirements.set(
+            item.requiredProductId,
+            (previousRequirements.get(item.requiredProductId) ?? 0) +
+              item.requiredQuantity,
+          );
+      const nextRequirements = new Map(
+        requiredParts.map(({ product, quantity }) => [product.id, quantity]),
+      );
+      if (
+        previousRequirements.size !== nextRequirements.size ||
+        [...previousRequirements].some(
+          ([productId, quantity]) =>
+            nextRequirements.get(productId) !== quantity,
+        )
+      )
+        throw new BusinessError(
+          "Per modificare i ricambi richiesti, riaprire prima la riparazione.",
+        );
+      if (
+        order.products.some(
+          (line) => line.kind === "REPAIR_PART" && !line.consumedAt,
+        )
+      )
+        throw new BusinessError(
+          "Verifica i ricambi non contabilizzati prima di modificare il preventivo.",
+        );
+    }
     if (
       balance(items, order.payments, {
         ...options,
@@ -930,7 +1045,6 @@ export async function replaceQuote(
     await tx.workOrderProduct.deleteMany({
       where: { orderId: id, kind: "REPAIR_PART", consumedAt: null },
     });
-    const requiredParts = await requiredPartLines(tx, items);
     const existingPartContexts = requiredParts.length
       ? await tx.workOrderProduct.findMany({
           where: {
@@ -968,19 +1082,20 @@ export async function replaceQuote(
         confirmedAt: null,
         confirmationNote: "",
         ...(order.status === "READY" ? {} : { status: nextStatus }),
-        products: requiredParts.length
-          ? {
-              create: requiredParts.map(({ product, quantity }) => ({
-                productId: product.id,
-                productName: product.name,
-                category: product.category,
-                kind: "REPAIR_PART" as const,
-                contextKey: requiredPartContexts.get(product.id),
-                unitPrice: decimal(0),
-                quantity,
-              })),
-            }
-          : undefined,
+        products:
+          order.status !== "READY" && requiredParts.length
+            ? {
+                create: requiredParts.map(({ product, quantity }) => ({
+                  productId: product.id,
+                  productName: product.name,
+                  category: product.category,
+                  kind: "REPAIR_PART" as const,
+                  contextKey: requiredPartContexts.get(product.id),
+                  unitPrice: decimal(0),
+                  quantity,
+                })),
+              }
+            : undefined,
       },
     });
     if (order.status !== "READY" && order.status !== nextStatus)
@@ -1039,28 +1154,11 @@ export async function addPayment(actorInput: Actor, id: string, raw: unknown) {
       throw new BusinessError("La scheda è chiusa.");
     if (amount > balance(order.items, order.payments, order))
       throw new BusinessError("L'importo supera il saldo da pagare.");
-    const repairDue = settlement(order.items, {
-      orderDiscount: order.orderDiscount,
-      includeVat: order.includeVat,
-      afterSalesFee: order.afterSalesFee,
-    }).due;
-    const retailDue = settlement([], { products: order.products }).productTotal;
-    const repairPaid = order.payments
-      .flatMap((payment) => payment.allocations)
-      .filter(
-        (allocation) =>
-          allocation.source ===
-          (order.type === "QUICK_SERVICE" ? "QUICK_SERVICE" : "REPAIR"),
-      )
-      .reduce((sum, allocation) => sum + cents(allocation.amount), 0);
-    const retailPaid = order.payments
-      .flatMap((payment) => payment.allocations)
-      .filter((allocation) => allocation.source === "RETAIL")
-      .reduce((sum, allocation) => sum + cents(allocation.amount), 0);
+    const buckets = paymentBuckets(order);
     const allocation = allocatePayment(
       amount,
-      Math.max(0, repairDue - repairPaid),
-      Math.max(0, retailDue - retailPaid),
+      Math.max(0, buckets.repairDue - buckets.repairPaid),
+      Math.max(0, buckets.retailDue - buckets.retailPaid),
     );
     const kind = order.afterSalesOpen ? "AFTER_SALES" : data.kind;
     const rework = order.afterSalesOpen
@@ -1147,22 +1245,18 @@ export async function setPaidTotal(
     );
     const delta = target - current;
     if (!delta) return;
-    const repairPaid = order.payments
-      .flatMap((payment) => payment.allocations)
-      .filter(
-        (allocation) =>
-          allocation.source ===
-          (order.type === "QUICK_SERVICE" ? "QUICK_SERVICE" : "REPAIR"),
-      )
-      .reduce((sum, allocation) => sum + cents(allocation.amount), 0);
-    const retailPaid = current - repairPaid;
+    const buckets = paymentBuckets(order);
     const split =
       delta > 0
-        ? allocatePayment(delta, due - current, 0)
+        ? allocatePayment(
+            delta,
+            Math.max(0, buckets.repairDue - buckets.repairPaid),
+            Math.max(0, buckets.retailDue - buckets.retailPaid),
+          )
         : allocatePayment(
             -delta,
-            Math.max(0, repairPaid),
-            Math.max(0, retailPaid),
+            Math.max(0, buckets.repairPaid),
+            Math.max(0, buckets.retailPaid),
           );
     const payment = await tx.payment.create({
       data: {
@@ -1204,6 +1298,8 @@ export async function setPaidTotal(
       before: decimal(current),
       after: decimal(target),
       difference: decimal(delta),
+      method: data.method,
+      reason: data.adjustmentReason,
     });
   });
 }
@@ -1243,6 +1339,16 @@ export async function changeStatus(
     } else {
       assertTransition(order.status, data.status, order.afterSalesOpen);
     }
+
+    if (
+      data.status === "COMPLETED" &&
+      order.products.some(
+        (line) => line.kind === "REPAIR_PART" && !line.consumedAt,
+      )
+    )
+      throw new BusinessError(
+        "Ricambi non registrati: completa prima il controllo di magazzino.",
+      );
 
     if (data.cancelPayment) {
       if (order.status !== "DIAGNOSING" || data.status !== "CANCELLED")
@@ -1951,12 +2057,28 @@ export async function removeWorkOrderProduct(
     const actor = await currentActor(tx, actorInput);
     const line = await tx.workOrderProduct.findFirstOrThrow({
       where: { id: lineId, orderId },
-      include: { order: true },
+      include: {
+        order: { include: { items: true, products: true, payments: true } },
+      },
     });
     if (line.consumedAt)
       throw new BusinessError("Il movimento di magazzino è già registrato.");
     if (originalOrderLocked(line.order))
       throw new BusinessError("La scheda è chiusa.");
+    if (line.kind === "RETAIL_ADDON") {
+      const remainingProducts = line.order.products.filter(
+        (product) => product.id !== line.id,
+      );
+      if (
+        balance(line.order.items, line.order.payments, {
+          ...line.order,
+          products: remainingProducts,
+        }) < 0
+      )
+        throw new BusinessError(
+          "L'incassato supera il nuovo totale: registra prima il rimborso.",
+        );
+    }
     await tx.workOrderProduct.delete({ where: { id: line.id } });
     await audit(tx, actor, orderId, "WORK_ORDER_PRODUCT_REMOVED", {
       lineId,
@@ -2011,6 +2133,14 @@ export async function checkoutWorkOrder(
     });
     if (order.status !== "READY")
       throw new BusinessError("La riparazione non è pronta per la consegna.");
+    if (
+      order.products.some(
+        (line) => line.kind === "REPAIR_PART" && !line.consumedAt,
+      )
+    )
+      throw new BusinessError(
+        "Ricambi non registrati: completa prima il controllo di magazzino.",
+      );
     const remaining = balance(order.items, order.payments, order);
     if (amount < 0 || (remaining > 0 && amount === 0))
       throw new BusinessError("L'importo deve essere maggiore di zero.");
@@ -2023,31 +2153,11 @@ export async function checkoutWorkOrder(
             orderBy: { createdAt: "desc" },
           })
         : null;
-      const repairDue = settlement(order.items, {
-        orderDiscount: order.orderDiscount,
-        includeVat: order.includeVat,
-        afterSalesFee: order.afterSalesFee,
-        inspectionFee: order.inspectionFee,
-      }).due;
-      const retailDue = settlement([], {
-        products: order.products,
-      }).productTotal;
-      const repairPaid = order.payments
-        .flatMap((payment) => payment.allocations)
-        .filter(
-          (allocation) =>
-            allocation.source ===
-            (order.type === "QUICK_SERVICE" ? "QUICK_SERVICE" : "REPAIR"),
-        )
-        .reduce((sum, allocation) => sum + cents(allocation.amount), 0);
-      const retailPaid = order.payments
-        .flatMap((payment) => payment.allocations)
-        .filter((allocation) => allocation.source === "RETAIL")
-        .reduce((sum, allocation) => sum + cents(allocation.amount), 0);
+      const buckets = paymentBuckets(order);
       const allocation = allocatePayment(
         amount,
-        Math.max(0, repairDue - repairPaid),
-        Math.max(0, retailDue - retailPaid),
+        Math.max(0, buckets.repairDue - buckets.repairPaid),
+        Math.max(0, buckets.retailDue - buckets.retailPaid),
       );
       const payment = await tx.payment.create({
         data: {
@@ -2517,6 +2627,34 @@ export async function createRetailSale(actorInput: Actor, raw: unknown) {
         subtotal: unitPrice * quantity,
       };
     });
+    const reservations = await tx.workOrderProduct.findMany({
+      where: {
+        productId: { in: products.map((product) => product.id) },
+        consumedAt: null,
+        order: { status: { notIn: ["COMPLETED", "REFUNDED", "CANCELLED"] } },
+      },
+      select: { productId: true, quantity: true },
+    });
+    const reservedByProduct = new Map<string, number>();
+    for (const reservation of reservations)
+      reservedByProduct.set(
+        reservation.productId,
+        (reservedByProduct.get(reservation.productId) ?? 0) +
+          reservation.quantity,
+      );
+    if (
+      lines.some(
+        ({ product, quantity }) =>
+          quantity >
+          Math.max(
+            0,
+            product.stockQuantity - (reservedByProduct.get(product.id) ?? 0),
+          ),
+      )
+    )
+      throw new BusinessError(
+        "Scorte insufficienti o prodotto non disponibile.",
+      );
     const quickServices = await tx.quickService.findMany({
       where: {
         id: { in: [...new Set(data.services.map((line) => line.serviceId))] },
@@ -2687,7 +2825,6 @@ export async function deleteRetailSale(actorInput: Actor, id: string) {
     });
     await tx.retailServiceItem.deleteMany({ where: { saleId: id } });
     await tx.retailSaleItem.deleteMany({ where: { saleId: id } });
-    await tx.auditLog.deleteMany({ where: { entityId: id } });
     await tx.retailSale.delete({ where: { id } });
     await audit(tx, actor, id, "RETAIL_SALE_DELETED", {
       code: sale.code,

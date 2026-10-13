@@ -202,6 +202,7 @@ export const paidTotalInput = z.object({
   requestId: z.string().uuid(),
   amount: amountInput,
   method: z.enum(["CASH", "CARD", "OTHER"]).default("CASH"),
+  adjustmentReason: z.string().trim().min(1).max(200),
 });
 export const inventoryAdjustmentInput = z.object({
   requestId: z.string().uuid(),

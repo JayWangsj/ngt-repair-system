@@ -171,17 +171,25 @@ function PaymentControl({
   const it = useMessages();
   const router = useRouter();
   const [value, setValue] = useState(decimal(row.paid));
+  const [method, setMethod] = useState<"" | "CASH" | "CARD" | "OTHER">("");
+  const [adjustmentReason, setAdjustmentReason] = useState("");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState("");
+  const parsed = Number(value.replace(",", "."));
+  const changed =
+    !Number.isFinite(parsed) || Math.round(parsed * 100) !== row.paid;
   function save() {
-    const parsed = Number(value.replace(",", "."));
-    if (Number.isFinite(parsed) && Math.round(parsed * 100) === row.paid)
+    if (!changed) return;
+    if (!method || !adjustmentReason.trim()) {
+      setError(it.paymentAdjustmentDetailsRequired);
       return;
+    }
     startTransition(async () => {
       const result = await setPaidTotalAction(row.id, {
         requestId: crypto.randomUUID(),
         amount: value,
-        method: "CASH",
+        method,
+        adjustmentReason,
       });
       if (!result.ok) return setError(result.error);
       setError("");
@@ -203,7 +211,10 @@ function PaymentControl({
             value={value}
             inputMode="decimal"
             disabled={pending}
-            onChange={(event) => setValue(event.target.value)}
+            onChange={(event) => {
+              setValue(event.target.value);
+              setError("");
+            }}
             onBlur={save}
           />
         ) : (
@@ -214,6 +225,43 @@ function PaymentControl({
         <small>{it.balance}</small>
         <strong>{money(row.balance)}</strong>
       </span>
+      {active &&
+        !["COMPLETED", "REFUNDED", "CANCELLED"].includes(row.status) &&
+        changed && (
+          <div className="order-payment-adjustment">
+            <label>
+              <span className="sr-only">{it.paymentMethod}</span>
+              <select
+                aria-label={it.paymentMethod}
+                value={method}
+                disabled={pending}
+                onChange={(event) => {
+                  setMethod(event.target.value as typeof method);
+                  setError("");
+                }}
+              >
+                <option value="">{it.choosePaymentMethod}</option>
+                <option value="CASH">{it.cash}</option>
+                <option value="CARD">{it.card}</option>
+                <option value="OTHER">{it.otherPaymentMethod}</option>
+              </select>
+            </label>
+            <label>
+              <span className="sr-only">{it.paymentAdjustmentReason}</span>
+              <input
+                aria-label={it.paymentAdjustmentReason}
+                value={adjustmentReason}
+                placeholder={it.paymentAdjustmentReason}
+                disabled={pending}
+                onChange={(event) => {
+                  setAdjustmentReason(event.target.value);
+                  setError("");
+                }}
+                onBlur={save}
+              />
+            </label>
+          </div>
+        )}
       {error && <small className="inline-control-error">{error}</small>}
     </div>
   );

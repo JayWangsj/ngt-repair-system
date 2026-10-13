@@ -77,7 +77,7 @@ var
   Line: String;
 begin
   LogPath := ExpandConstant('{localappdata}\NGT\install-stages.log');
-  Line := FormatDateTime('yyyy-mm-dd"T"hh:nn:ss', Now) + ' ' + Detail + ' ' + Stage + #13#10;
+  Line := IntToStr(GetTickCount) + ' ' + Detail + ' ' + Stage + ' ' + #13#10;
   SaveStringToFile(LogPath, Line, True);
 end;
 

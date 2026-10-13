@@ -51,15 +51,27 @@ New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
 Write-Output "Inno Setup compiler: $CompilerPath"
 Write-Output "Installer package directory: $packageDirectory"
 Write-Output "Installer output: $outputRoot"
-& $CompilerPath `
-  ("/DAppVersion=" + $version) `
-  ("/DPackageDirectory=" + $packageDirectory) `
-  ("/DBootstrapPath=" + $bootstrapPath) `
-  ("/DIconPath=" + $iconPath) `
-  ("/DOutputDir=" + $outputRoot) `
-  $installerDefinition
+$packageDrive = "Z:"
+if (Get-PSDrive -Name "Z" -ErrorAction SilentlyContinue) {
+  throw "Temporary installer package drive Z: is already in use."
+}
+& subst.exe $packageDrive $packageDirectory
 if ($LASTEXITCODE -ne 0) {
-  throw "Windows studio installer compilation failed."
+  throw "Unable to create a short path for the installer package."
+}
+try {
+  & $CompilerPath `
+    ("/DAppVersion=" + $version) `
+    ("/DPackageDirectory=" + $packageDrive) `
+    ("/DBootstrapPath=" + $bootstrapPath) `
+    ("/DIconPath=" + $iconPath) `
+    ("/DOutputDir=" + $outputRoot) `
+    $installerDefinition
+  if ($LASTEXITCODE -ne 0) {
+    throw "Windows studio installer compilation failed."
+  }
+} finally {
+  & subst.exe $packageDrive /D
 }
 
 $installer = Join-Path $outputRoot ("ngt-studio-windows-setup-v" + $version + ".exe")

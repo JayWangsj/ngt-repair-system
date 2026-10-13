@@ -1,8 +1,14 @@
 import { BusinessError } from "@/lib/domain";
 import { importBusinessData } from "@/lib/data-transfer";
+import { isSameOriginWriteRequest } from "@/lib/request-source";
 import { requireActor } from "@/lib/session";
 
 export async function POST(request: Request) {
+  if (!isSameOriginWriteRequest(request))
+    return Response.json(
+      { error: "cross_origin_request_rejected" },
+      { status: 403 },
+    );
   try {
     const size = Number(request.headers.get("content-length") ?? "0");
     if (size > 20 * 1024 * 1024)

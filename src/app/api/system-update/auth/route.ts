@@ -1,4 +1,5 @@
 import { getGitHubLoginStatus, startGitHubLogin } from "@/lib/studio-update";
+import { isSameOriginWriteRequest } from "@/lib/request-source";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -12,7 +13,12 @@ export async function GET() {
   }
 }
 
-export async function POST() {
+export async function POST(request: Request) {
+  if (!isSameOriginWriteRequest(request))
+    return Response.json(
+      { error: "cross_origin_request_rejected" },
+      { status: 403 },
+    );
   try {
     const status = await startGitHubLogin();
     return Response.json({ started: true, ...status }, { status: 202 });

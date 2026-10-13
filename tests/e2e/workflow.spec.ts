@@ -7141,11 +7141,22 @@ test("test tools generate linked data and persist repair motion tuning", async (
   let existingTestOrderCount = 0;
   while (true) {
     existingTestOrderCount += await existingTestRows.count();
-    const nextPage = page
-      .getByRole("navigation", { name: "Paginazione delle schede" })
-      .getByRole("link", { name: "Successiva", exact: true });
+    const pagination = page.getByRole("navigation", {
+      name: "Paginazione delle schede",
+    });
+    const nextPage = pagination.getByRole("link", {
+      name: "Successiva",
+      exact: true,
+    });
     if (!(await nextPage.count())) break;
+    const currentPage = Number(
+      new URL(page.url()).searchParams.get("page") || "1",
+    );
     await nextPage.click();
+    await expect(page).toHaveURL(
+      (url) => Number(url.searchParams.get("page") || "1") === currentPage + 1,
+    );
+    await expect(pagination).toContainText(`Pagina ${currentPage + 1} di`);
   }
   await page.goto("/settings/test-tools");
   await expect(tools).toBeVisible();
@@ -7206,11 +7217,22 @@ test("test tools generate linked data and persist repair motion tuning", async (
         .locator(".order-customer-link span")
         .allTextContents()),
     );
-    const nextPage = page
-      .getByRole("navigation", { name: "Paginazione delle schede" })
-      .getByRole("link", { name: "Successiva", exact: true });
+    const pagination = page.getByRole("navigation", {
+      name: "Paginazione delle schede",
+    });
+    const nextPage = pagination.getByRole("link", {
+      name: "Successiva",
+      exact: true,
+    });
     if (!(await nextPage.count())) break;
+    const currentPage = Number(
+      new URL(page.url()).searchParams.get("page") || "1",
+    );
     await nextPage.click();
+    await expect(page).toHaveURL(
+      (url) => Number(url.searchParams.get("page") || "1") === currentPage + 1,
+    );
+    await expect(pagination).toContainText(`Pagina ${currentPage + 1} di`);
   }
   expect(codes).toHaveLength(existingTestOrderCount + 50);
   expect(codes.every((code) => /^[RS]-\d{11}$/.test(code.trim()))).toBe(true);

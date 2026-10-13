@@ -55,7 +55,11 @@ describe("NGT brand assets", () => {
       "scripts/build-windows-studio-package.ps1",
       "utf8",
     );
-    expect(launcher).toContain('cp("public", ".next/standalone/public"');
+    expect(launcher).toContain('["public", ".next/standalone/public"]');
+    expect(launcher).toContain("await access(destination)");
+    expect(launcher).toContain(
+      "await cp(source, destination, { recursive: true })",
+    );
     expect(e2eRunner).toContain('cp("public", `${distDir}/standalone/public`');
     expect(packager).toContain(
       'Copy-Item -LiteralPath "public" -Destination (Join-Path $stage "public")',

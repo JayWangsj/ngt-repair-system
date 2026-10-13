@@ -52,6 +52,23 @@ type GitHubAuth = {
   userCode?: string;
 };
 
+const activeUpdateStatuses = [
+  "queued",
+  "checking",
+  "downloading",
+  "downloaded",
+  "verifying",
+  "preparing-runtime",
+  "backing-up",
+  "installing",
+  "validating",
+  "rolling-back",
+];
+
+function isActiveUpdateStatus(status?: string) {
+  return activeUpdateStatuses.includes(status || "");
+}
+
 function formatBytes(value?: number) {
   if (!value || value < 0) return "—";
   const units = ["B", "KB", "MB", "GB"];
@@ -118,7 +135,9 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
       };
       setInfo(next);
       if (next.status) {
+        const statusIsActive = isActiveUpdateStatus(next.status.status);
         const statusMatchesRelease =
+          (!statusIsActive || next.updateAvailable) &&
           (!next.updateAvailable || next.status.status !== "complete") &&
           (!next.status.latestVersion ||
             next.status.latestVersion.replace(/^v/i, "") ===
@@ -127,19 +146,7 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
           ? next.status
           : { status: "idle" };
         setStatus(nextStatus);
-        const isActive = [
-          "queued",
-          "checking",
-          "downloading",
-          "downloaded",
-          "verifying",
-          "preparing-runtime",
-          "backing-up",
-          "installing",
-          "validating",
-          "rolling-back",
-        ].includes(nextStatus.status || "");
-        if (isActive) {
+        if (isActiveUpdateStatus(nextStatus.status)) {
           resumeActiveUpdate = true;
           setPending(true);
           void monitorUpdate();
@@ -320,6 +327,10 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
           );
           return;
         }
+        if (!isActiveUpdateStatus(result.status)) {
+          setPending(false);
+          return;
+        }
       } catch {
         // The local server can be briefly unavailable while versions switch.
       }
@@ -333,20 +344,7 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
     setAutoCheck(enabled);
   }
 
-  const updateActive =
-    pending &&
-    [
-      "queued",
-      "checking",
-      "downloading",
-      "downloaded",
-      "verifying",
-      "preparing-runtime",
-      "backing-up",
-      "installing",
-      "validating",
-      "rolling-back",
-    ].includes(status.status || "");
+  const updateActive = pending && isActiveUpdateStatus(status.status);
   const stageOrder = [
     "checking",
     "downloading",

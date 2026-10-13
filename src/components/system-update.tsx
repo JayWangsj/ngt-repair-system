@@ -308,20 +308,6 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
       "installing",
       "validating",
     ].includes(status.status || "");
-  const downloaded = status.bytesDownloaded || 0;
-  const total = status.totalBytes || info?.downloadSize || 0;
-  const progressKnown = status.progressKnown === true && total > 0;
-  const percentage = progressKnown
-    ? Math.min(100, Math.round((downloaded / total) * 100))
-    : 0;
-  const stages = [
-    ["downloaded", it.updateStageDownloaded],
-    ["verifying", it.updateStageVerifying],
-    ["backing-up", it.updateStageBackup],
-    ["installing", it.updateStageInstalling],
-    ["validating", it.updateStageValidating],
-    ["complete", it.updateStageComplete],
-  ];
   const stageOrder = [
     "checking",
     "downloading",
@@ -332,10 +318,28 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
     "validating",
     "complete",
   ];
-  const currentStage =
-    status.status === "failed" ? status.stage : status.status;
+  const currentStage = status.stage || status.status;
   const currentIndex = stageOrder.indexOf(currentStage || "");
-
+  const downloaded = status.bytesDownloaded || 0;
+  const total = status.totalBytes || info?.downloadSize || 0;
+  const downloadComplete =
+    downloaded > 0 && currentIndex >= stageOrder.indexOf("downloaded");
+  const showDownloadProgress =
+    status.status === "downloading" || downloadComplete;
+  const progressKnown =
+    total > 0 && (status.progressKnown === true || downloadComplete);
+  const displayedDownloaded = downloadComplete ? total : downloaded;
+  const percentage = progressKnown
+    ? Math.min(100, Math.round((displayedDownloaded / total) * 100))
+    : 0;
+  const stages = [
+    ["downloaded", it.updateStageDownloaded],
+    ["verifying", it.updateStageVerifying],
+    ["backing-up", it.updateStageBackup],
+    ["installing", it.updateStageInstalling],
+    ["validating", it.updateStageValidating],
+    ["complete", it.updateStageComplete],
+  ];
   return (
     <div className="system-update-page">
       {!info?.updateAvailable &&
@@ -458,10 +462,14 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
         status.status === "failed" ||
         status.status === "complete") && (
         <section className="panel padded update-progress-card">
-          {status.status === "downloading" && (
+          {showDownloadProgress && (
             <div className="download-progress">
               <div className="download-progress-heading">
-                <strong>{it.updateDownloading}</strong>
+                <strong>
+                  {downloadComplete
+                    ? it.updateStageDownloaded
+                    : it.updateDownloading}
+                </strong>
                 <span>
                   {progressKnown ? `${percentage}%` : it.updateCalculating}
                 </span>
@@ -478,18 +486,20 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
               </div>
               <div className="download-progress-meta">
                 <span>
-                  {formatBytes(downloaded)} / {formatBytes(total)}
+                  {formatBytes(displayedDownloaded)} / {formatBytes(total)}
                 </span>
-                {Boolean(status.bytesPerSecond) && (
-                  <span>
-                    {it.updateSpeed}: {formatBytes(status.bytesPerSecond)}/s
-                  </span>
-                )}
-                {Boolean(status.etaSeconds) && (
-                  <span>
-                    {it.updateEta}: {status.etaSeconds}s
-                  </span>
-                )}
+                {status.status === "downloading" &&
+                  Boolean(status.bytesPerSecond) && (
+                    <span>
+                      {it.updateSpeed}: {formatBytes(status.bytesPerSecond)}/s
+                    </span>
+                  )}
+                {status.status === "downloading" &&
+                  Boolean(status.etaSeconds) && (
+                    <span>
+                      {it.updateEta}: {status.etaSeconds}s
+                    </span>
+                  )}
               </div>
             </div>
           )}

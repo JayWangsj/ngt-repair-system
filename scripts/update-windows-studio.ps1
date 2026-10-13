@@ -35,6 +35,10 @@ function ConvertTo-NgtProcessArgument([string]$Value) {
 
 $studioStopped = $false
 $currentStage = "checking"
+$totalBytes = [long]0
+$downloadedBytes = [long]0
+$bytesPerSecond = [long]0
+$etaSeconds = 0
 try {
   Write-NgtUpdateStatus "checking" "" @{ stage = $currentStage }
   $releaseOutput = & $githubCli release view --repo $repository --json "tagName,assets"
@@ -111,24 +115,24 @@ try {
   $downloadError = $downloadProcess.StandardError.ReadToEndAsync()
   while (-not $downloadProcess.WaitForExit(1000)) {
     $downloadProcess.Refresh()
-    $bytesDownloaded = [long](@(
+    $downloadedBytes = [long](@(
       Get-ChildItem -LiteralPath $downloadRoot -File -Force -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -ne $checksumAsset.name -and $_.Name -ne "download.error.log" } |
         Measure-Object -Property Length -Sum
     )[0].Sum)
     $elapsedSeconds = [Math]::Max(0.001, ((Get-Date) - $downloadStart).TotalSeconds)
-    $bytesPerSecond = [long]($bytesDownloaded / $elapsedSeconds)
-    $etaSeconds = if (($totalBytes -gt $bytesDownloaded) -and ($bytesPerSecond -gt 0)) {
-      [int][Math]::Ceiling(($totalBytes - $bytesDownloaded) / $bytesPerSecond)
+    $bytesPerSecond = [long]($downloadedBytes / $elapsedSeconds)
+    $etaSeconds = if (($totalBytes -gt $downloadedBytes) -and ($bytesPerSecond -gt 0)) {
+      [int][Math]::Ceiling(($totalBytes - $downloadedBytes) / $bytesPerSecond)
     } else { 0 }
     Write-NgtUpdateStatus "downloading" "" @{
       stage = $currentStage
       latestVersion = $latestTag
-      bytesDownloaded = $bytesDownloaded
+      bytesDownloaded = $downloadedBytes
       totalBytes = $totalBytes
       bytesPerSecond = $bytesPerSecond
       etaSeconds = $etaSeconds
-      progressKnown = (($totalBytes -gt 0) -and ($bytesDownloaded -gt 0))
+      progressKnown = (($totalBytes -gt 0) -and ($downloadedBytes -gt 0))
     }
   }
   $downloadProcess.WaitForExit()
@@ -187,13 +191,25 @@ try {
   }
 
   $currentStage = "backing-up"
-  Write-NgtUpdateStatus "backing-up" "" @{ stage = $currentStage; latestVersion = $latestTag }
+  Write-NgtUpdateStatus "backing-up" "" @{
+    stage = $currentStage
+    latestVersion = $latestTag
+    bytesDownloaded = $downloadedBytes
+    totalBytes = $totalBytes
+    progressKnown = ($totalBytes -gt 0)
+  }
   Stop-NgtStudioProcesses
   $studioStopped = $true
   $backupOutput = & (Join-Path $PSScriptRoot "backup-windows-studio.ps1") -LeaveStopped
   $backupOutput | Write-Output
   $currentStage = "installing"
-  Write-NgtUpdateStatus "installing" "" @{ stage = $currentStage; latestVersion = $latestTag }
+  Write-NgtUpdateStatus "installing" "" @{
+    stage = $currentStage
+    latestVersion = $latestTag
+    bytesDownloaded = $downloadedBytes
+    totalBytes = $totalBytes
+    progressKnown = ($totalBytes -gt 0)
+  }
   & (Join-Path $newReleaseRoot "scripts\install-windows-studio.ps1") `
     -DataRoot ([string]$config.dataRoot) `
     -InstallRoot $installRoot `
@@ -202,9 +218,21 @@ try {
     throw "New studio release installer failed."
   }
   $currentStage = "validating"
-  Write-NgtUpdateStatus "validating" "" @{ stage = $currentStage; latestVersion = $latestTag }
+  Write-NgtUpdateStatus "validating" "" @{
+    stage = $currentStage
+    latestVersion = $latestTag
+    bytesDownloaded = $downloadedBytes
+    totalBytes = $totalBytes
+    progressKnown = ($totalBytes -gt 0)
+  }
   Wait-NgtStudioHealth
-  Write-NgtUpdateStatus "complete" "" @{ stage = "complete"; latestVersion = $latestTag }
+  Write-NgtUpdateStatus "complete" "" @{
+    stage = "complete"
+    latestVersion = $latestTag
+    bytesDownloaded = $downloadedBytes
+    totalBytes = $totalBytes
+    progressKnown = ($totalBytes -gt 0)
+  }
   Write-Output "NGT studio updated: v$($currentRelease.version) -> $latestTag"
 } catch {
   $failure = $_.Exception.Message
@@ -216,6 +244,13 @@ try {
       $failure += " Previous release restart also failed: $($_.Exception.Message)"
     }
   }
-  Write-NgtUpdateStatus "failed" $failure @{ stage = $currentStage }
+  Write-NgtUpdateStatus "failed" $failure @{
+    stage = $currentStage
+    bytesDownloaded = $downloadedBytes
+    totalBytes = $totalBytes
+    bytesPerSecond = $bytesPerSecond
+    etaSeconds = $etaSeconds
+    progressKnown = (($totalBytes -gt 0) -and ($downloadedBytes -gt 0))
+  }
   throw "Studio update failed. $failure"
 }

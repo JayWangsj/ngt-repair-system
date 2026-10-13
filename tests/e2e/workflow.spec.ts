@@ -3816,26 +3816,37 @@ test("system update page checks a private release and shows real progress", asyn
   });
   await page.route("**/api/system-update/status", (route) => {
     statusPolls += 1;
-    return route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(
-        statusPolls === 1
+    const nextStatus =
+      statusPolls === 1
+        ? {
+            status: "downloading",
+            stage: "downloading",
+            bytesDownloaded: 120000000,
+            totalBytes: 240000000,
+            bytesPerSecond: 8000000,
+            etaSeconds: 15,
+            progressKnown: true,
+          }
+        : statusPolls === 2
           ? {
-              status: "downloading",
-              stage: "downloading",
-              bytesDownloaded: 120000000,
+              status: "verifying",
+              stage: "verifying",
+              bytesDownloaded: 240000000,
               totalBytes: 240000000,
-              bytesPerSecond: 8000000,
-              etaSeconds: 15,
               progressKnown: true,
             }
           : {
               status: "failed",
               stage: "verifying",
               message: "Aggiornamento di prova interrotto.",
-            },
-      ),
+              bytesDownloaded: 240000000,
+              totalBytes: 240000000,
+              progressKnown: true,
+            };
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(nextStatus),
     });
   });
 
@@ -3866,8 +3877,28 @@ test("system update page checks a private release and shows real progress", asyn
     "aria-valuenow",
     "50",
   );
+  await expect(
+    page
+      .locator(".update-stage-list li")
+      .filter({ hasText: "Download completato" }),
+  ).toHaveClass(/active/);
   await expect(page.locator(".download-progress-meta")).toContainText(
     "7.6 MB/s",
+  );
+  await expect(page.locator(".update-progress-track")).toHaveAttribute(
+    "aria-valuenow",
+    "100",
+  );
+  await expect(page.locator(".download-progress-heading")).toContainText(
+    "Download completato",
+  );
+  await expect(
+    page
+      .locator(".update-stage-list li")
+      .filter({ hasText: "Download completato" }),
+  ).toHaveClass(/complete/);
+  await expect(page.locator(".download-progress-meta")).not.toContainText(
+    "Velocità",
   );
   await expect(page.locator(".update-error")).toContainText(
     "Aggiornamento di prova interrotto.",

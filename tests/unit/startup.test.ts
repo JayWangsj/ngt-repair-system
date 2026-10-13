@@ -208,6 +208,7 @@ describe("Windows persistent startup", () => {
     expect(updater).toContain('Write-NgtUpdateStatus "downloading"');
     expect(updater).toContain("bytesDownloaded");
     expect(updater).toContain("bytesPerSecond");
+    expect(updater).toContain("bytesDownloaded = $downloadedBytes");
     expect(updater).toContain('Write-NgtUpdateStatus "verifying"');
     expect(updater).toContain('Write-NgtUpdateStatus "backing-up"');
     expect(updater).toContain('Write-NgtUpdateStatus "installing"');

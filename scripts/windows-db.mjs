@@ -33,6 +33,7 @@ const cache = join(
   tmpdir(),
   `ngt-pg-${createHash("sha256").update(process.cwd()).digest("hex").slice(0, 10)}`,
 );
+const runtime = /[^\x00-\x7F]/.test(native) ? join(cache, "runtime") : native;
 const configuredDataRoot = process.env.NGT_DATA_ROOT?.trim();
 const persistentRoot = configuredDataRoot
   ? resolve(configuredDataRoot)
@@ -59,17 +60,22 @@ try {
   );
 }
 await mkdir(cache, { recursive: true });
-try {
-  await access(join(cache, "runtime/bin/postgres.exe"));
-} catch {
-  await cp(native, join(cache, "runtime"), {
-    recursive: true,
-    dereference: true,
-  });
+if (runtime === native) {
+  console.log(`Using packaged PostgreSQL runtime at ${runtime}.`);
+} else {
+  console.log(`Preparing PostgreSQL runtime at ${runtime}.`);
+  try {
+    await access(join(runtime, "bin/postgres.exe"));
+  } catch {
+    await cp(native, runtime, {
+      recursive: true,
+      dereference: true,
+    });
+  }
 }
 function run(exe, args) {
   return new Promise((resolve, reject) => {
-    const child = spawn(join(cache, "runtime/bin", exe), args, {
+    const child = spawn(join(runtime, "bin", exe), args, {
       windowsHide: true,
       stdio: "pipe",
     });
@@ -120,6 +126,7 @@ if (!initialized) {
   const passwordFile = join(cache, "init-password");
   await writeFile(passwordFile, secrets.password);
   try {
+    console.log(`Initializing PostgreSQL data at ${initializingDataDir}.`);
     await run("initdb.exe", [
       "-D",
       initializingDataDir,
@@ -135,8 +142,9 @@ if (!initialized) {
     await unlink(passwordFile);
   }
 }
+console.log(`Starting PostgreSQL from ${runtime}.`);
 const postgres = spawn(
-  join(cache, "runtime/bin/postgres.exe"),
+  join(runtime, "bin/postgres.exe"),
   ["-D", dataDir, "-h", "127.0.0.1", "-p", "55432"],
   { windowsHide: true, stdio: ["ignore", "ignore", "pipe"] },
 );
@@ -189,10 +197,7 @@ try {
   if (e.code !== "EEXIST") throw e;
 }
 await writeFile(join(workspace, "database-location.txt"), dataDir);
-await writeFile(
-  join(workspace, "database-runtime-location.txt"),
-  join(cache, "runtime"),
-);
+await writeFile(join(workspace, "database-runtime-location.txt"), runtime);
 console.log("Business PostgreSQL ready on 127.0.0.1:55432.");
 async function stop() {
   await run("pg_ctl.exe", ["-D", dataDir, "-m", "fast", "stop"]);

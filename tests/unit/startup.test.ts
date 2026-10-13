@@ -107,6 +107,13 @@ describe("Windows persistent startup", () => {
       "utf8",
     );
     expect(database).toContain("process.env.NGT_DATA_ROOT");
+    expect(database).toContain(
+      'const runtime = /[^\\x00-\\x7F]/.test(native) ? join(cache, "runtime") : native;',
+    );
+    expect(database).toContain("Using packaged PostgreSQL runtime");
+    expect(database).toContain("Preparing PostgreSQL runtime");
+    expect(database).toContain("Initializing PostgreSQL data");
+    expect(database).toContain("Starting PostgreSQL from");
     expect(database).toContain("Preserved incomplete database");
     expect(database).toContain("initializingDataDir");
     expect(database).toContain("output.trim()");

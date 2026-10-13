@@ -10,6 +10,9 @@ export const statuses = [
   "CANCELLED",
 ] as const;
 export type OrderStatus = (typeof statuses)[number];
+export function isActiveOrderStatus(status: string) {
+  return !["COMPLETED", "REFUNDED", "CANCELLED"].includes(status);
+}
 export type StatusMutationSnapshot = {
   status: OrderStatus;
   due: number;

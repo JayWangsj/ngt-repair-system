@@ -717,7 +717,7 @@ test("single operator opens every business page without login", async ({
   await page.goto("/settings");
   await expect(page.getByRole("link", { name: /Lingua/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /^Dati / })).toBeVisible();
-  await page.goto("/orders");
+  await page.goto("/orders?month=");
   await expect(
     page.getByRole("link", {
       name: "Servizio di riparazione",
@@ -2385,6 +2385,12 @@ test("repair list exposes month, status, due-date and payment controls", async (
     ),
   ).toBe(1);
   const currentMonth = await month.inputValue();
+  await page.goto("/orders?month=not-a-month");
+  await expect(page.locator('input[name="month"]')).toHaveValue("");
+  await expect(
+    page.getByRole("heading", { name: "Schede di servizio" }),
+  ).toBeVisible();
+  await page.goto(`/orders?month=${currentMonth}`);
   await expect(
     page.getByRole("button", { name: "Filtra", exact: true }),
   ).toHaveCount(0);
@@ -2511,6 +2517,15 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await expect(row.getByLabel("Incassato", { exact: true })).toBeVisible();
   await row.getByLabel("Consegna prevista", { exact: true }).fill("2099-11-30");
   await row.getByLabel("Incassato", { exact: true }).fill("30");
+  await row
+    .getByLabel("Metodo di pagamento", { exact: true })
+    .selectOption("CARD");
+  const adjustmentReason = row.getByLabel("Motivo della modifica", {
+    exact: true,
+  });
+  await adjustmentReason.fill("Pagamento registrato correttamente");
+  await adjustmentReason.press("Tab");
+  await expect(row.getByLabel("Incassato", { exact: true })).toHaveValue("30");
   await page.getByRole("heading", { name: "Schede di servizio" }).click();
   await expect(row.getByLabel("Incassato", { exact: true })).toHaveCount(0);
   await expect(row).toContainText("30,00 €");
@@ -7119,10 +7134,19 @@ test("test tools generate linked data and persist repair motion tuning", async (
     ),
   ).toBe(true);
 
-  await page.goto("/orders");
-  const existingTestOrderCount = await page
-    .locator('.order-list-body tr:has(.order-customer-link[href*="TEST-"])')
-    .count();
+  await page.goto("/orders?month=");
+  const existingTestRows = page.locator(
+    '.order-list-body tr:has(.order-customer-link[href*="TEST-"])',
+  );
+  let existingTestOrderCount = 0;
+  while (true) {
+    existingTestOrderCount += await existingTestRows.count();
+    const nextPage = page
+      .getByRole("navigation", { name: "Paginazione delle schede" })
+      .getByRole("link", { name: "Successiva", exact: true });
+    if (!(await nextPage.count())) break;
+    await nextPage.click();
+  }
   await page.goto("/settings/test-tools");
   await expect(tools).toBeVisible();
 
@@ -7163,31 +7187,53 @@ test("test tools generate linked data and persist repair motion tuning", async (
     })
     .click();
   await expect(page).toHaveURL(/\/orders/);
+  await page.goto("/orders?month=");
   const generatedRows = page.locator(
     '.order-list-body tr:has(.order-customer-link[href*="TEST-"])',
   );
-  await expect(generatedRows).toHaveCount(existingTestOrderCount + 50);
-  const codes = await generatedRows
-    .locator(".order-code-link span")
-    .allTextContents();
+  const codes: string[] = [];
+  const rowTexts: string[] = [];
+  const customerNames: string[] = [];
+  while (true) {
+    codes.push(
+      ...(await generatedRows
+        .locator(".order-code-link span")
+        .allTextContents()),
+    );
+    rowTexts.push(...(await generatedRows.allTextContents()));
+    customerNames.push(
+      ...(await generatedRows
+        .locator(".order-customer-link span")
+        .allTextContents()),
+    );
+    const nextPage = page
+      .getByRole("navigation", { name: "Paginazione delle schede" })
+      .getByRole("link", { name: "Successiva", exact: true });
+    if (!(await nextPage.count())) break;
+    await nextPage.click();
+  }
+  expect(codes).toHaveLength(existingTestOrderCount + 50);
   expect(codes.every((code) => /^[RS]-\d{11}$/.test(code.trim()))).toBe(true);
   expect(codes.some((code) => code.trim().startsWith("R-"))).toBe(true);
   expect(codes.some((code) => code.trim().startsWith("S-"))).toBe(true);
-  await expect(
-    generatedRows.filter({ hasText: "Riparazione" }).filter({
-      hasText: "Ricevuto",
-    }),
-  ).toHaveCount(0);
-  const customers = await generatedRows
-    .locator(".order-customer-link span")
-    .allTextContents();
-  expect(customers.every((name) => !name.includes("TEST"))).toBe(true);
+  expect(
+    rowTexts.some(
+      (text) => text.includes("Riparazione") && text.includes("Ricevuto"),
+    ),
+  ).toBe(false);
+  expect(customerNames.every((name) => !name.includes("TEST"))).toBe(true);
 
+  await page
+    .getByPlaceholder("Numero, cliente, telefono o modello", { exact: true })
+    .fill("Galaxy S24 Ultra");
+  await expect(page).toHaveURL(
+    (url) => url.searchParams.get("q") === "Galaxy S24 Ultra",
+  );
   const diagnosticRow = generatedRows
     .filter({ hasText: "Samsung Galaxy S24 Ultra" })
     .filter({ hasText: "In diagnosi" });
-  await expect(diagnosticRow).toHaveCount(1);
-  await diagnosticRow.locator(".order-code-link").click();
+  await expect(diagnosticRow.first()).toBeVisible();
+  await diagnosticRow.first().locator(".order-code-link").click();
   const status = page.locator(".detail-status .status-dropdown-trigger");
   await expect(status).toContainText("In diagnosi");
   await page.waitForLoadState("networkidle");

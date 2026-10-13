@@ -9,6 +9,7 @@ import {
   cents,
   decimal,
   isOverdue,
+  isActiveOrderStatus,
   inventoryStatus,
   isDiagnosticFault,
   matchRule,
@@ -166,6 +167,12 @@ describe("quote matching", () => {
   });
 });
 describe("status and permissions", () => {
+  it("excludes refunded orders from active counts", () => {
+    expect(isActiveOrderStatus("READY")).toBe(true);
+    expect(isActiveOrderStatus("REFUNDED")).toBe(false);
+    expect(isActiveOrderStatus("COMPLETED")).toBe(false);
+    expect(isActiveOrderStatus("CANCELLED")).toBe(false);
+  });
   it("requires allowed transitions and terminal states remain closed", () => {
     expect(statuses).not.toContain("WAITING_APPROVAL");
     expect(() => assertTransition("RECEIVED", "COMPLETED")).toThrow();

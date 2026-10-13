@@ -28,11 +28,12 @@ type Result<Data = undefined> =
 async function execute<Work extends { id?: string } | void, Data = undefined>(
   work: () => Promise<Work>,
   select?: (result: Work) => Data,
-  revalidate = true,
+  revalidatePaths: string[] | false = ["/"],
 ): Promise<Result<Data>> {
   try {
     const result = await work();
-    if (revalidate) revalidatePath("/", "layout");
+    if (revalidatePaths)
+      for (const path of revalidatePaths) revalidatePath(path);
     return {
       ok: true,
       id: result?.id,
@@ -81,6 +82,12 @@ async function execute<Work extends { id?: string } | void, Data = undefined>(
     };
   }
 }
+function orderPaths(id?: string) {
+  return ["/", "/orders", ...(id ? [`/orders/${id}`] : [])];
+}
+const inventoryPaths = ["/", "/inventory", "/retail", "/orders"];
+const pricePaths = ["/", "/quotes", "/orders", "/orders/new"];
+const customerPaths = ["/", "/customers", "/orders", "/orders/new"];
 type StatusOrderRecord = WorkOrder & {
   items: WorkOrderItem[];
   products: WorkOrderProduct[];
@@ -108,68 +115,131 @@ function statusMutationSnapshot(
 }
 export async function createOrderAction(input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.createOrder(actor, input));
+  return execute(
+    () => service.createOrder(actor, input),
+    undefined,
+    orderPaths(),
+  );
 }
 export async function createQuickServiceOrderAction(input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.createQuickServiceOrder(actor, input));
+  return execute(
+    () => service.createQuickServiceOrder(actor, input),
+    undefined,
+    orderPaths(),
+  );
 }
 export async function updateBusinessClockAction(input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.updateBusinessClock(actor, input));
+  return execute(() => service.updateBusinessClock(actor, input), undefined, [
+    "/",
+    "/orders",
+  ]);
 }
 export async function updateOrderAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.updateOrder(actor, id, input));
+  return execute(
+    () => service.updateOrder(actor, id, input),
+    undefined,
+    orderPaths(id),
+  );
 }
 export async function updateDueDateAction(id: string, dueDate: string) {
   const actor = await requireActor();
-  return execute(() => service.updateDueDate(actor, id, dueDate));
+  return execute(
+    () => service.updateDueDate(actor, id, dueDate),
+    undefined,
+    orderPaths(id),
+  );
 }
 export async function quoteAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.replaceQuote(actor, id, input));
+  return execute(
+    () => service.replaceQuote(actor, id, input),
+    undefined,
+    orderPaths(id),
+  );
 }
 export async function completeInspectionAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.completeInspection(actor, id, input));
+  return execute(
+    () => service.completeInspection(actor, id, input),
+    undefined,
+    orderPaths(id),
+  );
 }
 export async function paymentAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.addPayment(actor, id, input));
+  return execute(
+    () => service.addPayment(actor, id, input),
+    undefined,
+    orderPaths(id),
+  );
 }
 export async function setPaidTotalAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.setPaidTotal(actor, id, input));
+  return execute(
+    () => service.setPaidTotal(actor, id, input),
+    undefined,
+    orderPaths(id),
+  );
 }
 export async function createProductAction(input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.createProduct(actor, input));
+  return execute(
+    () => service.createProduct(actor, input),
+    undefined,
+    inventoryPaths,
+  );
 }
 export async function adjustInventoryAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.adjustInventory(actor, id, input));
+  return execute(
+    () => service.adjustInventory(actor, id, input),
+    undefined,
+    inventoryPaths,
+  );
 }
 export async function updateProductAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.updateProduct(actor, id, input));
+  return execute(
+    () => service.updateProduct(actor, id, input),
+    undefined,
+    inventoryPaths,
+  );
 }
 export async function deleteProductsAction(ids: string[]) {
   const actor = await requireActor();
-  return execute(() => service.deleteProducts(actor, ids));
+  return execute(
+    () => service.deleteProducts(actor, ids),
+    undefined,
+    inventoryPaths,
+  );
 }
 export async function saveInventoryCategoryAction(input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.saveInventoryCategory(actor, input));
+  return execute(
+    () => service.saveInventoryCategory(actor, input),
+    undefined,
+    inventoryPaths,
+  );
 }
 export async function deleteInventoryCategoryAction(id: string) {
   const actor = await requireActor();
-  return execute(() => service.deleteInventoryCategory(actor, id));
+  return execute(
+    () => service.deleteInventoryCategory(actor, id),
+    undefined,
+    inventoryPaths,
+  );
 }
 
 export async function deleteDeviceCatalogOptionAction(input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.deleteDeviceCatalogOption(actor, input));
+  return execute(
+    () => service.deleteDeviceCatalogOption(actor, input),
+    undefined,
+    customerPaths,
+  );
 }
 export async function createRetailSaleAction(input: unknown) {
   const actor = await requireActor();
@@ -201,38 +271,69 @@ export async function createRetailSaleAction(input: unknown) {
         subtotal: cents(item.subtotal),
       })),
     }),
+    ["/", "/retail", "/retail/sales", "/inventory"],
   );
 }
 export async function deleteRetailSaleAction(id: string) {
   const actor = await requireActor();
-  return execute(() => service.deleteRetailSale(actor, id));
+  return execute(() => service.deleteRetailSale(actor, id), undefined, [
+    "/",
+    "/retail",
+    "/retail/sales",
+    `/retail/sales/${id}`,
+    "/inventory",
+  ]);
 }
 export async function saveQuickServiceAction(
   id: string | null,
   input: unknown,
 ) {
   const actor = await requireActor();
-  return execute(() => service.saveQuickService(actor, id, input));
+  return execute(() => service.saveQuickService(actor, id, input), undefined, [
+    "/",
+    "/retail",
+    "/orders/new",
+  ]);
 }
 export async function deleteQuickServiceAction(id: string) {
   const actor = await requireActor();
-  return execute(() => service.deleteQuickService(actor, id));
+  return execute(() => service.deleteQuickService(actor, id), undefined, [
+    "/",
+    "/retail",
+    "/orders/new",
+  ]);
 }
 export async function renameDeviceModelAction(input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.renameDeviceModel(actor, input));
+  return execute(
+    () => service.renameDeviceModel(actor, input),
+    undefined,
+    customerPaths,
+  );
 }
 export async function deleteWorkOrderAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.deleteWorkOrder(actor, id, input));
+  return execute(
+    () => service.deleteWorkOrder(actor, id, input),
+    undefined,
+    orderPaths(id),
+  );
 }
 export async function addWorkOrderProductAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.addWorkOrderProduct(actor, id, input));
+  return execute(
+    () => service.addWorkOrderProduct(actor, id, input),
+    undefined,
+    [...orderPaths(id), "/inventory"],
+  );
 }
 export async function removeWorkOrderProductAction(id: string, lineId: string) {
   const actor = await requireActor();
-  return execute(() => service.removeWorkOrderProduct(actor, id, lineId));
+  return execute(
+    () => service.removeWorkOrderProduct(actor, id, lineId),
+    undefined,
+    [...orderPaths(id), "/inventory"],
+  );
 }
 export async function checkoutWorkOrderAction(
   id: string,
@@ -243,7 +344,7 @@ export async function checkoutWorkOrderAction(
   return execute(
     () => service.checkoutWorkOrder(actor, id, input),
     statusMutationSnapshot,
-    revalidate,
+    revalidate ? [...orderPaths(id), "/inventory"] : false,
   );
 }
 export async function statusAction(
@@ -255,16 +356,24 @@ export async function statusAction(
   return execute(
     () => service.changeStatus(actor, id, input),
     statusMutationSnapshot,
-    revalidate,
+    revalidate ? [...orderPaths(id), "/inventory"] : false,
   );
 }
 export async function warrantyAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.updateWarranty(actor, id, input));
+  return execute(
+    () => service.updateWarranty(actor, id, input),
+    undefined,
+    orderPaths(id),
+  );
 }
 export async function afterSalesAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.openAfterSales(actor, id, input));
+  return execute(
+    () => service.openAfterSales(actor, id, input),
+    undefined,
+    orderPaths(id),
+  );
 }
 export async function updateReworkPartAction(
   id: string,
@@ -272,19 +381,35 @@ export async function updateReworkPartAction(
   input: unknown,
 ) {
   const actor = await requireActor();
-  return execute(() => service.updateReworkPart(actor, id, itemId, input));
+  return execute(
+    () => service.updateReworkPart(actor, id, itemId, input),
+    undefined,
+    orderPaths(id),
+  );
 }
 export async function refundAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.refundOrder(actor, id, input));
+  return execute(
+    () => service.refundOrder(actor, id, input),
+    undefined,
+    orderPaths(id),
+  );
 }
 export async function ruleAction(id: string | null, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.savePriceRule(actor, id, input));
+  return execute(
+    () => service.savePriceRule(actor, id, input),
+    undefined,
+    pricePaths,
+  );
 }
 export async function updatePriceRuleFieldsAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.updatePriceRuleFields(actor, id, input));
+  return execute(
+    () => service.updatePriceRuleFields(actor, id, input),
+    undefined,
+    pricePaths,
+  );
 }
 
 export async function lookupCustomerAction(phone: string) {
@@ -324,55 +449,115 @@ export async function lookupCustomerAction(phone: string) {
 
 export async function customerAction(id: string | null, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.saveCustomer(actor, id, input));
+  return execute(
+    () => service.saveCustomer(actor, id, input),
+    undefined,
+    customerPaths,
+  );
 }
 export async function deleteCustomerAction(id: string) {
   const actor = await requireActor();
-  return execute(() => service.deleteCustomer(actor, id));
+  return execute(
+    () => service.deleteCustomer(actor, id),
+    undefined,
+    customerPaths,
+  );
 }
 export async function deleteCustomersAction(ids: string[]) {
   const actor = await requireActor();
-  return execute(() => service.deleteCustomers(actor, ids));
+  return execute(
+    () => service.deleteCustomers(actor, ids),
+    undefined,
+    customerPaths,
+  );
 }
 export async function deviceAction(id: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.saveDevice(actor, id, input));
+  return execute(
+    () => service.saveDevice(actor, id, input),
+    undefined,
+    customerPaths,
+  );
 }
 export async function createDeviceAction(customerId: string, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.createDevice(actor, customerId, input));
+  return execute(
+    () => service.createDevice(actor, customerId, input),
+    undefined,
+    customerPaths,
+  );
 }
 export async function deleteDeviceAction(id: string) {
   const actor = await requireActor();
-  return execute(() => service.deleteDevice(actor, id));
+  return execute(
+    () => service.deleteDevice(actor, id),
+    undefined,
+    customerPaths,
+  );
 }
 export async function deleteRulesAction(ids: string[]) {
   const actor = await requireActor();
-  return execute(() => service.deletePriceRules(actor, ids));
+  return execute(
+    () => service.deletePriceRules(actor, ids),
+    undefined,
+    pricePaths,
+  );
 }
 export async function hideFaultAction(category: string, name: string) {
   const actor = await requireActor();
-  return execute(() => service.hideFault(actor, category, name));
+  return execute(() => service.hideFault(actor, category, name), undefined, [
+    "/",
+    "/settings",
+    "/orders/new",
+    "/orders",
+  ]);
 }
 export async function saveFaultAction(id: string | null, input: unknown) {
   const actor = await requireActor();
-  return execute(() => service.saveFault(actor, id, input));
+  return execute(() => service.saveFault(actor, id, input), undefined, [
+    "/",
+    "/settings",
+    "/orders/new",
+    "/orders",
+  ]);
 }
 export async function deleteFaultAction(id: string) {
   const actor = await requireActor();
-  return execute(() => service.deleteFault(actor, id));
+  return execute(() => service.deleteFault(actor, id), undefined, [
+    "/",
+    "/settings",
+    "/orders/new",
+    "/orders",
+  ]);
 }
 export async function reorderFaultsAction(category: string, ids: string[]) {
   const actor = await requireActor();
-  return execute(() => service.reorderFaults(actor, category, ids));
+  return execute(() => service.reorderFaults(actor, category, ids), undefined, [
+    "/",
+    "/settings",
+    "/orders/new",
+    "/orders",
+  ]);
 }
 export async function restoreFaultAction(category: string, name: string) {
   const actor = await requireActor();
-  return execute(() => service.restoreFault(actor, category, name));
+  return execute(() => service.restoreFault(actor, category, name), undefined, [
+    "/",
+    "/settings",
+    "/orders/new",
+    "/orders",
+  ]);
 }
 export async function clearDataAction() {
   const actor = await requireActor();
-  return execute(() => clearBusinessData(actor));
+  return execute(() => clearBusinessData(actor), undefined, [
+    "/",
+    "/orders",
+    "/customers",
+    "/inventory",
+    "/retail",
+    "/quotes",
+  ]);
 }
 
 export async function generateTestDataAction(count: 10 | 50 | 100) {
@@ -396,5 +581,6 @@ export async function generateTestDataAction(count: 10 | 50 | 100) {
       quickServices,
       retailSales,
     }),
+    ["/", "/orders", "/customers", "/inventory", "/retail", "/quotes"],
   );
 }

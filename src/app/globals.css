@@ -1005,6 +1005,19 @@ td small {
   margin: 26px 0 20px;
   flex-wrap: wrap;
 }
+.order-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0 28px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.order-pagination > div {
+  display: flex;
+  gap: 8px;
+}
 .grow {
   flex: 1 1 360px;
   min-width: 260px;
@@ -8508,6 +8521,17 @@ summary.record-icon::-webkit-details-marker {
   min-height: 30px;
   padding: 4px 6px;
   text-align: right;
+}
+.order-payment-adjustment {
+  display: grid;
+  gap: 4px;
+}
+.order-payment-adjustment input,
+.order-payment-adjustment select {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  padding: 4px 6px;
 }
 .order-balance-value {
   color: var(--muted);

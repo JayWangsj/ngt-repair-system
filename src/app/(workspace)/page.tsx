@@ -16,7 +16,7 @@ import {
   dateTime,
   balance,
   cents,
-  isOverdue,
+  isActiveOrderStatus,
   money,
   orderCode,
   romeDay,
@@ -32,7 +32,11 @@ import { getLocale, getMessages } from "@/lib/i18n-server";
 import { Badge, PageHeader } from "@/components/common";
 import { requireActor } from "@/lib/session";
 import { DashboardMotion } from "@/components/dashboard-motion";
-import { getBusinessDay } from "@/lib/business-date";
+import {
+  getBusinessDay,
+  romeDateRange,
+  validBusinessDate,
+} from "@/lib/business-date";
 import { DashboardStatsDialog } from "@/components/dashboard-stats-dialog";
 import { DatePicker } from "@/components/business-select";
 
@@ -46,6 +50,12 @@ function revenueTrend(current: number, previous: number) {
   return { change, label: `${change >= 0 ? "+" : ""}${change}%` };
 }
 
+function nextRomeDay(day: string) {
+  const next = new Date(`${day}T12:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next.toISOString().slice(0, 10);
+}
+
 export default async function Dashboard({
   searchParams,
 }: {
@@ -55,49 +65,109 @@ export default async function Dashboard({
   const locale = await getLocale();
   const actor = await requireActor();
   const businessToday = await getBusinessDay();
-  const [orders, payments, products, sales, saleItems] = await Promise.all([
-    db.workOrder.findMany({
-      include: {
-        device: { include: { customer: true } },
-        items: true,
-        products: true,
-        payments: true,
-      },
-      orderBy: { createdAt: "desc" },
-    }),
-    db.payment.findMany({
-      include: { allocations: true },
-      orderBy: { receivedAt: "asc" },
-    }),
-    db.product.findMany({ where: { enabled: true } }),
-    db.retailSale.findMany({ orderBy: { createdAt: "desc" }, take: 5 }),
-    db.retailSaleItem.findMany({ include: { sale: true } }),
-  ]);
   const query = await searchParams;
   const requestedDay = query.day;
   const today =
-    requestedDay && /^\d{4}-\d{2}-\d{2}$/.test(requestedDay)
+    requestedDay && validBusinessDate(requestedDay)
       ? requestedDay
       : businessToday;
-  const active = orders.filter(
-    (order) => !["COMPLETED", "CANCELLED"].includes(order.status),
+  const todayRange = romeDateRange(today, nextRomeDay(today));
+  const weekRange = romeDateRange(
+    recentRomeDays(today, 7)[0],
+    nextRomeDay(today),
   );
-  const overdue = active.filter((order) => isOverdue(order, businessToday));
-  const lowStock = products.filter(
-    (product) =>
-      product.stockQuantity > 0 && product.stockQuantity <= product.minStock,
+  const closedStatuses = ["COMPLETED", "CANCELLED", "REFUNDED"] as const;
+  const [
+    orderStatusRows,
+    activeOrders,
+    todayOrderCount,
+    overdueCount,
+    stockLevels,
+    payments,
+    sales,
+    saleItems,
+    recentOrders,
+  ] = await Promise.all([
+    db.workOrder.groupBy({ by: ["status"], _count: { _all: true } }),
+    db.workOrder.findMany({
+      where: { status: { notIn: [...closedStatuses] } },
+      select: {
+        status: true,
+        orderDiscount: true,
+        includeVat: true,
+        inspectionFee: true,
+        afterSalesFee: true,
+        items: { select: { final: true, discount: true } },
+        products: {
+          select: { unitPrice: true, discount: true, quantity: true },
+        },
+        payments: { select: { amount: true } },
+      },
+    }),
+    db.workOrder.count({ where: { createdAt: todayRange } }),
+    db.workOrder.count({
+      where: {
+        status: { notIn: [...closedStatuses] },
+        dueDate: { lt: businessToday },
+      },
+    }),
+    db.product.findMany({
+      where: { enabled: true },
+      select: { stockQuantity: true, minStock: true },
+    }),
+    db.payment.findMany({
+      where: { receivedAt: weekRange },
+      include: { allocations: true },
+      orderBy: { receivedAt: "asc" },
+    }),
+    db.retailSale.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: { id: true, code: true, createdAt: true, total: true },
+    }),
+    db.retailSaleItem.findMany({
+      where: { sale: { createdAt: todayRange } },
+      include: { sale: true },
+    }),
+    db.workOrder.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: {
+        id: true,
+        code: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        device: { select: { brand: true, model: true } },
+      },
+    }),
+  ]);
+  const statusCounts = new Map(
+    orderStatusRows.map((row) => [row.status, row._count._all]),
   );
-  const outOfStock = products.filter((product) => product.stockQuantity <= 0);
-  const todayRevenue = summarizePayments(payments, today);
-  const unpaid = orders.filter(
-    (order) =>
-      order.status !== "CANCELLED" &&
-      balance(order.items, order.payments, order) > 0,
-  );
-  const openBalance = unpaid.reduce(
-    (sum, order) => sum + balance(order.items, order.payments, order),
+  const countStatus = (status: (typeof statuses)[number]) =>
+    statusCounts.get(status) ?? 0;
+  const totalOrderCount = orderStatusRows.reduce(
+    (sum, row) => sum + row._count._all,
     0,
   );
+  const activeCount = orderStatusRows.reduce(
+    (sum, row) => sum + (isActiveOrderStatus(row.status) ? row._count._all : 0),
+    0,
+  );
+  const lowStockCount = stockLevels.filter(
+    (product) =>
+      product.stockQuantity > 0 && product.stockQuantity <= product.minStock,
+  ).length;
+  const outOfStockCount = stockLevels.filter(
+    (product) => product.stockQuantity <= 0,
+  ).length;
+  const openBalance = activeOrders.reduce(
+    (sum, order) =>
+      sum + Math.max(0, balance(order.items, order.payments, order)),
+    0,
+  );
+  const todayRevenue = summarizePayments(payments, today);
   const yesterdayRevenue = summarizePayments(
     payments,
     recentRomeDays(today, 2)[0],
@@ -136,8 +206,8 @@ export default async function Dashboard({
   const metrics = [
     {
       label: it.active,
-      value: active.length,
-      count: active.length,
+      value: activeCount,
+      count: activeCount,
       type: "integer",
       icon: Wrench,
       color: "teal",
@@ -145,8 +215,8 @@ export default async function Dashboard({
     },
     {
       label: it.ready,
-      value: active.filter((order) => order.status === "READY").length,
-      count: active.filter((order) => order.status === "READY").length,
+      value: countStatus("READY"),
+      count: countStatus("READY"),
       type: "integer",
       icon: PackageCheck,
       color: "blue",
@@ -154,8 +224,8 @@ export default async function Dashboard({
     },
     {
       label: it.overdue,
-      value: overdue.length,
-      count: overdue.length,
+      value: overdueCount,
+      count: overdueCount,
       type: "integer",
       icon: Clock3,
       color: "orange",
@@ -215,8 +285,8 @@ export default async function Dashboard({
       quickService,
     ]),
     methods: todayRevenue.methods,
-    attention: [overdue.length, lowStock.length, outOfStock.length],
-    recent: [orders[0]?.updatedAt, sales[0]?.createdAt],
+    attention: [overdueCount, lowStockCount, outOfStockCount],
+    recent: [recentOrders[0]?.updatedAt, sales[0]?.createdAt],
   });
 
   return (
@@ -502,13 +572,7 @@ export default async function Dashboard({
                   </div>
                   <div className="metric">
                     <span>{it.createdOnDay}</span>
-                    <strong>
-                      {
-                        orders.filter(
-                          (order) => romeDay(order.createdAt) === today,
-                        ).length
-                      }
-                    </strong>
+                    <strong>{todayOrderCount}</strong>
                   </div>
                   <div className="metric">
                     <span>{it.openBalance}</span>
@@ -538,12 +602,7 @@ export default async function Dashboard({
                     {statuses.map((status) => (
                       <div className="stat-row" key={status}>
                         <span>{it.status[status]}</span>
-                        <strong>
-                          {
-                            orders.filter((order) => order.status === status)
-                              .length
-                          }
-                        </strong>
+                        <strong>{countStatus(status)}</strong>
                       </div>
                     ))}
                   </section>
@@ -558,16 +617,14 @@ export default async function Dashboard({
         <div className="section-heading">
           <h2>{it.workflow}</h2>
           <span className="muted">
-            {orders.length} {it.nav.orders.toLowerCase()}
+            {totalOrderCount} {it.nav.orders.toLowerCase()}
           </span>
         </div>
         <div className="workflow">
           {statuses.map((status) => (
             <Link href={`/orders?status=${status}`} key={status}>
               <span className={`status-dot status-${status.toLowerCase()}`} />
-              <strong>
-                {orders.filter((order) => order.status === status).length}
-              </strong>
+              <strong>{countStatus(status)}</strong>
               <span>{it.status[status]}</span>
             </Link>
           ))}
@@ -579,22 +636,22 @@ export default async function Dashboard({
           <div className="section-heading">
             <h2>{it.priorities}</h2>
           </div>
-          {overdue.length + lowStock.length + outOfStock.length ? (
+          {overdueCount + lowStockCount + outOfStockCount ? (
             <>
               <Link href="/orders?attention=overdue">
                 <Clock3 size={18} />
                 <span>{it.overdue}</span>
-                <strong>{overdue.length}</strong>
+                <strong>{overdueCount}</strong>
               </Link>
               <Link href="/inventory?status=LOW_STOCK">
                 <AlertTriangle size={18} />
                 <span>{it.dashboard.lowStock}</span>
-                <strong>{lowStock.length}</strong>
+                <strong>{lowStockCount}</strong>
               </Link>
               <Link href="/inventory?status=OUT_OF_STOCK">
                 <ShoppingBag size={18} />
                 <span>{it.dashboard.outOfStock}</span>
-                <strong>{outOfStock.length}</strong>
+                <strong>{outOfStockCount}</strong>
               </Link>
             </>
           ) : (
@@ -613,7 +670,7 @@ export default async function Dashboard({
               <ChevronRight size={15} aria-hidden="true" />
             </Link>
           </div>
-          {orders.slice(0, 5).map((order) => (
+          {recentOrders.map((order) => (
             <Link
               className="dashboard-list-row"
               href={`/orders/${order.id}`}
@@ -628,7 +685,7 @@ export default async function Dashboard({
               <Badge status={order.status} />
             </Link>
           ))}
-          {!orders.length && (
+          {!totalOrderCount && (
             <p className="dashboard-empty">
               <Inbox size={18} />
               {it.empty}

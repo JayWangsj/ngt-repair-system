@@ -17,6 +17,25 @@ export function validBusinessDate(value: string) {
   );
 }
 
+export function romeDateRange(startDay: string, endDayExclusive: string) {
+  const boundary = (day: string) => {
+    const utcMidnight = new Date(`${day}T00:00:00Z`);
+    const offset = new Intl.DateTimeFormat("en", {
+      timeZone: "Europe/Rome",
+      timeZoneName: "longOffset",
+    })
+      .formatToParts(utcMidnight)
+      .find((part) => part.type === "timeZoneName")?.value;
+    const match = /GMT(?:(\+|-)(\d{1,2})(?::(\d{2}))?)?/.exec(offset ?? "");
+    const minutes = match?.[1]
+      ? (Number(match[2]) * 60 + Number(match[3] ?? 0)) *
+        (match[1] === "+" ? 1 : -1)
+      : 0;
+    return new Date(utcMidnight.getTime() - minutes * 60_000);
+  };
+  return { gte: boundary(startDay), lt: boundary(endDayExclusive) };
+}
+
 export function resolveBusinessDay(
   clock: { mode: string; manualDate: string | null } | null,
   systemDate = new Date(),

@@ -36,7 +36,7 @@ function Start-NgtProcess([string]$Name, [string]$Script, [int]$Port) {
 
 while ($true) {
   try {
-    Start-NgtProcess -Name "test-database" -Script "scripts/windows-test-db.mjs" -Port 55433
+    Start-NgtProcess -Name "test-database" -Script "scripts/windows-test-db.mjs" -Port 55510
     $environmentFile = Join-Path $stateDirectory "test.env"
     if (-not (Test-Path -LiteralPath $environmentFile)) {
       throw "Missing .local/test.env."

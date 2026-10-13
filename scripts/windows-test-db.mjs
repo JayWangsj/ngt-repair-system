@@ -86,7 +86,7 @@ try {
 }
 const postgres = spawn(
   join(cache, "runtime/bin/postgres.exe"),
-  ["-D", dataDir, "-h", "127.0.0.1", "-p", "55433"],
+  ["-D", dataDir, "-h", "127.0.0.1", "-p", "55510"],
   { windowsHide: true, stdio: ["ignore", "ignore", "pipe"] },
 );
 postgres.on("error", (error) => {
@@ -100,7 +100,7 @@ postgres.stderr.on("data", (chunk) => {
 postgres.on("exit", (code) => {
   if (!ready || code) process.exit(code || 1);
 });
-const connection = `postgresql://ngt:${secrets.password}@127.0.0.1:55433/`;
+const connection = `postgresql://ngt:${secrets.password}@127.0.0.1:55510/`;
 for (let attempt = 0; attempt < 100; attempt++) {
   const client = new Client({ connectionString: `${connection}postgres` });
   try {
@@ -126,7 +126,7 @@ await writeFile(
   `DATABASE_URL="${connection}ngt_test?schema=public"\nAUTH_SECRET="${secrets.authSecret}"\nAUTH_URL="http://127.0.0.1:3236"\nAUTH_TRUST_HOST="true"\n`,
 );
 await writeFile(join(workspace, "test-database-location.txt"), cache);
-console.log("Isolated ngt_test ready on 127.0.0.1:55433.");
+console.log("Isolated ngt_test ready on 127.0.0.1:55510.");
 async function stop() {
   await run("pg_ctl.exe", ["-D", dataDir, "-m", "fast", "stop"]);
   process.exit(0);

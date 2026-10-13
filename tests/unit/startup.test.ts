@@ -62,10 +62,10 @@ describe("Windows persistent startup", () => {
     );
     expect(service).toContain('"test.env"');
     expect(service).toContain('$env:PORT = "3236"');
-    expect(service).toContain('"scripts/windows-test-db.mjs" -Port 55433');
+    expect(service).toContain('"scripts/windows-test-db.mjs" -Port 55510');
     expect(service).toContain('"scripts/start.mjs" -Port 3236');
     expect(testDatabase).toContain('"CREATE DATABASE ngt_test"');
-    expect(testDatabase).toContain('"55433"');
+    expect(testDatabase).toContain('"55510"');
     expect(testDatabase).not.toContain('CREATE DATABASE ngt"');
     expect(installer).toContain('$taskName = "NGT Test Preview"');
     expect(installer).toContain(

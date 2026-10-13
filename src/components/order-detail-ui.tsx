@@ -299,12 +299,16 @@ export function AfterSalesActions({
   originalProjects,
   products,
   productCategories,
+  device,
+  catalogDeletions = [],
 }: {
   orderId: string;
   received: number;
   originalProjects: AfterSalesProject[];
   products: import("./forms").CreatedProduct[];
   productCategories: import("./forms").CategoryView[];
+  device: { category: string; brand: string; model: string };
+  catalogDeletions?: import("./forms").DeviceCatalogDeletionView[];
 }) {
   const it = useMessages();
   const [dialog, setDialog] = useState<"rework" | "refund" | null>(null);
@@ -334,6 +338,8 @@ export function AfterSalesActions({
             originalProjects={originalProjects}
             products={products}
             productCategories={productCategories}
+            device={device}
+            catalogDeletions={catalogDeletions}
             onSuccess={() => setDialog(null)}
           />
         </FormDialog>

@@ -1,7 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { modelKey, normalizeDeviceModel, normalizeModel } from "@/lib/catalog";
+import {
+  modelKey,
+  normalizeBrand,
+  normalizeDeviceModel,
+  normalizeModel,
+} from "@/lib/catalog";
 
 describe("model normalization", () => {
+  it("preserves catalog casing for lowercase brand names", () => {
+    expect(normalizeBrand("VIVO")).toBe("vivo");
+    expect(normalizeBrand("Realme")).toBe("realme");
+  });
   it("prefers the current brand catalog display name", () => {
     expect(normalizeModel("galaxy-a17", ["Galaxy A17"])).toBe("Galaxy A17");
     expect(modelKey("Pixel 9 Pro")).toBe(modelKey("pixel-9pro"));

@@ -97,6 +97,7 @@ export default async function Detail({
     faultOptions,
     productCategories,
     reservations,
+    catalogDeletions,
   ] = await Promise.all([
     db.priceRule.findMany({ where: { enabled: true } }),
     db.product.findMany({
@@ -139,6 +140,9 @@ export default async function Detail({
         },
       },
       _sum: { quantity: true },
+    }),
+    db.deviceCatalogDeletion.findMany({
+      select: { category: true, kind: true, brand: true, value: true },
     }),
   ]);
   const repairProducts = products.filter(
@@ -681,6 +685,7 @@ export default async function Detail({
                     ),
                   }))}
                   productCategories={productCategories}
+                  catalogDeletions={catalogDeletions}
                 />
               ) : null
             }
@@ -821,6 +826,7 @@ export default async function Detail({
                     ),
                   }))}
                   productCategories={productCategories}
+                  catalogDeletions={catalogDeletions}
                 />
               ) : undefined
             }
@@ -887,6 +893,7 @@ export default async function Detail({
                     ),
                   }))}
                   productCategories={productCategories}
+                  catalogDeletions={catalogDeletions}
                 />
               </div>
             ) : (
@@ -967,6 +974,13 @@ export default async function Detail({
                             ),
                           }))}
                           productCategories={productCategories}
+                          device={{
+                            category: order.device.category,
+                            brand: order.device.brand,
+                            model: order.device.model,
+                          }}
+                          project={item.project}
+                          catalogDeletions={catalogDeletions}
                         />
                       </div>
                     )}
@@ -1105,6 +1119,12 @@ export default async function Detail({
                 ),
               }))}
               productCategories={productCategories}
+              device={{
+                category: order.device.category,
+                brand: order.device.brand,
+                model: order.device.model,
+              }}
+              catalogDeletions={catalogDeletions}
             />
           )}
         </div>

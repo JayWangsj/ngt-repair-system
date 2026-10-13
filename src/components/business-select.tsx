@@ -94,6 +94,7 @@ export function SelectDropdown({
   middleControl,
   creationControls = "always",
   preserveQueryOnClose = false,
+  commitEmptyOnClose = false,
   clearable = false,
   loading = false,
   showEmptyPanel = true,
@@ -123,6 +124,7 @@ export function SelectDropdown({
   middleControl?: ReactNode;
   creationControls?: "always" | "no-match";
   preserveQueryOnClose?: boolean;
+  commitEmptyOnClose?: boolean;
   clearable?: boolean;
   loading?: boolean;
   showEmptyPanel?: boolean;
@@ -186,7 +188,10 @@ export function SelectDropdown({
       focus = false,
       commit = true,
     }: { focus?: boolean; commit?: boolean } = {}) => {
-      if (commit && searchable && query.trim()) onCommit?.(query.trim());
+      if (commit && searchable) {
+        if (query.trim()) onCommit?.(query.trim());
+        else if (commitEmptyOnClose && open) onChange?.("");
+      }
       setOpen(false);
       if (!preserveQueryOnClose) setQuery("");
       setActive(0);
@@ -198,7 +203,16 @@ export function SelectDropdown({
           focusComfortably(searchable ? search.current : simpleTrigger.current),
         );
     },
-    [onClose, onCommit, preserveQueryOnClose, query, searchable],
+    [
+      commitEmptyOnClose,
+      onChange,
+      onClose,
+      onCommit,
+      open,
+      preserveQueryOnClose,
+      query,
+      searchable,
+    ],
   );
   function openDropdown() {
     const element = trigger.current;
@@ -245,10 +259,18 @@ export function SelectDropdown({
     }
     if (event.key === "Escape") {
       event.preventDefault();
-      close({ focus: true });
+      close({ focus: true, commit: !commitEmptyOnClose });
     } else if (event.key === "ArrowDown") move(event, 1);
     else if (event.key === "ArrowUp") move(event, -1);
-    else if (event.key === "Enter" && visible[active]) {
+    else if (
+      event.key === "Enter" &&
+      searchable &&
+      !trimmedQuery &&
+      commitEmptyOnClose
+    ) {
+      onChange?.("");
+      close({ commit: false });
+    } else if (event.key === "Enter" && visible[active]) {
       choose(visible[active]);
     } else if (
       event.key === "Enter" &&
@@ -386,6 +408,8 @@ export function SelectDropdown({
                 onQueryChange?.(next);
                 if (next.trim()) {
                   if (!open) openDropdown();
+                } else if (commitEmptyOnClose && open) {
+                  setOpen(true);
                 } else {
                   setInternalValue("");
                   setOpen(false);
@@ -404,11 +428,17 @@ export function SelectDropdown({
                 onClick={(event) => {
                   event.stopPropagation();
                   setQuery("");
-                  setInternalValue("");
                   setActive(0);
+                  onQueryChange?.("");
+                  if (commitEmptyOnClose && open) {
+                    requestAnimationFrame(() =>
+                      focusComfortably(search.current),
+                    );
+                    return;
+                  }
+                  setInternalValue("");
                   setOpen(false);
                   setPresent(false);
-                  onQueryChange?.("");
                   onChange?.("");
                   requestAnimationFrame(() => focusComfortably(search.current));
                 }}

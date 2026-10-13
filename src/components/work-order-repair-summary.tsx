@@ -7,6 +7,7 @@ import {
   ItemsEditor,
   QuoteItemsDraftForm,
   type CategoryView,
+  type DeviceCatalogDeletionView,
   type ItemView,
   type RuleView,
 } from "./forms";
@@ -58,6 +59,7 @@ export function WorkOrderRepairSummary({
   initialDiscount,
   initialVat,
   locked,
+  catalogDeletions = [],
 }: {
   orderId: string;
   items: SummaryItem[];
@@ -70,6 +72,7 @@ export function WorkOrderRepairSummary({
   inspectionFee: string;
   owner: boolean;
   locked: boolean;
+  catalogDeletions?: DeviceCatalogDeletionView[];
 }) {
   const it = useMessages();
   const cardEdit = useOrderDetailEdit();
@@ -107,6 +110,7 @@ export function WorkOrderRepairSummary({
         focusedEdit
         showEmptyPartSummary
         onFocusedEditComplete={cardEdit?.clearTarget}
+        catalogDeletions={catalogDeletions}
       />
     </div>
   );

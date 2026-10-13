@@ -9,10 +9,16 @@ export const categories = {
   OTHER: ["Altro", "其他设备"],
 } as const;
 export type Category = keyof typeof categories;
-export function normalizeBrand(value: string) {
+export function normalizeBrand(
+  value: string,
+  catalog: string[] = Object.values(brands).flat(),
+) {
   const brand = value.trim().replace(/\s+/g, " ");
-  if (/^apple$/i.test(brand)) return "Apple";
-  if (/^samsung$/i.test(brand)) return "Samsung";
+  const exact = catalog.find(
+    (candidate) =>
+      candidate.toLocaleLowerCase("it") === brand.toLocaleLowerCase("it"),
+  );
+  if (exact) return exact;
   return brand ? brand[0].toLocaleUpperCase("it") + brand.slice(1) : "";
 }
 export function modelKey(value: string) {

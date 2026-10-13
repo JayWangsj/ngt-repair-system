@@ -75,6 +75,7 @@ import {
   models,
   faultPresets,
   type Category,
+  modelKey,
   normalizeBrand,
   normalizeDeviceModel,
 } from "@/lib/catalog";
@@ -116,6 +117,7 @@ import {
   refundAction,
   createProductAction,
   deleteInventoryCategoryAction,
+  deleteDeviceCatalogOptionAction,
 } from "@/app/actions";
 import {
   focusComfortably,
@@ -378,90 +380,170 @@ export type ProductCompatibilityDraft = {
   project: string;
 };
 
+export type DeviceCatalogDeletionView = {
+  category: string;
+  kind: string;
+  brand: string;
+  value: string;
+};
+
 export function ProductCompatibilityFields({
   value,
   onChange,
+  options = [],
+  deletions = [],
+  onDelete,
 }: {
   value: ProductCompatibilityDraft[];
   onChange: (value: ProductCompatibilityDraft[]) => void;
+  options?: ProductCompatibilityDraft[];
+  deletions?: DeviceCatalogDeletionView[];
+  onDelete?: (
+    kind: "BRAND" | "MODEL",
+    entry: ProductCompatibilityDraft,
+    value: string,
+  ) => void | Promise<void>;
 }) {
   const it = useMessages();
   const { locale } = useLanguage();
+  const hidden = (
+    kind: "BRAND" | "MODEL",
+    entry: ProductCompatibilityDraft,
+    candidate: string,
+  ) =>
+    deletions.some(
+      (deletion) =>
+        deletion.category === entry.category &&
+        deletion.kind === kind &&
+        (kind === "BRAND" ||
+          deletion.brand.toLocaleLowerCase("it") ===
+            entry.brand.toLocaleLowerCase("it")) &&
+        deletion.value.toLocaleLowerCase("it") ===
+          candidate.toLocaleLowerCase("it"),
+    );
   return (
     <fieldset className="product-compatibility-editor">
       <legend>{it.inventory.compatibleDevices}</legend>
-      {value.map((entry, index) => (
-        <div className="product-compatibility-row" key={index}>
-          <SimpleSelect
-            value={entry.category}
-            onChange={(category) =>
-              onChange(
-                value.map((item, position) =>
-                  position === index ? { ...item, category } : item,
-                ),
-              )
-            }
-            placeholder={it.deviceType}
-            ariaLabel={it.deviceType}
-            options={Object.entries(categories).map(([category, labels]) => ({
-              value: category,
-              label: labels[locale === "zh" ? 1 : 0],
-            }))}
-          />
-          <input
-            aria-label={it.brand}
-            placeholder={it.brand}
-            value={entry.brand}
-            onChange={(event) =>
-              onChange(
-                value.map((item, position) =>
-                  position === index
-                    ? { ...item, brand: event.target.value }
-                    : item,
-                ),
-              )
-            }
-          />
-          <input
-            aria-label={it.model}
-            placeholder={it.model}
-            value={entry.model}
-            onChange={(event) =>
-              onChange(
-                value.map((item, position) =>
-                  position === index
-                    ? { ...item, model: event.target.value }
-                    : item,
-                ),
-              )
-            }
-          />
-          <input
-            aria-label={it.project}
-            placeholder={`${it.project} (${it.optional})`}
-            value={entry.project}
-            onChange={(event) =>
-              onChange(
-                value.map((item, position) =>
-                  position === index
-                    ? { ...item, project: event.target.value }
-                    : item,
-                ),
-              )
-            }
-          />
-          <button
-            type="button"
-            className="icon-button record-icon record-icon-delete"
-            aria-label={it.remove}
-            onClick={() =>
-              onChange(value.filter((_, position) => position !== index))
-            }
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
-      ))}
+      {value.map((entry, index) => {
+        const category = entry.category as Category;
+        const brandOptions = uniqueOptions([
+          ...(brands[category] ?? []),
+          ...options
+            .filter((option) => option.category === entry.category)
+            .map((option) => option.brand),
+          entry.brand,
+        ]).filter((brand) => brand && !hidden("BRAND", entry, brand));
+        const catalogBrand = Object.keys(models[category] ?? {}).find(
+          (brand) =>
+            brand.toLocaleLowerCase("it") ===
+            entry.brand.toLocaleLowerCase("it"),
+        );
+        const modelOptions = uniqueOptions([
+          ...(catalogBrand ? (models[category]?.[catalogBrand] ?? []) : []),
+          ...options
+            .filter(
+              (option) =>
+                option.category === entry.category &&
+                option.brand.toLocaleLowerCase("it") ===
+                  entry.brand.toLocaleLowerCase("it"),
+            )
+            .map((option) => option.model),
+          entry.model,
+        ]).filter((model) => model && !hidden("MODEL", entry, model));
+        const projectOptions = uniqueOptions(
+          options
+            .filter(
+              (option) =>
+                option.category === entry.category &&
+                option.brand.toLocaleLowerCase("it") ===
+                  entry.brand.toLocaleLowerCase("it") &&
+                modelKey(option.model) === modelKey(entry.model),
+            )
+            .map((option) => option.project),
+        ).filter(Boolean);
+        return (
+          <div className="product-compatibility-row" key={index}>
+            <SimpleSelect
+              value={entry.category}
+              onChange={(category) =>
+                onChange(
+                  value.map((item, position) =>
+                    position === index
+                      ? { ...item, category, brand: "", model: "", project: "" }
+                      : item,
+                  ),
+                )
+              }
+              placeholder={it.deviceType}
+              ariaLabel={it.deviceType}
+              options={Object.entries(categories).map(([category, labels]) => ({
+                value: category,
+                label: labels[locale === "zh" ? 1 : 0],
+              }))}
+            />
+            <EditableSelect
+              label={it.brand}
+              value={entry.brand}
+              createLabel={it.customBrand}
+              options={brandOptions}
+              normalize={(brand) => normalizeBrand(brand, brandOptions)}
+              deletableValues={onDelete ? brandOptions : []}
+              onDelete={(brand) => onDelete?.("BRAND", entry, brand)}
+              onChange={(brand) =>
+                onChange(
+                  value.map((item, position) =>
+                    position === index
+                      ? { ...item, brand, model: "", project: "" }
+                      : item,
+                  ),
+                )
+              }
+            />
+            <EditableSelect
+              label={it.model}
+              value={entry.model}
+              createLabel={it.customModel}
+              options={modelOptions}
+              normalize={(model) =>
+                normalizeDeviceModel(entry.brand, model, modelOptions)
+              }
+              readOnly={!entry.brand}
+              deletableValues={onDelete ? modelOptions : []}
+              onDelete={(model) => onDelete?.("MODEL", entry, model)}
+              onChange={(model) =>
+                onChange(
+                  value.map((item, position) =>
+                    position === index ? { ...item, model, project: "" } : item,
+                  ),
+                )
+              }
+            />
+            <EditableSelect
+              label={`${it.project} (${it.optional})`}
+              value={entry.project}
+              options={projectOptions}
+              readOnly={!entry.model}
+              onChange={(project) =>
+                onChange(
+                  value.map((item, position) =>
+                    position === index ? { ...item, project } : item,
+                  ),
+                )
+              }
+            />
+            <button
+              type="button"
+              className="icon-button record-icon record-icon-delete"
+              aria-label={it.remove}
+              onClick={() =>
+                onChange(value.filter((_, position) => position !== index))
+              }
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        );
+      })}
       <Button
         type="button"
         variant="outline"
@@ -494,6 +576,9 @@ export function ProductForm({
   initialUsage,
   onCreated,
   quickRepair = false,
+  initialCompatibility,
+  compatibilityOptions = [],
+  catalogDeletions = [],
 }: {
   categories: CategoryView[];
   onClose: () => void;
@@ -502,6 +587,9 @@ export function ProductForm({
   initialUsage?: "RETAIL" | "REPAIR";
   onCreated?: (product: CreatedProduct) => void;
   quickRepair?: boolean;
+  initialCompatibility?: ProductCompatibilityDraft;
+  compatibilityOptions?: ProductCompatibilityDraft[];
+  catalogDeletions?: DeviceCatalogDeletionView[];
 }) {
   const it = useMessages();
   const { locale } = useLanguage();
@@ -514,7 +602,9 @@ export function ProductForm({
   );
   const [compatibilities, setCompatibilities] = useState<
     ProductCompatibilityDraft[]
-  >([]);
+  >(() => (initialCompatibility ? [initialCompatibility] : []));
+  const [hiddenCatalog, setHiddenCatalog] =
+    useState<DeviceCatalogDeletionView[]>(catalogDeletions);
   const [hiddenCategories, setHiddenCategories] = useState<string[]>([]);
   const nameInput = useRef<HTMLInputElement>(null);
   const costInput = useRef<HTMLInputElement>(null);
@@ -596,6 +686,40 @@ export function ProductForm({
   ]
     .filter((item) => mode === "inventory" || item.toLowerCase() !== "ricambi")
     .sort();
+  async function deleteCatalogOption(
+    kind: "BRAND" | "MODEL",
+    entry: ProductCompatibilityDraft,
+    value: string,
+  ) {
+    const input: DeviceCatalogDeletionView = {
+      category: entry.category,
+      kind,
+      brand: kind === "MODEL" ? entry.brand : "",
+      value,
+    };
+    const result = await deleteDeviceCatalogOptionAction(input);
+    if (!result.ok) return setError(result.error);
+    setHiddenCatalog((current) => [...current, input]);
+    setCompatibilities((current) =>
+      current.map((compatibility) => {
+        if (compatibility.category !== entry.category) return compatibility;
+        if (
+          kind === "BRAND" &&
+          compatibility.brand.toLocaleLowerCase("it") ===
+            value.toLocaleLowerCase("it")
+        )
+          return { ...compatibility, brand: "", model: "", project: "" };
+        if (
+          kind === "MODEL" &&
+          compatibility.brand.toLocaleLowerCase("it") ===
+            entry.brand.toLocaleLowerCase("it") &&
+          modelKey(compatibility.model) === modelKey(value)
+        )
+          return { ...compatibility, model: "", project: "" };
+        return compatibility;
+      }),
+    );
+  }
   return (
     <form
       className="dialog-form"
@@ -690,6 +814,9 @@ export function ProductForm({
         <ProductCompatibilityFields
           value={compatibilities}
           onChange={setCompatibilities}
+          options={compatibilityOptions}
+          deletions={hiddenCatalog}
+          onDelete={quickRepair ? deleteCatalogOption : undefined}
         />
       )}
       <label className="checkbox">
@@ -750,6 +877,7 @@ export function ItemsEditor({
   focusedEdit = false,
   onFocusedEditComplete,
   projectPicker = false,
+  catalogDeletions = [],
 }: {
   discounts?: boolean;
   items: ItemView[];
@@ -772,6 +900,7 @@ export function ItemsEditor({
   focusedEdit?: boolean;
   onFocusedEditComplete?: () => void;
   projectPicker?: boolean;
+  catalogDeletions?: DeviceCatalogDeletionView[];
 }) {
   const it = useMessages();
   const [createdProducts, setCreatedProducts] = useState<CreatedProduct[]>([]);
@@ -1551,6 +1680,7 @@ export function ItemsEditor({
                         onCustom={(query) => setCreatingPart({ index, query })}
                         creationControls="no-match"
                         clearable
+                        commitEmptyOnClose
                       />
                     )}
                   </div>
@@ -1897,6 +2027,19 @@ export function ItemsEditor({
             initialName={creatingPart.query}
             initialUsage="REPAIR"
             quickRepair
+            initialCompatibility={{
+              category: device.category,
+              brand: device.brand,
+              model: device.model,
+              project: items[creatingPart.index]?.project ?? "",
+            }}
+            compatibilityOptions={rules.map((rule) => ({
+              category: rule.category,
+              brand: rule.brand,
+              model: rule.model,
+              project: rule.project,
+            }))}
+            catalogDeletions={catalogDeletions}
             onClose={() => setCreatingPart(null)}
             onCreated={(product) => {
               setCreatedProducts((current) => [...current, product]);
@@ -3195,12 +3338,18 @@ export function ReworkPartEditor({
   value,
   products,
   productCategories,
+  device,
+  project,
+  catalogDeletions = [],
 }: {
   orderId: string;
   itemId: string;
   value: string;
   products: CreatedProduct[];
   productCategories: CategoryView[];
+  device: { category: string; brand: string; model: string };
+  project: string;
+  catalogDeletions?: DeviceCatalogDeletionView[];
 }) {
   const it = useMessages();
   const router = useRouter();
@@ -3264,6 +3413,7 @@ export function ReworkPartEditor({
           customLabel={it.newPart}
           onCustom={setCreatingPart}
           creationControls="no-match"
+          commitEmptyOnClose
         />
       ) : (
         <ReworkPartSummary
@@ -3285,6 +3435,8 @@ export function ReworkPartEditor({
             initialName={creatingPart}
             initialUsage="REPAIR"
             quickRepair
+            initialCompatibility={{ ...device, project }}
+            catalogDeletions={catalogDeletions}
             onClose={() => setCreatingPart(null)}
             onCreated={(product) => {
               setCreatedProducts((current) => [...current, product]);
@@ -3302,12 +3454,16 @@ export function AfterSalesForm({
   originalProjects,
   products,
   productCategories,
+  device,
+  catalogDeletions = [],
   onSuccess,
 }: {
   id: string;
   originalProjects: AfterSalesProject[];
   products: CreatedProduct[];
   productCategories: CategoryView[];
+  device: { category: string; brand: string; model: string };
+  catalogDeletions?: DeviceCatalogDeletionView[];
   onSuccess?: () => void;
 }) {
   const it = useMessages();
@@ -3509,6 +3665,7 @@ export function AfterSalesForm({
                           setCreatingPart({ projectId: project.id, query })
                         }
                         creationControls="no-match"
+                        commitEmptyOnClose
                       />
                     ) : (
                       <ReworkPartSummary
@@ -3564,6 +3721,14 @@ export function AfterSalesForm({
             initialName={creatingPart.query}
             initialUsage="REPAIR"
             quickRepair
+            initialCompatibility={{
+              ...device,
+              project:
+                originalProjects.find(
+                  (project) => project.id === creatingPart.projectId,
+                )?.name ?? "",
+            }}
+            catalogDeletions={catalogDeletions}
             onClose={() => setCreatingPart(null)}
             onCreated={(product) => {
               setCreatedProducts((current) => [...current, product]);
@@ -3639,6 +3804,7 @@ export function EditQuoteForm({
   productCategories = [],
   onSuccess,
   mode = "all",
+  catalogDeletions = [],
 }: {
   id: string;
   initial: ItemView[];
@@ -3659,6 +3825,7 @@ export function EditQuoteForm({
   owner: boolean;
   onSuccess?: () => void;
   mode?: "all" | "items" | "totals";
+  catalogDeletions?: DeviceCatalogDeletionView[];
 }) {
   const it = useMessages();
   const [items, setItems] = useState(initial);
@@ -3683,6 +3850,7 @@ export function EditQuoteForm({
             products={products}
             productCategories={productCategories}
             showEmptyPartSummary
+            catalogDeletions={catalogDeletions}
           />
         </>
       )}

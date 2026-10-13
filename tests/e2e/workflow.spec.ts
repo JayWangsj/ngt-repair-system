@@ -4696,6 +4696,8 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await dialogPartSearch.fill(`Ricambio assente ${Date.now()}`);
   await expect(dialogNewPart).toBeVisible();
   await dialogPartSearch.fill("");
+  await expect(dialogPartSearch).toBeVisible();
+  await dialogPartSearch.press("Enter");
   await expect(dialog.locator(".selected-part-summary")).toContainText(
     "Nessuno",
   );
@@ -4728,7 +4730,12 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   dialog = page.getByRole("dialog");
   await dialog.getByRole("radio", { name: /Riparazione a pagamento/ }).check();
   await dialog.locator(".selected-part-summary .summary-action").click();
-  await dialog.getByRole("combobox", { name: /Ricambio richiesto/ }).fill("");
+  const paidPartSearch = dialog.getByRole("combobox", {
+    name: /Ricambio richiesto/,
+  });
+  await paidPartSearch.fill("");
+  await expect(paidPartSearch).toBeVisible();
+  await dialog.getByLabel("Note post-vendita (facoltative)").click();
   await expect(dialog.locator(".selected-part-summary")).toContainText(
     "Nessuno",
   );
@@ -5441,6 +5448,32 @@ test("creates a repair part from the quote and selects it immediately", async ({
   );
   await expect(dialog.getByRole("button", { name: "Utilizzo" })).toHaveCount(0);
   await expect(dialog.getByLabel("Costo", { exact: true })).toBeFocused();
+  await expect(dialog.getByRole("combobox", { name: "Marca" })).toHaveValue(
+    "Apple",
+  );
+  await expect(dialog.getByRole("combobox", { name: "Modello" })).toHaveValue(
+    "iPhone 13",
+  );
+  await expect(
+    dialog.getByRole("combobox", { name: /Intervento/ }),
+  ).toHaveValue("sostituzione display");
+  await dialog
+    .getByRole("button", { name: "Espandi opzioni", exact: true })
+    .nth(1)
+    .click();
+  const appleOption = page
+    .locator(".business-select-panel.is-entering")
+    .getByRole("option")
+    .filter({ hasText: "Apple" })
+    .first();
+  const deleteApple = appleOption.getByRole("button", {
+    name: "Rimuovi Apple",
+    exact: true,
+  });
+  await expect(deleteApple).toHaveCSS("opacity", "0");
+  await appleOption.hover();
+  await expect(deleteApple).toHaveCSS("opacity", "1");
+  await dialog.getByRole("combobox", { name: "Marca" }).press("Escape");
   await dialog.getByLabel("Costo", { exact: true }).fill("12");
   await dialog.getByLabel("Scorta iniziale", { exact: true }).fill("0");
   await dialog.getByLabel("Scorta minima", { exact: true }).fill("1");
@@ -5543,6 +5576,18 @@ test("changing a selected repair part focuses its current name and preserves it 
   await expect(search).toHaveAttribute("aria-expanded", "true");
   await search.press("Escape");
   await expect(summary).toContainText("Batteria Test");
+  await summary.locator(".summary-action").click();
+  await search.fill("");
+  await expect(search).toBeVisible();
+  await search.press("Escape");
+  await expect(summary).toContainText("Batteria Test");
+  await summary.locator(".summary-action").click();
+  await search.fill("");
+  await expect(search).toBeVisible();
+  await page.locator(".quote-required-part-label").click();
+  await expect(search).toHaveCount(0);
+  await expect(summary).toContainText("Nessuno");
+  await chooseRequiredPart(page, "Batteria Test");
   await summary.locator(".summary-action").click();
   await expect(search).toBeFocused();
   await search.fill(`Ricambio stile ${Date.now()}`);

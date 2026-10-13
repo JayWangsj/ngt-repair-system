@@ -12,6 +12,7 @@ import {
   QuoteSummary,
   quoteItemsValid,
   type CategoryView,
+  type DeviceCatalogDeletionView,
   type ItemView,
   type RuleView,
 } from "./forms";
@@ -30,6 +31,7 @@ export function CompleteInspectionButton({
   initialFaultIds,
   products,
   productCategories,
+  catalogDeletions = [],
 }: {
   orderId: string;
   inspectionFee: string;
@@ -46,6 +48,7 @@ export function CompleteInspectionButton({
     available: number;
   }[];
   productCategories: CategoryView[];
+  catalogDeletions?: DeviceCatalogDeletionView[];
 }) {
   const today = useBusinessDay();
   const it = useMessages();
@@ -157,6 +160,7 @@ export function CompleteInspectionButton({
                   productCategories={productCategories}
                   progressive
                   projectPicker
+                  catalogDeletions={catalogDeletions}
                 />
                 {quoteValid && (
                   <div className="inspection-progressive-reveal">

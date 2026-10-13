@@ -304,6 +304,26 @@ export const quickServiceOrderInput = z.object({
   ),
 });
 
+export const quickServiceOrderEditInput = z
+  .object({
+    expectedAt: quickServiceExpectedAtInput.refine(Boolean),
+    notes: text,
+    items: z
+      .array(
+        z.object({
+          id: z.string().min(1).max(100),
+          project: short,
+          final: amountInput,
+        }),
+      )
+      .min(1)
+      .max(30),
+  })
+  .superRefine((value, ctx) => {
+    if (new Set(value.items.map((item) => item.id)).size !== value.items.length)
+      ctx.addIssue({ code: "custom", path: ["items"] });
+  });
+
 export const renameDeviceModelInput = z.object({
   category: z.string().trim().min(1).max(30),
   brand: short,

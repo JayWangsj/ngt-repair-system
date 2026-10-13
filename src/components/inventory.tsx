@@ -19,7 +19,11 @@ import {
   Star,
   X,
 } from "lucide-react";
-import { deleteProductsAction, updateProductAction } from "@/app/actions";
+import {
+  deleteDeviceCatalogOptionAction,
+  deleteProductsAction,
+  updateProductAction,
+} from "@/app/actions";
 import { categories as deviceCategories, type Category } from "@/lib/catalog";
 import { decimal, inventoryStatus, money } from "@/lib/domain";
 import { useLanguage, useMessages } from "./language";
@@ -28,6 +32,7 @@ import {
   ProductCompatibilityFields,
   ProductForm,
   type CategoryView,
+  type DeviceCatalogDeletionView,
   type ProductCompatibilityDraft,
 } from "./forms";
 import {
@@ -112,10 +117,14 @@ function ProductName({ name, favorite }: { name: string; favorite: boolean }) {
 
 function ProductCompatibilityDialog({
   product,
+  options,
+  catalogDeletions,
   onClose,
   onSave,
 }: {
   product: ProductView;
+  options: ProductCompatibilityDraft[];
+  catalogDeletions: DeviceCatalogDeletionView[];
   onClose: () => void;
   onSave: (value: ProductCompatibilityDraft[]) => void;
 }) {
@@ -123,10 +132,59 @@ function ProductCompatibilityDialog({
   const [value, setValue] = useState<ProductCompatibilityDraft[]>(
     product.compatibilities,
   );
+  const [deletions, setDeletions] = useState(catalogDeletions);
+  const [error, setError] = useState("");
+  async function deleteCatalogOption(
+    kind: "BRAND" | "MODEL",
+    entry: ProductCompatibilityDraft,
+    candidate: string,
+  ) {
+    const input: DeviceCatalogDeletionView = {
+      category: entry.category,
+      kind,
+      brand: kind === "MODEL" ? entry.brand : "",
+      value: candidate,
+    };
+    const result = await deleteDeviceCatalogOptionAction(input);
+    if (!result.ok) return setError(result.error);
+    setError("");
+    setDeletions((current) => [...current, input]);
+    setValue((current) =>
+      current.map((compatibility) => {
+        if (compatibility.category !== entry.category) return compatibility;
+        if (
+          kind === "BRAND" &&
+          compatibility.brand.toLocaleLowerCase("it") ===
+            candidate.toLocaleLowerCase("it")
+        )
+          return { ...compatibility, brand: "", model: "", project: "" };
+        if (
+          kind === "MODEL" &&
+          compatibility.brand.toLocaleLowerCase("it") ===
+            entry.brand.toLocaleLowerCase("it") &&
+          compatibility.model.toLocaleLowerCase("it") ===
+            candidate.toLocaleLowerCase("it")
+        )
+          return { ...compatibility, model: "", project: "" };
+        return compatibility;
+      }),
+    );
+  }
   return (
     <FormDialog title={it.inventory.editCompatibleDevices} onClose={onClose}>
       <div data-form-dialog-body data-product-compatibility-dialog>
-        <ProductCompatibilityFields value={value} onChange={setValue} />
+        <ProductCompatibilityFields
+          value={value}
+          onChange={setValue}
+          options={options}
+          deletions={deletions}
+          onDelete={deleteCatalogOption}
+        />
+        {error && (
+          <p className="message error" role="alert">
+            {error}
+          </p>
+        )}
         <div className="dialog-actions">
           <Button type="button" variant="outline" onClick={onClose}>
             {it.cancel}
@@ -617,10 +675,12 @@ function DeviceCompatibilityFilter({
 export function InventoryWorkspace({
   products,
   categories: categoryOptions,
+  catalogDeletions,
   initialStatus = "",
 }: {
   products: ProductView[];
   categories: CategoryView[];
+  catalogDeletions: DeviceCatalogDeletionView[];
   initialStatus?: "" | ReturnType<typeof inventoryStatus>;
 }) {
   const it = useMessages();
@@ -1180,6 +1240,8 @@ export function InventoryWorkspace({
           return product ? (
             <ProductCompatibilityDialog
               product={product}
+              options={compatibilities}
+              catalogDeletions={catalogDeletions}
               onClose={() => setCompatibilityEditor("")}
               onSave={(compatibilities) => {
                 const next = { ...product, compatibilities };

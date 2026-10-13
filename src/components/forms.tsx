@@ -117,7 +117,6 @@ import {
   refundAction,
   createProductAction,
   deleteInventoryCategoryAction,
-  deleteDeviceCatalogOptionAction,
 } from "@/app/actions";
 import {
   focusComfortably,
@@ -578,8 +577,6 @@ export function ProductForm({
   onCreated,
   quickRepair = false,
   initialCompatibility,
-  compatibilityOptions = [],
-  catalogDeletions = [],
 }: {
   categories: CategoryView[];
   onClose: () => void;
@@ -589,8 +586,6 @@ export function ProductForm({
   onCreated?: (product: CreatedProduct) => void;
   quickRepair?: boolean;
   initialCompatibility?: ProductCompatibilityDraft;
-  compatibilityOptions?: ProductCompatibilityDraft[];
-  catalogDeletions?: DeviceCatalogDeletionView[];
 }) {
   const it = useMessages();
   const { locale } = useLanguage();
@@ -604,8 +599,6 @@ export function ProductForm({
   const [compatibilities, setCompatibilities] = useState<
     ProductCompatibilityDraft[]
   >(() => (initialCompatibility ? [initialCompatibility] : []));
-  const [hiddenCatalog, setHiddenCatalog] =
-    useState<DeviceCatalogDeletionView[]>(catalogDeletions);
   const [hiddenCategories, setHiddenCategories] = useState<string[]>([]);
   const nameInput = useRef<HTMLInputElement>(null);
   const costInput = useRef<HTMLInputElement>(null);
@@ -626,10 +619,29 @@ export function ProductForm({
     const name = String(form.get("name") ?? "").trim();
     const costPrice = String(form.get("costPrice") ?? "").trim();
     const salePrice = String(form.get("salePrice") ?? "").trim();
+    const quickCompatibility = compatibilities[0];
+    const quickContextComplete = Boolean(
+      quickCompatibility?.category.trim() &&
+      quickCompatibility.brand.trim() &&
+      quickCompatibility.model.trim() &&
+      quickCompatibility.project.trim(),
+    );
+    if (quickRepair && !quickContextComplete) {
+      setError(it.inventory.repairContextMissing);
+      return;
+    }
     const missing = [
-      !name ? it.inventory.product : "",
+      !name
+        ? quickRepair
+          ? it.inventory.repairPartName
+          : it.inventory.product
+        : "",
       !category ? it.inventory.category : "",
-      !costPrice ? it.inventory.costPrice : "",
+      !costPrice
+        ? quickRepair
+          ? it.inventory.repairPartCost
+          : it.inventory.costPrice
+        : "",
       (mode === "retail" || usage !== "REPAIR") && !salePrice
         ? it.inventory.salePrice
         : "",
@@ -657,9 +669,13 @@ export function ProductForm({
         minStock: String(form.get("minStock") ?? "0"),
         favorite: form.get("favorite") === "on",
         enabled: true,
-        compatibilities: compatibilities.filter(
-          (entry) => entry.brand.trim() && entry.model.trim(),
-        ),
+        compatibilities: quickRepair
+          ? quickCompatibility
+            ? [quickCompatibility]
+            : []
+          : compatibilities.filter(
+              (entry) => entry.brand.trim() && entry.model.trim(),
+            ),
       });
       if (!result.ok) return setError(result.error);
       if (result.id)
@@ -687,40 +703,6 @@ export function ProductForm({
   ]
     .filter((item) => mode === "inventory" || item.toLowerCase() !== "ricambi")
     .sort();
-  async function deleteCatalogOption(
-    kind: "BRAND" | "MODEL",
-    entry: ProductCompatibilityDraft,
-    value: string,
-  ) {
-    const input: DeviceCatalogDeletionView = {
-      category: entry.category,
-      kind,
-      brand: kind === "MODEL" ? entry.brand : "",
-      value,
-    };
-    const result = await deleteDeviceCatalogOptionAction(input);
-    if (!result.ok) return setError(result.error);
-    setHiddenCatalog((current) => [...current, input]);
-    setCompatibilities((current) =>
-      current.map((compatibility) => {
-        if (compatibility.category !== entry.category) return compatibility;
-        if (
-          kind === "BRAND" &&
-          compatibility.brand.toLocaleLowerCase("it") ===
-            value.toLocaleLowerCase("it")
-        )
-          return { ...compatibility, brand: "", model: "", project: "" };
-        if (
-          kind === "MODEL" &&
-          compatibility.brand.toLocaleLowerCase("it") ===
-            entry.brand.toLocaleLowerCase("it") &&
-          modelKey(compatibility.model) === modelKey(value)
-        )
-          return { ...compatibility, model: "", project: "" };
-        return compatibility;
-      }),
-    );
-  }
   return (
     <form
       className="dialog-form"
@@ -729,7 +711,11 @@ export function ProductForm({
       noValidate
     >
       <div className="form-grid">
-        <Field label={it.inventory.product}>
+        <Field
+          label={
+            quickRepair ? it.inventory.repairPartName : it.inventory.product
+          }
+        >
           <input
             ref={nameInput}
             name="name"
@@ -773,7 +759,11 @@ export function ProductForm({
             />
           </Field>
         )}
-        <Field label={it.inventory.costPrice}>
+        <Field
+          label={
+            quickRepair ? it.inventory.repairPartCost : it.inventory.costPrice
+          }
+        >
           <input
             ref={costInput}
             name="costPrice"
@@ -811,18 +801,27 @@ export function ProductForm({
           />
         </Field>
       </div>
-      {mode === "inventory" && usage === "REPAIR" && (
+      {quickRepair && (
+        <p className="product-quick-repair-context">
+          {initialCompatibility?.brand.trim() &&
+          initialCompatibility.model.trim() &&
+          initialCompatibility.project.trim()
+            ? it.inventory.repairContext
+                .replace("{brand}", initialCompatibility.brand)
+                .replace("{model}", initialCompatibility.model)
+                .replace("{project}", initialCompatibility.project)
+            : it.inventory.repairContextMissing}
+        </p>
+      )}
+      {mode === "inventory" && usage === "REPAIR" && !quickRepair && (
         <ProductCompatibilityFields
           value={compatibilities}
           onChange={setCompatibilities}
-          options={compatibilityOptions}
-          deletions={hiddenCatalog}
-          onDelete={quickRepair ? deleteCatalogOption : undefined}
         />
       )}
       <label className="checkbox">
         <input name="favorite" type="checkbox" />
-        {it.inventory.favorite}
+        {quickRepair ? it.inventory.repairPartFavorite : it.inventory.favorite}
       </label>
       {error && (
         <p className="message error" role="alert">
@@ -838,7 +837,11 @@ export function ProductForm({
         >
           {it.cancel}
         </Button>
-        <Button disabled={pending}>{it.inventory.saveProduct}</Button>
+        <Button disabled={pending}>
+          {quickRepair
+            ? it.inventory.createAndSelect
+            : it.inventory.saveProduct}
+        </Button>
       </div>
     </form>
   );
@@ -878,7 +881,6 @@ export function ItemsEditor({
   focusedEdit = false,
   onFocusedEditComplete,
   projectPicker = false,
-  catalogDeletions = [],
 }: {
   discounts?: boolean;
   items: ItemView[];
@@ -901,7 +903,6 @@ export function ItemsEditor({
   focusedEdit?: boolean;
   onFocusedEditComplete?: () => void;
   projectPicker?: boolean;
-  catalogDeletions?: DeviceCatalogDeletionView[];
 }) {
   const it = useMessages();
   const [createdProducts, setCreatedProducts] = useState<CreatedProduct[]>([]);
@@ -2034,13 +2035,6 @@ export function ItemsEditor({
               model: device.model,
               project: items[creatingPart.index]?.project ?? "",
             }}
-            compatibilityOptions={rules.map((rule) => ({
-              category: rule.category,
-              brand: rule.brand,
-              model: rule.model,
-              project: rule.project,
-            }))}
-            catalogDeletions={catalogDeletions}
             onClose={() => setCreatingPart(null)}
             onCreated={(product) => {
               setCreatedProducts((current) => [...current, product]);
@@ -3343,7 +3337,6 @@ export function ReworkPartEditor({
   productCategories,
   device,
   project,
-  catalogDeletions = [],
 }: {
   orderId: string;
   itemId: string;
@@ -3352,7 +3345,6 @@ export function ReworkPartEditor({
   productCategories: CategoryView[];
   device: { category: string; brand: string; model: string };
   project: string;
-  catalogDeletions?: DeviceCatalogDeletionView[];
 }) {
   const it = useMessages();
   const router = useRouter();
@@ -3439,7 +3431,6 @@ export function ReworkPartEditor({
             initialUsage="REPAIR"
             quickRepair
             initialCompatibility={{ ...device, project }}
-            catalogDeletions={catalogDeletions}
             onClose={() => setCreatingPart(null)}
             onCreated={(product) => {
               setCreatedProducts((current) => [...current, product]);
@@ -3458,7 +3449,6 @@ export function AfterSalesForm({
   products,
   productCategories,
   device,
-  catalogDeletions = [],
   onSuccess,
 }: {
   id: string;
@@ -3466,7 +3456,6 @@ export function AfterSalesForm({
   products: CreatedProduct[];
   productCategories: CategoryView[];
   device: { category: string; brand: string; model: string };
-  catalogDeletions?: DeviceCatalogDeletionView[];
   onSuccess?: () => void;
 }) {
   const it = useMessages();
@@ -3731,7 +3720,6 @@ export function AfterSalesForm({
                   (project) => project.id === creatingPart.projectId,
                 )?.name ?? "",
             }}
-            catalogDeletions={catalogDeletions}
             onClose={() => setCreatingPart(null)}
             onCreated={(product) => {
               setCreatedProducts((current) => [...current, product]);
@@ -3807,7 +3795,6 @@ export function EditQuoteForm({
   productCategories = [],
   onSuccess,
   mode = "all",
-  catalogDeletions = [],
 }: {
   id: string;
   initial: ItemView[];
@@ -3828,7 +3815,6 @@ export function EditQuoteForm({
   owner: boolean;
   onSuccess?: () => void;
   mode?: "all" | "items" | "totals";
-  catalogDeletions?: DeviceCatalogDeletionView[];
 }) {
   const it = useMessages();
   const [items, setItems] = useState(initial);
@@ -3853,7 +3839,6 @@ export function EditQuoteForm({
             products={products}
             productCategories={productCategories}
             showEmptyPartSummary
-            catalogDeletions={catalogDeletions}
           />
         </>
       )}

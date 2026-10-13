@@ -54,6 +54,8 @@ export function OrderDetailCard({
   locked = false,
   className = "",
   defaultExpanded = true,
+  summary,
+  id,
   testId,
 }: {
   title: string;
@@ -63,6 +65,8 @@ export function OrderDetailCard({
   locked?: boolean;
   className?: string;
   defaultExpanded?: boolean;
+  summary?: ReactNode;
+  id?: string;
   testId?: string;
 }) {
   const it = useMessages();
@@ -76,6 +80,7 @@ export function OrderDetailCard({
   const card = useRef<HTMLElement>(null);
   const heading = useRef<HTMLDivElement>(null);
   const body = useRef<HTMLDivElement>(null);
+  const outsideSaveTimer = useRef<number | null>(null);
   const wasExpanded = useRef(expanded);
   const saves = useRef(new Set<FormSaveRegistration>());
   const [saving, setSaving] = useState(false);
@@ -124,13 +129,19 @@ export function OrderDetailCard({
     if (editing) return;
     setExpanded((current) => !current);
   }
-  async function submitEdit() {
-    if (saving) return;
-    setSaving(true);
-    const saved = await saveAll();
-    setSaving(false);
-    if (saved) closeEdit();
-  }
+  const submitEdit = useCallback(
+    async (collapseOnSuccess = false) => {
+      if (saving) return;
+      setSaving(true);
+      const saved = await saveAll();
+      setSaving(false);
+      if (saved) {
+        closeEdit();
+        if (collapseOnSuccess) setExpanded(false);
+      }
+    },
+    [saveAll, saving],
+  );
   useEffect(() => {
     if (!editing) return;
     function guardNavigation(event: MouseEvent) {
@@ -162,6 +173,36 @@ export function OrderDetailCard({
       window.removeEventListener("beforeunload", guardUnload);
     };
   }, [editing, hasUnsavedChanges]);
+  useEffect(() => {
+    if (!editing) return;
+    function saveWhenClickingOutside(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Element) || card.current?.contains(target))
+        return;
+      if (
+        target.closest("[data-prevent-card-autosave], a[href], [role='dialog']")
+      )
+        return;
+      if (outsideSaveTimer.current !== null)
+        window.clearTimeout(outsideSaveTimer.current);
+      outsideSaveTimer.current = window.setTimeout(() => {
+        outsideSaveTimer.current = null;
+        void submitEdit(true);
+      }, 0);
+    }
+    document.addEventListener("pointerdown", saveWhenClickingOutside, true);
+    return () => {
+      document.removeEventListener(
+        "pointerdown",
+        saveWhenClickingOutside,
+        true,
+      );
+      if (outsideSaveTimer.current !== null) {
+        window.clearTimeout(outsideSaveTimer.current);
+        outsideSaveTimer.current = null;
+      }
+    };
+  }, [editing, submitEdit]);
   async function saveAndLeave() {
     if (!leaveHref || saving) return;
     setSaving(true);
@@ -193,6 +234,7 @@ export function OrderDetailCard({
       <section
         ref={card}
         className={`panel padded order-detail-card ${editable ? "is-editable" : ""} ${editing ? "is-editing" : ""} ${locked ? "is-locked" : ""} ${className}`}
+        id={id}
         data-testid={testId}
       >
         <div
@@ -209,9 +251,13 @@ export function OrderDetailCard({
             void toggleExpanded();
           }}
         >
-          <div className="order-card-toggle">
-            <h2>{title}</h2>
-            {expanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+          <div className="order-card-title">
+            <div className="order-card-toggle">
+              <h2>{title}</h2>
+            </div>
+            {!expanded && summary && (
+              <small className="order-card-summary">{summary}</small>
+            )}
           </div>
           <div className="order-card-actions">
             {editing && <small>{it.editing}</small>}
@@ -233,6 +279,12 @@ export function OrderDetailCard({
               </button>
             )}
           </div>
+          <span
+            className="order-card-expand-icon"
+            data-testid="order-card-expand-icon"
+          >
+            {expanded ? <ChevronUp size={17} /> : <ChevronDown size={17} />}
+          </span>
         </div>
         <div
           className={`order-card-collapse ${expanded ? "is-expanded" : ""}`}
@@ -337,7 +389,6 @@ export function AfterSalesActions({
   products,
   productCategories,
   device,
-  catalogDeletions = [],
 }: {
   orderId: string;
   received: number;
@@ -345,7 +396,6 @@ export function AfterSalesActions({
   products: import("./forms").CreatedProduct[];
   productCategories: import("./forms").CategoryView[];
   device: { category: string; brand: string; model: string };
-  catalogDeletions?: import("./forms").DeviceCatalogDeletionView[];
 }) {
   const it = useMessages();
   const [dialog, setDialog] = useState<"rework" | "refund" | null>(null);
@@ -376,7 +426,6 @@ export function AfterSalesActions({
             products={products}
             productCategories={productCategories}
             device={device}
-            catalogDeletions={catalogDeletions}
             onSuccess={() => setDialog(null)}
           />
         </FormDialog>

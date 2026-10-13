@@ -152,6 +152,17 @@ export async function updateDueDateAction(id: string, dueDate: string) {
     orderPaths(id),
   );
 }
+export async function updateQuickServiceOrderAction(
+  id: string,
+  input: unknown,
+) {
+  const actor = await requireActor();
+  return execute(
+    () => service.updateQuickServiceOrder(actor, id, input),
+    undefined,
+    orderPaths(id),
+  );
+}
 export async function quoteAction(id: string, input: unknown) {
   const actor = await requireActor();
   return execute(

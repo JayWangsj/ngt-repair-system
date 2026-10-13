@@ -77,6 +77,14 @@ export function WorkOrderProducts({
   const [selectedProduct, setSelectedProduct] = useState("");
   const [quantity, setQuantity] = useState("1");
   const addonLines = lines.filter((line) => line.kind === "RETAIL_ADDON");
+  const summary = addonLines.length
+    ? addonLines
+        .map(
+          (line) =>
+            `${line.productName} × ${line.quantity} · ${money(cents(line.unitPrice) * line.quantity)}`,
+        )
+        .join(" · ")
+    : it.orderProducts.empty;
   const availableForOrder = (product: ProductOption) =>
     Math.min(
       product.stock,
@@ -121,6 +129,7 @@ export function WorkOrderProducts({
   return (
     <OrderDetailCard
       title={it.orderProducts.title}
+      summary={summary}
       locked={closed}
       className="order-products"
       testId="products-card"

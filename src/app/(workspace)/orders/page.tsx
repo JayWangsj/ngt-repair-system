@@ -33,6 +33,7 @@ export default async function Orders({
     attention?: string;
     month?: string;
     type?: string;
+    view?: string;
     page?: string;
   }>;
 }) {
@@ -41,8 +42,23 @@ export default async function Orders({
   const query = await searchParams;
   const today = await getBusinessDay();
   const q = query.q?.trim() ?? "";
+  const exactOrderSearch =
+    /^\d+$/.test(q) || /^(?:R|S|V)-?\d{8}-?\d{3}$/i.test(q);
+  const requestedView = [
+    "active",
+    "ready",
+    "overdue",
+    "unpaid",
+    "closed",
+  ].includes(query.view ?? "")
+    ? query.view!
+    : "";
+  const view = exactOrderSearch ? "" : requestedView;
   const month =
-    query.attention === "overdue" || query.attention === "unpaid"
+    exactOrderSearch ||
+    view === "overdue" ||
+    view === "unpaid" ||
+    (view && query.month === undefined)
       ? ""
       : query.month === undefined
         ? romeDay().slice(0, 7)
@@ -55,22 +71,57 @@ export default async function Orders({
   const type =
     query.type === "REPAIR" || query.type === "QUICK_SERVICE" ? query.type : "";
   const attention =
-    query.attention === "overdue" || query.attention === "unpaid"
-      ? query.attention
-      : "";
+    view === "overdue" || view === "unpaid"
+      ? view
+      : query.attention === "overdue" || query.attention === "unpaid"
+        ? query.attention
+        : "";
   const filters: Prisma.WorkOrderWhereInput[] = [];
   if (q)
     filters.push({
       OR: [
+        { device: { brand: { contains: q, mode: "insensitive" } } },
         { device: { model: { contains: q, mode: "insensitive" } } },
+        { device: { imei: { contains: q, mode: "insensitive" } } },
         {
           device: { customer: { name: { contains: q, mode: "insensitive" } } },
         },
-        { device: { customer: { phone: { contains: q } } } },
+        {
+          device: { customer: { phone: { contains: q, mode: "insensitive" } } },
+        },
+        {
+          device: {
+            customer: {
+              phones: { some: { phone: { contains: q, mode: "insensitive" } } },
+            },
+          },
+        },
+        {
+          relatedDevices: {
+            some: {
+              device: {
+                OR: [
+                  { brand: { contains: q, mode: "insensitive" } },
+                  { model: { contains: q, mode: "insensitive" } },
+                  { imei: { contains: q, mode: "insensitive" } },
+                ],
+              },
+            },
+          },
+        },
+        { items: { some: { project: { contains: q, mode: "insensitive" } } } },
+        { fault: { contains: q, mode: "insensitive" } },
+        { faultNote: { contains: q, mode: "insensitive" } },
+        { inspectionResult: { contains: q, mode: "insensitive" } },
+        { notes: { contains: q, mode: "insensitive" } },
         { code: { contains: q, mode: "insensitive" } },
         ...(/^\d+$/.test(q) ? [{ number: Number(q) }] : []),
       ],
     });
+  if (view === "active")
+    filters.push({ status: { notIn: [...closedStatuses] } });
+  if (view === "ready") filters.push({ status: "READY" });
+  if (view === "closed") filters.push({ status: { in: [...closedStatuses] } });
   if (status) filters.push({ status });
   if (type) filters.push({ type });
   if (month)
@@ -143,11 +194,36 @@ export default async function Orders({
   function pageHref(targetPage: number) {
     const params = new URLSearchParams();
     if (q) params.set("q", q);
-    if (month) params.set("month", month);
+    if (query.month !== undefined || !view) params.set("month", month);
     if (status) params.set("status", status);
     if (attention) params.set("attention", attention);
     if (type) params.set("type", type);
+    if (view) params.set("view", view);
     params.set("page", String(targetPage));
+    return `/orders?${params.toString()}`;
+  }
+  const returnParams = new URLSearchParams();
+  if (q) returnParams.set("q", q);
+  if (query.month !== undefined || !view) returnParams.set("month", month);
+  if (status) returnParams.set("status", status);
+  if (attention) returnParams.set("attention", attention);
+  if (type) returnParams.set("type", type);
+  if (view) returnParams.set("view", view);
+  if (query.page) returnParams.set("page", String(page));
+  const returnTo = `/orders?${returnParams.toString()}`;
+  const quickViews = [
+    { key: "", label: it.orderViews.month },
+    { key: "active", label: it.orderViews.active },
+    { key: "ready", label: it.orderViews.ready },
+    { key: "overdue", label: it.orderViews.overdue },
+    { key: "unpaid", label: it.orderViews.unpaid },
+    { key: "closed", label: it.orderViews.closed },
+  ];
+  function quickViewHref(nextView: string) {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (type) params.set("type", type);
+    if (nextView) params.set("view", nextView);
     return `/orders?${params.toString()}`;
   }
   return (
@@ -172,17 +248,46 @@ export default async function Orders({
           </div>
         }
       />
+      <nav className="order-quick-views" aria-label={it.orderQuickViewsLabel}>
+        {quickViews.map(({ key, label }) => (
+          <Link
+            key={key || "month"}
+            href={quickViewHref(key)}
+            className={
+              !view && !key
+                ? "is-active"
+                : view === key && key
+                  ? "is-active"
+                  : ""
+            }
+            aria-current={
+              !view && !key ? "page" : view === key && key ? "page" : undefined
+            }
+          >
+            {label}
+          </Link>
+        ))}
+        {view && <span>{it.orderViews.allTime}</span>}
+      </nav>
       <OrderFilters
+        key={[month, status, attention, type, view].join("|")}
         initial={{
           q,
           month,
           status,
           attention,
           type,
+          view,
         }}
+        currentMonth={romeDay().slice(0, 7)}
+        exactOrderSearch={exactOrderSearch}
       />
       <section className="panel table-panel">
-        <OrderTable orders={orders} />
+        <OrderTable
+          orders={orders}
+          returnTo={returnTo}
+          emptyText={it.searchNoResults}
+        />
       </section>
       {pageCount > 1 && (
         <nav className="order-pagination" aria-label={it.orderPagination}>

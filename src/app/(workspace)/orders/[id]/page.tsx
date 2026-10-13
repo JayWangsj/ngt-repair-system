@@ -13,6 +13,7 @@ import {
   promisedDate,
   settlement,
   warrantyProgress,
+  type OrderStatus,
 } from "@/lib/domain";
 import { BackButton, Badge, PageHeader } from "@/components/common";
 import {
@@ -36,6 +37,7 @@ import {
 } from "@/components/order-detail-ui";
 import { DetailStatusControl } from "@/components/order-list-controls";
 import { CompleteInspectionButton } from "@/components/inspection-quote";
+import { QuickServiceOrderEditor } from "@/components/quick-service-order-editor";
 import { getBusinessDay } from "@/lib/business-date";
 import { WorkOrderRepairSummary } from "@/components/work-order-repair-summary";
 import { ServiceOrderActions } from "@/components/service-order-actions";
@@ -58,14 +60,22 @@ function auditContext(value: unknown) {
 
 export default async function Detail({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ returnTo?: string }>;
 }) {
   const it = await getMessages();
   const locale = await getLocale();
   const actor = await requireActor();
   const today = await getBusinessDay();
-  const { id } = await params;
+  const [{ id }, query] = await Promise.all([params, searchParams]);
+  const requestedReturnTo = query.returnTo ?? "";
+  const returnTo =
+    requestedReturnTo === "/orders" || requestedReturnTo.startsWith("/orders?")
+      ? requestedReturnTo
+      : "/orders";
+  const backHref = `${returnTo}#order-${id}`;
   const [order, audits, inventoryMovementCount] = await Promise.all([
     db.workOrder.findUnique({ where: { id }, include: orderInclude }),
     db.auditLog.findMany({
@@ -98,7 +108,6 @@ export default async function Detail({
     faultOptions,
     productCategories,
     reservations,
-    catalogDeletions,
   ] = await Promise.all([
     db.priceRule.findMany({ where: { enabled: true } }),
     db.product.findMany({
@@ -142,9 +151,6 @@ export default async function Detail({
       },
       _sum: { quantity: true },
     }),
-    db.deviceCatalogDeletion.findMany({
-      select: { category: true, kind: true, brand: true, value: true },
-    }),
   ]);
   const repairProducts = products.filter(
     (product) => product.usage === "REPAIR",
@@ -176,6 +182,67 @@ export default async function Detail({
       totals.inspectionTotal;
   const productAmount = financiallyClosed ? 0 : totals.productTotal;
   const afterSalesAmount = financiallyClosed ? 0 : totals.afterSalesTotal;
+  const primaryStatusAction:
+    { status: OrderStatus; label: string } | undefined =
+    order.status === "RECEIVED"
+      ? {
+          status: order.type === "QUICK_SERVICE" ? "REPAIRING" : "DIAGNOSING",
+          label:
+            order.type === "QUICK_SERVICE"
+              ? it.stageActions.startQuickService
+              : it.stageActions.startDiagnosis,
+        }
+      : order.status === "REPAIRING"
+        ? {
+            status: "READY",
+            label:
+              order.type === "QUICK_SERVICE"
+                ? it.stageActions.completeQuickService
+                : it.stageActions.completeRepair,
+          }
+        : order.status === "REWORKING"
+          ? { status: "READY", label: it.stageActions.completeRepair }
+          : order.status === "READY"
+            ? { status: "COMPLETED", label: it.orderProducts.checkout }
+            : undefined;
+  const inspectionStageAction =
+    order.type === "REPAIR" && order.status === "DIAGNOSING" ? (
+      <CompleteInspectionButton
+        orderId={id}
+        inspectionFee={order.inspectionFee.toString()}
+        device={{
+          category: order.device.category,
+          brand: order.device.brand,
+          series: order.device.series,
+          model: order.device.model,
+        }}
+        rules={rules.map((rule) => ({
+          ...rule,
+          suggested: rule.suggested.toString(),
+          cost: undefined,
+          updatedAt: undefined,
+        }))}
+        faultOptions={faultOptions.map(({ _count, ...fault }) => ({
+          ...fault,
+          usageCount: _count.orders,
+        }))}
+        initialFaultIds={order.faults.flatMap((fault) =>
+          fault.catalogId ? [fault.catalogId] : [],
+        )}
+        products={repairProducts.map((product) => ({
+          id: product.id,
+          name: product.name,
+          category: product.category,
+          stock: product.stockQuantity,
+          reserved: reservedByProduct.get(product.id) ?? 0,
+          available: Math.max(
+            0,
+            product.stockQuantity - (reservedByProduct.get(product.id) ?? 0),
+          ),
+        }))}
+        productCategories={productCategories}
+      />
+    ) : null;
   const originalLocked =
     order.afterSalesOpen ||
     ["COMPLETED", "REWORKING", "REFUNDED", "CANCELLED"].includes(order.status);
@@ -269,7 +336,7 @@ export default async function Detail({
   if (order.type === "QUICK_SERVICE")
     return (
       <>
-        <BackButton href="/orders" label={it.nav.orders} />
+        <BackButton href={backHref} label={it.nav.orders} />
         <PageHeader
           title={orderCode(order.code)}
           description={`${it.orderTypes.QUICK_SERVICE} · ${order.device.customer.name}`}
@@ -285,7 +352,9 @@ export default async function Detail({
               paid={received}
               balance={remaining}
               afterSalesOpen={false}
+              primaryAction={primaryStatusAction}
             />
+            {inspectionStageAction}
             <ServiceOrderActions
               id={id}
               code={order.code}
@@ -303,7 +372,24 @@ export default async function Detail({
         <div className="detail-grid">
           <div className="stack">
             <section className="panel padded">
-              <h2>{it.quickService.serviceItems}</h2>
+              <div className="quick-service-detail-heading">
+                <h2>{it.quickService.serviceItems}</h2>
+                <QuickServiceOrderEditor
+                  id={id}
+                  expectedAt={order.expectedAt ?? ""}
+                  notes={order.notes}
+                  items={order.items.map((item) => ({
+                    id: item.id,
+                    project: item.project,
+                    final: item.final.toString(),
+                  }))}
+                  paid={received}
+                  currentTotal={currentDue}
+                  locked={["COMPLETED", "REFUNDED", "CANCELLED"].includes(
+                    order.status,
+                  )}
+                />
+              </div>
               <div className="quick-service-detail-list">
                 {order.items.map((item) => (
                   <div key={item.id}>
@@ -317,6 +403,9 @@ export default async function Detail({
                   </div>
                 ))}
               </div>
+              {order.notes && (
+                <p className="quick-service-order-notes">{order.notes}</p>
+              )}
             </section>
             <section className="panel padded">
               <h2>{it.quickService.selectDevices}</h2>
@@ -553,10 +642,11 @@ export default async function Detail({
     });
   }
   events.sort((a, b) => a.at.getTime() - b.at.getTime());
+  const latestEvent = events.at(-1);
 
   return (
     <>
-      <BackButton href="/orders" label={it.nav.orders} />
+      <BackButton href={backHref} label={it.nav.orders} />
       <PageHeader
         title={orderCode(order.code)}
         description={`${order.device.brand} ${order.device.model} · ${order.device.customer.name}`}
@@ -572,7 +662,17 @@ export default async function Detail({
             paid={received}
             balance={remaining}
             afterSalesOpen={order.afterSalesOpen}
+            primaryAction={primaryStatusAction}
           />
+          {inspectionStageAction}
+          {order.status === "PARTS_MISSING" && (
+            <a
+              className="button button-primary stage-primary-action"
+              href="#required-parts"
+            >
+              {it.stageActions.viewMissingParts}
+            </a>
+          )}
           <ServiceOrderActions
             id={id}
             code={order.code}
@@ -598,10 +698,11 @@ export default async function Detail({
       <div className="detail-grid">
         <div className="stack">
           <OrderDetailCard
-            key={`details-${order.afterSalesOpen}`}
+            key={`details-${order.afterSalesOpen}-${order.status}`}
             title={it.details}
             locked={originalLocked}
-            defaultExpanded={false}
+            defaultExpanded={!order.afterSalesOpen}
+            summary={`${order.device.customer.name} · ${order.device.brand} ${order.device.model} · ${order.status === "DIAGNOSING" ? it.inspectionPending : faultLabel(order.fault, locale)}`}
             testId="details-card"
             edit={
               <EditOrderForm
@@ -686,7 +787,6 @@ export default async function Detail({
                     ),
                   }))}
                   productCategories={productCategories}
-                  catalogDeletions={catalogDeletions}
                 />
               ) : null
             }
@@ -747,10 +847,10 @@ export default async function Detail({
           </OrderDetailCard>
 
           <WorkOrderProducts
-            key={`products-${order.afterSalesOpen}`}
+            key={`products-${order.afterSalesOpen}-${order.status}`}
             orderId={id}
             closed={originalLocked}
-            defaultExpanded={!order.afterSalesOpen}
+            defaultExpanded={false}
             products={products.map((product) => ({
               id: product.id,
               name: product.name,
@@ -777,12 +877,17 @@ export default async function Detail({
           />
 
           <OrderDetailCard
-            key={`quote-${order.afterSalesOpen}`}
+            key={`quote-${order.afterSalesOpen}-${order.status}`}
             title={
               order.status === "DIAGNOSING" ? it.inspectionAndQuote : it.quote
             }
             locked={originalLocked || order.status === "DIAGNOSING"}
-            defaultExpanded={false}
+            defaultExpanded={!order.afterSalesOpen}
+            summary={
+              order.inspectionMode
+                ? `${it.inspectionFeeLabel} · ${money(totals.inspectionTotal)}`
+                : `${order.items.map((item) => item.project).join(" · ")} · ${money(totals.due)}`
+            }
             testId="quote-card"
             edit={
               order.status !== "DIAGNOSING" ? (
@@ -827,7 +932,6 @@ export default async function Detail({
                     ),
                   }))}
                   productCategories={productCategories}
-                  catalogDeletions={catalogDeletions}
                 />
               ) : undefined
             }
@@ -859,43 +963,6 @@ export default async function Detail({
                     <dd>{money(totals.due)}</dd>
                   </div>
                 </dl>
-                <CompleteInspectionButton
-                  orderId={id}
-                  inspectionFee={order.inspectionFee.toString()}
-                  device={{
-                    category: order.device.category,
-                    brand: order.device.brand,
-                    series: order.device.series,
-                    model: order.device.model,
-                  }}
-                  rules={rules.map((rule) => ({
-                    ...rule,
-                    suggested: rule.suggested.toString(),
-                    cost: undefined,
-                    updatedAt: undefined,
-                  }))}
-                  faultOptions={faultOptions.map(({ _count, ...fault }) => ({
-                    ...fault,
-                    usageCount: _count.orders,
-                  }))}
-                  initialFaultIds={order.faults.flatMap((fault) =>
-                    fault.catalogId ? [fault.catalogId] : [],
-                  )}
-                  products={repairProducts.map((product) => ({
-                    id: product.id,
-                    name: product.name,
-                    category: product.category,
-                    stock: product.stockQuantity,
-                    reserved: reservedByProduct.get(product.id) ?? 0,
-                    available: Math.max(
-                      0,
-                      product.stockQuantity -
-                        (reservedByProduct.get(product.id) ?? 0),
-                    ),
-                  }))}
-                  productCategories={productCategories}
-                  catalogDeletions={catalogDeletions}
-                />
               </div>
             ) : (
               <>
@@ -923,6 +990,17 @@ export default async function Detail({
             title={it.warranty.title}
             locked={originalLocked}
             defaultExpanded={order.afterSalesOpen}
+            summary={order.items
+              .map((item) => {
+                const warranty = itemWarranties.get(item.id);
+                const status = !warranty
+                  ? it.warranty.none
+                  : warranty.active
+                    ? it.warranty.active
+                    : it.warranty.expired;
+                return `${item.project} · ${status}`;
+              })
+              .join(" · ")}
             testId="warranty-card"
             edit={
               <WarrantyForm
@@ -981,7 +1059,6 @@ export default async function Detail({
                             model: order.device.model,
                           }}
                           project={item.project}
-                          catalogDeletions={catalogDeletions}
                         />
                       </div>
                     )}
@@ -996,6 +1073,11 @@ export default async function Detail({
             title={it.history}
             locked
             defaultExpanded={false}
+            summary={
+              latestEvent
+                ? `${latestEvent.title}${latestEvent.detail ? ` · ${latestEvent.detail}` : ""}`
+                : it.history
+            }
             className="history-card"
             testId="history-card"
           >
@@ -1125,7 +1207,6 @@ export default async function Detail({
                 brand: order.device.brand,
                 model: order.device.model,
               }}
-              catalogDeletions={catalogDeletions}
             />
           )}
         </div>

@@ -23,7 +23,6 @@ export default async function NewOrder({
     productCategories,
     reservations,
     quickServices,
-    catalogDeletions,
   ] = await Promise.all([
     db.faultOption.findMany({
       select: {
@@ -74,9 +73,6 @@ export default async function NewOrder({
       where: { enabled: true },
       orderBy: { name: "asc" },
     }),
-    db.deviceCatalogDeletion.findMany({
-      select: { category: true, kind: true, brand: true, value: true },
-    }),
   ]);
   const reservedByProduct = new Map(
     reservations.map((entry) => [entry.productId, entry._sum.quantity ?? 0]),
@@ -114,7 +110,6 @@ export default async function NewOrder({
               ),
             }))}
             productCategories={productCategories}
-            catalogDeletions={catalogDeletions}
             rules={rules.map((r) => ({
               ...r,
               suggested: r.suggested.toString(),

@@ -1168,11 +1168,53 @@ test("manages one quick service for held service orders and retail checkout", as
     .boundingBox();
   expect(Math.abs(statusBox!.y - moreBox!.y)).toBeLessThan(1);
   expect(Math.abs(statusBox!.height - moreBox!.height)).toBeLessThan(1);
+  await page
+    .getByRole("button", { name: "Avvia servizio", exact: true })
+    .click();
+  await expect(
+    page.locator(".detail-status .status-dropdown-trigger"),
+  ).toContainText("In lavorazione");
+  await expect(
+    page.getByRole("button", { name: "Completa servizio", exact: true }),
+  ).toBeVisible();
   await expect(page.locator(".quick-service-detail-list")).toContainText(
     serviceName,
   );
+  const quickServiceEdit = page.getByRole("button", {
+    name: "Modifica servizio rapido",
+    exact: true,
+  });
+  await quickServiceEdit.click();
+  const quickServiceEditDialog = page.getByRole("dialog", {
+    name: "Modifica servizio rapido",
+  });
+  await quickServiceEditDialog
+    .getByLabel("Completamento previsto", { exact: true })
+    .fill("2099-12-30T18:00");
+  await quickServiceEditDialog
+    .getByLabel("Note", { exact: true })
+    .fill("Nota aggiornata dal dettaglio");
+  await quickServiceEditDialog
+    .getByLabel("Intervento 1", { exact: true })
+    .fill(`${serviceName} aggiornato`);
+  await quickServiceEditDialog
+    .getByLabel("Prezzo (€)", { exact: true })
+    .fill("35.00");
+  await quickServiceEditDialog
+    .getByRole("button", { name: "Salva modifiche", exact: true })
+    .click();
+  await expect(quickServiceEditDialog).toHaveCount(0);
+  await expect(page.locator(".quick-service-detail-list")).toContainText(
+    `${serviceName} aggiornato`,
+  );
+  await expect(page.locator(".quick-service-order-notes")).toContainText(
+    "Nota aggiornata dal dettaglio",
+  );
   const serviceDetailUrl = page.url();
   await page.goto("/orders");
+  await page.getByRole("link", { name: "In corso", exact: true }).click();
+  await expect(page).toHaveURL(/view=active/);
+  await expect(page.getByLabel("Mese", { exact: true })).toHaveValue("");
   const quickOrderRow = page
     .locator(".order-list-body > tr")
     .filter({ hasText: serviceCode });
@@ -1183,6 +1225,18 @@ test("manages one quick service for held service orders and retail checkout", as
     "background-color",
     "rgb(223, 245, 236)",
   );
+  await quickOrderRow.getByRole("link", { name: serviceCode }).click();
+  await page.locator(".back-link").click();
+  await expect(page).toHaveURL(/view=active.*#order-/);
+  await page
+    .getByPlaceholder(
+      "Numero, cliente, telefono, dispositivo, IMEI o intervento",
+    )
+    .fill(serviceCode);
+  await expect(page.locator(".order-search-scope")).toContainText(
+    "ignora il filtro mensile",
+  );
+  await expect(quickOrderRow).toBeVisible();
   await quickOrderRow.click();
   const expectedAtInput = quickOrderRow.getByLabel("Consegna prevista", {
     exact: true,
@@ -2603,7 +2657,7 @@ test("repair list separates explicit collection from payment correction", async 
   await save(page);
   const orderPath = new URL(page.url()).pathname;
   await page.goto("/orders");
-  const row = page.locator(`tbody tr:has(a[href="${orderPath}"])`);
+  const row = page.locator(`tbody tr:has(a[href^="${orderPath}"])`);
   await row.click();
   await row
     .getByRole("button", { name: "Registra incasso", exact: true })
@@ -3105,7 +3159,7 @@ test("repair list skips movement animation when the row stays in place", async (
   const orderPath = new URL(page.url()).pathname;
   const code = (await page.locator("h1").innerText()).trim();
   await page.goto(`/orders?q=${encodeURIComponent(code)}`);
-  const row = page.locator(`tbody tr:has(a[href="${orderPath}"])`);
+  const row = page.locator(`tbody tr:has(a[href^="${orderPath}"])`);
   await expect(row).toBeVisible();
   await row.evaluate((element) => {
     document.body.dataset.samePositionAnimationObserved = "false";
@@ -4387,7 +4441,7 @@ test("zero balance delivery uses the lightweight confirmation dialog", async ({
   ).toHaveText(/Consegnato/);
 });
 
-test("detail edits require an explicit save and protect navigation", async ({
+test("detail edits save on outside click and protect navigation", async ({
   page,
 }) => {
   await fillOrder(page);
@@ -4403,11 +4457,17 @@ test("detail edits require an explicit save and protect navigation", async ({
     .fill("2099-12-30");
 
   await page.getByTestId("history-card").locator(".order-card-heading").click();
-  await expect(details).toHaveClass(/is-editing/);
-  await details.getByRole("button", { name: "Annulla", exact: true }).click();
+  await expect(details).not.toHaveClass(/is-editing/);
+  await expect(details.locator(".order-card-heading")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expect(details.locator(".order-card-summary")).toContainText(
+    "Cliente Playwright",
+  );
   await page.goto("/orders");
-  const row = page.locator(`tbody tr:has(a[href="${orderPath}"])`);
-  await expect(row).toContainText("31/12/2099");
+  const row = page.locator(`tbody tr:has(a[href^="${orderPath}"])`);
+  await expect(row).toContainText("30/12/2099");
 
   await page.goto(orderPath);
   await details.locator(".order-card-heading").click();
@@ -4416,7 +4476,7 @@ test("detail edits require an explicit save and protect navigation", async ({
     .click();
   await details
     .getByLabel("Consegna prevista", { exact: true })
-    .fill("2099-12-30");
+    .fill("2099-12-29");
   await page.locator(".back-link").click();
   const leaveDialog = page.getByRole("dialog", {
     name: "Modifiche non salvate",
@@ -4431,8 +4491,8 @@ test("detail edits require an explicit save and protect navigation", async ({
     .getByRole("dialog", { name: "Modifiche non salvate", exact: true })
     .getByRole("button", { name: "Salva ed esci", exact: true })
     .click();
-  await expect(page).toHaveURL(/\/orders$/);
-  await expect(row).toContainText("30/12/2099");
+  await expect(page).toHaveURL(/\/orders(?:#.*)?$/);
+  await expect(row).toContainText("29/12/2099");
 });
 
 test("repair detail cards lock history and keep post-sale finance auditable", async ({
@@ -4452,27 +4512,63 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   const quote = page.getByTestId("quote-card");
   const warranty = page.getByTestId("warranty-card");
   const history = page.getByTestId("history-card");
-  await expect(details.locator(".order-card-heading")).toHaveAttribute(
-    "aria-expanded",
-    "false",
+  const cardExpandIcons = [details, products, quote, warranty, history].map(
+    (card) => card.getByTestId("order-card-expand-icon"),
   );
-  await expect(products.locator(".order-card-heading")).toHaveAttribute(
+  const iconBounds = await Promise.all(
+    cardExpandIcons.map((icon) => icon.boundingBox()),
+  );
+  expect(iconBounds.every(Boolean)).toBe(true);
+  const iconRightEdges = iconBounds.map((bounds) => bounds!.x + bounds!.width);
+  expect(
+    Math.max(...iconRightEdges) - Math.min(...iconRightEdges),
+  ).toBeLessThanOrEqual(1);
+  await expect(details.locator(".order-card-heading")).toHaveAttribute(
     "aria-expanded",
     "true",
   );
-  await expect(quote.locator(".order-card-heading")).toHaveAttribute(
+  await expect(products.locator(".order-card-heading")).toHaveAttribute(
     "aria-expanded",
     "false",
+  );
+  await expect(quote.locator(".order-card-heading")).toHaveAttribute(
+    "aria-expanded",
+    "true",
   );
   await expect(warranty.locator(".order-card-heading")).toHaveAttribute(
     "aria-expanded",
     "false",
   );
+  await expect(products.locator(".order-card-summary")).toContainText(
+    "Nessun prodotto collegato",
+  );
+  await quote.locator(".order-card-heading").click();
+  await expect(quote.locator(".order-card-heading")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expect(quote.locator(".order-card-summary")).toContainText(
+    "Fotocamera",
+  );
+  await quote.locator(".order-card-heading").click();
+  await expect(quote.locator(".order-card-heading")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
+  await expect(warranty.locator(".order-card-summary")).toContainText(
+    "Fotocamera",
+  );
   await expect(history.locator(".order-card-heading")).toHaveAttribute(
     "aria-expanded",
     "false",
   );
+  await expect(history.locator(".order-card-summary")).not.toBeEmpty();
   await expect(page.getByTestId("other-information-card")).toHaveCount(0);
+  await details.locator(".order-card-heading").click();
+  await page.waitForTimeout(250);
+  await expect(details.locator(".order-card-summary")).toContainText(
+    "Cliente Playwright",
+  );
   await details.locator(".order-card-heading").click();
   await page.waitForTimeout(250);
   const repairSummary = details.locator(".detail-repair-summary");
@@ -4607,6 +4703,45 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
     details.locator(".detail-repair-summary .selected-part-summary"),
   ).toContainText("Batteria Test");
   await expect(details).toHaveClass(/is-editing/);
+  const editablePart = details.locator(
+    ".detail-repair-summary .selected-part-summary",
+  );
+  await editablePart.locator(".summary-action").click();
+  const requiredPartSearch = details.getByRole("combobox", {
+    name: "Ricambio richiesto 1",
+    exact: true,
+  });
+  await requiredPartSearch.fill("");
+  await expect(requiredPartSearch).toHaveValue("");
+  await expect(
+    details.locator(".detail-repair-summary .selected-part-summary"),
+  ).toHaveCount(0);
+  await history.locator(".order-card-heading").click();
+  await expect(details).not.toHaveClass(/is-editing/);
+  await expect(details.locator(".order-card-heading")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await details.locator(".order-card-heading").click();
+  await expect(
+    details.locator(".detail-repair-summary .selected-part-summary"),
+  ).toContainText("Nessuno");
+  await details
+    .locator(".detail-repair-summary .selected-part-summary .summary-action")
+    .click();
+  await chooseBusinessOption(
+    page,
+    "Ricambio richiesto 1",
+    "Batteria Test",
+    details,
+  );
+  await details.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(
+    details.locator(".detail-repair-summary .selected-part-summary"),
+  ).toContainText("Batteria Test");
+  await details
+    .getByRole("button", { name: "Modifica dati", exact: true })
+    .click();
   await details
     .getByLabel("Note interne", { exact: true })
     .fill("Test salvataggio unico");
@@ -4654,6 +4789,11 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
       (element) => element.getBoundingClientRect().top + window.scrollY,
     ),
   ).toBe(productsTop);
+  await products.locator(".order-card-heading").click();
+  await expect(products.locator(".order-card-heading")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
 
   const addProduct = products.getByRole("button", {
     name: "Aggiungi prodotto",
@@ -4711,7 +4851,7 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await details
     .getByLabel("Descrizione aggiuntiva")
     .fill("Fotocamera non funziona");
-  await details.locator(".order-card-heading").click();
+  await history.locator(".order-card-heading").click();
   await expect(details).not.toHaveClass(/is-editing/);
   await expect(details.locator(".order-card-heading")).toHaveAttribute(
     "aria-expanded",
@@ -4922,7 +5062,7 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   const listPage = await page.context().newPage();
   await listPage.goto("/orders");
   const reworkRow = listPage.locator(
-    `tbody tr:has(a[href="${new URL(page.url()).pathname}"])`,
+    `tbody tr:has(a[href^="${new URL(page.url()).pathname}"])`,
   );
   await expect(reworkRow).toBeVisible();
   expect(
@@ -5601,39 +5741,108 @@ test("creates a repair part from the quote and selects it immediately", async ({
   const dialog = page.getByRole("dialog", {
     name: "Nuovo ricambio per riparazione",
   });
-  await expect(dialog.getByLabel("Prodotto", { exact: true })).toHaveValue(
+  await expect(dialog.getByLabel("Nome ricambio", { exact: true })).toHaveValue(
     productName,
   );
   await expect(dialog.getByRole("button", { name: "Categoria" })).toHaveCount(
     0,
   );
   await expect(dialog.getByRole("button", { name: "Utilizzo" })).toHaveCount(0);
-  await expect(dialog.getByLabel("Costo", { exact: true })).toBeFocused();
-  await expect(dialog.getByRole("combobox", { name: "Marca" })).toHaveValue(
-    "Apple",
+  await expect(dialog.getByLabel("Costo (€)", { exact: true })).toBeFocused();
+  await expect(dialog).toContainText(
+    "Utilizzo: Apple · iPhone 13 · sostituzione display",
   );
-  await expect(dialog.getByRole("combobox", { name: "Modello" })).toHaveValue(
-    "iPhone 13",
+  await expect(dialog.locator(".product-compatibility-editor")).toHaveCount(0);
+  await expect(dialog.getByRole("combobox", { name: "Marca" })).toHaveCount(0);
+  await expect(dialog.getByRole("combobox", { name: "Modello" })).toHaveCount(
+    0,
   );
   await expect(
     dialog.getByRole("combobox", { name: /Intervento/ }),
+  ).toHaveCount(0);
+  const formGrid = dialog.locator(".form-grid");
+  await expect(formGrid.locator(":scope > *")).toHaveCount(4);
+  expect(
+    await formGrid.evaluate(
+      (element) =>
+        getComputedStyle(element).gridTemplateColumns.split(" ").length,
+    ),
+  ).toBe(2);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await formGrid.evaluate(
+      (element) =>
+        getComputedStyle(element).gridTemplateColumns.split(" ").length,
+    ),
+  ).toBe(1);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await dialog.getByLabel("Costo (€)", { exact: true }).fill("12");
+  await dialog.getByLabel("Scorta iniziale", { exact: true }).fill("0");
+  await dialog.getByLabel("Scorta minima", { exact: true }).fill("1");
+  await dialog
+    .getByLabel("Imposta come ricambio frequente", { exact: true })
+    .check();
+  await dialog.getByRole("button", { name: "Crea e seleziona" }).click();
+
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator(".selected-part-summary")).toContainText(
+    productName,
+  );
+  await expect(
+    page.getByText(
+      "Il ricambio selezionato non è sufficiente: dopo la creazione la scheda passerà automaticamente a «Ricambio mancante».",
+      { exact: true },
+    ),
+  ).toBeVisible();
+
+  await page.goto("/inventory");
+  const inventorySearch = page.getByLabel(
+    "Cerca prodotto, ricambio, marca o modello",
+    { exact: true },
+  );
+  await inventorySearch.fill(productName);
+  const createdPart = page.getByRole("row", { name: new RegExp(productName) });
+  await expect(createdPart).toContainText("Apple / Telefono / iPhone 13");
+  await createdPart.click();
+  await createdPart
+    .getByRole("button", { name: "Modifica dispositivi compatibili" })
+    .click();
+  const compatibilityDialog = page.getByRole("dialog", {
+    name: "Modifica dispositivi compatibili",
+  });
+  await expect(
+    compatibilityDialog.getByRole("combobox", { name: "Marca" }),
+  ).toHaveValue("Apple");
+  await expect(
+    compatibilityDialog.getByRole("combobox", { name: "Modello" }),
+  ).toHaveValue("iPhone 13");
+  await expect(
+    compatibilityDialog.getByRole("combobox", { name: /Intervento/ }),
   ).toHaveValue("sostituzione display");
-  const addCompatibility = dialog.getByRole("button", {
+});
+
+test("inventory repair products retain their compatibility editor", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto("/inventory");
+  const productRow = page.getByRole("row", { name: /Batteria Test/ });
+  await productRow.click();
+  await productRow
+    .getByRole("button", { name: "Modifica dispositivi compatibili" })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Modifica dispositivi compatibili",
+  });
+  const compatibilityAdd = dialog.getByRole("button", {
     name: "Compatibilità",
     exact: true,
   });
-  await expect(addCompatibility).toHaveClass(/add-device-action/);
-  await expect(addCompatibility).toHaveCSS("border-top-style", "dashed");
-  await addCompatibility.hover();
-  await expect(addCompatibility).toHaveCSS(
-    "background-color",
-    "rgb(255, 248, 217)",
-  );
-  const brandCombobox = dialog.getByRole("combobox", { name: "Marca" });
-  await dialog
-    .getByRole("button", { name: "Apri opzioni", exact: true })
-    .first()
-    .click();
+  await compatibilityAdd.click();
+  const brand = dialog
+    .getByRole("combobox", { name: "Marca", exact: true })
+    .first();
+  await brand.fill("App");
   const appleOption = page
     .locator(".business-select-panel.is-entering")
     .getByRole("option")
@@ -5646,22 +5855,25 @@ test("creates a repair part from the quote and selects it immediately", async ({
   await expect(deleteApple).toHaveCSS("opacity", "0");
   await appleOption.hover();
   await expect(deleteApple).toHaveCSS("opacity", "1");
-  await brandCombobox.press("Escape");
-  await dialog.getByLabel("Costo", { exact: true }).fill("12");
-  await dialog.getByLabel("Scorta iniziale", { exact: true }).fill("0");
-  await dialog.getByLabel("Scorta minima", { exact: true }).fill("1");
-  await dialog.getByRole("button", { name: "Salva prodotto" }).click();
-
-  await expect(dialog).toHaveCount(0);
-  await expect(page.locator(".selected-part-summary")).toContainText(
-    productName,
-  );
-  await expect(
-    page.getByText(
-      "Il ricambio selezionato non è sufficiente: dopo la creazione la scheda passerà automaticamente a «Ricambio mancante».",
-      { exact: true },
-    ),
-  ).toBeVisible();
+  await appleOption.click();
+  const model = dialog
+    .getByRole("combobox", { name: "Modello", exact: true })
+    .first();
+  await model.fill("iPhone");
+  const iphoneOption = page
+    .locator(".business-select-panel.is-entering")
+    .getByRole("option")
+    .filter({ hasText: "iPhone 13" })
+    .first();
+  const deleteIphone = iphoneOption.getByRole("button", {
+    name: "Rimuovi iPhone 13",
+    exact: true,
+  });
+  await expect(deleteIphone).toHaveCSS("opacity", "0");
+  await iphoneOption.hover();
+  await expect(deleteIphone).toHaveCSS("opacity", "1");
+  await model.press("Escape");
+  await dialog.getByRole("button", { name: "Annulla", exact: true }).click();
 });
 
 test("changing a selected repair part focuses its current name and preserves it on cancel", async ({
@@ -5757,7 +5969,15 @@ test("changing a selected repair part focuses its current name and preserves it 
   await summary.locator(".summary-action").click();
   await search.fill("");
   await expect(search).toBeVisible();
+  await expect(search).toHaveValue("");
   await page.locator(".quote-required-part-label").click();
+  await expect(search).toHaveCount(0);
+  await expect(summary).toContainText("Nessuno");
+  await chooseRequiredPart(page, "Batteria Test");
+  await summary.locator(".summary-action").click();
+  await search.fill("");
+  await expect(search).toHaveValue("");
+  await search.press("Enter");
   await expect(search).toHaveCount(0);
   await expect(summary).toContainText("Nessuno");
   await chooseRequiredPart(page, "Batteria Test");

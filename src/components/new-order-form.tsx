@@ -31,7 +31,6 @@ import {
   ItemsEditor,
   quoteItemsValid,
   type CategoryView,
-  type DeviceCatalogDeletionView,
   type RuleView,
 } from "./forms";
 import { type FaultCatalogItem } from "./fault-catalog-manager";
@@ -206,7 +205,6 @@ export function NewOrderWizard({
   customers,
   products,
   productCategories,
-  catalogDeletions = [],
 }: {
   rules: RuleView[];
   faultOptions: FaultCatalogItem[];
@@ -220,7 +218,6 @@ export function NewOrderWizard({
     available: number;
   }[];
   productCategories: CategoryView[];
-  catalogDeletions?: DeviceCatalogDeletionView[];
 }) {
   const it = useMessages();
   const { locale } = useLanguage();
@@ -788,7 +785,6 @@ export function NewOrderWizard({
                 productCategories={productCategories}
                 progressive
                 projectPicker
-                catalogDeletions={catalogDeletions}
               />
             )}
             {touched && !validQuote && (

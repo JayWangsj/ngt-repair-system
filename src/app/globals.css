@@ -883,6 +883,12 @@ td small {
     background-color 150ms ease-out,
     color 150ms ease-out;
 }
+.product-quick-repair-context {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 .order-link:hover,
 .order-link:focus-visible,
 .section-heading a:hover,
@@ -1004,6 +1010,56 @@ td small {
   gap: 12px;
   margin: 26px 0 20px;
   flex-wrap: wrap;
+}
+.order-quick-views {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow-x: auto;
+  margin-top: 20px;
+  padding-bottom: 2px;
+}
+.order-quick-views a,
+.order-quick-views > span {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 11px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.order-quick-views a:hover,
+.order-quick-views a.is-active {
+  border-color: #e8c850;
+  background: #fff6d7;
+  color: #715500;
+}
+.order-quick-views > span {
+  border-color: transparent;
+  background: #f4f5f2;
+}
+.order-date-scope-toggle {
+  min-height: 41px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: #715500;
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.order-date-scope-toggle:hover {
+  background: #fff6d7;
+}
+.order-search-scope {
+  flex: 1 1 100%;
+  margin: -3px 0 0;
+  color: var(--muted);
+  font-size: 11px;
 }
 .order-pagination {
   display: flex;
@@ -1413,12 +1469,61 @@ textarea {
   font-size: 11px;
 }
 .detail-status-control .inline-order-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
 }
 .detail-primary-actions {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+.stage-primary-action {
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 11px;
+}
+.quick-service-detail-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.quick-service-detail-heading h2 {
+  margin: 0;
+}
+.quick-service-order-edit-trigger {
+  min-height: 34px;
+  padding: 7px 10px;
+  font-size: 11px;
+}
+.quick-service-order-notes {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.quick-service-order-edit-items,
+.quick-service-order-edit-totals {
+  display: grid;
+  gap: 10px;
+}
+.quick-service-order-edit-totals {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: #fffdf7;
+  color: var(--muted);
+  font-size: 11px;
+}
+.quick-service-order-edit-totals strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 13px;
 }
 .status-dropdown {
   display: inline-flex;
@@ -1638,14 +1743,20 @@ textarea {
   background: #fffefb;
 }
 .order-card-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 20px;
+  align-items: start;
   gap: 12px;
   margin: calc(var(--detail-card-padding) * -1)
     calc(var(--detail-card-padding) * -1) 0;
   padding: var(--detail-card-padding);
   cursor: pointer;
+}
+.order-card-title {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  gap: 5px;
 }
 .order-card-toggle {
   min-width: 0;
@@ -1663,6 +1774,12 @@ textarea {
   text-align: left;
   transition: color 150ms ease-out;
 }
+.order-card-summary {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
 .order-card-toggle h2 {
   margin: 0;
   font: inherit;
@@ -1675,6 +1792,14 @@ textarea {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+.order-card-expand-icon {
+  display: grid;
+  width: 20px;
+  height: 24px;
+  margin-top: 2px;
+  place-items: center;
+  color: var(--ink);
 }
 .order-card-actions > small {
   border-radius: 999px;
@@ -2304,6 +2429,9 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
   .filters .button {
     flex: 1;
   }
+  .filters > .order-date-scope-toggle {
+    flex: 1;
+  }
   .form-section {
     padding: 20px 18px;
   }
@@ -2323,6 +2451,15 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
   .detail-status {
     flex-wrap: wrap;
     gap: 10px;
+  }
+  .detail-primary-actions {
+    flex-wrap: wrap;
+  }
+  .quick-service-detail-heading {
+    flex-wrap: wrap;
+  }
+  .quick-service-order-edit-totals {
+    grid-template-columns: 1fr;
   }
   .padded {
     padding: 20px;

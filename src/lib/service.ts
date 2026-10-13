@@ -44,6 +44,7 @@ import {
   userInput,
   quickServiceInput,
   quickServiceOrderInput,
+  quickServiceOrderEditInput,
   renameDeviceModelInput,
   deleteWorkOrderInput,
 } from "./validation";
@@ -2981,6 +2982,63 @@ export async function createQuickServiceOrder(actorInput: Actor, raw: unknown) {
       serviceIds,
     });
     return order;
+  });
+}
+
+export async function updateQuickServiceOrder(
+  actorInput: Actor,
+  id: string,
+  raw: unknown,
+) {
+  const data = quickServiceOrderEditInput.parse(raw);
+  return transact(async (tx) => {
+    const actor = await currentActor(tx, actorInput);
+    const order = await tx.workOrder.findUniqueOrThrow({
+      where: { id },
+      include: { items: true, payments: true, products: true },
+    });
+    if (order.type !== "QUICK_SERVICE")
+      throw new BusinessError("La scheda non è un servizio rapido.");
+    if (["COMPLETED", "REFUNDED", "CANCELLED"].includes(order.status))
+      throw new BusinessError("La scheda è chiusa.");
+    const itemIds = new Set(data.items.map((item) => item.id));
+    if (
+      data.items.length !== order.items.length ||
+      order.items.some((item) => !itemIds.has(item.id))
+    )
+      throw new BusinessError("I servizi della scheda sono cambiati.");
+    const items = data.items.map((item) => ({
+      ...order.items.find((existing) => existing.id === item.id)!,
+      project: item.project,
+      final: decimal(cents(item.final)),
+    }));
+    if (balance(items, order.payments, order) < 0)
+      throw new BusinessError(
+        "Il totale non può essere inferiore agli incassi già registrati.",
+      );
+    await assertDueDate(tx, data.expectedAt.slice(0, 10));
+    await tx.workOrder.update({
+      where: { id },
+      data: {
+        expectedAt: data.expectedAt,
+        dueDate: data.expectedAt.slice(0, 10),
+        notes: data.notes,
+        fault: items.map((item) => item.project).join("; "),
+      },
+    });
+    for (const item of data.items)
+      await tx.workOrderItem.update({
+        where: { id: item.id },
+        data: {
+          project: item.project,
+          final: decimal(cents(item.final)),
+        },
+      });
+    await audit(tx, actor, id, "QUICK_SERVICE_ORDER_UPDATED", {
+      expectedAt: data.expectedAt,
+      notes: data.notes,
+      items: data.items.map(({ project, final }) => ({ project, final })),
+    });
   });
 }
 

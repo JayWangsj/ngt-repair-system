@@ -91,15 +91,23 @@ export async function OrderTable({
   orders,
   hideCustomer = false,
   compact = false,
+  returnTo = "/orders",
+  emptyText,
 }: {
   orders: Row[];
   hideCustomer?: boolean;
   compact?: boolean;
+  returnTo?: string;
+  emptyText?: string;
 }) {
   const it = await getMessages();
   const today = await getBusinessDay();
   if (!orders.length)
-    return compact ? <p className="compact-empty">{it.empty}</p> : <Empty />;
+    return compact ? (
+      <p className="compact-empty">{emptyText ?? it.empty}</p>
+    ) : (
+      <Empty text={emptyText} />
+    );
   return (
     <div className="table-scroll order-table-scroll">
       <table className={`order-table${compact ? " order-table-compact" : ""}`}>
@@ -118,6 +126,7 @@ export async function OrderTable({
         <OrderListBody
           hideCustomer={hideCustomer}
           compact={compact}
+          returnTo={returnTo}
           rows={orders.map((order) => {
             const due = ["REFUNDED", "CANCELLED"].includes(order.status)
               ? 0

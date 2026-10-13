@@ -51,6 +51,7 @@ import {
   deleteInventoryCategory,
   deleteDeviceCatalogOption,
   createQuickServiceOrder,
+  updateQuickServiceOrder,
   deleteQuickService,
   deleteWorkOrder,
   renameDeviceModel,
@@ -2509,12 +2510,60 @@ describe("quick service orders", () => {
     });
     expect(saved.relatedDevices).toHaveLength(2);
     expect(saved.items[0].final.toString()).toBe("35");
+    await updateQuickServiceOrder(staff, order.id, {
+      expectedAt: "2099-12-29T18:00",
+      notes: "Nota aggiornata",
+      items: [
+        {
+          id: saved.items[0].id,
+          project: "Migrazione completata",
+          final: "40",
+        },
+      ],
+    });
+    const edited = await db.workOrder.findUniqueOrThrow({
+      where: { id: order.id },
+      include: { items: true },
+    });
+    expect(edited).toMatchObject({
+      expectedAt: "2099-12-29T18:00",
+      dueDate: "2099-12-29",
+      notes: "Nota aggiornata",
+    });
+    expect(edited.items[0]).toMatchObject({ project: "Migrazione completata" });
+    expect(edited.items[0].final.toString()).toBe("40");
     expect(
       (await db.device.findUniqueOrThrow({ where: { id: firstDevice.id } }))
         .model,
     ).toBe("Galaxy A26 5G");
     await deleteWorkOrder(owner, order.id, { code: order.code });
     expect(await db.workOrder.count({ where: { id: order.id } })).toBe(0);
+
+    const paidOrder = await createQuickServiceOrder(staff, {
+      requestId: randomUUID(),
+      customerId: customer.id,
+      deviceIds: [firstDevice.id],
+      services: [{ serviceId: service.id, price: "35" }],
+      expectedAt: "2099-12-31T18:30",
+    });
+    const paidItem = await db.workOrderItem.findFirstOrThrow({
+      where: { orderId: paidOrder.id },
+    });
+    await addPayment(staff, paidOrder.id, {
+      requestId: randomUUID(),
+      amount: "20",
+      method: "CASH",
+      kind: "BALANCE",
+    });
+    await expect(
+      updateQuickServiceOrder(staff, paidOrder.id, {
+        expectedAt: "2099-12-31T18:30",
+        notes: "",
+        items: [
+          { id: paidItem.id, project: "Migrazione completa", final: "19.99" },
+        ],
+      }),
+    ).rejects.toThrow("inferiore agli incassi");
   });
 });
 

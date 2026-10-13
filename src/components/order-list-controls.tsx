@@ -22,7 +22,11 @@ import {
 } from "@/lib/order-motion";
 import { useBusinessDay } from "./business-date";
 import { useMessages } from "./language";
-import { StatusDropdown, type StatusDropdownOrder } from "./status-dropdown";
+import {
+  StatusDropdown,
+  type PrimaryStatusAction,
+  type StatusDropdownOrder,
+} from "./status-dropdown";
 import { FormDialog, PaymentForm } from "./forms";
 import { Button } from "./ui/button";
 
@@ -51,6 +55,7 @@ function StatusControl({
   active,
   onSettled,
   refreshOnSettled,
+  primaryAction,
 }: {
   row: Pick<
     OrderListRow,
@@ -66,6 +71,7 @@ function StatusControl({
   active: boolean;
   onSettled?: (order: StatusDropdownOrder) => void;
   refreshOnSettled?: boolean;
+  primaryAction?: PrimaryStatusAction;
 }) {
   return (
     <StatusDropdown
@@ -74,6 +80,7 @@ function StatusControl({
       active={active}
       onSettled={onSettled}
       refreshOnSettled={refreshOnSettled}
+      primaryAction={primaryAction}
     />
   );
 }
@@ -87,6 +94,7 @@ export function DetailStatusControl({
   balance,
   afterSalesOpen,
   type,
+  primaryAction,
 }: Pick<
   OrderListRow,
   | "id"
@@ -97,7 +105,7 @@ export function DetailStatusControl({
   | "balance"
   | "afterSalesOpen"
   | "type"
->) {
+> & { primaryAction?: PrimaryStatusAction }) {
   return (
     <div className="detail-status-control">
       <StatusControl
@@ -112,6 +120,7 @@ export function DetailStatusControl({
           type,
         }}
         active
+        primaryAction={primaryAction}
       />
     </div>
   );
@@ -333,10 +342,12 @@ export function OrderListBody({
   rows,
   hideCustomer = false,
   compact = false,
+  returnTo = "/orders",
 }: {
   rows: OrderListRow[];
   hideCustomer?: boolean;
   compact?: boolean;
+  returnTo?: string;
 }) {
   const it = useMessages();
   const [activeId, setActiveId] = useState("");
@@ -724,6 +735,7 @@ export function OrderListBody({
         return (
           <tr
             key={row.id}
+            id={`order-${row.id}`}
             data-order-id={row.id}
             className={`business-list-row ${active ? "order-row-active" : ""} ${suppressedHoverId === row.id ? "order-row-hover-suppressed" : ""} ${highlightedId === row.id ? "order-row-status-highlight" : ""}`.trim()}
             onClick={() => setActiveId(row.id)}
@@ -749,7 +761,7 @@ export function OrderListBody({
             <td>
               <Link
                 className="order-link order-code-link"
-                href={`/orders/${row.id}`}
+                href={`/orders/${row.id}?returnTo=${encodeURIComponent(returnTo)}`}
                 onClick={(event) => event.stopPropagation()}
               >
                 <span>{row.code}</span>

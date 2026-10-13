@@ -205,16 +205,20 @@ export type StatusDropdownOrder = {
   type?: "REPAIR" | "QUICK_SERVICE";
 };
 
+export type PrimaryStatusAction = { status: OrderStatus; label: string };
+
 export function StatusDropdown({
   order,
   active = true,
   onSettled,
   refreshOnSettled = true,
+  primaryAction,
 }: {
   order: StatusDropdownOrder;
   active?: boolean;
   onSettled?: (order: StatusDropdownOrder) => void;
   refreshOnSettled?: boolean;
+  primaryAction?: PrimaryStatusAction;
 }) {
   const it = useMessages();
   const router = useRouter();
@@ -270,6 +274,32 @@ export function StatusDropdown({
     if (refreshOnSettled) router.refresh();
     else router.prefetch(`/customers${window.location.search}`);
   }
+  function selectStatus(next: OrderStatus) {
+    if (next === "COMPLETED") return setCheckoutOpen(true);
+    if (next === "CANCELLED") {
+      setCancelAmount(decimal(currentOrder.balance));
+      setCollectDiagnostic(false);
+      return setCancelOpen(true);
+    }
+    void (async () => {
+      setPending(true);
+      setError("");
+      try {
+        const result = await submitStatus(
+          order.id,
+          { status: next, note: "", pickedUpBy: "" },
+          refreshOnSettled,
+        );
+        if (!result.ok) return setError(result.error);
+        if (!result.data) return setError(it.connectionError);
+        settled(result.data);
+      } catch {
+        setError(it.connectionError);
+      } finally {
+        setPending(false);
+      }
+    })();
+  }
   if (!active)
     return (
       <span className={`badge status-${currentOrder.status.toLowerCase()}`}>
@@ -279,6 +309,16 @@ export function StatusDropdown({
     );
   return (
     <div className="inline-order-control">
+      {primaryAction && (
+        <Button
+          type="button"
+          className="stage-primary-action"
+          disabled={pending}
+          onClick={() => selectStatus(primaryAction.status)}
+        >
+          {primaryAction.label}
+        </Button>
+      )}
       <StatusSelect
         value={currentOrder.status}
         label={statusLabel(currentOrder.status)}
@@ -287,35 +327,7 @@ export function StatusDropdown({
           label: statusLabel(status),
         }))}
         disabled={pending}
-        onChange={(next) => {
-          if (next === "COMPLETED") return setCheckoutOpen(true);
-          if (next === "CANCELLED") {
-            setCancelAmount(decimal(currentOrder.balance));
-            setCollectDiagnostic(false);
-            return setCancelOpen(true);
-          }
-          void (async () => {
-            setPending(true);
-            try {
-              const result = await submitStatus(
-                order.id,
-                {
-                  status: next,
-                  note: "",
-                  pickedUpBy: "",
-                },
-                refreshOnSettled,
-              );
-              if (!result.ok) return setError(result.error);
-              if (!result.data) return setError(it.connectionError);
-              settled(result.data);
-            } catch {
-              setError(it.connectionError);
-            } finally {
-              setPending(false);
-            }
-          })();
-        }}
+        onChange={selectStatus}
       />
       {error && !cancelOpen && (
         <small className="inline-control-error">{error}</small>

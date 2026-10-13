@@ -12,9 +12,18 @@ type FilterValues = {
   status: string;
   attention: string;
   type: string;
+  view: string;
 };
 
-export function OrderFilters({ initial }: { initial: FilterValues }) {
+export function OrderFilters({
+  initial,
+  currentMonth,
+  exactOrderSearch = false,
+}: {
+  initial: FilterValues;
+  currentMonth: string;
+  exactOrderSearch?: boolean;
+}) {
   const it = useMessages();
   const router = useRouter();
   const pathname = usePathname();
@@ -27,10 +36,11 @@ export function OrderFilters({ initial }: { initial: FilterValues }) {
     const navigate = () => {
       const params = new URLSearchParams();
       if (next.q.trim()) params.set("q", next.q.trim());
-      if (next.month) params.set("month", next.month);
       if (next.status) params.set("status", next.status);
       if (next.attention) params.set("attention", next.attention);
       if (next.type) params.set("type", next.type);
+      if (next.view) params.set("view", next.view);
+      params.set("month", next.month);
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     };
     if (delay) timer.current = window.setTimeout(navigate, delay);
@@ -64,6 +74,20 @@ export function OrderFilters({ initial }: { initial: FilterValues }) {
           onChange={(event) => apply({ ...values, month: event.target.value })}
         />
       </label>
+      <button
+        type="button"
+        className="order-date-scope-toggle"
+        onClick={() =>
+          apply({
+            ...values,
+            month: values.month ? "" : currentMonth,
+            view: "",
+            attention: "",
+          })
+        }
+      >
+        {values.month ? it.orderViews.allTime : it.orderViews.month}
+      </button>
       <label>
         <span className="sr-only">{it.statusLabel}</span>
         <SimpleSelect
@@ -118,6 +142,11 @@ export function OrderFilters({ initial }: { initial: FilterValues }) {
           ]}
         />
       </label>
+      {exactOrderSearch && (
+        <p className="order-search-scope" role="status">
+          {it.exactOrderSearchScope}
+        </p>
+      )}
     </div>
   );
 }

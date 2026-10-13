@@ -188,8 +188,9 @@ export function SelectDropdown({
       focus = false,
       commit = true,
     }: { focus?: boolean; commit?: boolean } = {}) => {
+      const currentQuery = search.current?.value ?? query;
       if (commit && searchable) {
-        if (query.trim()) onCommit?.(query.trim());
+        if (currentQuery.trim()) onCommit?.(currentQuery.trim());
         else if (commitEmptyOnClose && open) onChange?.("");
       }
       setOpen(false);
@@ -240,10 +241,16 @@ export function SelectDropdown({
     setActive((current) => (current + delta + visible.length) % visible.length);
   }
   function keys(event: KeyboardEvent) {
+    const currentQuery =
+      event.currentTarget instanceof HTMLInputElement
+        ? event.currentTarget.value
+        : (search.current?.value ?? query);
+    const currentTrimmedQuery = currentQuery.trim();
     if (
       searchable &&
       !open &&
       currentValue &&
+      !commitEmptyOnClose &&
       (event.key === "Backspace" || event.key === "Delete")
     ) {
       event.preventDefault();
@@ -265,7 +272,7 @@ export function SelectDropdown({
     else if (
       event.key === "Enter" &&
       searchable &&
-      !trimmedQuery &&
+      !currentTrimmedQuery &&
       commitEmptyOnClose
     ) {
       onChange?.("");
@@ -275,27 +282,27 @@ export function SelectDropdown({
     } else if (
       event.key === "Enter" &&
       searchable &&
-      trimmedQuery &&
+      currentTrimmedQuery &&
       !visible.length &&
       onNoMatchEnter
     ) {
-      onNoMatchEnter(trimmedQuery);
+      onNoMatchEnter(currentTrimmedQuery);
     } else if (
       event.key === "Enter" &&
       searchable &&
-      trimmedQuery &&
+      currentTrimmedQuery &&
       onCommit
     ) {
       close();
     } else if (
       event.key === "Enter" &&
       searchable &&
-      trimmedQuery &&
+      currentTrimmedQuery &&
       onCustom &&
       canCreate
     ) {
       close({ commit: false });
-      onCustom(trimmedQuery);
+      onCustom(currentTrimmedQuery);
     }
   }
   useEffect(() => {
@@ -308,8 +315,8 @@ export function SelectDropdown({
       )
         close();
     }
-    document.addEventListener("pointerdown", outside);
-    return () => document.removeEventListener("pointerdown", outside);
+    document.addEventListener("pointerdown", outside, true);
+    return () => document.removeEventListener("pointerdown", outside, true);
   }, [close, open, panel, trigger]);
   useEffect(() => {
     if (!open) {
@@ -332,6 +339,7 @@ export function SelectDropdown({
     )
       return;
     const frame = requestAnimationFrame(() => {
+      if (initialFocusApplied.current) return;
       const element = trigger.current;
       if (!element || disabled) return;
       initialFocusApplied.current = true;
@@ -403,12 +411,14 @@ export function SelectDropdown({
               disabled={disabled}
               onChange={(event) => {
                 const next = event.target.value;
+                initialFocusApplied.current = true;
                 setQuery(next);
                 setActive(0);
                 onQueryChange?.(next);
                 if (next.trim()) {
                   if (!open) openDropdown();
-                } else if (commitEmptyOnClose && open) {
+                } else if (commitEmptyOnClose && (open || currentValue)) {
+                  if (!open) openDropdown();
                   setOpen(true);
                 } else {
                   setInternalValue("");
@@ -430,7 +440,8 @@ export function SelectDropdown({
                   setQuery("");
                   setActive(0);
                   onQueryChange?.("");
-                  if (commitEmptyOnClose && open) {
+                  if (commitEmptyOnClose && (open || currentValue)) {
+                    if (!open) openDropdown();
                     requestAnimationFrame(() =>
                       focusComfortably(search.current),
                     );

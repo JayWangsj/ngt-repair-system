@@ -66,7 +66,10 @@ Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile
 
 [Code]
 var
-  InstallFilesStartedAt: TDateTime;
+  InstallFilesStartedAt: Longint;
+
+function GetTickCount: Longint;
+  external 'GetTickCount@kernel32.dll stdcall';
 
 procedure WriteInstallStage(const Stage, Detail: String);
 var
@@ -86,7 +89,7 @@ var
 begin
   if CurStep = ssInstall then
   begin
-    InstallFilesStartedAt := Now;
+    InstallFilesStartedAt := GetTickCount;
     WriteInstallStage('install-files', 'START');
     exit;
   end;
@@ -95,7 +98,7 @@ begin
     exit;
 
   WriteInstallStage('install-files', 'COMPLETE durationSeconds=' +
-    FloatToStr((Now - InstallFilesStartedAt) * 86400));
+    FloatToStr((GetTickCount - InstallFilesStartedAt) / 1000));
   WizardForm.StatusLabel.Caption := '正在准备运行环境、数据库并启动系统…';
   PowerShellPath := ExpandConstant('{sys}\WindowsPowerShell\v1.0\powershell.exe');
   Parameters := '-NoProfile -ExecutionPolicy Bypass -File "' +

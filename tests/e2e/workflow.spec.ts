@@ -7054,6 +7054,13 @@ test("test tools generate linked data and persist repair motion tuning", async (
     ),
   ).toBe(true);
 
+  await page.goto("/orders");
+  const existingTestOrderCount = await page
+    .locator('.order-list-body tr:has(.order-customer-link[href*="TEST-"])')
+    .count();
+  await page.goto("/settings/test-tools");
+  await expect(tools).toBeVisible();
+
   const lift = tools
     .locator(".test-motion-control")
     .filter({ hasText: "Altezza sollevamento" })
@@ -7094,7 +7101,7 @@ test("test tools generate linked data and persist repair motion tuning", async (
   const generatedRows = page.locator(
     '.order-list-body tr:has(.order-customer-link[href*="TEST-"])',
   );
-  await expect(generatedRows).toHaveCount(50);
+  await expect(generatedRows).toHaveCount(existingTestOrderCount + 50);
   const codes = await generatedRows
     .locator(".order-code-link span")
     .allTextContents();
@@ -7118,6 +7125,7 @@ test("test tools generate linked data and persist repair motion tuning", async (
   await diagnosticRow.locator(".order-code-link").click();
   const status = page.locator(".detail-status .status-dropdown-trigger");
   await expect(status).toContainText("In diagnosi");
+  await page.waitForLoadState("networkidle");
   const quote = page.getByTestId("quote-card");
   await quote.getByRole("button", { name: "Diagnosi e preventivo" }).click();
   await page
@@ -7129,6 +7137,7 @@ test("test tools generate linked data and persist repair motion tuning", async (
   const dialog = page.getByRole("dialog", {
     name: "Completa diagnosi e crea preventivo",
   });
+  await expect(dialog).toBeVisible();
   await expect(dialog.locator(".quote-item")).toHaveCount(0);
   await dialog.getByLabel("Non si accende", { exact: true }).check();
   await dialog

@@ -325,6 +325,21 @@ test("new repair uses a single selected accordion step", async ({ page }) => {
   await expect(cards.nth(0).locator(".order-step-state")).toContainText(
     "In corso",
   );
+  await expect(page.locator(".order-step-title small")).toHaveCount(0);
+  const incompleteReminder = page.locator(
+    ".sticky-order-actions.needs-attention",
+  );
+  await expect(incompleteReminder).toContainText(
+    "Completa: Cliente e contatto",
+  );
+  await expect(incompleteReminder).toHaveCSS(
+    "background-color",
+    "rgb(255, 248, 217)",
+  );
+  await expect(incompleteReminder).toHaveCSS(
+    "border-color",
+    "rgb(228, 182, 0)",
+  );
   await expect(page.locator(".order-step-collapse.is-expanded")).toHaveCount(1);
   const cardGaps = async () =>
     cards.evaluateAll((elements) =>

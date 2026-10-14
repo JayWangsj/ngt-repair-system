@@ -124,7 +124,6 @@ function StepCard({
   title,
   state,
   summary,
-  summaryError = false,
   selected,
   expanded,
   onToggle,
@@ -134,7 +133,6 @@ function StepCard({
   title: string;
   state: "not-started" | "in-progress" | "completed";
   summary?: string;
-  summaryError?: boolean;
   selected: boolean;
   expanded: boolean;
   onToggle: () => void;
@@ -179,9 +177,7 @@ function StepCard({
             {title}{" "}
             {state === "completed" && <Check size={16} aria-hidden="true" />}
           </strong>
-          {summary && (
-            <small className={summaryError ? "is-error" : ""}>{summary}</small>
-          )}
+          {summary && <small>{summary}</small>}
         </span>
         <span className="order-step-state">{label}</span>
         <ChevronDown className="order-step-chevron" size={17} />
@@ -458,16 +454,6 @@ export function NewOrderWizard({
           .filter(Boolean),
         ...customFaults,
       ].join(", ");
-  const step2Missing = !brand.trim()
-    ? it.selectBrandError
-    : !model.trim()
-      ? it.selectModelError
-      : !validFault
-        ? it.selectFaultError
-        : !dueDate
-          ? it.selectDueDateError
-          : "";
-
   return (
     <>
       <div className="new-order-layout">
@@ -484,11 +470,7 @@ export function NewOrderWizard({
             selected={selectedStep === 0}
             expanded={expandedStep === 0}
             onToggle={() => toggleStep(0)}
-            summary={
-              customer?.name ??
-              (expandedStep !== 0 ? it.selectCustomerError : undefined)
-            }
-            summaryError={!validCustomer && expandedStep !== 0}
+            summary={customer?.name}
           >
             <CustomerPicker
               customers={customers}
@@ -506,13 +488,10 @@ export function NewOrderWizard({
             expanded={expandedStep === 1}
             onToggle={() => toggleStep(1)}
             summary={
-              expandedStep !== 1 && !validStep2
-                ? step2Missing
-                : validDevice
-                  ? `${categories[category][locale === "zh" ? 1 : 0]} · ${brand} · ${model}${faultSummary ? ` · ${faultSummary}` : ""}`
-                  : undefined
+              validDevice
+                ? `${categories[category][locale === "zh" ? 1 : 0]} · ${brand} · ${model}${faultSummary ? ` · ${faultSummary}` : ""}`
+                : undefined
             }
-            summaryError={expandedStep !== 1 && !validStep2}
           >
             {validDevice ? (
               <RepairDeviceSummary
@@ -745,13 +724,8 @@ export function NewOrderWizard({
             summary={
               validQuote
                 ? `${inspectionMode ? it.inspectionFeeLabel : `${items.length} ${it.repairItems}`} · ${money(quote.due)}`
-                : validStep2 && expandedStep !== 2
-                  ? inspectionMode
-                    ? it.inspectionFeeError
-                    : it.repairItemError
-                  : undefined
+                : undefined
             }
-            summaryError={expandedStep !== 2 && validStep2 && !validQuote}
           >
             {inspectionMode ? (
               <>
@@ -894,7 +868,9 @@ export function NewOrderWizard({
               {translateError(error, locale)}
             </p>
           )}
-          <div className="sticky-order-actions">
+          <div
+            className={`sticky-order-actions ${ready ? "is-ready" : "needs-attention"}`}
+          >
             <div>
               {ready ? (
                 <>

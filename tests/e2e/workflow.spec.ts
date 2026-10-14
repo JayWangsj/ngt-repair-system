@@ -2661,6 +2661,17 @@ test("repair list exposes month, status, due-date and payment controls", async (
     "transform",
     "matrix(1, 0, 0, 1, 0, 0)",
   );
+  const dueDateInput = row.getByLabel("Consegna prevista", { exact: true });
+  await expect(dueDateInput).toHaveValue("2099-12-31");
+  const dateTextWidth = await dueDateInput.evaluate((input) => {
+    const style = getComputedStyle(input);
+    return (
+      input.clientWidth -
+      parseFloat(style.paddingLeft) -
+      parseFloat(style.paddingRight)
+    );
+  });
+  expect(dateTextWidth).toBeGreaterThanOrEqual(90);
   const status = row.locator(".status-dropdown-trigger");
   await expect(status).toBeVisible();
   await expect(row.locator("select.status-select")).toHaveCount(0);

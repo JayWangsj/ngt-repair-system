@@ -76,7 +76,7 @@ export function BatchControls({
       </Button>
       <Button
         variant="ghost"
-        className="batch-control-button"
+        className="batch-control-button batch-control-finish"
         disabled={pending}
         onClick={onFinish}
       >

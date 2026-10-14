@@ -685,7 +685,8 @@ test("repair project picker selects multiple items and removes a summary on hove
   await expect(remove).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await remove.hover();
   await expect(remove).toHaveCSS("border-top-color", "rgba(0, 0, 0, 0)");
-  await expect(remove).toHaveCSS("background-color", "rgb(255, 247, 214)");
+  await expect(remove).toHaveCSS("background-color", "rgb(255, 240, 238)");
+  await expect(remove).toHaveCSS("color", "rgb(166, 70, 66)");
   await remove.click();
   await expect(summaries).toHaveCount(0);
 });
@@ -2143,6 +2144,33 @@ test("creates and edits a product directly in the inventory row", async ({
   await expect(
     repairPartRow.locator("td.inventory-price-cell").last().locator("input"),
   ).toHaveCount(0);
+  const categoryTrigger = repairPartRow.locator(
+    ".inventory-category-cell .business-select-trigger",
+  );
+  await expect(categoryTrigger).toBeVisible();
+  await expect(
+    repairPartRow.locator(".inventory-category-cell .business-combobox-input"),
+  ).toHaveCount(0);
+  const categoryLabel = await categoryTrigger.innerText();
+  const categoryAndUsage = await repairPartRow.evaluate((element) => {
+    const category = element
+      .querySelector(".inventory-category-cell .business-select-trigger")!
+      .getBoundingClientRect();
+    const usage = element
+      .querySelector(".inventory-usage-cell .business-select-trigger")!
+      .getBoundingClientRect();
+    return { categoryRight: category.right, usageLeft: usage.left };
+  });
+  expect(categoryAndUsage.categoryRight).toBeLessThanOrEqual(
+    categoryAndUsage.usageLeft,
+  );
+  await categoryTrigger.click();
+  const currentCategoryOption = page.getByRole("option", {
+    name: categoryLabel,
+    exact: true,
+  });
+  await expect(currentCategoryOption).toBeVisible();
+  await currentCategoryOption.click();
   const usageAndCompatibility = await repairPartRow.evaluate((element) => {
     const usage = element
       .querySelector(".inventory-usage-cell .business-select-trigger")!
@@ -7369,6 +7397,10 @@ test("customer detail removes duplicate actions and supports keyboard icon editi
   await page.locator(".customer-name .order-link").first().click();
   const customerDialog = page.getByRole("dialog");
   await expect(customerDialog.locator(".customer-summary")).toBeVisible();
+  const dialogClose = customerDialog.locator(".dialog-close");
+  await dialogClose.hover();
+  await expect(dialogClose).toHaveCSS("background-color", "rgb(255, 240, 238)");
+  await expect(dialogClose).toHaveCSS("color", "rgb(166, 70, 66)");
   await expect(
     customerDialog.locator(".eyebrow").filter({ hasText: "Area di lavoro" }),
   ).toHaveCount(0);

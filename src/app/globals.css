@@ -8209,6 +8209,17 @@ summary.record-icon::-webkit-details-marker {
 .retail-remove:active:not(:disabled) {
   background: #fbdedb;
 }
+.x-icon-button:hover:not(:disabled),
+.dialog-close:hover:not(:disabled),
+.quick-service-remove:hover:not(:disabled),
+.retail-remove:hover:not(:disabled),
+.compatibility-project-chip button:hover:not(:disabled),
+.update-notification button:hover:not(:disabled),
+.batch-control-button.batch-control-finish:hover:not(:disabled) {
+  border-color: transparent;
+  background: #fff0ee;
+  color: #a64642;
+}
 .retail-clear.button {
   border-color: transparent;
   background: transparent;
@@ -8551,7 +8562,11 @@ summary.record-icon::-webkit-details-marker {
   min-width: 180px;
 }
 .inventory-category-cell .business-select {
-  min-width: 170px;
+  width: 100%;
+  min-width: 0;
+}
+.inventory-category-cell .business-select-trigger {
+  min-width: 0;
 }
 .inventory-usage-cell .business-select {
   width: 100%;

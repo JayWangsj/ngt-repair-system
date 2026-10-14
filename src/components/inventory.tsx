@@ -1321,26 +1321,20 @@ export function InventoryWorkspace({
                     </td>
                     <td className="inventory-category-cell">
                       {selected ? (
-                        <SearchableCombobox
+                        <SimpleSelect
                           value={product.category}
                           onChange={(category) =>
                             updateDraft(product, { category })
                           }
-                          groups={[
-                            {
-                              options: [
-                                ...new Set([
-                                  product.category,
-                                  ...presetCategories,
-                                  ...categoryOptions.map((item) => item.name),
-                                ]),
-                              ].map((item) => ({ value: item, label: item })),
-                            },
-                          ]}
+                          options={[
+                            ...new Set([
+                              product.category,
+                              ...presetCategories,
+                              ...categoryOptions.map((item) => item.name),
+                            ]),
+                          ].map((item) => ({ value: item, label: item }))}
                           placeholder={it.selectOption}
                           ariaLabel={it.inventory.category}
-                          searchPlaceholder={it.inventory.search}
-                          emptyText={it.noMatches}
                         />
                       ) : (
                         product.category

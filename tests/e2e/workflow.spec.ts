@@ -2842,7 +2842,7 @@ test("repair list animates a row reordered by a local status change", async ({
   const newerOrderPath = new URL(page.url()).pathname;
   await page.goto("/orders");
 
-  const olderRow = page.locator(`tbody tr:has(a[href="${olderOrderPath}"])`);
+  const olderRow = page.locator(`tbody tr:has(a[href^="${olderOrderPath}"])`);
   const initialOrder = await page
     .locator(".order-code-link")
     .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
@@ -2948,7 +2948,7 @@ test("repair list animates a row reordered by a local status change", async ({
         )
           document.body.dataset.changedOrderCameraObserved = "true";
         const changedRow = document
-          .querySelector(`a[href="${changedHref}"]`)
+          .querySelector(`a[href^="${changedHref}"]`)
           ?.closest("tr");
         if (changedRow) {
           document.body.dataset.changedOrderMaximumHeightDifference = String(
@@ -3054,7 +3054,7 @@ test("repair list animates a row reordered by a local status change", async ({
           );
           const changed = cell
             .closest("tr")
-            ?.querySelector(`a[href="${changedHref}"]`);
+            ?.querySelector(`a[href^="${changedHref}"]`);
           const moving =
             changed &&
             cell.closest("tr")?.classList.contains("order-row-status-moving");
@@ -3244,7 +3244,7 @@ test("repair list animates a row reordered by a local status change", async ({
 
   await page.goto("/orders");
   const fixedViewportRow = page.locator(
-    `tbody tr:has(a[href="${newerOrderPath}"])`,
+    `tbody tr:has(a[href^="${newerOrderPath}"])`,
   );
   await page
     .locator("tbody tr")
@@ -3315,7 +3315,7 @@ test("repair list delivery uses the shared checkout and refreshes the row", asyn
   await state(page, "READY");
   const orderPath = new URL(page.url()).pathname;
   await page.goto("/orders");
-  const row = page.locator(`tbody tr:has(a[href="${orderPath}"])`);
+  const row = page.locator(`tbody tr:has(a[href^="${orderPath}"])`);
   await row.click();
   await row.locator(".status-dropdown-trigger").click();
   await page
@@ -3350,7 +3350,7 @@ test("repair list cancellation uses the shared confirmation and locks the row", 
   await save(page);
   const orderPath = new URL(page.url()).pathname;
   await page.goto("/orders");
-  const row = page.locator(`tbody tr:has(a[href="${orderPath}"])`);
+  const row = page.locator(`tbody tr:has(a[href^="${orderPath}"])`);
   await row.click();
   await row.locator(".status-dropdown-trigger").click();
   await page
@@ -3422,7 +3422,7 @@ test("diagnostic cancellation can collect the remaining diagnostic fee", async (
   const cancelledOrderPath = new URL(page.url()).pathname;
   await page.goto("/orders");
   const cancelledRow = page.locator(
-    `tbody tr:has(a[href="${cancelledOrderPath}"])`,
+    `tbody tr:has(a[href^="${cancelledOrderPath}"])`,
   );
   await expect(cancelledRow.locator(".order-payment-values")).toContainText(
     "30,00 €",
@@ -3504,7 +3504,7 @@ test("diagnostic order saves faults, date and quote in one progressive flow", as
   await page.keyboard.press("Escape");
 
   await page.goto("/orders");
-  const listRow = page.locator(`tbody tr:has(a[href="${orderPath}"])`);
+  const listRow = page.locator(`tbody tr:has(a[href^="${orderPath}"])`);
   await expect(listRow).toContainText("In diagnosi");
   await expect(listRow).toContainText("Problema da diagnosticare");
   await listRow.getByRole("link").first().click();
@@ -3684,6 +3684,35 @@ test("sales history uses a monthly filter", async ({ page }) => {
 test("completes a retail sale and opens its immutable receipt", async ({
   page,
 }) => {
+  await page.goto("/");
+  const readCents = async (amount: Locator) => {
+    if (!(await amount.count())) return 0;
+    const text = await amount.innerText();
+    const value = text.match(/-?[\d.]+,\d{2}/)?.[0];
+    expect(value).toBeDefined();
+    return Math.round(
+      Number(value!.replaceAll(".", "").replace(",", ".")) * 100,
+    );
+  };
+  const initialDay = page.locator(".revenue-day").last();
+  const initialDayRetail = await readCents(
+    initialDay
+      .locator(".revenue-tooltip span")
+      .filter({ hasText: "Vendita prodotti" })
+      .locator("b"),
+  );
+  const initialRetail = await readCents(
+    page
+      .locator(".revenue-source-legend p")
+      .filter({ hasText: "Vendita prodotti" })
+      .locator("strong"),
+  );
+  const initialCard = await readCents(
+    page
+      .locator(".payment-method-row")
+      .filter({ hasText: "Carta" })
+      .locator("strong"),
+  );
   await page.goto("/retail");
   const products = page.locator(".retail-product-grid");
   const cable = products.getByRole("button", { name: /Cavo USB-C Test/ });
@@ -3880,14 +3909,31 @@ test("completes a retail sale and opens its immutable receipt", async ({
   const latestDay = page.locator(".revenue-day").last();
   await latestDay.hover();
   await expect(latestDay.locator(".revenue-tooltip")).toHaveCSS("opacity", "1");
-  await expect(latestDay.locator(".revenue-tooltip")).toContainText("24,00");
+  expect(
+    await readCents(
+      latestDay
+        .locator(".revenue-tooltip span")
+        .filter({ hasText: "Vendita prodotti" })
+        .locator("b"),
+    ),
+  ).toBe(initialDayRetail + 2400);
   await expect(page.locator(".donut-segment")).toHaveCount(3);
-  await expect(page.locator(".revenue-source-legend")).toContainText(
-    "Vendita prodotti24,00 €",
-  );
-  await expect(
-    page.locator(".payment-method-row").filter({ hasText: "Carta" }),
-  ).toContainText("24,00 €");
+  expect(
+    await readCents(
+      page
+        .locator(".revenue-source-legend p")
+        .filter({ hasText: "Vendita prodotti" })
+        .locator("strong"),
+    ),
+  ).toBe(initialRetail + 2400);
+  expect(
+    await readCents(
+      page
+        .locator(".payment-method-row")
+        .filter({ hasText: "Carta" })
+        .locator("strong"),
+    ),
+  ).toBe(initialCard + 2400);
 });
 test("creates automatic quote, receives payment and delivers", async ({
   page,
@@ -3899,6 +3945,10 @@ test("creates automatic quote, receives payment and delivers", async ({
     .fill("20");
   await save(page);
   const productForm = page.locator(".order-product-form");
+  await page
+    .getByTestId("products-card")
+    .locator(".order-card-heading")
+    .click();
   await productForm
     .getByRole("combobox", { name: "Prodotto", exact: true })
     .click();
@@ -7212,7 +7262,7 @@ test("settings exports data and re-import skips existing records", async ({
   const backup = await exported.json();
   expect(backup).toMatchObject({
     format: "ngt-repair-data",
-    version: 8,
+    version: 9,
   });
   const imported = await page.request.post("/api/data/import", {
     data: backup,
@@ -7650,11 +7700,11 @@ test("customer links from repair list and detail open the shared dialog", async 
   await expect(page).toHaveURL(/\/orders/);
 
   await row.locator(".order-code-link").click();
-  await page
-    .getByRole("button", { name: /Dettagli/ })
-    .first()
-    .click();
-  await page.locator(".order-detail-card .order-customer-link").click();
+  const detailCustomerLink = page.locator(
+    ".order-detail-card .order-customer-link",
+  );
+  await expect(detailCustomerLink).toBeVisible();
+  await detailCustomerLink.click();
   dialog = page.getByRole("dialog", {
     name: "Dettagli cliente",
     exact: true,
@@ -7894,7 +7944,10 @@ test("test tools generate linked data and persist repair motion tuning", async (
   expect(customerNames.every((name) => !name.includes("TEST"))).toBe(true);
 
   await page
-    .getByPlaceholder("Numero, cliente, telefono o modello", { exact: true })
+    .getByPlaceholder(
+      "Numero, cliente, telefono, dispositivo, IMEI o intervento",
+      { exact: true },
+    )
     .fill("Galaxy S24 Ultra");
   await expect(page).toHaveURL(
     (url) => url.searchParams.get("q") === "Galaxy S24 Ultra",

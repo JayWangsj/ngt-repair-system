@@ -31,51 +31,61 @@ export default async function InventoryPage({
     requestedStatus === "OUT_OF_STOCK"
       ? requestedStatus
       : "";
-  const [products, categories, movements, reservations, catalogDeletions] =
-    await Promise.all([
-      db.product.findMany({
-        where: { enabled: true },
-        include: {
-          compatibilities: true,
-          requiredByRules: {
-            where: { enabled: true },
-            select: {
-              brand: true,
-              category: true,
-              model: true,
-              project: true,
-            },
-            orderBy: [
-              { brand: "asc" },
-              { category: "asc" },
-              { model: "asc" },
-              { project: "asc" },
-            ],
+  const [
+    products,
+    categories,
+    movements,
+    reservations,
+    catalogDeletions,
+    projectCatalog,
+  ] = await Promise.all([
+    db.product.findMany({
+      where: { enabled: true },
+      include: {
+        compatibilities: true,
+        requiredByRules: {
+          where: { enabled: true },
+          select: {
+            brand: true,
+            category: true,
+            model: true,
+            project: true,
           },
+          orderBy: [
+            { brand: "asc" },
+            { category: "asc" },
+            { model: "asc" },
+            { project: "asc" },
+          ],
         },
-        orderBy: [{ favorite: "desc" }, { name: "asc" }],
-      }),
-      db.inventoryCategory.findMany({
-        where: { deletedAt: null },
-        orderBy: { name: "asc" },
-      }),
-      db.inventoryMovement.findMany({
-        include: { product: { select: { name: true } } },
-        orderBy: { createdAt: "desc" },
-      }),
-      db.workOrderProduct.groupBy({
-        by: ["productId"],
-        where: {
-          kind: "REPAIR_PART",
-          consumedAt: null,
-          order: { status: { notIn: ["COMPLETED", "REFUNDED", "CANCELLED"] } },
-        },
-        _sum: { quantity: true },
-      }),
-      db.deviceCatalogDeletion.findMany({
-        select: { category: true, kind: true, brand: true, value: true },
-      }),
-    ]);
+      },
+      orderBy: [{ favorite: "desc" }, { name: "asc" }],
+    }),
+    db.inventoryCategory.findMany({
+      where: { deletedAt: null },
+      orderBy: { name: "asc" },
+    }),
+    db.inventoryMovement.findMany({
+      include: { product: { select: { name: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    db.workOrderProduct.groupBy({
+      by: ["productId"],
+      where: {
+        kind: "REPAIR_PART",
+        consumedAt: null,
+        order: { status: { notIn: ["COMPLETED", "REFUNDED", "CANCELLED"] } },
+      },
+      _sum: { quantity: true },
+    }),
+    db.deviceCatalogDeletion.findMany({
+      select: { category: true, kind: true, brand: true, value: true },
+    }),
+    db.priceRule.findMany({
+      where: { enabled: true },
+      select: { brand: true, category: true, model: true, project: true },
+    }),
+  ]);
   const reservedByProduct = new Map(
     reservations.map((entry) => [entry.productId, entry._sum.quantity ?? 0]),
   );
@@ -176,6 +186,7 @@ export default async function InventoryPage({
         products={productViews}
         categories={categories}
         catalogDeletions={catalogDeletions}
+        projectCatalog={projectCatalog}
         initialStatus={initialStatus}
       />
     </>

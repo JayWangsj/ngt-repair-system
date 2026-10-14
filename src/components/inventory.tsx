@@ -916,11 +916,13 @@ export function InventoryWorkspace({
   products,
   categories: categoryOptions,
   catalogDeletions,
+  projectCatalog,
   initialStatus = "",
 }: {
   products: ProductView[];
   categories: CategoryView[];
   catalogDeletions: DeviceCatalogDeletionView[];
+  projectCatalog: ProductCompatibility[];
   initialStatus?: "" | ReturnType<typeof inventoryStatus>;
 }) {
   const it = useMessages();
@@ -946,6 +948,10 @@ export function InventoryWorkspace({
   const compatibilities = useMemo(
     () => products.flatMap((product) => product.compatibilities),
     [products],
+  );
+  const compatibilityOptions = useMemo(
+    () => [...compatibilities, ...projectCatalog],
+    [compatibilities, projectCatalog],
   );
   const filtered = useMemo(
     () =>
@@ -1474,7 +1480,7 @@ export function InventoryWorkspace({
           return product ? (
             <ProductCompatibilityDialog
               product={product}
-              options={compatibilities}
+              options={compatibilityOptions}
               catalogDeletions={catalogDeletions}
               onClose={() => setCompatibilityEditor("")}
               onSave={(compatibilities) => {

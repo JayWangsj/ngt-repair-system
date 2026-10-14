@@ -120,6 +120,12 @@ describe("Windows persistent startup", () => {
     expect(database).toContain("Preparing PostgreSQL runtime");
     expect(database).toContain("Initializing PostgreSQL data");
     expect(database).toContain("Starting PostgreSQL from");
+    expect(database).toContain(
+      'const readyFile = join(workspace, "database-ready.pid")',
+    );
+    expect(database).toContain(
+      "await writeFile(readyFile, String(process.pid))",
+    );
     expect(database).toContain("Preserved incomplete database");
     expect(database).toContain("initializingDataDir");
     expect(database).toContain("output.trim()");
@@ -135,6 +141,11 @@ describe("Windows persistent startup", () => {
     expect(installer).toContain("Wait-NgtStudioHealth");
     const common = await readFile("scripts/windows-studio-common.ps1", "utf8");
     expect(common).toContain("$process.HasExited");
+    expect(common).toContain(
+      '$readyFile = Join-Path $script:NgtStateDirectory "database-ready.pid"',
+    );
+    expect(common).toContain("$readyProcessId.Trim() -eq [string]$process.Id");
+    expect(common).not.toContain("Database did not open port 55432 in time.");
     expect(common).toContain("studio-database.error.log");
     expect(common).toContain("studio-database.log");
     expect(common).toContain("$process.WaitForExit()");

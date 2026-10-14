@@ -185,6 +185,8 @@ function Start-NgtStudioDatabase {
   $nodeExecutable = Get-NgtNodeExecutable
   $outputLog = Join-Path $script:NgtStateDirectory "studio-database.log"
   $errorLog = Join-Path $script:NgtStateDirectory "studio-database.error.log"
+  $readyFile = Join-Path $script:NgtStateDirectory "database-ready.pid"
+  Remove-Item -LiteralPath $readyFile -Force -ErrorAction SilentlyContinue
   $process = Start-Process -FilePath $nodeExecutable `
     -ArgumentList "scripts/windows-db.mjs" `
     -WorkingDirectory $script:NgtProjectRoot `
@@ -194,8 +196,11 @@ function Start-NgtStudioDatabase {
   Set-Content -LiteralPath (Join-Path $script:NgtStateDirectory "database.pid") `
     -Value $process.Id -Encoding ascii
   for ($attempt = 0; $attempt -lt 120; $attempt++) {
-    if ([bool](Get-NetTCPConnection -LocalPort 55432 -State Listen -ErrorAction SilentlyContinue)) {
-      return
+    if (Test-Path -LiteralPath $readyFile) {
+      $readyProcessId = [string](Get-Content -LiteralPath $readyFile -Raw -ErrorAction SilentlyContinue)
+      if ($readyProcessId.Trim() -eq [string]$process.Id) {
+        return
+      }
     }
     if ($process.HasExited) {
       $process.WaitForExit()
@@ -212,7 +217,14 @@ function Start-NgtStudioDatabase {
     }
     Start-Sleep -Milliseconds 250
   }
-  throw "Database did not open port 55432 in time."
+  $details = @($outputLog, $errorLog) | ForEach-Object {
+    $content = Get-Content -LiteralPath $_ -Raw -ErrorAction SilentlyContinue
+    if ($content) { $content.Trim() }
+  }
+  if ($details) {
+    throw "Database did not become ready in time:`n$($details -join "`n")"
+  }
+  throw "Database did not become ready in time."
 }
 
 function Start-NgtStudioTask {

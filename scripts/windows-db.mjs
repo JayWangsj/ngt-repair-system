@@ -29,6 +29,7 @@ try {
   );
 }
 const workspace = resolve(".local");
+const readyFile = join(workspace, "database-ready.pid");
 const cache = join(
   tmpdir(),
   `ngt-pg-${createHash("sha256").update(process.cwd()).digest("hex").slice(0, 10)}`,
@@ -198,8 +199,10 @@ try {
 }
 await writeFile(join(workspace, "database-location.txt"), dataDir);
 await writeFile(join(workspace, "database-runtime-location.txt"), runtime);
+await writeFile(readyFile, String(process.pid));
 console.log("Business PostgreSQL ready on 127.0.0.1:55432.");
 async function stop() {
+  await unlink(readyFile).catch(() => {});
   await run("pg_ctl.exe", ["-D", dataDir, "-m", "fast", "stop"]);
   process.exit(0);
 }

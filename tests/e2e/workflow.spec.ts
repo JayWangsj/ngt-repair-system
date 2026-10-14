@@ -1122,32 +1122,16 @@ test("manages one quick service for held service orders and retail checkout", as
   await expect(removeService).toHaveCSS("opacity", "1");
   const expectedDate = page.getByLabel("Data", { exact: true });
   await expect(expectedDate).toHaveCSS("cursor", "pointer");
-  await page.evaluate(() => {
-    const input = document.querySelector<HTMLInputElement>(
-      '.quick-service-schedule input[type="date"]',
-    );
-    if (!input) return;
-    Object.defineProperty(input, "showPicker", {
-      value: () => {
-        (
-          window as Window & { quickDatePickerOpened?: number }
-        ).quickDatePickerOpened =
-          ((window as Window & { quickDatePickerOpened?: number })
-            .quickDatePickerOpened ?? 0) + 1;
-      },
-    });
-  });
   const expectedDateBox = await expectedDate.boundingBox();
   await expectedDate.click({
     position: { x: 8, y: expectedDateBox!.height / 2 },
   });
-  expect(
-    await page.evaluate(
-      () =>
-        (window as Window & { quickDatePickerOpened?: number })
-          .quickDatePickerOpened,
-    ),
-  ).toBe(1);
+  const quickCalendar = page.getByRole("dialog", { name: "Scegli data" });
+  await expect(quickCalendar).toBeVisible();
+  await expect(quickCalendar.locator(".date-picker-days > button")).toHaveCount(
+    42,
+  );
+  await page.keyboard.press("Escape");
   await expectedDate.fill("2099-12-31");
   await page.getByLabel("Ora", { exact: true }).fill("18:30");
   await page
@@ -1168,53 +1152,64 @@ test("manages one quick service for held service orders and retail checkout", as
     .boundingBox();
   expect(Math.abs(statusBox!.y - moreBox!.y)).toBeLessThan(1);
   expect(Math.abs(statusBox!.height - moreBox!.height)).toBeLessThan(1);
-  await page
-    .getByRole("button", { name: "Avvia servizio", exact: true })
-    .click();
+  await expect(
+    page.getByRole("button", { name: "Avvia servizio", exact: true }),
+  ).toHaveCount(0);
+  await page.locator(".detail-status .status-dropdown-trigger").click();
+  await page.getByRole("option", { name: "In lavorazione" }).click();
   await expect(
     page.locator(".detail-status .status-dropdown-trigger"),
   ).toContainText("In lavorazione");
   await expect(
     page.getByRole("button", { name: "Completa servizio", exact: true }),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(page.locator(".quick-service-detail-list")).toContainText(
     serviceName,
   );
-  const quickServiceEdit = page.getByRole("button", {
-    name: "Modifica servizio rapido",
-    exact: true,
-  });
-  await quickServiceEdit.click();
-  const quickServiceEditDialog = page.getByRole("dialog", {
-    name: "Modifica servizio rapido",
-  });
-  await quickServiceEditDialog
-    .getByLabel("Completamento previsto", { exact: true })
-    .fill("2099-12-30T18:00");
-  await quickServiceEditDialog
-    .getByLabel("Note", { exact: true })
-    .fill("Nota aggiornata dal dettaglio");
-  await quickServiceEditDialog
-    .getByLabel("Intervento 1", { exact: true })
-    .fill(`${serviceName} aggiornato`);
-  await quickServiceEditDialog
-    .getByLabel("Prezzo (€)", { exact: true })
-    .fill("35.00");
-  await quickServiceEditDialog
-    .getByRole("button", { name: "Salva modifiche", exact: true })
-    .click();
-  await expect(quickServiceEditDialog).toHaveCount(0);
-  await expect(page.locator(".quick-service-detail-list")).toContainText(
-    `${serviceName} aggiornato`,
-  );
-  await expect(page.locator(".quick-service-order-notes")).toContainText(
-    "Nota aggiornata dal dettaglio",
-  );
+  await expect(
+    page.getByRole("button", {
+      name: "Modifica servizio rapido",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  const quickServiceColumns = await page
+    .locator(".quick-service-detail-list > div")
+    .first()
+    .evaluate((row) => {
+      const name = row.firstElementChild!.getBoundingClientRect();
+      const price = row.lastElementChild!.getBoundingClientRect();
+      return { nameRight: name.right, priceLeft: price.left };
+    });
+  expect(
+    quickServiceColumns.priceLeft - quickServiceColumns.nameRight,
+  ).toBeGreaterThanOrEqual(24);
   const serviceDetailUrl = page.url();
   await page.goto("/orders");
   await page.getByRole("link", { name: "In corso", exact: true }).click();
   await expect(page).toHaveURL(/view=active/);
+  const activeQuickView = page.getByRole("link", {
+    name: "In corso",
+    exact: true,
+  });
+  await expect(activeQuickView).toHaveCSS(
+    "background-color",
+    "rgb(255, 241, 182)",
+  );
+  await expect(activeQuickView).toHaveCSS(
+    "border-top-color",
+    "rgb(128, 96, 0)",
+  );
   await expect(page.getByLabel("Mese", { exact: true })).toHaveValue("");
+  const filterHeights = await page
+    .locator(
+      ".filters > label > input, .filters > label .date-picker, .filters > label .business-select-trigger, .filters > .order-date-scope-toggle",
+    )
+    .evaluateAll((controls) =>
+      controls.map((control) => control.getBoundingClientRect().height),
+    );
+  expect(Math.max(...filterHeights) - Math.min(...filterHeights)).toBeLessThan(
+    1,
+  );
   const quickOrderRow = page
     .locator(".order-list-body > tr")
     .filter({ hasText: serviceCode });
@@ -1780,34 +1775,22 @@ test("dashboard animates on entry and data changes while respecting reduced moti
   const dashboardDate = page.locator(
     '.dashboard-date-filter input[type="date"]',
   );
-  await page.evaluate(() => {
-    const input = document.querySelector<HTMLInputElement>(
-      '.dashboard-date-filter input[type="date"]',
-    );
-    if (!input) return;
-    Object.defineProperty(input, "showPicker", {
-      value: () => {
-        (
-          window as Window & { dashboardDatePickerOpened?: number }
-        ).dashboardDatePickerOpened =
-          ((window as Window & { dashboardDatePickerOpened?: number })
-            .dashboardDatePickerOpened ?? 0) + 1;
-      },
-    });
-  });
   const dateBox = await dashboardDate.boundingBox();
   await dashboardDate.click({
     position: { x: 8, y: dateBox!.height / 2 },
   });
-  expect(
-    await page.evaluate(
-      () =>
-        (window as Window & { dashboardDatePickerOpened?: number })
-          .dashboardDatePickerOpened,
-    ),
-  ).toBe(1);
+  const dashboardCalendar = page.getByRole("dialog", {
+    name: "Scegli data",
+  });
+  await expect(dashboardCalendar).toBeVisible();
+  await expect(
+    dashboardCalendar.locator(".date-picker-days .is-selected"),
+  ).toHaveCount(1);
+  await page.keyboard.press("Escape");
   await dashboardDate.fill("2026-10-03");
-  await expect(page.locator(".dashboard-date-filter button")).toHaveCount(0);
+  await expect(
+    page.locator(".dashboard-date-filter .date-picker-toggle"),
+  ).toHaveCount(1);
   await expect(dashboard).toHaveClass(/dashboard-updating/);
   await expect(page).toHaveURL(/day=2026-10-03/);
   await expect(page.getByTestId("dashboard-motion")).toHaveClass(
@@ -2102,6 +2085,18 @@ test("creates and edits a product directly in the inventory row", async ({
   await expect(
     repairPartRow.locator("td.inventory-price-cell").last().locator("input"),
   ).toHaveCount(0);
+  const usageAndCompatibility = await repairPartRow.evaluate((element) => {
+    const usage = element
+      .querySelector(".inventory-usage-cell .business-select-trigger")!
+      .getBoundingClientRect();
+    const compatibility = element
+      .querySelector(".inventory-compatible-cell")!
+      .getBoundingClientRect();
+    return { usageRight: usage.right, compatibilityLeft: compatibility.left };
+  });
+  expect(usageAndCompatibility.usageRight).toBeLessThanOrEqual(
+    usageAndCompatibility.compatibilityLeft,
+  );
   await page.getByRole("heading", { name: "Magazzino" }).click();
 
   await page.getByRole("button", { name: "Nuovo prodotto" }).click();
@@ -2300,7 +2295,7 @@ test("creates and edits a product directly in the inventory row", async ({
   await expect(movementMonth).toHaveAttribute("type", "month");
   const movementClose = movementDialog.getByRole("button", { name: "Chiudi" });
   const [movementMonthBox, movementCloseBox] = await Promise.all([
-    movementMonth.boundingBox(),
+    movementMonth.locator("..").boundingBox(),
     movementClose.boundingBox(),
   ]);
   expect(movementMonthBox!.width).toBeLessThanOrEqual(180);
@@ -2328,11 +2323,11 @@ test("creates and edits a product directly in the inventory row", async ({
   await manageBatch.click();
   await expect(
     inventoryMain.locator(".inventory-table thead th").first(),
-  ).toHaveClass(/inventory-status-cell/);
-  await expect(row.locator("td").first()).toHaveClass(/inventory-status-cell/);
+  ).toHaveClass(/inventory-selection/);
+  await expect(row.locator("td").first()).toHaveClass(/inventory-selection/);
   await expect(
     inventoryMain.locator(".inventory-table thead th").nth(1),
-  ).toHaveClass(/inventory-selection/);
+  ).toHaveClass(/inventory-status-cell/);
   const deleteBatch = batchControls.getByRole("button", {
     name: "Elimina",
     exact: true,
@@ -2385,11 +2380,11 @@ test("filters inventory by compatible device and exposes compatibility", async (
     search,
     inventoryMain.getByRole("button", { name: "Categoria", exact: true }),
     inventoryMain.getByRole("button", { name: "Utilizzo", exact: true }),
+    inventoryMain.getByRole("button", { name: "Stato scorte", exact: true }),
     inventoryMain.getByRole("button", {
       name: "Dispositivi compatibili",
       exact: true,
     }),
-    inventoryMain.getByRole("button", { name: "Stato scorte", exact: true }),
     inventoryMain.getByRole("button", {
       name: "Gestisci selezione",
       exact: true,
@@ -2405,6 +2400,15 @@ test("filters inventory by compatible device and exposes compatibility", async (
   expect(filterBoxes.map((box) => box!.x)).toEqual(
     [...filterBoxes].map((box) => box!.x).sort((left, right) => left - right),
   );
+  const deviceFilterTrigger = inventoryMain.getByRole("button", {
+    name: "Dispositivi compatibili",
+    exact: true,
+  });
+  await expect(deviceFilterTrigger).toHaveCSS("border-top-width", "0px");
+  await expect(deviceFilterTrigger).toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
 
   await expect(battery).toContainText("Apple / Telefono / iPhone 14");
   await expect(cable).toContainText("Universale");
@@ -2416,10 +2420,7 @@ test("filters inventory by compatible device and exposes compatibility", async (
   await expect(battery).toBeVisible();
   await search.fill("");
 
-  const trigger = inventoryMain.getByRole("button", {
-    name: "Dispositivi compatibili",
-    exact: true,
-  });
+  const trigger = deviceFilterTrigger;
   await trigger.click();
   let popover = page.getByRole("dialog", {
     name: "Dispositivi compatibili",
@@ -3490,6 +3491,9 @@ test("diagnostic order saves faults, date and quote in one progressive flow", as
   await quote.locator(".order-card-heading").click();
   await expect(quote).toContainText("Costo diagnosi (IVA esclusa)");
   const history = page.getByTestId("history-card");
+  await expect(
+    page.locator(".detail-primary-actions button.stage-primary-action"),
+  ).toHaveCount(0);
   await history.locator(".order-card-heading").click();
   await expect(history).toContainText("Diagnosi avviata");
   await expect(history).toContainText("Diagnosi completata");
@@ -4569,6 +4573,10 @@ test("repair detail cards lock history and keep post-sale finance auditable", as
   await expect(details.locator(".order-card-summary")).toContainText(
     "Cliente Playwright",
   );
+  await page.mouse.move(0, 0);
+  await expect(
+    details.getByRole("button", { name: "Modifica dati", exact: true }),
+  ).toHaveCSS("opacity", "0");
   await details.locator(".order-card-heading").click();
   await page.waitForTimeout(250);
   const repairSummary = details.locator(".detail-repair-summary");
@@ -5810,6 +5818,11 @@ test("creates a repair part from the quote and selects it immediately", async ({
   const compatibilityDialog = page.getByRole("dialog", {
     name: "Modifica dispositivi compatibili",
   });
+  await compatibilityDialog
+    .getByRole("button", {
+      name: /Modifica dispositivi compatibili: Apple iPhone 13/,
+    })
+    .click();
   await expect(
     compatibilityDialog.getByRole("combobox", { name: "Marca" }),
   ).toHaveValue("Apple");
@@ -5819,6 +5832,22 @@ test("creates a repair part from the quote and selects it immediately", async ({
   await expect(
     compatibilityDialog.getByRole("combobox", { name: /Intervento/ }),
   ).toHaveValue("sostituzione display");
+  await compatibilityDialog
+    .getByRole("button", { name: "Annulla", exact: true })
+    .click();
+  const compatibilityOverview = page.getByRole("dialog", {
+    name: "Modifica dispositivi compatibili",
+  });
+  await compatibilityOverview
+    .getByRole("button", { name: "Rimuovi Apple iPhone 13", exact: true })
+    .click();
+  await expect(
+    compatibilityOverview.locator(".compatibility-device-row"),
+  ).toHaveCount(0);
+  await compatibilityOverview
+    .getByRole("button", { name: "Salva", exact: true })
+    .click();
+  await expect(compatibilityOverview).toHaveCount(0);
 });
 
 test("inventory repair products retain their compatibility editor", async ({
@@ -5835,11 +5864,18 @@ test("inventory repair products retain their compatibility editor", async ({
     name: "Modifica dispositivi compatibili",
   });
   const compatibilityAdd = dialog.getByRole("button", {
-    name: "Compatibilità",
+    name: "Aggiungi dispositivo compatibile",
     exact: true,
   });
+  await expect(dialog.locator(".compatibility-product-summary")).toContainText(
+    "Batteria Test",
+  );
+  await expect(dialog.locator(".compatibility-device-list")).toBeVisible();
   await compatibilityAdd.click();
-  const brand = dialog
+  const editorDialog = page.getByRole("dialog", {
+    name: "Aggiungi dispositivo compatibile",
+  });
+  const brand = editorDialog
     .getByRole("combobox", { name: "Marca", exact: true })
     .first();
   await brand.fill("App");
@@ -5856,7 +5892,7 @@ test("inventory repair products retain their compatibility editor", async ({
   await appleOption.hover();
   await expect(deleteApple).toHaveCSS("opacity", "1");
   await appleOption.click();
-  const model = dialog
+  const model = editorDialog
     .getByRole("combobox", { name: "Modello", exact: true })
     .first();
   await model.fill("iPhone");
@@ -5873,7 +5909,9 @@ test("inventory repair products retain their compatibility editor", async ({
   await iphoneOption.hover();
   await expect(deleteIphone).toHaveCSS("opacity", "1");
   await model.press("Escape");
-  await dialog.getByRole("button", { name: "Annulla", exact: true }).click();
+  await editorDialog
+    .getByRole("button", { name: "Annulla", exact: true })
+    .click();
 });
 
 test("changing a selected repair part focuses its current name and preserves it on cancel", async ({
@@ -6088,6 +6126,17 @@ test("customer list searches instantly, preserves navigation and supports compac
   await expect(detailDialog).toBeVisible();
   await expect(detailDialog).toHaveClass(/form-dialog/);
   await expect(detailDialog.locator(".customer-device-row")).toHaveCount(1);
+  const customerAddDevice = detailDialog.getByRole("button", {
+    name: "Dispositivo",
+    exact: true,
+  });
+  await expect(customerAddDevice).toHaveClass(/add-device-action/);
+  await expect(customerAddDevice).toHaveCSS("border-top-style", "dashed");
+  await customerAddDevice.hover();
+  await expect(customerAddDevice).toHaveCSS(
+    "background-color",
+    "rgb(255, 248, 217)",
+  );
   await expect(
     detailDialog.getByRole("heading", { name: "Storico schede di servizio" }),
   ).toBeVisible();
@@ -6865,6 +6914,91 @@ test("quote hierarchy supports stable hover editing and linked batch selection",
     page.getByRole("button", { name: /Elimina preventivi selezionati/ }),
   ).toBeDisabled();
   await expect(page.getByRole("checkbox")).toHaveCount(0);
+});
+
+test("quote repair part waits for commit and supports creating a new part", async ({
+  page,
+}) => {
+  await page.goto("/prices");
+  await page.getByLabel("Cerca", { exact: true }).fill("iPhone 14");
+  const row = page
+    .locator(".price-rule-row")
+    .filter({ hasText: "sostituzione batteria" });
+  await row.hover();
+  await row
+    .getByRole("button", { name: "Modifica preventivo", exact: true })
+    .click();
+
+  let editDialog = page.getByRole("dialog", {
+    name: "Modifica preventivo",
+    exact: true,
+  });
+  let partSearch = editDialog.getByRole("combobox", {
+    name: "Ricambio richiesto",
+    exact: true,
+  });
+  await expect(partSearch).toHaveValue("Batteria Test");
+  await partSearch.fill("");
+  await expect(partSearch).toHaveValue("");
+  await expect(
+    editDialog.getByLabel("Quantità", { exact: true }),
+  ).toBeVisible();
+
+  await editDialog.locator('input[name="notes"]').click();
+  await expect(partSearch).toHaveValue("Nessun ricambio richiesto");
+  await expect(editDialog.getByLabel("Quantità", { exact: true })).toHaveCount(
+    0,
+  );
+
+  const productName = `Ricambio preventivo ${Date.now()}`;
+  await partSearch.fill(productName);
+  const newPart = editDialog.getByRole("button", {
+    name: "Nuovo ricambio per riparazione",
+    exact: true,
+  });
+  await expect(newPart).toBeEnabled();
+  await newPart.click();
+  const productDialog = page.getByRole("dialog", {
+    name: "Nuovo ricambio per riparazione",
+    exact: true,
+  });
+  await expect(
+    productDialog.getByLabel("Nome ricambio", { exact: true }),
+  ).toHaveValue(productName);
+  await expect(productDialog).toContainText(
+    "Utilizzo: Apple · iPhone 14 · sostituzione batteria",
+  );
+  await productDialog.getByLabel("Costo (€)", { exact: true }).fill("12");
+  await productDialog.getByLabel("Scorta minima", { exact: true }).fill("1");
+  await productDialog
+    .getByRole("button", { name: "Crea e seleziona", exact: true })
+    .click();
+  await expect(productDialog).toHaveCount(0);
+  await expect(partSearch).toHaveValue(productName);
+  await expect(
+    editDialog.getByLabel("Quantità", { exact: true }),
+  ).toBeVisible();
+
+  await partSearch.fill("");
+  await editDialog.getByRole("button", { name: "Salva", exact: true }).click();
+  await expect(editDialog).toHaveCount(0);
+
+  await row.hover();
+  await row
+    .getByRole("button", { name: "Modifica preventivo", exact: true })
+    .click();
+  editDialog = page.getByRole("dialog", {
+    name: "Modifica preventivo",
+    exact: true,
+  });
+  partSearch = editDialog.getByRole("combobox", {
+    name: "Ricambio richiesto",
+    exact: true,
+  });
+  await expect(partSearch).toHaveValue("Nessun ricambio richiesto");
+  await expect(editDialog.getByLabel("Quantità", { exact: true })).toHaveCount(
+    0,
+  );
 });
 
 test("price editor keeps deletion inside batch management", async ({

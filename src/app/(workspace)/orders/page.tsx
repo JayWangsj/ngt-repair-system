@@ -58,6 +58,8 @@ export default async function Orders({
     exactOrderSearch ||
     view === "overdue" ||
     view === "unpaid" ||
+    query.attention === "overdue" ||
+    query.attention === "unpaid" ||
     (view && query.month === undefined)
       ? ""
       : query.month === undefined

@@ -1,19 +1,32 @@
 "use client";
 
-import { Check, ChevronDown, Plus, Search, X } from "lucide-react";
+import {
+  CalendarDays,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
+  forwardRef,
   useId,
   useLayoutEffect,
   useRef,
   useState,
+  type FocusEvent,
   type KeyboardEvent,
   type InputHTMLAttributes,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { useMessages } from "./language";
+import { useLanguage, useMessages } from "./language";
+import { useBusinessDay } from "./business-date";
 import {
   ensureComfortableInteractionSpace,
   focusComfortably,
@@ -628,16 +641,356 @@ export function SearchableCombobox(
   return <SelectDropdown {...props} searchable />;
 }
 
-export function DatePicker(props: InputHTMLAttributes<HTMLInputElement>) {
-  const { onClick, type = "date", ...rest } = props;
-  return (
-    <input
-      {...rest}
-      type={type}
-      onClick={(event) => {
-        onClick?.(event);
-        event.currentTarget.showPicker?.();
-      }}
-    />
-  );
+type DatePickerType = "date" | "month" | "datetime-local";
+
+function dateParts(value: string) {
+  const match = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(value);
+  if (!match) return null;
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3] ?? 1),
+  };
 }
+
+function isoDate(year: number, month: number, day: number) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function shiftMonth(year: number, month: number, delta: number) {
+  const value = new Date(year, month - 1 + delta, 1);
+  return { year: value.getFullYear(), month: value.getMonth() + 1 };
+}
+
+function calendarDays(year: number, month: number) {
+  const first = new Date(year, month - 1, 1);
+  const mondayOffset = (first.getDay() + 6) % 7;
+  return Array.from({ length: 42 }, (_, index) => {
+    const value = new Date(year, month - 1, index - mondayOffset + 1);
+    return {
+      year: value.getFullYear(),
+      month: value.getMonth() + 1,
+      day: value.getDate(),
+    };
+  });
+}
+
+export const DatePicker = forwardRef<
+  HTMLInputElement,
+  InputHTMLAttributes<HTMLInputElement>
+>(function DatePicker(props, forwardedRef) {
+  const {
+    className = "",
+    defaultValue,
+    disabled,
+    max,
+    min,
+    onBlur,
+    onChange,
+    onClick,
+    onFocus,
+    required,
+    type = "date",
+    value,
+    ...rest
+  } = props;
+  const pickerType = type as DatePickerType;
+  const { locale } = useLanguage();
+  const today = useBusinessDay();
+  const input = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(false);
+  const [internalValue, setInternalValue] = useState(
+    String(defaultValue ?? ""),
+  );
+  const currentValue = String(value ?? internalValue);
+  const initial = dateParts(currentValue) ?? dateParts(today)!;
+  const [view, setView] = useState({
+    year: initial.year,
+    month: initial.month,
+  });
+  const { trigger, panel, position } = useDropdown(open);
+  const language = locale === "zh" ? "zh-CN" : "it-IT";
+  const copy =
+    locale === "zh"
+      ? {
+          clear: "清空",
+          today: "今天",
+          previous: "上一个月",
+          next: "下一个月",
+          choose: "选择日期",
+        }
+      : {
+          clear: "Svuota",
+          today: "Oggi",
+          previous: "Mese precedente",
+          next: "Mese successivo",
+          choose: "Scegli data",
+        };
+
+  function openPicker() {
+    const selected = dateParts(currentValue) ?? dateParts(today)!;
+    setView({ year: selected.year, month: selected.month });
+    setOpen(true);
+  }
+
+  function togglePicker() {
+    if (open) setOpen(false);
+    else openPicker();
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function outside(event: PointerEvent) {
+      if (!(event.target instanceof Node)) return;
+      if (
+        trigger.current?.contains(event.target) ||
+        panel.current?.contains(event.target)
+      )
+        return;
+      setOpen(false);
+    }
+    document.addEventListener("pointerdown", outside);
+    return () => document.removeEventListener("pointerdown", outside);
+  }, [open, panel, trigger]);
+
+  function setInputRef(element: HTMLInputElement | null) {
+    input.current = element;
+    if (typeof forwardedRef === "function") forwardedRef(element);
+    else if (forwardedRef) forwardedRef.current = element;
+  }
+
+  function emitValue(next: string, close = true) {
+    const element = input.current;
+    if (!element) return;
+    if (value === undefined) setInternalValue(next);
+    const setter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    setter?.call(element, next);
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+    if (close) setOpen(false);
+    window.setTimeout(() => {
+      if (!onBlur || !input.current) return;
+      onBlur({
+        currentTarget: input.current,
+        target: input.current,
+      } as FocusEvent<HTMLInputElement>);
+    }, 0);
+  }
+
+  function chooseDate(year: number, month: number, day: number) {
+    const selected = isoDate(year, month, day);
+    if (pickerType === "datetime-local") {
+      const time = currentValue.slice(11, 16) || "09:00";
+      emitValue(`${selected}T${time}`, false);
+      setView({ year, month });
+      return;
+    }
+    emitValue(selected);
+  }
+
+  const selected = dateParts(currentValue);
+  const minimum = typeof min === "string" ? min.slice(0, 10) : "";
+  const maximum = typeof max === "string" ? max.slice(0, 10) : "";
+  const monthLabel = new Intl.DateTimeFormat(language, {
+    year: "numeric",
+    month: "long",
+  }).format(new Date(view.year, view.month - 1, 1));
+  const weekdays = Array.from({ length: 7 }, (_, index) =>
+    new Intl.DateTimeFormat(language, { weekday: "narrow" }).format(
+      new Date(2024, 0, index + 1),
+    ),
+  );
+  const monthOptions = Array.from({ length: 12 }, (_, index) =>
+    new Intl.DateTimeFormat(language, { month: "short" }).format(
+      new Date(view.year, index, 1),
+    ),
+  );
+
+  return (
+    <div
+      ref={trigger}
+      className={`date-picker ${className}${open ? " is-open" : ""}${disabled ? " is-disabled" : ""}`.trim()}
+    >
+      <CalendarDays className="date-picker-leading-icon" size={17} />
+      <input
+        {...rest}
+        ref={setInputRef}
+        className="date-picker-input"
+        type={pickerType}
+        value={currentValue}
+        disabled={disabled}
+        min={min}
+        max={max}
+        required={required}
+        onChange={(event) => {
+          if (value === undefined) setInternalValue(event.target.value);
+          onChange?.(event);
+        }}
+        onFocus={onFocus}
+        onBlur={onBlur}
+        onClick={(event) => {
+          onClick?.(event);
+          if (!event.defaultPrevented && !disabled) togglePicker();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" && !disabled) {
+            event.preventDefault();
+            openPicker();
+          }
+          if (event.key === "Escape") setOpen(false);
+        }}
+      />
+      <button
+        type="button"
+        className="date-picker-toggle"
+        aria-label={copy.choose}
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={togglePicker}
+      >
+        <ChevronDown size={16} aria-hidden="true" />
+      </button>
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={panel}
+            className="date-picker-popover"
+            role="dialog"
+            aria-label={copy.choose}
+            style={{
+              top: position.top,
+              left: position.left,
+              minWidth: Math.max(position.width, 310),
+            }}
+            data-prevent-card-autosave
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setOpen(false);
+                input.current?.focus();
+              }
+            }}
+          >
+            <div className="date-picker-header">
+              <button
+                type="button"
+                aria-label={copy.previous}
+                onClick={() =>
+                  setView((current) =>
+                    shiftMonth(
+                      current.year,
+                      current.month,
+                      pickerType === "month" ? -12 : -1,
+                    ),
+                  )
+                }
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <strong>{pickerType === "month" ? view.year : monthLabel}</strong>
+              <button
+                type="button"
+                aria-label={copy.next}
+                onClick={() =>
+                  setView((current) =>
+                    shiftMonth(
+                      current.year,
+                      current.month,
+                      pickerType === "month" ? 12 : 1,
+                    ),
+                  )
+                }
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+            {pickerType === "month" ? (
+              <div className="date-picker-months">
+                {monthOptions.map((label, index) => {
+                  const next = `${view.year}-${String(index + 1).padStart(2, "0")}`;
+                  const unavailable =
+                    (typeof min === "string" && next < min.slice(0, 7)) ||
+                    (typeof max === "string" && next > max.slice(0, 7));
+                  return (
+                    <button
+                      type="button"
+                      key={next}
+                      className={currentValue === next ? "is-selected" : ""}
+                      disabled={unavailable}
+                      onClick={() => emitValue(next)}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <>
+                <div className="date-picker-weekdays" aria-hidden="true">
+                  {weekdays.map((weekday, index) => (
+                    <span key={`${weekday}-${index}`}>{weekday}</span>
+                  ))}
+                </div>
+                <div className="date-picker-days">
+                  {calendarDays(view.year, view.month).map((day) => {
+                    const next = isoDate(day.year, day.month, day.day);
+                    const unavailable =
+                      (minimum && next < minimum) ||
+                      (maximum && next > maximum);
+                    return (
+                      <button
+                        type="button"
+                        key={next}
+                        className={`${day.month !== view.month ? "is-outside" : ""}${selected && next === isoDate(selected.year, selected.month, selected.day) ? " is-selected" : ""}${next === today ? " is-today" : ""}`.trim()}
+                        disabled={Boolean(unavailable)}
+                        onClick={() => chooseDate(day.year, day.month, day.day)}
+                      >
+                        {day.day}
+                      </button>
+                    );
+                  })}
+                </div>
+                {pickerType === "datetime-local" && (
+                  <label className="date-picker-time">
+                    <span>{locale === "zh" ? "时间" : "Ora"}</span>
+                    <input
+                      type="time"
+                      value={currentValue.slice(11, 16) || "09:00"}
+                      onChange={(event) => {
+                        const day = currentValue.slice(0, 10) || today;
+                        emitValue(`${day}T${event.target.value}`, false);
+                      }}
+                    />
+                  </label>
+                )}
+              </>
+            )}
+            <div className="date-picker-footer">
+              {!required && (
+                <button type="button" onClick={() => emitValue("")}>
+                  <Trash2 size={15} /> {copy.clear}
+                </button>
+              )}
+              <button
+                type="button"
+                className="date-picker-today"
+                onClick={() => {
+                  if (pickerType === "month") emitValue(today.slice(0, 7));
+                  else if (pickerType === "datetime-local")
+                    emitValue(
+                      `${today}T${currentValue.slice(11, 16) || "09:00"}`,
+                    );
+                  else emitValue(today);
+                }}
+              >
+                {copy.today}
+              </button>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
+});

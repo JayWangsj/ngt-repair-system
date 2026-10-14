@@ -2554,7 +2554,7 @@ export function NewOrderForm({
           <textarea {...register("fault")} maxLength={2000} rows={2} />
         </Field>
         <Field label={it.dueDate}>
-          <input {...register("dueDate")} type="date" min={today} />
+          <DatePicker {...register("dueDate")} min={today} />
         </Field>
       </Section>
       <Section number="03" title={it.quoteSection}>
@@ -2995,8 +2995,7 @@ export function EditOrderForm({
           />
         </Field>
         <Field label={it.dueDate}>
-          <input
-            type="date"
+          <DatePicker
             name="dueDate"
             min={today}
             defaultValue={values.dueDate ?? ""}
@@ -3949,6 +3948,17 @@ export function RuleForm({
   const [requiredProductId, setRequiredProductId] = useState(
     rule?.requiredProductId ?? "",
   );
+  const [requiredProductCleared, setRequiredProductCleared] = useState(false);
+  const [createdRepairProducts, setCreatedRepairProducts] = useState<
+    { id: string; name: string; stockQuantity: number }[]
+  >([]);
+  const [creatingPart, setCreatingPart] = useState<string | null>(null);
+  const availableRepairProducts = [
+    ...repairProducts,
+    ...createdRepairProducts.filter(
+      (created) => !repairProducts.some((product) => product.id === created.id),
+    ),
+  ];
   return (
     <ActionForm
       submit={it.save}
@@ -3966,7 +3976,7 @@ export function RuleForm({
           brand,
           model,
           project,
-          requiredProductId,
+          requiredProductId: requiredProductCleared ? "" : requiredProductId,
           series: model ? "" : (rule?.series ?? ""),
           minutes: rule?.minutes ?? 60,
           enabled: true,
@@ -4059,12 +4069,18 @@ export function RuleForm({
         <Field label={it.requiredPart}>
           <SearchableCombobox
             value={requiredProductId}
-            onChange={setRequiredProductId}
+            onChange={(value) => {
+              setRequiredProductId(value);
+              setRequiredProductCleared(false);
+            }}
+            onQueryChange={(query) =>
+              setRequiredProductCleared(query.trim() === "")
+            }
             groups={[
               {
                 options: [
                   { value: "", label: it.noRequiredPart },
-                  ...repairProducts.map((product) => ({
+                  ...availableRepairProducts.map((product) => ({
                     value: product.id,
                     label: product.name,
                     secondary: `${it.inventory.currentStock}: ${product.stockQuantity}`,
@@ -4076,6 +4092,10 @@ export function RuleForm({
             ariaLabel={it.requiredPart}
             searchPlaceholder={it.search}
             emptyText={it.noMatches}
+            clearable
+            commitEmptyOnClose
+            customLabel={it.newRepairPart}
+            onCustom={setCreatingPart}
           />
         </Field>
         {requiredProductId && (
@@ -4093,6 +4113,34 @@ export function RuleForm({
       <Field label={it.notes}>
         <input name="notes" defaultValue={rule?.notes} maxLength={2000} />
       </Field>
+      {creatingPart !== null && (
+        <FormDialog
+          title={it.newRepairPart}
+          onClose={() => setCreatingPart(null)}
+        >
+          <ProductForm
+            categories={[]}
+            mode="inventory"
+            initialName={creatingPart}
+            initialUsage="REPAIR"
+            quickRepair
+            initialCompatibility={{ category, brand, model, project }}
+            onClose={() => setCreatingPart(null)}
+            onCreated={(product) => {
+              setCreatedRepairProducts((current) => [
+                ...current,
+                {
+                  id: product.id,
+                  name: product.name,
+                  stockQuantity: product.stock,
+                },
+              ]);
+              setRequiredProductId(product.id);
+              setRequiredProductCleared(false);
+            }}
+          />
+        </FormDialog>
+      )}
     </ActionForm>
   );
 }

@@ -8,6 +8,7 @@ import { cents, money } from "@/lib/domain";
 import { useMessages } from "./language";
 import { Field, FormDialog } from "./forms";
 import { Button } from "./ui/button";
+import { DatePicker } from "./business-select";
 
 type QuickServiceItem = { id: string; project: string; final: string };
 
@@ -123,7 +124,7 @@ export function QuickServiceOrderEditor({
             onSubmit={submit}
           >
             <Field label={it.quickService.expectedAt}>
-              <input
+              <DatePicker
                 type="datetime-local"
                 required
                 value={date}

@@ -13,7 +13,6 @@ import {
   promisedDate,
   settlement,
   warrantyProgress,
-  type OrderStatus,
 } from "@/lib/domain";
 import { BackButton, Badge, PageHeader } from "@/components/common";
 import {
@@ -37,7 +36,6 @@ import {
 } from "@/components/order-detail-ui";
 import { DetailStatusControl } from "@/components/order-list-controls";
 import { CompleteInspectionButton } from "@/components/inspection-quote";
-import { QuickServiceOrderEditor } from "@/components/quick-service-order-editor";
 import { getBusinessDay } from "@/lib/business-date";
 import { WorkOrderRepairSummary } from "@/components/work-order-repair-summary";
 import { ServiceOrderActions } from "@/components/service-order-actions";
@@ -182,29 +180,6 @@ export default async function Detail({
       totals.inspectionTotal;
   const productAmount = financiallyClosed ? 0 : totals.productTotal;
   const afterSalesAmount = financiallyClosed ? 0 : totals.afterSalesTotal;
-  const primaryStatusAction:
-    { status: OrderStatus; label: string } | undefined =
-    order.status === "RECEIVED"
-      ? {
-          status: order.type === "QUICK_SERVICE" ? "REPAIRING" : "DIAGNOSING",
-          label:
-            order.type === "QUICK_SERVICE"
-              ? it.stageActions.startQuickService
-              : it.stageActions.startDiagnosis,
-        }
-      : order.status === "REPAIRING"
-        ? {
-            status: "READY",
-            label:
-              order.type === "QUICK_SERVICE"
-                ? it.stageActions.completeQuickService
-                : it.stageActions.completeRepair,
-          }
-        : order.status === "REWORKING"
-          ? { status: "READY", label: it.stageActions.completeRepair }
-          : order.status === "READY"
-            ? { status: "COMPLETED", label: it.orderProducts.checkout }
-            : undefined;
   const inspectionStageAction =
     order.type === "REPAIR" && order.status === "DIAGNOSING" ? (
       <CompleteInspectionButton
@@ -352,7 +327,6 @@ export default async function Detail({
               paid={received}
               balance={remaining}
               afterSalesOpen={false}
-              primaryAction={primaryStatusAction}
             />
             {inspectionStageAction}
             <ServiceOrderActions
@@ -372,24 +346,7 @@ export default async function Detail({
         <div className="detail-grid">
           <div className="stack">
             <section className="panel padded">
-              <div className="quick-service-detail-heading">
-                <h2>{it.quickService.serviceItems}</h2>
-                <QuickServiceOrderEditor
-                  id={id}
-                  expectedAt={order.expectedAt ?? ""}
-                  notes={order.notes}
-                  items={order.items.map((item) => ({
-                    id: item.id,
-                    project: item.project,
-                    final: item.final.toString(),
-                  }))}
-                  paid={received}
-                  currentTotal={currentDue}
-                  locked={["COMPLETED", "REFUNDED", "CANCELLED"].includes(
-                    order.status,
-                  )}
-                />
-              </div>
+              <h2>{it.quickService.serviceItems}</h2>
               <div className="quick-service-detail-list">
                 {order.items.map((item) => (
                   <div key={item.id}>
@@ -662,7 +619,6 @@ export default async function Detail({
             paid={received}
             balance={remaining}
             afterSalesOpen={order.afterSalesOpen}
-            primaryAction={primaryStatusAction}
           />
           {inspectionStageAction}
           {order.status === "PARTS_MISSING" && (

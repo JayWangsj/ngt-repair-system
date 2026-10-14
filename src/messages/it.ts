@@ -229,6 +229,12 @@ export const it = {
     compatibleDevices: "Dispositivi compatibili",
     editCompatibleDevices: "Modifica dispositivi compatibili",
     addCompatibility: "Compatibilità",
+    addCompatibleDevice: "Aggiungi dispositivo compatibile",
+    compatibleDeviceCount: "{count} dispositivi associati",
+    compatibilityListHelp:
+      "Gestisci i dispositivi e gli interventi associati a questo ricambio.",
+    compatibilityEditorHelp:
+      "Seleziona il dispositivo e gli interventi di riparazione associati.",
     allBrands: "Tutte le marche",
     allDeviceTypes: "Tutti i tipi",
     allModels: "Tutti i modelli",

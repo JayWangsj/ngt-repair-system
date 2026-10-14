@@ -17,6 +17,7 @@ import {
   Plus,
   Smartphone,
   Star,
+  Trash2,
   X,
 } from "lucide-react";
 import {
@@ -129,11 +130,44 @@ function ProductCompatibilityDialog({
   onSave: (value: ProductCompatibilityDraft[]) => void;
 }) {
   const it = useMessages();
+  const { locale } = useLanguage();
   const [value, setValue] = useState<ProductCompatibilityDraft[]>(
     product.compatibilities,
   );
+  const [editing, setEditing] = useState<{
+    indices: number[];
+    rows: ProductCompatibilityDraft[];
+  } | null>(null);
   const [deletions, setDeletions] = useState(catalogDeletions);
   const [error, setError] = useState("");
+  const devices = Object.values(
+    value.reduce<
+      Record<
+        string,
+        {
+          category: string;
+          brand: string;
+          model: string;
+          projects: string[];
+          indices: number[];
+        }
+      >
+    >((groups, entry, index) => {
+      const key = [entry.category, entry.brand, entry.model].join("\u0000");
+      const group = groups[key] ?? {
+        category: entry.category,
+        brand: entry.brand,
+        model: entry.model,
+        projects: [],
+        indices: [],
+      };
+      if (entry.project && !group.projects.includes(entry.project))
+        group.projects.push(entry.project);
+      group.indices.push(index);
+      groups[key] = group;
+      return groups;
+    }, {}),
+  );
   async function deleteCatalogOption(
     kind: "BRAND" | "MODEL",
     entry: ProductCompatibilityDraft,
@@ -149,7 +183,7 @@ function ProductCompatibilityDialog({
     if (!result.ok) return setError(result.error);
     setError("");
     setDeletions((current) => [...current, input]);
-    setValue((current) =>
+    const removeFrom = (current: ProductCompatibilityDraft[]) =>
       current.map((compatibility) => {
         if (compatibility.category !== entry.category) return compatibility;
         if (
@@ -167,30 +201,168 @@ function ProductCompatibilityDialog({
         )
           return { ...compatibility, model: "", project: "" };
         return compatibility;
-      }),
+      });
+    setValue(removeFrom);
+    setEditing((current) =>
+      current ? { ...current, rows: removeFrom(current.rows) } : current,
     );
   }
+  function confirmEditor() {
+    if (!editing) return;
+    const retained = value.filter(
+      (_, index) => !editing.indices.includes(index),
+    );
+    setValue([...retained, ...editing.rows]);
+    setEditing(null);
+  }
   return (
-    <FormDialog title={it.inventory.editCompatibleDevices} onClose={onClose}>
+    <FormDialog
+      title={
+        editing?.indices.length
+          ? it.inventory.editCompatibleDevices
+          : editing
+            ? it.inventory.addCompatibleDevice
+            : it.inventory.editCompatibleDevices
+      }
+      subtitle={
+        editing
+          ? it.inventory.compatibilityEditorHelp
+          : it.inventory.compatibilityListHelp
+      }
+      onClose={() => (editing ? setEditing(null) : onClose())}
+    >
       <div data-form-dialog-body data-product-compatibility-dialog>
-        <ProductCompatibilityFields
-          value={value}
-          onChange={setValue}
-          options={options}
-          deletions={deletions}
-          onDelete={deleteCatalogOption}
-        />
+        {editing ? (
+          <ProductCompatibilityFields
+            value={editing.rows}
+            onChange={(rows) => setEditing({ ...editing, rows })}
+            options={options}
+            deletions={deletions}
+            onDelete={deleteCatalogOption}
+          />
+        ) : (
+          <div className="compatibility-overview">
+            <section className="compatibility-product-summary">
+              <span className="quick-service-picker-icon" aria-hidden="true">
+                <PackageOpen size={22} />
+              </span>
+              <span>
+                <strong>{product.name}</strong>
+                <small>
+                  {product.category} ·{" "}
+                  {it.inventory.compatibleDeviceCount.replace(
+                    "{count}",
+                    String(devices.length),
+                  )}
+                </small>
+              </span>
+            </section>
+            <div className="compatibility-list-heading">
+              <strong>{it.inventory.compatibleDevices}</strong>
+              <small>{it.inventory.compatibilityListHelp}</small>
+            </div>
+            <div className="compatibility-device-list">
+              {devices.map((device) => (
+                <div
+                  className="compatibility-device-row"
+                  key={device.indices[0]}
+                >
+                  <button
+                    type="button"
+                    className="compatibility-device-edit"
+                    aria-label={`${it.inventory.editCompatibleDevices}: ${device.brand} ${device.model}`}
+                    onClick={() =>
+                      setEditing({
+                        indices: device.indices,
+                        rows: device.indices.map((index) => ({
+                          ...value[index],
+                        })),
+                      })
+                    }
+                  >
+                    <span>
+                      <strong>
+                        {device.brand} {device.model}
+                      </strong>
+                      <small>
+                        {
+                          deviceCategories[device.category as Category]?.[
+                            locale === "zh" ? 1 : 0
+                          ]
+                        }
+                      </small>
+                    </span>
+                    <span className="compatibility-projects">
+                      {device.projects.length ? (
+                        device.projects.map((project) => (
+                          <span key={project}>{project}</span>
+                        ))
+                      ) : (
+                        <span>{it.inventory.allRepairUses}</span>
+                      )}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="record-icon record-icon-delete"
+                    aria-label={`${it.remove} ${device.brand} ${device.model}`}
+                    onClick={() =>
+                      setValue((current) =>
+                        current.filter(
+                          (_, index) => !device.indices.includes(index),
+                        ),
+                      )
+                    }
+                  >
+                    <Trash2 size={17} />
+                  </button>
+                </div>
+              ))}
+              {!devices.length && <p className="empty">{it.noMatches}</p>}
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="add-device-action compatibility-add-device"
+              onClick={() =>
+                setEditing({
+                  indices: [],
+                  rows: [
+                    {
+                      category: "PHONE",
+                      brand: "",
+                      model: "",
+                      project: "",
+                    },
+                  ],
+                })
+              }
+            >
+              <Plus size={16} /> {it.inventory.addCompatibleDevice}
+            </Button>
+          </div>
+        )}
         {error && (
           <p className="message error" role="alert">
             {error}
           </p>
         )}
         <div className="dialog-actions">
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => (editing ? setEditing(null) : onClose())}
+          >
             {it.cancel}
           </Button>
-          <Button type="button" onClick={() => onSave(value)}>
-            {it.save}
+          <Button
+            type="button"
+            disabled={Boolean(
+              editing?.rows.some((row) => !row.brand || !row.model),
+            )}
+            onClick={() => (editing ? confirmEditor() : onSave(value))}
+          >
+            {editing ? it.confirm : it.save}
           </Button>
         </div>
       </div>
@@ -866,12 +1038,6 @@ export function InventoryWorkspace({
             { value: "REPAIR", label: it.inventory.repair },
           ]}
         />
-        <DeviceCompatibilityFilter
-          compatibilities={compatibilities}
-          value={deviceFilter}
-          onApply={setDeviceFilter}
-          onClear={() => setDeviceFilter(emptyDeviceFilter)}
-        />
         <SimpleSelect
           value={status}
           onChange={(value) =>
@@ -885,6 +1051,12 @@ export function InventoryWorkspace({
             { value: "LOW_STOCK", label: it.inventory.low },
             { value: "OUT_OF_STOCK", label: it.inventory.out },
           ]}
+        />
+        <DeviceCompatibilityFilter
+          compatibilities={compatibilities}
+          value={deviceFilter}
+          onApply={setDeviceFilter}
+          onClear={() => setDeviceFilter(emptyDeviceFilter)}
         />
         <div className="inventory-batch-controls">
           <BatchControls
@@ -921,7 +1093,6 @@ export function InventoryWorkspace({
           <table className="inventory-table">
             <thead>
               <tr>
-                <th className="inventory-status-cell">{it.inventory.status}</th>
                 {batchMode && (
                   <th className="inventory-selection">
                     <input
@@ -954,6 +1125,7 @@ export function InventoryWorkspace({
                     />
                   </th>
                 )}
+                <th className="inventory-status-cell">{it.inventory.status}</th>
                 <th className="inventory-product-cell">
                   {it.inventory.product}
                 </th>
@@ -1022,13 +1194,6 @@ export function InventoryWorkspace({
                       });
                     }}
                   >
-                    <td className="inventory-status-cell">
-                      <span
-                        className={`stock-badge stock-${productStatus.toLowerCase()}`}
-                      >
-                        {statusLabel(productStatus)}
-                      </span>
-                    </td>
                     {batchMode && (
                       <td className="inventory-selection">
                         <input
@@ -1045,6 +1210,13 @@ export function InventoryWorkspace({
                         />
                       </td>
                     )}
+                    <td className="inventory-status-cell">
+                      <span
+                        className={`stock-badge stock-${productStatus.toLowerCase()}`}
+                      >
+                        {statusLabel(productStatus)}
+                      </span>
+                    </td>
                     <td className="inventory-product-cell">
                       {selected ? (
                         <div className="inventory-name-edit">

@@ -20,7 +20,11 @@ import { Button } from "./ui/button";
 import { QuantityStepper } from "./ui/quantity-stepper";
 import { OrderDetailCard } from "./order-detail-ui";
 import { FormDialog } from "./forms";
-import { SearchableCombobox, SimpleSelect } from "./business-select";
+import {
+  DatePicker,
+  SearchableCombobox,
+  SimpleSelect,
+} from "./business-select";
 
 type ProductOption = {
   id: string;
@@ -333,7 +337,7 @@ export function WorkOrderCheckout({
       </label>
       <label>
         <span>{it.orderProducts.deliveryTime}</span>
-        <input
+        <DatePicker
           name="pickedUpAt"
           type="datetime-local"
           defaultValue={now()}

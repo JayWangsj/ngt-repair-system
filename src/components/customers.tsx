@@ -524,14 +524,19 @@ export function CustomerDevices({
         <h2>
           {it.devices} ({devices.length})
         </h2>
+      </div>
+      <div className="panel customer-device-list">
         {!readOnly && !creating && (
-          <Button variant="outline" onClick={() => setCreating(true)}>
-            <Plus size={15} aria-hidden="true" />
+          <Button
+            type="button"
+            variant="outline"
+            className="add-device-action customer-detail-add-device"
+            onClick={() => setCreating(true)}
+          >
+            <Plus size={18} aria-hidden="true" />
             {it.device}
           </Button>
         )}
-      </div>
-      <div className="panel customer-device-list">
         {creating && (
           <article className="customer-device-editor">
             <DeviceForm

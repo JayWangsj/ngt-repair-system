@@ -28,6 +28,7 @@ import {
   type StatusDropdownOrder,
 } from "./status-dropdown";
 import { FormDialog, PaymentForm } from "./forms";
+import { DatePicker } from "./business-select";
 import { Button } from "./ui/button";
 
 export type OrderListRow = {
@@ -155,10 +156,10 @@ function DueDateControl({
         {row.overdue && <small>{it.overdue}</small>}
       </div>
     );
-  function save() {
-    if (value === currentValue) return;
+  function save(nextValue = value) {
+    if (nextValue === currentValue) return;
     startTransition(async () => {
-      const result = await updateDueDateAction(row.id, value);
+      const result = await updateDueDateAction(row.id, nextValue);
       if (!result.ok) return setError(result.error);
       setError("");
       router.refresh();
@@ -166,7 +167,7 @@ function DueDateControl({
   }
   return (
     <div className="inline-order-control">
-      <input
+      <DatePicker
         className="order-due-input"
         aria-label={it.dueDate}
         type={row.type === "QUICK_SERVICE" ? "datetime-local" : "date"}
@@ -174,7 +175,7 @@ function DueDateControl({
         value={value}
         disabled={pending}
         onChange={(event) => setValue(event.target.value)}
-        onBlur={save}
+        onBlur={(event) => save(event.currentTarget.value)}
       />
       {error && <small className="inline-control-error">{error}</small>}
     </div>

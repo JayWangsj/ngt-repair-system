@@ -1023,18 +1023,26 @@ td small {
 .order-quick-views > span {
   flex: 0 0 auto;
   padding: 8px 12px;
-  border: 1px solid var(--line);
+  border: 1px solid #b8ae8d;
   border-radius: 999px;
-  color: var(--muted);
+  background: #fffdf5;
+  color: #574200;
   font-size: 11px;
   text-decoration: none;
   white-space: nowrap;
 }
 .order-quick-views a:hover,
 .order-quick-views a.is-active {
-  border-color: #e8c850;
-  background: #fff6d7;
-  color: #715500;
+  border-color: #806000;
+  background: #fff1b6;
+  color: #574200;
+}
+.order-quick-views a:active {
+  background: #ffe99d;
+}
+.order-quick-views a:focus-visible {
+  outline: 2px solid rgb(210 174 33 / 45%);
+  outline-offset: 2px;
 }
 .order-quick-views > span {
   border-color: transparent;
@@ -1099,6 +1107,12 @@ td small {
 }
 .filters input {
   width: 100%;
+}
+.filters .business-select-trigger,
+.filters .date-picker,
+.filters .date-picker-input {
+  height: 41px;
+  min-height: 41px;
 }
 label {
   display: flex;
@@ -1825,7 +1839,7 @@ textarea {
     border-color var(--motion-base) var(--ease-ui);
 }
 .order-detail-card:hover .order-card-edit,
-.order-detail-card:focus-within .order-card-edit,
+.order-detail-card:has(:focus-visible) .order-card-edit,
 .order-card-edit:focus-visible {
   opacity: 1;
   pointer-events: auto;
@@ -3848,6 +3862,79 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
   gap: 8px;
   align-items: center;
 }
+.compatibility-overview,
+.compatibility-device-list {
+  display: grid;
+  gap: 10px;
+}
+.compatibility-product-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.compatibility-product-summary > span:last-child,
+.compatibility-list-heading {
+  display: grid;
+  gap: 3px;
+}
+.compatibility-product-summary small,
+.compatibility-list-heading small,
+.compatibility-device-edit small {
+  color: var(--muted);
+}
+.compatibility-list-heading {
+  padding: 8px 0 2px;
+}
+.compatibility-device-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 4px 7px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.compatibility-device-edit {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 5px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+.compatibility-device-edit > span:first-child {
+  display: grid;
+  gap: 3px;
+}
+.compatibility-projects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.compatibility-projects > span {
+  max-width: 100%;
+  padding: 5px 9px;
+  overflow-wrap: anywhere;
+  border-radius: 7px;
+  background: var(--soft);
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.compatibility-device-edit:hover strong,
+.compatibility-device-edit:focus-visible strong {
+  color: #765800;
+}
+.compatibility-add-device {
+  width: 100%;
+  margin-top: 6px;
+}
 .order-type-tag {
   display: inline-flex;
   width: max-content;
@@ -3997,14 +4084,24 @@ details.secondary-actions {
 .quick-service-device-list > div {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 24px;
   padding: 10px 0;
   border-bottom: 1px solid var(--line);
+}
+.quick-service-detail-list > div > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.quick-service-detail-list > div > strong:last-child {
+  flex: 0 0 auto;
 }
 @media (max-width: 760px) {
   .quick-service-choice,
   .product-compatibility-row,
   .catalog-manager-row {
+    grid-template-columns: 1fr;
+  }
+  .compatibility-device-edit {
     grid-template-columns: 1fr;
   }
 }
@@ -6635,6 +6732,217 @@ details.secondary-actions {
   color: #9ca3a0;
   cursor: default;
 }
+.date-picker {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+.date-picker-input {
+  padding-right: 38px;
+  padding-left: 38px;
+  border-color: #d9dddb;
+  background: #fff;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease-out,
+    box-shadow 150ms ease-out,
+    background-color 150ms ease-out;
+}
+.date-picker-input::-webkit-calendar-picker-indicator {
+  opacity: 0;
+  pointer-events: none;
+}
+.date-picker-leading-icon,
+.date-picker-toggle {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.date-picker-leading-icon {
+  left: 13px;
+  color: var(--ink);
+  pointer-events: none;
+}
+.date-picker-toggle {
+  right: 3px;
+  width: 34px;
+  height: calc(100% - 6px);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+}
+.date-picker-toggle:hover:not(:disabled) {
+  background: #fff8d9;
+}
+.date-picker-toggle svg {
+  transition: transform 150ms ease-out;
+}
+.date-picker.is-open .date-picker-toggle svg {
+  transform: rotate(180deg);
+}
+.date-picker:hover:not(.is-disabled) .date-picker-input {
+  border-color: #e0bd37;
+  background: #fffdf7;
+}
+.date-picker.is-open .date-picker-input,
+.date-picker-input:focus-visible {
+  border-color: #e4ae00;
+  box-shadow: 0 0 0 2px rgb(228 174 0 / 18%);
+  outline: none;
+}
+.date-picker.is-disabled .date-picker-leading-icon {
+  color: #9ca3a0;
+}
+.date-picker-popover {
+  position: fixed;
+  z-index: 1600;
+  width: 310px;
+  max-width: calc(100vw - 24px);
+  padding: 14px;
+  border: 1px solid #e0e4e2;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 16px 38px rgb(35 39 47 / 16%);
+}
+.date-picker-header {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.date-picker-header strong {
+  text-align: center;
+  font-size: 15px;
+}
+.date-picker-header button,
+.date-picker-days button,
+.date-picker-months button,
+.date-picker-footer button {
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+.date-picker-header button {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 8px;
+}
+.date-picker-header button:hover,
+.date-picker-days button:hover:not(:disabled):not(.is-selected),
+.date-picker-months button:hover:not(:disabled):not(.is-selected),
+.date-picker-footer button:hover {
+  background: #fff7d6;
+}
+.date-picker-weekdays,
+.date-picker-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+.date-picker-weekdays {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 10px;
+  text-align: center;
+}
+.date-picker-weekdays span {
+  padding: 5px 0;
+}
+.date-picker-days button {
+  min-height: 34px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.date-picker-days button.is-outside {
+  color: #a8afac;
+}
+.date-picker-days button.is-today:not(.is-selected) {
+  border-color: #efcf67;
+  background: #fffaf0;
+  color: #765b00;
+  font-weight: 700;
+}
+.date-picker-days button.is-selected,
+.date-picker-months button.is-selected {
+  border-color: #f4c62d;
+  background: #f4c62d;
+  color: #302600;
+  font-weight: 750;
+}
+.date-picker-days button:focus-visible,
+.date-picker-months button:focus-visible,
+.date-picker-header button:focus-visible,
+.date-picker-footer button:focus-visible {
+  outline: 2px solid #e4ae00;
+  outline-offset: 1px;
+}
+.date-picker-days button:disabled,
+.date-picker-months button:disabled {
+  border-color: transparent !important;
+  background: transparent !important;
+  color: #c4c9c7 !important;
+}
+.date-picker-months {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+.date-picker-months button {
+  min-height: 40px;
+  padding: 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.date-picker-time {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+}
+.date-picker-time input {
+  min-height: 36px;
+}
+.date-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.date-picker-footer button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.date-picker-footer .date-picker-today {
+  margin-left: auto;
+  color: #9a6d00;
+  font-weight: 700;
+}
 .business-select-panel {
   position: fixed;
   z-index: 1500;
@@ -7853,6 +8161,10 @@ summary.record-icon::-webkit-details-marker {
   margin: 0;
   color: var(--muted);
 }
+.customer-detail-add-device {
+  width: calc(100% - 32px);
+  margin: 16px;
+}
 .order-project-summary {
   max-width: 240px;
   overflow: hidden;
@@ -8133,7 +8445,11 @@ summary.record-icon::-webkit-details-marker {
   min-width: 170px;
 }
 .inventory-usage-cell .business-select {
-  min-width: 135px;
+  width: 100%;
+  min-width: 0;
+}
+.inventory-usage-cell .business-select-trigger {
+  min-width: 0;
 }
 .favorite-toggle {
   border: 0;
@@ -8163,8 +8479,8 @@ summary.record-icon::-webkit-details-marker {
 .inventory-filters {
   display: grid;
   grid-template-columns:
-    minmax(180px, 1fr) repeat(4, minmax(105px, 145px))
-    auto;
+    minmax(180px, 1fr) repeat(3, minmax(105px, 145px))
+    auto auto;
   align-items: center;
   gap: 10px;
   padding: 16px;
@@ -8200,14 +8516,20 @@ summary.record-icon::-webkit-details-marker {
   align-items: center;
   gap: 8px;
   width: 100%;
-  height: 42px;
-  min-height: 42px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--ink);
-  padding: 8px 11px;
+  height: 40px;
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 10px;
+  font-weight: 650;
+  white-space: nowrap;
   text-align: left;
+}
+.inventory-device-filter-trigger:hover {
+  background: #fff8d9;
+  color: var(--ink);
 }
 .inventory-device-filter-trigger span {
   overflow: hidden;
@@ -8215,10 +8537,9 @@ summary.record-icon::-webkit-details-marker {
   white-space: nowrap;
 }
 .inventory-device-filter-trigger.is-active {
-  border-color: #d9a900;
   background: #fff9e8;
   color: #765b00;
-  box-shadow: 0 0 0 2px rgb(255 211 51 / 16%);
+  box-shadow: inset 0 0 0 1px rgb(217 169 0 / 32%);
 }
 .inventory-device-popover {
   position: fixed;

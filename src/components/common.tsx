@@ -8,7 +8,7 @@ import type {
   Payment,
 } from "@prisma/client";
 import { Plus, Wrench } from "lucide-react";
-import { getMessages } from "@/lib/i18n-server";
+import { getLocale, getMessages } from "@/lib/i18n-server";
 import {
   balance,
   cents,
@@ -101,6 +101,7 @@ export async function OrderTable({
   emptyText?: string;
 }) {
   const it = await getMessages();
+  const locale = await getLocale();
   const today = await getBusinessDay();
   if (!orders.length)
     return compact ? (
@@ -155,7 +156,7 @@ export async function OrderTable({
               dueDate: promisedDate(order) ?? "",
               expectedAt: order.expectedAt ?? "",
               overdue: isOverdue(order, today),
-              lastUpdated: dateTime(order.updatedAt),
+              lastUpdated: dateTime(order.updatedAt, locale),
               due,
               paid,
               balance: remaining,

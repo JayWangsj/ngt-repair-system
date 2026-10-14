@@ -1806,11 +1806,27 @@ test("dashboard animates on entry and data changes while respecting reduced moti
   const dashboardDateToggle = page.locator(
     ".dashboard-date-filter .date-picker-toggle",
   );
+  await expect(page.locator(".dashboard-date-filter > span").nth(1)).toHaveCSS(
+    "white-space",
+    "nowrap",
+  );
   const toggleBeforeHover = await dashboardDateToggle.boundingBox();
   await dashboardDateToggle.hover();
   const toggleAfterHover = await dashboardDateToggle.boundingBox();
   expect(toggleAfterHover?.y).toBeCloseTo(toggleBeforeHover!.y, 1);
   const dateBox = await dashboardDate.boundingBox();
+  const datePickerBox = await page
+    .locator(".dashboard-date-filter .date-picker")
+    .boundingBox();
+  expect(datePickerBox?.width).toBeCloseTo(dateBox!.width, 1);
+  expect(toggleAfterHover!.y + toggleAfterHover!.height / 2).toBeCloseTo(
+    dateBox!.y + dateBox!.height / 2,
+    1,
+  );
+  expect(toggleAfterHover!.x).toBeGreaterThan(dateBox!.x);
+  expect(toggleAfterHover!.x + toggleAfterHover!.width).toBeLessThanOrEqual(
+    dateBox!.x + dateBox!.width,
+  );
   await dashboardDate.click({
     position: { x: 8, y: dateBox!.height / 2 },
   });
@@ -2677,12 +2693,46 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await expect(
     row.getByRole("button", { name: "Registra incasso", exact: true }),
   ).toBeVisible();
-  await row.getByLabel("Consegna prevista", { exact: true }).fill("2099-11-30");
+  await row.getByLabel("Consegna prevista", { exact: true }).click();
+  const dueDatePicker = page.getByRole("dialog", {
+    name: "Scegli data",
+    exact: true,
+  });
+  await dueDatePicker
+    .getByRole("button", { name: "Mese precedente", exact: true })
+    .click();
+  await dueDatePicker
+    .locator(".date-picker-days button:not(.is-outside)")
+    .filter({ hasText: /^30$/ })
+    .click();
+  await expect(row.locator(".inline-control-error")).toHaveCount(0);
+  await expect(
+    row.getByLabel("Consegna prevista", { exact: true }),
+  ).toHaveValue("2099-11-30");
   await page.getByRole("heading", { name: "Schede di servizio" }).click();
   await expect(
     row.getByLabel("Consegna prevista", { exact: true }),
   ).toHaveCount(0);
   await expect(row).toContainText("30/11/2099");
+
+  await page.goto("/settings/language");
+  await page.getByRole("button", { name: "中文", exact: true }).click();
+  await page.goto("/orders");
+  const localizedRow = page
+    .locator(".order-list-body > tr")
+    .filter({ hasText: orderCode });
+  await expect(localizedRow.locator(".order-updated-cell")).toContainText(
+    /\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}/,
+  );
+  await localizedRow.click();
+  const localizedDueDate = localizedRow.getByLabel("预计交付日期", {
+    exact: true,
+  });
+  await localizedDueDate.fill("2000-01-01");
+  await localizedDueDate.evaluate((input) => input.blur());
+  await expect(localizedRow.locator(".inline-control-error")).toHaveText(
+    "交付日期不能早于今天。",
+  );
 });
 test("repair list separates explicit collection from payment correction", async ({
   page,

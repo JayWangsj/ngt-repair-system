@@ -306,8 +306,8 @@ export const money = (amount: number) =>
   new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(
     amount / 100,
   );
-export const dateTime = (date: Date | string) =>
-  new Intl.DateTimeFormat("it-IT", {
+export const dateTime = (date: Date | string, locale: "it" | "zh" = "it") =>
+  new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "it-IT", {
     dateStyle: "short",
     timeStyle: "short",
     timeZone: "Europe/Rome",

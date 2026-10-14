@@ -63,6 +63,7 @@ const errors: Record<string, string> = {
     "记录已存在，请核对后重试。",
   "Operazione non riuscita. Aggiorna la pagina e riprova.":
     "操作失败，请刷新后重试。",
+  "La consegna non può precedere oggi.": "交付日期不能早于今天。",
   "Connessione non disponibile. Riprova.": "连接失败，请重试。",
   "Riprovare l'operazione.": "请重试。",
   "Sessione non valida. Accedi di nuovo.": "本地操作记录不可用，请刷新后重试。",

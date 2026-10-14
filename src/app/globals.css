@@ -2623,6 +2623,11 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
 }
 .dashboard-date-filter > span:nth-child(2) {
   margin-right: auto;
+  white-space: nowrap;
+}
+.dashboard-date-filter .date-picker {
+  flex: 0 0 auto;
+  width: auto;
 }
 .dashboard-date-filter input {
   width: auto;

@@ -7,6 +7,7 @@ import {
   allocatePayment,
   balance,
   cents,
+  dateTime,
   decimal,
   isOverdue,
   isActiveOrderStatus,
@@ -217,6 +218,11 @@ describe("Italian localization and validation", () => {
   it("uses Rome day across UTC midnight and daylight saving", () => {
     expect(romeDay(new Date("2026-07-01T22:30:00Z"))).toBe("2026-07-02");
     expect(romeDay(new Date("2026-01-01T23:30:00Z"))).toBe("2026-01-02");
+  });
+  it("formats timestamps for the selected interface language", () => {
+    const timestamp = new Date("2026-10-14T00:51:00Z");
+    expect(dateTime(timestamp, "it")).toBe("14/10/26, 02:51");
+    expect(dateTime(timestamp, "zh")).toBe("2026/10/14 02:51");
   });
   it("starts warranty at actual delivery and adds exact days", () => {
     expect(

@@ -12,6 +12,7 @@ import {
 import { useRouter } from "next/navigation";
 import { setPaidTotalAction, updateDueDateAction } from "@/app/actions";
 import { dateOnly, decimal, money, type OrderStatus } from "@/lib/domain";
+import { translateError } from "@/lib/i18n";
 import {
   defaultOrderMotionSettings,
   normalizeOrderMotionSettings,
@@ -21,7 +22,7 @@ import {
   readOrderViewportFollow,
 } from "@/lib/order-motion";
 import { useBusinessDay } from "./business-date";
-import { useMessages } from "./language";
+import { useLanguage, useMessages } from "./language";
 import {
   StatusDropdown,
   type PrimaryStatusAction,
@@ -135,6 +136,7 @@ function DueDateControl({
   active: boolean;
 }) {
   const it = useMessages();
+  const { locale } = useLanguage();
   const today = useBusinessDay();
   const router = useRouter();
   const [value, setValue] = useState(
@@ -177,7 +179,11 @@ function DueDateControl({
         onChange={(event) => setValue(event.target.value)}
         onBlur={(event) => save(event.currentTarget.value)}
       />
-      {error && <small className="inline-control-error">{error}</small>}
+      {error && (
+        <small className="inline-control-error">
+          {translateError(error, locale)}
+        </small>
+      )}
     </div>
   );
 }

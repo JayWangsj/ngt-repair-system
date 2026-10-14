@@ -5844,36 +5844,37 @@ test("creates a repair part from the quote and selects it immediately", async ({
   const compatibilityDialog = page.getByRole("dialog", {
     name: "Modifica dispositivi compatibili",
   });
-  await compatibilityDialog
-    .getByRole("button", {
-      name: /Modifica dispositivi compatibili: Apple iPhone 13/,
-    })
-    .click();
+  const compatibilityRow = compatibilityDialog.locator(
+    ".compatibility-device-row",
+  );
+  await expect(compatibilityRow).toContainText("iPhone 13");
+  await expect(compatibilityRow).toContainText("sostituzione display");
+  await expect(compatibilityRow).not.toContainText("Apple");
+  await expect(
+    compatibilityDialog.locator(".compatibility-list-heading small"),
+  ).toHaveCount(0);
   await expect(
     compatibilityDialog.getByRole("combobox", { name: "Marca" }),
-  ).toHaveValue("Apple");
-  await expect(
-    compatibilityDialog.getByRole("combobox", { name: "Modello" }),
-  ).toHaveValue("iPhone 13");
-  await expect(
-    compatibilityDialog.getByRole("combobox", { name: /Intervento/ }),
-  ).toHaveValue("sostituzione display");
-  await compatibilityDialog
-    .getByRole("button", { name: "Annulla", exact: true })
-    .click();
-  const compatibilityOverview = page.getByRole("dialog", {
-    name: "Modifica dispositivi compatibili",
-  });
-  await compatibilityOverview
-    .getByRole("button", { name: "Rimuovi Apple iPhone 13", exact: true })
-    .click();
-  await expect(
-    compatibilityOverview.locator(".compatibility-device-row"),
   ).toHaveCount(0);
-  await compatibilityOverview
+  const removeCompatibility = compatibilityRow.getByRole("button", {
+    name: "Rimuovi Apple iPhone 13",
+    exact: true,
+  });
+  await expect(removeCompatibility).toHaveCSS("opacity", "0");
+  await compatibilityRow.hover();
+  await expect(compatibilityRow).toHaveCSS(
+    "background-color",
+    "rgb(255, 249, 232)",
+  );
+  await expect(removeCompatibility).toHaveCSS("opacity", "1");
+  await removeCompatibility.click();
+  await expect(
+    compatibilityDialog.locator(".compatibility-device-row"),
+  ).toHaveCount(0);
+  await compatibilityDialog
     .getByRole("button", { name: "Salva", exact: true })
     .click();
-  await expect(compatibilityOverview).toHaveCount(0);
+  await expect(compatibilityDialog).toHaveCount(0);
 });
 
 test("inventory repair products retain their compatibility editor", async ({
@@ -5890,7 +5891,7 @@ test("inventory repair products retain their compatibility editor", async ({
     name: "Modifica dispositivi compatibili",
   });
   const compatibilityAdd = dialog.getByRole("button", {
-    name: "Aggiungi dispositivo compatibile",
+    name: "Compatibilità",
     exact: true,
   });
   await expect(dialog.locator(".compatibility-product-summary")).toContainText(
@@ -5901,6 +5902,10 @@ test("inventory repair products retain their compatibility editor", async ({
   const editorDialog = page.getByRole("dialog", {
     name: "Aggiungi dispositivo compatibile",
   });
+  await expect(editorDialog.locator(".compatibility-device-fields")).toHaveCSS(
+    "grid-template-columns",
+    /.+ .+ .+/,
+  );
   const brand = editorDialog
     .getByRole("combobox", { name: "Marca", exact: true })
     .first();
@@ -5910,13 +5915,6 @@ test("inventory repair products retain their compatibility editor", async ({
     .getByRole("option")
     .filter({ hasText: "Apple" })
     .first();
-  const deleteApple = appleOption.getByRole("button", {
-    name: "Rimuovi Apple",
-    exact: true,
-  });
-  await expect(deleteApple).toHaveCSS("opacity", "0");
-  await appleOption.hover();
-  await expect(deleteApple).toHaveCSS("opacity", "1");
   await appleOption.click();
   const model = editorDialog
     .getByRole("combobox", { name: "Modello", exact: true })
@@ -5925,19 +5923,37 @@ test("inventory repair products retain their compatibility editor", async ({
   const iphoneOption = page
     .locator(".business-select-panel.is-entering")
     .getByRole("option")
-    .filter({ hasText: "iPhone 13" })
+    .filter({ hasText: "iPhone 14" })
     .first();
-  const deleteIphone = iphoneOption.getByRole("button", {
-    name: "Rimuovi iPhone 13",
+  await iphoneOption.click();
+  const projects = editorDialog.getByRole("combobox", {
+    name: "Intervento",
     exact: true,
   });
-  await expect(deleteIphone).toHaveCSS("opacity", "0");
-  await iphoneOption.hover();
-  await expect(deleteIphone).toHaveCSS("opacity", "1");
-  await model.press("Escape");
-  await editorDialog
-    .getByRole("button", { name: "Annulla", exact: true })
+  await expect(projects).toBeEnabled();
+  const openProjects = editorDialog.locator(
+    ".compatibility-project-selector .business-combobox-chevron",
+  );
+  await openProjects.click();
+  await page
+    .locator(".business-select-panel.is-entering")
+    .getByRole("option", { name: "sostituzione batteria", exact: true })
     .click();
+  await openProjects.click();
+  await page
+    .locator(".business-select-panel.is-entering")
+    .getByRole("option", { name: "sostituzione display", exact: true })
+    .click();
+  await expect(editorDialog.locator(".compatibility-project-chip")).toHaveText([
+    "sostituzione batteria",
+    "sostituzione display",
+  ]);
+  await editorDialog.getByRole("button", { name: "Conferma" }).click();
+  const summary = dialog.locator(".compatibility-device-row", {
+    hasText: "iPhone 14",
+  });
+  await expect(summary).toContainText("sostituzione batteria");
+  await expect(summary).toContainText("sostituzione display");
 });
 
 test("changing a selected repair part focuses its current name and preserves it on cancel", async ({

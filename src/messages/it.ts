@@ -235,6 +235,8 @@ export const it = {
       "Gestisci i dispositivi e gli interventi associati a questo ricambio.",
     compatibilityEditorHelp:
       "Seleziona il dispositivo e gli interventi di riparazione associati.",
+    compatibilityProjectsHelp:
+      "Seleziona uno o più interventi di riparazione compatibili.",
     allBrands: "Tutte le marche",
     allDeviceTypes: "Tutti i tipi",
     allModels: "Tutti i modelli",

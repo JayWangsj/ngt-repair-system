@@ -192,6 +192,7 @@ export const zh: typeof it = {
     compatibleDeviceCount: "已适配设备：{count} 个",
     compatibilityListHelp: "管理当前配件适配的设备及对应维修项目。",
     compatibilityEditorHelp: "选择设备并关联对应的维修项目。",
+    compatibilityProjectsHelp: "选择一个或多个适用的维修项目。",
     allBrands: "全部品牌",
     allDeviceTypes: "全部设备类型",
     allModels: "全部型号",

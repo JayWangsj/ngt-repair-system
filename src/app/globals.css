@@ -3888,8 +3888,7 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
   gap: 3px;
 }
 .compatibility-product-summary small,
-.compatibility-list-heading small,
-.compatibility-device-edit small {
+.compatibility-list-heading small {
   color: var(--muted);
 }
 .compatibility-list-heading {
@@ -3900,24 +3899,27 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  padding: 7px 4px 7px 12px;
+  padding: 10px 8px 10px 12px;
   border-bottom: 1px solid var(--line);
+  border-radius: 8px;
 }
-.compatibility-device-edit {
+.compatibility-device-summary {
   display: grid;
   grid-template-columns: minmax(180px, 0.8fr) minmax(0, 1.2fr);
   align-items: center;
   gap: 14px;
   min-width: 0;
-  padding: 5px 0;
-  border: 0;
-  background: transparent;
   color: var(--ink);
-  text-align: left;
 }
-.compatibility-device-edit > span:first-child {
-  display: grid;
-  gap: 3px;
+.compatibility-device-row > .record-icon-delete {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease-out;
+}
+.compatibility-device-row:hover > .record-icon-delete,
+.compatibility-device-row:focus-within > .record-icon-delete {
+  opacity: 1;
+  pointer-events: auto;
 }
 .compatibility-projects {
   display: flex;
@@ -3933,13 +3935,90 @@ html[data-sidebar-collapsed="true"] .nav-item:focus-visible::after {
   color: var(--muted);
   font-size: 0.78rem;
 }
-.compatibility-device-edit:hover strong,
-.compatibility-device-edit:focus-visible strong {
-  color: #765800;
-}
 .compatibility-add-device {
   width: 100%;
   margin-top: 6px;
+}
+.compatibility-add-editor {
+  display: grid;
+  gap: 18px;
+}
+.compatibility-device-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.compatibility-device-fields > label,
+.compatibility-device-fields > .editable-field {
+  margin: 0;
+}
+.compatibility-project-field {
+  display: grid;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.compatibility-project-field > header {
+  display: grid;
+  gap: 3px;
+}
+.compatibility-project-field small {
+  color: var(--muted);
+}
+.compatibility-project-selector {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 1px solid #d8dddb;
+  border-radius: 8px;
+  background: #fff;
+}
+.compatibility-project-selector:focus-within {
+  border-color: #d2ae21;
+  box-shadow: 0 0 0 3px rgb(235 196 39 / 12%);
+}
+.compatibility-project-chip {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 7px 4px 10px;
+  border-radius: 7px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+.compatibility-project-chip button {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+}
+.compatibility-project-search {
+  min-width: 220px;
+  flex: 1 1 220px;
+}
+.compatibility-project-search .business-combobox-input {
+  border: 0;
+  box-shadow: none;
+}
+.compatibility-project-search .business-combobox-chevron {
+  border: 0;
+}
+@media (max-width: 760px) {
+  .compatibility-device-fields {
+    grid-template-columns: 1fr;
+  }
+  .compatibility-device-summary {
+    grid-template-columns: 1fr;
+  }
 }
 .order-type-tag {
   display: inline-flex;

@@ -20,22 +20,18 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import {
-  deleteDeviceCatalogOptionAction,
-  deleteProductsAction,
-  updateProductAction,
-} from "@/app/actions";
+import { deleteProductsAction, updateProductAction } from "@/app/actions";
 import { categories as deviceCategories, type Category } from "@/lib/catalog";
 import { decimal, inventoryStatus, money } from "@/lib/domain";
 import { useLanguage, useMessages } from "./language";
 import {
   FormDialog,
-  ProductCompatibilityFields,
   ProductForm,
   type CategoryView,
   type DeviceCatalogDeletionView,
   type ProductCompatibilityDraft,
 } from "./forms";
+import { EditableSelect } from "./editable-select";
 import {
   DatePicker,
   SearchableCombobox,
@@ -134,12 +130,12 @@ function ProductCompatibilityDialog({
   const [value, setValue] = useState<ProductCompatibilityDraft[]>(
     product.compatibilities,
   );
-  const [editing, setEditing] = useState<{
-    indices: number[];
-    rows: ProductCompatibilityDraft[];
+  const [adding, setAdding] = useState<{
+    category: string;
+    brand: string;
+    model: string;
+    projects: string[];
   } | null>(null);
-  const [deletions, setDeletions] = useState(catalogDeletions);
-  const [error, setError] = useState("");
   const devices = Object.values(
     value.reduce<
       Record<
@@ -168,78 +164,183 @@ function ProductCompatibilityDialog({
       return groups;
     }, {}),
   );
-  async function deleteCatalogOption(
-    kind: "BRAND" | "MODEL",
-    entry: ProductCompatibilityDraft,
-    candidate: string,
-  ) {
-    const input: DeviceCatalogDeletionView = {
-      category: entry.category,
-      kind,
-      brand: kind === "MODEL" ? entry.brand : "",
-      value: candidate,
-    };
-    const result = await deleteDeviceCatalogOptionAction(input);
-    if (!result.ok) return setError(result.error);
-    setError("");
-    setDeletions((current) => [...current, input]);
-    const removeFrom = (current: ProductCompatibilityDraft[]) =>
-      current.map((compatibility) => {
-        if (compatibility.category !== entry.category) return compatibility;
-        if (
-          kind === "BRAND" &&
-          compatibility.brand.toLocaleLowerCase("it") ===
-            candidate.toLocaleLowerCase("it")
-        )
-          return { ...compatibility, brand: "", model: "", project: "" };
-        if (
-          kind === "MODEL" &&
-          compatibility.brand.toLocaleLowerCase("it") ===
-            entry.brand.toLocaleLowerCase("it") &&
-          compatibility.model.toLocaleLowerCase("it") ===
-            candidate.toLocaleLowerCase("it")
-        )
-          return { ...compatibility, model: "", project: "" };
-        return compatibility;
-      });
-    setValue(removeFrom);
-    setEditing((current) =>
-      current ? { ...current, rows: removeFrom(current.rows) } : current,
+  const hiddenCatalogValue = (kind: "BRAND" | "MODEL", candidate: string) =>
+    Boolean(
+      adding &&
+      catalogDeletions.some(
+        (deletion) =>
+          deletion.category === adding.category &&
+          deletion.kind === kind &&
+          (kind === "BRAND" ||
+            deletion.brand.toLocaleLowerCase("it") ===
+              adding.brand.toLocaleLowerCase("it")) &&
+          deletion.value.toLocaleLowerCase("it") ===
+            candidate.toLocaleLowerCase("it"),
+      ),
     );
-  }
-  function confirmEditor() {
-    if (!editing) return;
-    const retained = value.filter(
-      (_, index) => !editing.indices.includes(index),
-    );
-    setValue([...retained, ...editing.rows]);
-    setEditing(null);
+  const brandOptions = adding
+    ? uniqueValues(
+        options
+          .filter((option) => option.category === adding.category)
+          .map((option) => option.brand),
+      ).filter((brand) => !hiddenCatalogValue("BRAND", brand))
+    : [];
+  const modelOptions = adding
+    ? uniqueValues(
+        options
+          .filter(
+            (option) =>
+              option.category === adding.category &&
+              option.brand.toLocaleLowerCase("it") ===
+                adding.brand.toLocaleLowerCase("it"),
+          )
+          .map((option) => option.model),
+      ).filter((model) => !hiddenCatalogValue("MODEL", model))
+    : [];
+  const projectOptions = adding
+    ? uniqueValues(
+        options
+          .filter(
+            (option) =>
+              option.category === adding.category &&
+              option.brand.toLocaleLowerCase("it") ===
+                adding.brand.toLocaleLowerCase("it"),
+          )
+          .map((option) => option.project),
+      ).filter((project) => project && !adding.projects.includes(project))
+    : [];
+  function confirmAdding() {
+    if (!adding) return;
+    setValue((current) => [
+      ...new Map(
+        [
+          ...current,
+          ...adding.projects.map((project) => ({
+            category: adding.category,
+            brand: adding.brand,
+            model: adding.model,
+            project,
+          })),
+        ].map((entry) => [
+          [entry.category, entry.brand, entry.model, entry.project]
+            .map((part) => part.toLocaleLowerCase("it"))
+            .join("\u0000"),
+          entry,
+        ]),
+      ).values(),
+    ]);
+    setAdding(null);
   }
   return (
     <FormDialog
       title={
-        editing?.indices.length
-          ? it.inventory.editCompatibleDevices
-          : editing
-            ? it.inventory.addCompatibleDevice
-            : it.inventory.editCompatibleDevices
+        adding
+          ? it.inventory.addCompatibleDevice
+          : it.inventory.editCompatibleDevices
       }
       subtitle={
-        editing
+        adding
           ? it.inventory.compatibilityEditorHelp
           : it.inventory.compatibilityListHelp
       }
-      onClose={() => (editing ? setEditing(null) : onClose())}
+      onClose={() => (adding ? setAdding(null) : onClose())}
     >
       <div data-form-dialog-body data-product-compatibility-dialog>
-        {editing ? (
-          <ProductCompatibilityFields
-            value={editing.rows}
-            onChange={(rows) => setEditing({ ...editing, rows })}
-            options={options}
-            deletions={deletions}
-            onDelete={deleteCatalogOption}
-          />
+        {adding ? (
+          <div className="compatibility-add-editor">
+            <div className="compatibility-device-fields">
+              <label>
+                <span>{it.deviceType}</span>
+                <SimpleSelect
+                  value={adding.category}
+                  onChange={(category) =>
+                    setAdding({
+                      category,
+                      brand: "",
+                      model: "",
+                      projects: [],
+                    })
+                  }
+                  placeholder={it.deviceType}
+                  ariaLabel={it.deviceType}
+                  options={Object.entries(deviceCategories).map(
+                    ([category, labels]) => ({
+                      value: category,
+                      label: labels[locale === "zh" ? 1 : 0],
+                    }),
+                  )}
+                />
+              </label>
+              <EditableSelect
+                label={it.brand}
+                value={adding.brand}
+                options={brandOptions}
+                onChange={(brand) =>
+                  setAdding({ ...adding, brand, model: "", projects: [] })
+                }
+              />
+              <EditableSelect
+                label={it.model}
+                value={adding.model}
+                options={modelOptions}
+                readOnly={!adding.brand}
+                onChange={(model) =>
+                  setAdding({ ...adding, model, projects: [] })
+                }
+              />
+            </div>
+            <section className="compatibility-project-field">
+              <header>
+                <strong>{it.project}</strong>
+                <small>{it.inventory.compatibilityProjectsHelp}</small>
+              </header>
+              <div className="compatibility-project-selector">
+                {adding.projects.map((project) => (
+                  <span className="compatibility-project-chip" key={project}>
+                    {project}
+                    <button
+                      type="button"
+                      aria-label={`${it.remove} ${project}`}
+                      onClick={() =>
+                        setAdding({
+                          ...adding,
+                          projects: adding.projects.filter(
+                            (value) => value !== project,
+                          ),
+                        })
+                      }
+                    >
+                      <X size={13} />
+                    </button>
+                  </span>
+                ))}
+                <SearchableCombobox
+                  className="compatibility-project-search"
+                  value=""
+                  onChange={(project) => {
+                    if (!project) return;
+                    setAdding({
+                      ...adding,
+                      projects: [...adding.projects, project],
+                    });
+                  }}
+                  groups={[
+                    {
+                      options: projectOptions.map((project) => ({
+                        value: project,
+                        label: project,
+                      })),
+                    },
+                  ]}
+                  disabled={!adding.model}
+                  placeholder={it.selectRepairProjects}
+                  ariaLabel={it.project}
+                  searchPlaceholder={it.selectRepairProjects}
+                  emptyText={it.noMatches}
+                />
+              </div>
+            </section>
+          </div>
         ) : (
           <div className="compatibility-overview">
             <section className="compatibility-product-summary">
@@ -259,39 +360,15 @@ function ProductCompatibilityDialog({
             </section>
             <div className="compatibility-list-heading">
               <strong>{it.inventory.compatibleDevices}</strong>
-              <small>{it.inventory.compatibilityListHelp}</small>
             </div>
             <div className="compatibility-device-list">
               {devices.map((device) => (
                 <div
-                  className="compatibility-device-row"
+                  className="compatibility-device-row business-list-row"
                   key={device.indices[0]}
                 >
-                  <button
-                    type="button"
-                    className="compatibility-device-edit"
-                    aria-label={`${it.inventory.editCompatibleDevices}: ${device.brand} ${device.model}`}
-                    onClick={() =>
-                      setEditing({
-                        indices: device.indices,
-                        rows: device.indices.map((index) => ({
-                          ...value[index],
-                        })),
-                      })
-                    }
-                  >
-                    <span>
-                      <strong>
-                        {device.brand} {device.model}
-                      </strong>
-                      <small>
-                        {
-                          deviceCategories[device.category as Category]?.[
-                            locale === "zh" ? 1 : 0
-                          ]
-                        }
-                      </small>
-                    </span>
+                  <div className="compatibility-device-summary">
+                    <strong>{device.model}</strong>
                     <span className="compatibility-projects">
                       {device.projects.length ? (
                         device.projects.map((project) => (
@@ -301,7 +378,7 @@ function ProductCompatibilityDialog({
                         <span>{it.inventory.allRepairUses}</span>
                       )}
                     </span>
-                  </button>
+                  </div>
                   <button
                     type="button"
                     className="record-icon record-icon-delete"
@@ -325,44 +402,35 @@ function ProductCompatibilityDialog({
               variant="outline"
               className="add-device-action compatibility-add-device"
               onClick={() =>
-                setEditing({
-                  indices: [],
-                  rows: [
-                    {
-                      category: "PHONE",
-                      brand: "",
-                      model: "",
-                      project: "",
-                    },
-                  ],
+                setAdding({
+                  category: "PHONE",
+                  brand: "",
+                  model: "",
+                  projects: [],
                 })
               }
             >
-              <Plus size={16} /> {it.inventory.addCompatibleDevice}
+              <Plus size={16} /> {it.inventory.addCompatibility}
             </Button>
           </div>
-        )}
-        {error && (
-          <p className="message error" role="alert">
-            {error}
-          </p>
         )}
         <div className="dialog-actions">
           <Button
             type="button"
             variant="outline"
-            onClick={() => (editing ? setEditing(null) : onClose())}
+            onClick={() => (adding ? setAdding(null) : onClose())}
           >
             {it.cancel}
           </Button>
           <Button
             type="button"
             disabled={Boolean(
-              editing?.rows.some((row) => !row.brand || !row.model),
+              adding &&
+              (!adding.brand || !adding.model || adding.projects.length === 0),
             )}
-            onClick={() => (editing ? confirmEditor() : onSave(value))}
+            onClick={() => (adding ? confirmAdding() : onSave(value))}
           >
-            {editing ? it.confirm : it.save}
+            {adding ? it.confirm : it.save}
           </Button>
         </div>
       </div>

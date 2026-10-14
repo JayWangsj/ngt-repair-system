@@ -6686,6 +6686,13 @@ details.secondary-actions {
   color: #493800;
   font-weight: 650;
 }
+.repair-part-combobox .business-select-create {
+  min-width: max-content;
+}
+.repair-part-combobox .business-select-create span {
+  overflow: visible;
+  text-overflow: clip;
+}
 .quote-price-input {
   width: 100%;
   min-width: 118px;

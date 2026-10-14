@@ -6070,6 +6070,12 @@ test("changing a selected repair part focuses its current name and preserves it 
   });
   await expect(newPart).toBeEnabled();
   await expect(newPart).toHaveCSS("font-weight", "650");
+  expect(
+    await newPart.evaluate(
+      (button) => button.scrollWidth <= button.clientWidth + 1,
+    ),
+  ).toBe(true);
+  await expect(newPart.locator("span")).toHaveCSS("text-overflow", "clip");
   await search.press("Escape");
   await summary.hover();
   await removePart.click();

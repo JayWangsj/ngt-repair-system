@@ -1775,6 +1775,13 @@ test("dashboard animates on entry and data changes while respecting reduced moti
   const dashboardDate = page.locator(
     '.dashboard-date-filter input[type="date"]',
   );
+  const dashboardDateToggle = page.locator(
+    ".dashboard-date-filter .date-picker-toggle",
+  );
+  const toggleBeforeHover = await dashboardDateToggle.boundingBox();
+  await dashboardDateToggle.hover();
+  const toggleAfterHover = await dashboardDateToggle.boundingBox();
+  expect(toggleAfterHover?.y).toBeCloseTo(toggleBeforeHover!.y, 1);
   const dateBox = await dashboardDate.boundingBox();
   await dashboardDate.click({
     position: { x: 8, y: dateBox!.height / 2 },
@@ -1783,6 +1790,13 @@ test("dashboard animates on entry and data changes while respecting reduced moti
     name: "Scegli data",
   });
   await expect(dashboardCalendar).toBeVisible();
+  const calendarBox = await dashboardCalendar.boundingBox();
+  expect(calendarBox?.width).toBeGreaterThanOrEqual(300);
+  expect(calendarBox?.width).toBeLessThanOrEqual(330);
+  expect(calendarBox?.x).toBeGreaterThanOrEqual(12);
+  expect(calendarBox!.x + calendarBox!.width).toBeLessThanOrEqual(
+    (await page.evaluate(() => window.innerWidth)) - 12,
+  );
   await expect(
     dashboardCalendar.locator(".date-picker-days .is-selected"),
   ).toHaveCount(1);
@@ -2305,6 +2319,15 @@ test("creates and edits a product directly in the inventory row", async ({
   expect(
     movementCloseBox!.x - (movementMonthBox!.x + movementMonthBox!.width),
   ).toBeLessThanOrEqual(16);
+  await movementMonth.click({ position: { x: 8, y: 18 } });
+  const movementCalendar = movementDialog.locator(".date-picker-popover");
+  await expect(movementCalendar).toBeVisible();
+  expect(
+    await movementCalendar.evaluate(
+      (element) => element.parentElement?.tagName,
+    ),
+  ).toBe("DIALOG");
+  await page.keyboard.press("Escape");
   const currentMovementMonth = await movementMonth.inputValue();
   await expect(movementDialog).toContainText(productName);
   await expect(movementDialog).toContainText("4 → 6");
@@ -2480,30 +2503,18 @@ test("repair list exposes month, status, due-date and payment controls", async (
   );
   const month = page.locator('input[name="month"]');
   await expect(month).toHaveValue(/^\d{4}-\d{2}$/);
-  await page.evaluate(() => {
-    const input = document.querySelector<HTMLInputElement>(
-      'input[name="month"]',
-    );
-    if (!input) return;
-    Object.defineProperty(input, "showPicker", {
-      value: () => {
-        (
-          window as Window & { orderMonthPickerOpened?: number }
-        ).orderMonthPickerOpened =
-          ((window as Window & { orderMonthPickerOpened?: number })
-            .orderMonthPickerOpened ?? 0) + 1;
-      },
-    });
-  });
+  const monthPicker = month.locator("..");
+  await expect(monthPicker).toHaveCSS("width", "170px");
   const monthBox = await month.boundingBox();
   await month.click({ position: { x: 8, y: monthBox!.height / 2 } });
-  expect(
-    await page.evaluate(
-      () =>
-        (window as Window & { orderMonthPickerOpened?: number })
-          .orderMonthPickerOpened,
-    ),
-  ).toBe(1);
+  const monthCalendar = page.getByRole("dialog", { name: "Scegli data" });
+  await expect(monthCalendar).toBeVisible();
+  await expect(monthCalendar.locator(".date-picker-months button")).toHaveCount(
+    12,
+  );
+  const monthCalendarBox = await monthCalendar.boundingBox();
+  expect(monthCalendarBox!.width).toBeLessThanOrEqual(330);
+  await page.keyboard.press("Escape");
   const currentMonth = await month.inputValue();
   await page.goto("/orders?month=not-a-month");
   await expect(page.locator('input[name="month"]')).toHaveValue("");
@@ -2514,9 +2525,10 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await expect(
     page.getByRole("button", { name: "Filtra", exact: true }),
   ).toHaveCount(0);
-  const search = page.getByPlaceholder("Numero, cliente, telefono o modello", {
-    exact: true,
-  });
+  const search = page.getByPlaceholder(
+    "Numero, cliente, telefono, dispositivo, IMEI o intervento",
+    { exact: true },
+  );
   const orderCode = await page.locator(".order-code-link").first().innerText();
   await search.fill(orderCode);
   await expect(page).toHaveURL(
@@ -2634,21 +2646,14 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await expect(
     row.getByLabel("Consegna prevista", { exact: true }),
   ).toBeEnabled();
-  await expect(row.getByLabel("Incassato", { exact: true })).toBeVisible();
+  await expect(
+    row.getByRole("button", { name: "Registra incasso", exact: true }),
+  ).toBeVisible();
   await row.getByLabel("Consegna prevista", { exact: true }).fill("2099-11-30");
-  await row.getByLabel("Incassato", { exact: true }).fill("30");
-  await row
-    .getByLabel("Metodo di pagamento", { exact: true })
-    .selectOption("CARD");
-  const adjustmentReason = row.getByLabel("Motivo della modifica", {
-    exact: true,
-  });
-  await adjustmentReason.fill("Pagamento registrato correttamente");
-  await adjustmentReason.press("Tab");
-  await expect(row.getByLabel("Incassato", { exact: true })).toHaveValue("30");
   await page.getByRole("heading", { name: "Schede di servizio" }).click();
-  await expect(row.getByLabel("Incassato", { exact: true })).toHaveCount(0);
-  await expect(row).toContainText("30,00 €");
+  await expect(
+    row.getByLabel("Consegna prevista", { exact: true }),
+  ).toHaveCount(0);
   await expect(row).toContainText("30/11/2099");
 });
 test("repair list separates explicit collection from payment correction", async ({
@@ -3684,6 +3689,14 @@ test("completes a retail sale and opens its immutable receipt", async ({
 
   await page.getByRole("button", { name: "Vendite", exact: true }).click();
   const historyDialog = page.getByRole("dialog");
+  const salesMonth = historyDialog.getByLabel("Mese", { exact: true });
+  await salesMonth.click({ position: { x: 8, y: 18 } });
+  const salesCalendar = historyDialog.locator(".date-picker-popover");
+  await expect(salesCalendar).toBeVisible();
+  expect(
+    await salesCalendar.evaluate((element) => element.parentElement?.tagName),
+  ).toBe("DIALOG");
+  await page.keyboard.press("Escape");
   const saleNumber = historyDialog
     .getByRole("button", { name: /^V-\d{8}\d{3}$/ })
     .first();

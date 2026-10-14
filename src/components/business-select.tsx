@@ -22,6 +22,7 @@ import {
   type FocusEvent,
   type KeyboardEvent,
   type InputHTMLAttributes,
+  type RefObject,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -43,43 +44,58 @@ export type SelectOption = {
 };
 export type SelectGroup = { label?: string; options: SelectOption[] };
 
-function useDropdown(open: boolean) {
+function dropdownPosition(
+  anchor: HTMLElement | null,
+  panel: HTMLDivElement | null,
+) {
+  const rect = anchor?.getBoundingClientRect();
+  if (!rect) return;
+  const panelWidth = panel?.offsetWidth ?? rect.width;
+  const panelHeight = panel?.offsetHeight ?? 0;
+  const gap = 5;
+  const edge = 12;
+  const below = rect.bottom + gap;
+  const fitsBelow = below + panelHeight <= window.innerHeight - edge;
+  const fitsAbove = rect.top - gap - panelHeight >= edge;
+  const top =
+    !fitsBelow && fitsAbove
+      ? rect.top - gap - panelHeight
+      : Math.min(below, window.innerHeight - panelHeight - edge);
+  const left = Math.min(
+    Math.max(edge, rect.left),
+    Math.max(edge, window.innerWidth - panelWidth - edge),
+  );
+  return { top: Math.max(edge, top), left, width: rect.width };
+}
+
+function useDropdown(open: boolean, anchor?: RefObject<HTMLElement | null>) {
   const trigger = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
-  function place() {
-    const rect = trigger.current?.getBoundingClientRect();
-    if (!rect) return;
-    const panelWidth = panel.current?.offsetWidth ?? rect.width;
-    const panelHeight = panel.current?.offsetHeight ?? 0;
-    const gap = 5;
-    const edge = 12;
-    const below = rect.bottom + gap;
-    const fitsBelow = below + panelHeight <= window.innerHeight - edge;
-    const fitsAbove = rect.top - gap - panelHeight >= edge;
-    const top =
-      !fitsBelow && fitsAbove
-        ? rect.top - gap - panelHeight
-        : Math.min(below, window.innerHeight - panelHeight - edge);
-    const left = Math.min(
-      Math.max(edge, rect.left),
-      Math.max(edge, window.innerWidth - panelWidth - edge),
-    );
-    setPosition({ top: Math.max(edge, top), left, width: rect.width });
-  }
   useLayoutEffect(() => {
-    if (open) place();
-  }, [open]);
+    if (!open) return;
+    const next = dropdownPosition(
+      anchor?.current ?? trigger.current,
+      panel.current,
+    );
+    if (next) setPosition(next);
+  }, [anchor, open]);
   useEffect(() => {
     if (!open) return;
-    const reposition = () => place();
+    const reposition = () => {
+      const next = dropdownPosition(
+        anchor?.current ?? trigger.current,
+        panel.current,
+      );
+      if (next) setPosition(next);
+    };
     window.addEventListener("resize", reposition);
     window.addEventListener("scroll", reposition, true);
     return () => {
       window.removeEventListener("resize", reposition);
       window.removeEventListener("scroll", reposition, true);
     };
-  }, [open]);
+  }, [anchor, open]);
   return { trigger, panel, position };
 }
 
@@ -702,13 +718,14 @@ export const DatePicker = forwardRef<
   const [internalValue, setInternalValue] = useState(
     String(defaultValue ?? ""),
   );
+  const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
   const currentValue = String(value ?? internalValue);
   const initial = dateParts(currentValue) ?? dateParts(today)!;
   const [view, setView] = useState({
     year: initial.year,
     month: initial.month,
   });
-  const { trigger, panel, position } = useDropdown(open);
+  const { trigger, panel, position } = useDropdown(open, input);
   const language = locale === "zh" ? "zh-CN" : "it-IT";
   const copy =
     locale === "zh"
@@ -730,6 +747,7 @@ export const DatePicker = forwardRef<
   function openPicker() {
     const selected = dateParts(currentValue) ?? dateParts(today)!;
     setView({ year: selected.year, month: selected.month });
+    setPortalTarget(input.current?.closest("dialog") ?? document.body);
     setOpen(true);
   }
 
@@ -807,7 +825,6 @@ export const DatePicker = forwardRef<
       new Date(view.year, index, 1),
     ),
   );
-
   return (
     <div
       ref={trigger}
@@ -853,7 +870,7 @@ export const DatePicker = forwardRef<
         <ChevronDown size={16} aria-hidden="true" />
       </button>
       {open &&
-        typeof document !== "undefined" &&
+        portalTarget &&
         createPortal(
           <div
             ref={panel}
@@ -863,11 +880,12 @@ export const DatePicker = forwardRef<
             style={{
               top: position.top,
               left: position.left,
-              minWidth: Math.max(position.width, 310),
             }}
             data-prevent-card-autosave
             onKeyDown={(event) => {
               if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopPropagation();
                 setOpen(false);
                 input.current?.focus();
               }
@@ -989,7 +1007,7 @@ export const DatePicker = forwardRef<
               </button>
             </div>
           </div>,
-          document.body,
+          portalTarget,
         )}
     </div>
   );

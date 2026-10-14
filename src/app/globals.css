@@ -1098,6 +1098,9 @@ td small {
   min-width: 130px;
   white-space: nowrap;
 }
+.filters > label.order-month-filter:not(.grow) {
+  flex: 0 0 170px;
+}
 .filters > label:nth-of-type(4) {
   flex-basis: 155px;
 }
@@ -6778,6 +6781,11 @@ details.secondary-actions {
 }
 .date-picker-toggle:hover:not(:disabled) {
   background: #fff8d9;
+  transform: translateY(-50%) !important;
+}
+.date-picker-toggle:active:not(:disabled),
+.date-picker-toggle:disabled {
+  transform: translateY(-50%) !important;
 }
 .date-picker-toggle svg {
   transition: transform 150ms ease-out;

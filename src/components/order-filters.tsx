@@ -65,7 +65,7 @@ export function OrderFilters({
           onChange={(event) => apply({ ...values, q: event.target.value }, 250)}
         />
       </label>
-      <label>
+      <label className="order-month-filter">
         <span className="sr-only">{it.month}</span>
         <DatePicker
           name="month"

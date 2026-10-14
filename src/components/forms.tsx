@@ -4869,10 +4869,22 @@ export function FormDialog({
       className="form-dialog"
       data-prevent-card-autosave
       aria-labelledby={titleId}
+      onKeyDownCapture={(event) => {
+        if (
+          event.key === "Escape" &&
+          dialog.current?.querySelector(".date-picker-popover")
+        )
+          event.preventDefault();
+      }}
       onCancel={(e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (dialog.current?.querySelector(".status-dropdown-menu")) return;
+        if (
+          dialog.current?.querySelector(
+            ".status-dropdown-menu, .date-picker-popover",
+          )
+        )
+          return;
         if (!busy()) onClose();
       }}
     >

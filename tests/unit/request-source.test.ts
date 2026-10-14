@@ -16,10 +16,27 @@ describe("same-origin write source validation", () => {
     expect(isSameOriginWriteRequest(request)).toBe(true);
   });
 
+  it("accepts the browser origin when the request URL was normalized", () => {
+    const request = new Request(endpoint, {
+      method: "POST",
+      headers: {
+        host: "127.0.0.1:3000",
+        origin: "http://127.0.0.1:3000",
+        referer: "http://127.0.0.1:3000/customers/test",
+        "sec-fetch-site": "same-origin",
+      },
+    });
+
+    expect(isSameOriginWriteRequest(request)).toBe(true);
+  });
+
   it("rejects a foreign origin or a cross-site fetch", () => {
     const foreignOrigin = new Request(endpoint, {
       method: "POST",
-      headers: { origin: "https://attacker.example" },
+      headers: {
+        host: "127.0.0.1:3000",
+        origin: "https://attacker.example",
+      },
     });
     const crossSite = new Request(endpoint, {
       method: "POST",

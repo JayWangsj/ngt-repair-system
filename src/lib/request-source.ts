@@ -4,14 +4,18 @@ export function isSameOriginWriteRequest(
   if (request.headers.get("sec-fetch-site")?.toLowerCase() === "cross-site")
     return false;
 
-  const expectedOrigin = new URL(request.url).origin;
+  const requestUrl = new URL(request.url);
+  const expectedOrigins = new Set([requestUrl.origin]);
+  const host = request.headers.get("host");
+  if (host)
+    expectedOrigins.add(new URL(`${requestUrl.protocol}//${host}`).origin);
   for (const source of [
     request.headers.get("origin"),
     request.headers.get("referer"),
   ]) {
     if (!source) continue;
     try {
-      if (new URL(source).origin !== expectedOrigin) return false;
+      if (!expectedOrigins.has(new URL(source).origin)) return false;
     } catch {
       return false;
     }

@@ -2845,7 +2845,12 @@ test("repair list animates a row reordered by a local status change", async ({
   const olderRow = page.locator(`tbody tr:has(a[href^="${olderOrderPath}"])`);
   const initialOrder = await page
     .locator(".order-code-link")
-    .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
+    .evaluateAll((links) =>
+      links.map(
+        (link) =>
+          new URL(link.getAttribute("href") ?? "", location.href).pathname,
+      ),
+    );
   expect(initialOrder.indexOf(olderOrderPath)).toBeGreaterThan(
     initialOrder.indexOf(newerOrderPath),
   );
@@ -3592,7 +3597,6 @@ test("diagnostic order saves faults, date and quote in one progressive flow", as
   await saveInspection.dblclick();
   await expect(dialog).toHaveCount(0);
   await expect(status).toContainText("In riparazione");
-  await details.locator(".order-card-heading").click();
   await expect(details).toContainText("Display rotto");
   await expect(details).toContainText(result);
   await expect(details.locator(".detail-repair-summaries")).toBeVisible();
@@ -3971,7 +3975,6 @@ test("creates automatic quote, receives payment and delivers", async ({
   await expect(
     page.locator(".detail-status .status-dropdown-trigger"),
   ).toHaveText(/Consegnato/);
-  await page.getByTestId("details-card").locator(".order-card-heading").click();
   await page
     .getByRole("link", { name: "Cliente Playwright", exact: true })
     .click();
@@ -7690,6 +7693,7 @@ test("customer links from repair list and detail open the shared dialog", async 
   await save(page);
   await page.goto("/orders");
   const row = page.locator(".order-list-body tr").filter({ hasText: name });
+  const orderCode = await row.locator(".order-code-link").innerText();
   await row.locator(".order-customer-link").click();
   let dialog = page.getByRole("dialog", {
     name: "Dettagli cliente",
@@ -7712,7 +7716,9 @@ test("customer links from repair list and detail open the shared dialog", async 
   await expect(dialog).toBeVisible();
   await expect(page.locator(".order-detail-card").first()).toBeVisible();
 
-  const historyRow = dialog.locator(".order-list-body tr").first();
+  const historyRow = dialog
+    .locator(".order-list-body tr")
+    .filter({ hasText: orderCode });
   await historyRow.click();
   const due = historyRow.getByLabel("Consegna prevista", { exact: true });
   await due.fill("2099-11-29");
@@ -7757,13 +7763,14 @@ test("customer links from repair list and detail open the shared dialog", async 
     }).observe(element, { attributes: true, attributeFilter: ["class"] });
   });
   await menu.getByRole("option", { name: "Annullato", exact: true }).click();
-  await page
-    .getByRole("dialog", {
-      name: "Annulla scheda di servizio",
-      exact: true,
-    })
+  const cancelDialog = page.getByRole("dialog", {
+    name: "Annulla scheda di servizio",
+    exact: true,
+  });
+  await cancelDialog
     .getByRole("button", { name: "Conferma annullamento", exact: true })
     .click();
+  await expect(cancelDialog).toHaveCount(0);
   await expect(historyRow).not.toHaveClass(/order-row-active/);
   await expect(historyRow).toHaveClass(/order-row-hover-suppressed/);
   await expect(historyRow.locator(".badge")).toContainText("Annullato");

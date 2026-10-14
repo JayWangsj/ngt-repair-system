@@ -1193,11 +1193,24 @@ test("manages one quick service for held service orders and retail checkout", as
   });
   await expect(activeQuickView).toHaveCSS(
     "background-color",
-    "rgb(255, 241, 182)",
+    "rgb(255, 237, 159)",
   );
   await expect(activeQuickView).toHaveCSS(
-    "border-top-color",
-    "rgb(128, 96, 0)",
+    "box-shadow",
+    "rgb(228, 174, 0) 0px -3px 0px 0px inset",
+  );
+  const inactiveQuickView = page.getByRole("link", {
+    name: "Da ritirare",
+    exact: true,
+  });
+  await expect(inactiveQuickView).toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0)",
+  );
+  await inactiveQuickView.hover();
+  await expect(inactiveQuickView).toHaveCSS(
+    "background-color",
+    "rgb(255, 248, 217)",
   );
   await expect(page.getByLabel("Mese", { exact: true })).toHaveValue("");
   const filterHeights = await page

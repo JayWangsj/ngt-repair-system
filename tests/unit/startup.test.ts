@@ -346,6 +346,8 @@ describe("Windows persistent startup", () => {
     expect(packageSmokeTest).toContain("Start-NgtStudioDatabase");
     expect(packageSmokeTest).toContain("[switch]$IntegrityOnly");
     expect(packageSmokeTest).toContain('"initdb.exe"');
+    expect(packageSmokeTest).toContain("--- Archive bootstrap entries ---");
+    expect(packageSmokeTest).toContain("--- Extracted release scripts ---");
     expect(packageSmokeTest).toContain("require('pg')");
     expect(packageSmokeTest).toContain("new PrismaClient()");
     expect(packageSmokeTest).toContain("verify-windows-studio-release.ps1");

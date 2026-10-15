@@ -138,6 +138,13 @@ try {
   }
   Write-Output "Studio package smoke test passed."
 } catch {
+  Write-Output "--- Archive bootstrap entries ---"
+  & tar.exe -tf $ArchivePath | Where-Object { $_ -match "install-windows-studio-bootstrap" }
+  $releaseScripts = Join-Path $releaseRoot "scripts"
+  if (Test-Path -LiteralPath $releaseScripts -PathType Container) {
+    Write-Output "--- Extracted release scripts ---"
+    Get-ChildItem -LiteralPath $releaseScripts -File -Force | ForEach-Object { $_.Name }
+  }
   Write-SmokeLogs
   throw
 } finally {

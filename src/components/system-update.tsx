@@ -132,8 +132,8 @@ export function SystemUpdate({
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setAutoCheck(readAutoUpdateCheck());
+      void ensureChecked();
     });
-    void ensureChecked();
     return () => window.cancelAnimationFrame(frame);
   }, [ensureChecked]);
 

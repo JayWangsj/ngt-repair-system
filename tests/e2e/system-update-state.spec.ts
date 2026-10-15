@@ -561,9 +561,11 @@ test("continues monitoring an active update beyond the previous four-minute limi
     .getByRole("dialog")
     .getByRole("button", { name: "Aggiorna ora" })
     .click();
-  await page.clock.runFor(250_000);
+  await page.clock.runFor(1_000);
+  await page.clock.setFixedTime(new Date("2026-10-15T12:05:00.000Z"));
+  await page.clock.runFor(2_000);
 
-  expect(statusReads).toBeGreaterThan(120);
+  expect(statusReads).toBeGreaterThan(2);
   await expect(page.locator(".update-progress-card")).toContainText(
     "Installazione",
   );

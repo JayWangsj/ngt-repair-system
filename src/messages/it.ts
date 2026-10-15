@@ -598,6 +598,8 @@ export const it = {
   updateTaskStarting: "Avvio dell'attività di aggiornamento…",
   updateVerifyingTask: "Verifica dell'attività di aggiornamento precedente…",
   updateReconnecting: "Riconnessione al servizio di aggiornamento…",
+  updateNoRecentProgress:
+    "L'attività non ha segnalato nuovi progressi; la verifica continua automaticamente.",
   updateInterrupted:
     "L'attività di aggiornamento si è interrotta. Verifica i dettagli prima di riprovare.",
   updateRollingBack: "Ripristino della versione precedente…",
@@ -607,8 +609,9 @@ export const it = {
     "Aggiornamento non riuscito e ripristino non verificato. È necessaria una verifica manuale.",
   updateTargetChanged:
     "La versione disponibile è cambiata. Controlla di nuovo prima di aggiornare.",
-  verifyUpdateTask: "Verifica attività",
   updateLogDetails: "Dettagli diagnostici",
+  updateBuildCommit: "Commit della build",
+  updateInstallInstance: "Istanza d'installazione",
   updateLogUnavailable: "Il registro non è disponibile.",
   updateNow: "Aggiorna ora",
   updateConfirmTitle: "Conferma aggiornamento",

@@ -346,6 +346,154 @@ describe("studio update", () => {
     await expect(readFile(lockFile, "utf8")).resolves.toContain(updateId);
   });
 
+  it("starts only one updater when concurrent requests reclaim the same stale lock", async () => {
+    const { root, installRoot } = await studioRoot();
+    const lockFile = path.join(installRoot, "update.lock");
+    await writeFile(
+      lockFile,
+      JSON.stringify({ createdAt: "2020-01-01T00:00:00.000Z" }),
+    );
+
+    let inspectionCount = 0;
+    let releaseFirstInspection!: () => void;
+    const firstInspection = new Promise<void>((resolve) => {
+      releaseFirstInspection = resolve;
+    });
+    let launchCount = 0;
+    const inspect = async () => {
+      inspectionCount += 1;
+      if (inspectionCount <= 2) return false;
+      if (inspectionCount === 3) await firstInspection;
+      return false;
+    };
+    const launch = () => {
+      launchCount += 1;
+      if (launchCount === 1) releaseFirstInspection();
+      return updateProcess().process;
+    };
+
+    const results = await Promise.allSettled([
+      startStudioUpdate({ root, inspect, launch }),
+      startStudioUpdate({ root, inspect, launch }),
+    ]);
+
+    expect(launchCount).toBe(1);
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === "rejected"),
+    ).toHaveLength(1);
+  });
+
+  it("starts only one updater when concurrent requests find no prior lock", async () => {
+    const { root } = await studioRoot();
+    let launchCount = 0;
+    const results = await Promise.allSettled([
+      startStudioUpdate({
+        root,
+        inspect: async () => false,
+        launch: () => {
+          launchCount += 1;
+          return updateProcess().process;
+        },
+      }),
+      startStudioUpdate({
+        root,
+        inspect: async () => false,
+        launch: () => {
+          launchCount += 1;
+          return updateProcess().process;
+        },
+      }),
+    ]);
+
+    expect(launchCount).toBe(1);
+    expect(
+      results.filter((result) => result.status === "fulfilled"),
+    ).toHaveLength(1);
+    expect(
+      results.filter((result) => result.status === "rejected"),
+    ).toHaveLength(1);
+  });
+
+  it("does not let a late old executor callback overwrite a newer task", async () => {
+    const { root, installRoot } = await studioRoot();
+    const child = updateProcess();
+    await startStudioUpdate({ root, launch: () => child.process });
+    const nextId = "ce931cdf-1b06-40a2-a356-14c17e08dfb2";
+    await Promise.all([
+      writeFile(
+        path.join(installRoot, "update.lock"),
+        JSON.stringify({
+          updateId: nextId,
+          createdAt: new Date().toISOString(),
+        }),
+      ),
+      writeFile(
+        path.join(installRoot, "update-status.json"),
+        JSON.stringify({
+          status: "starting",
+          updateId: nextId,
+          message: "new task",
+        }),
+      ),
+    ]);
+
+    child.emit("close", 1);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    await expect(
+      readFile(path.join(installRoot, "update-status.json"), "utf8"),
+    ).resolves.toContain(nextId);
+    await expect(
+      readFile(path.join(installRoot, "update.lock"), "utf8"),
+    ).resolves.toContain(nextId);
+  });
+
+  it("does not mistake the process inspection command for a legacy updater", async () => {
+    const { root, installRoot } = await studioRoot();
+    await writeFile(
+      path.join(installRoot, "update.lock"),
+      "2020-01-01T00:00:00.000Z",
+    );
+
+    const result = await getStudioUpdateStatus(root);
+
+    expect(result.status).not.toBe("verifying-task");
+    expect(result.executorAlive).not.toBe(true);
+  });
+
+  it("clears only the matching maintenance marker after verified completion", async () => {
+    const { root, installRoot } = await studioRoot();
+    const updateId = "0bd7d5ac-4cd6-4a7e-9fd4-d11c136caf16";
+    const localState = path.join(installRoot, ".local");
+    await mkdir(localState, { recursive: true });
+    await Promise.all([
+      writeFile(
+        path.join(installRoot, "update-status.json"),
+        JSON.stringify({
+          status: "complete",
+          updateId,
+          targetVersion: "1.11.57",
+          actualVersion: "1.11.57",
+        }),
+      ),
+      writeFile(
+        path.join(localState, "update-maintenance.json"),
+        JSON.stringify({ updateId }),
+      ),
+    ]);
+
+    await expect(getStudioUpdateStatus(root)).resolves.toMatchObject({
+      status: "complete",
+      actualVersion: "1.11.57",
+    });
+    await expect(
+      readFile(path.join(localState, "update-maintenance.json"), "utf8"),
+    ).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
   it("records an asynchronous process start failure as a terminal task result", async () => {
     const { root, installRoot } = await studioRoot();
     const child = updateProcess();
@@ -353,12 +501,18 @@ describe("studio update", () => {
     child.emit("error", new Error("simulated spawn failure"));
 
     await expect
-      .poll(async () => {
-        const status = JSON.parse(
-          await readFile(path.join(installRoot, "update-status.json"), "utf8"),
-        ) as { status: string; message?: string };
-        return status;
-      })
+      .poll(
+        async () => {
+          const status = JSON.parse(
+            await readFile(
+              path.join(installRoot, "update-status.json"),
+              "utf8",
+            ),
+          ) as { status: string; message?: string };
+          return status;
+        },
+        { timeout: 5_000 },
+      )
       .toMatchObject({
         status: "failed",
         message: "Unable to start the update executor: simulated spawn failure",
@@ -401,6 +555,7 @@ describe("studio update", () => {
     const calls: string[][] = [];
     await startGitHubLogin({
       root,
+      checkCredentialStore: async () => undefined,
       launch: (executable, args) => {
         launches.push({ executable, args });
         return child.process;
@@ -413,7 +568,7 @@ describe("studio update", () => {
     expect(launches[0].executable).toBe(path.join(root, "runtime", "gh.exe"));
     expect(launches[0].args).toContain("--clipboard");
     expect(launches[0].args).toContain("--web");
-    expect(launches[0].args).toContain("repo");
+    expect(launches[0].args).not.toContain("--scopes");
     expect(child.input()).toBe("\n\n");
 
     child.process.stderr.write(
@@ -470,6 +625,7 @@ describe("studio update", () => {
     const child = authProcess();
     await startGitHubLogin({
       root,
+      checkCredentialStore: async () => undefined,
       launch: () => child.process,
     });
     child.process.stderr.write("failed to open browser: no default app\n");
@@ -484,11 +640,65 @@ describe("studio update", () => {
       });
   });
 
+  it("does not start browser authorization when credential storage is unavailable", async () => {
+    const { root } = await studioRoot();
+    let launchCount = 0;
+
+    await expect(
+      startGitHubLogin({
+        root,
+        checkCredentialStore: async () => {
+          throw new Error("Windows Credential Manager is unavailable.");
+        },
+        launch: () => {
+          launchCount += 1;
+          return authProcess().process;
+        },
+      }),
+    ).rejects.toThrow("Windows Credential Manager is unavailable.");
+    expect(launchCount).toBe(0);
+  });
+
+  it("accepts an externally managed fine-grained token after verifying release read access", async () => {
+    const { root } = await studioRoot();
+    const previousToken = process.env.GH_TOKEN;
+    process.env.GH_TOKEN = "test-only-token";
+    const calls: string[][] = [];
+    try {
+      const status = await startGitHubLogin({
+        root,
+        checkCredentialStore: async () => {
+          throw new Error("Should not access the credential store.");
+        },
+        launch: () => {
+          throw new Error("Should not open browser authorization.");
+        },
+        run: async (_executable, args) => {
+          calls.push(args);
+          return { stdout: "", stderr: "" };
+        },
+      });
+      expect(status.status).toBe("success");
+      expect(calls[0]).toEqual([
+        "auth",
+        "status",
+        "--hostname",
+        "github.com",
+        "--active",
+      ]);
+      expect(calls[1]).toContain("JayWangsj/ngt-repair-system");
+    } finally {
+      if (previousToken === undefined) delete process.env.GH_TOKEN;
+      else process.env.GH_TOKEN = previousToken;
+    }
+  });
+
   it("does not report success without private repository access", async () => {
     const { root } = await studioRoot();
     const child = authProcess();
     await startGitHubLogin({
       root,
+      checkCredentialStore: async () => undefined,
       launch: () => child.process,
       run: async (_executable, args) => {
         if (args[0] === "release") throw new Error("HTTP 404: Not Found");

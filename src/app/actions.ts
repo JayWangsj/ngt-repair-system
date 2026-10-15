@@ -23,6 +23,7 @@ import { db } from "@/lib/db";
 import { phoneInput } from "@/lib/validation";
 import { clearBusinessData } from "@/lib/data-transfer";
 import { generateTestData } from "@/lib/test-tools";
+import { assertStudioWritesAvailable } from "@/lib/studio-maintenance";
 type Result<Data = undefined> =
   { ok: true; id?: string; data?: Data } | { ok: false; error: string };
 async function execute<Work extends { id?: string } | void, Data = undefined>(
@@ -31,6 +32,7 @@ async function execute<Work extends { id?: string } | void, Data = undefined>(
   revalidatePaths: string[] | false = ["/"],
 ): Promise<Result<Data>> {
   try {
+    await assertStudioWritesAvailable();
     const result = await work();
     if (revalidatePaths)
       for (const path of revalidatePaths) revalidatePath(path);

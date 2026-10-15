@@ -21,7 +21,8 @@ import {
 } from "@/lib/system-update-state";
 import {
   readAutoUpdateCheck,
-  UPDATE_CHECKED_SESSION_KEY,
+  readUpdateCheckCache,
+  writeUpdateCheckCache,
 } from "@/lib/update-preference";
 
 type CheckState = {
@@ -44,7 +45,7 @@ type UpdateStateValue = {
   check: CheckState;
   task: TaskState;
   ensureChecked: () => Promise<boolean>;
-  checkForUpdates: () => Promise<boolean>;
+  checkForUpdates: (force?: boolean) => Promise<boolean>;
   refreshTask: () => Promise<TaskState>;
   startUpdate: (targetVersion: string) => Promise<void>;
 };
@@ -65,6 +66,8 @@ function toUpdateInfo(
     releaseNotes: value.releaseNotes,
     publishedAt: value.publishedAt,
     downloadSize: value.downloadSize,
+    installInstanceId: value.installInstanceId,
+    buildCommit: value.buildCommit,
   };
 }
 
@@ -112,81 +115,140 @@ export function UpdateStateProvider({
   const lastSuccessfulCheck = useRef(0);
   const monitorId = useRef(0);
   const monitorTimer = useRef<number | null>(null);
+  const monitorController = useRef<AbortController | null>(null);
+  const initializationPromise = useRef<Promise<void> | null>(null);
+  const startMonitoringRef = useRef<() => void>(() => undefined);
 
-  const checkForUpdates = useCallback(() => {
-    if (checkPromise.current) return checkPromise.current;
-    const id = ++requestId.current;
-    setCheck((current) => ({
-      ...current,
-      phase: "checking",
-      error: undefined,
-    }));
-    const request = (async () => {
-      const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 15_000);
-      try {
-        const response = await fetch("/api/system-update", {
-          cache: "no-store",
-          signal: controller.signal,
-        });
-        const result = (await response.json()) as Partial<UpdateInfo> & {
-          error?: string;
-        };
-        if (!response.ok)
-          throw new Error(result.error || "update_check_failed");
-        const next = toUpdateInfo(result);
-        const checkedAt = new Date().toISOString();
-        if (id === requestId.current) {
-          setInfo((previous) =>
-            next.authRequired && previous?.updateAvailable
-              ? {
-                  ...previous,
-                  currentVersion: next.currentVersion,
-                  authRequired: true,
-                }
-              : next,
-          );
-          setCurrentVersion(next.currentVersion || initialVersion);
-          lastSuccessfulCheck.current = Date.now();
-          setCheck({
-            phase: classifyUpdateCheck(next),
-            lastCheckedAt: checkedAt,
-            lastSuccessfulCheckAt: checkedAt,
-          });
-        }
-        return true;
-      } catch (cause) {
-        if (id === requestId.current) {
-          setCheck((current) => ({
-            ...current,
-            phase: "failed",
-            lastCheckedAt: new Date().toISOString(),
-            error: redactDiagnostic(
-              cause instanceof Error && cause.name !== "AbortError"
-                ? cause.message
-                : "update_check_timeout",
-            ),
-          }));
-        }
-        return false;
-      } finally {
-        window.clearTimeout(timeout);
-        if (id === requestId.current) checkPromise.current = null;
+  const checkForUpdates = useCallback(
+    (force = true) => {
+      if (checkPromise.current) return checkPromise.current;
+      if (!force) {
+        const cached = readUpdateCheckCache<UpdateInfo>(
+          task.status?.installInstanceId || info?.installInstanceId,
+          currentVersion,
+        );
+        if (cached) return Promise.resolve(true);
       }
-    })();
-    checkPromise.current = request;
-    return request;
-  }, [initialVersion]);
+      const id = ++requestId.current;
+      setCheck((current) => ({
+        ...current,
+        phase: "checking",
+        error: undefined,
+      }));
+      const request = (async () => {
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 30_000);
+        try {
+          const response = await fetch("/api/system-update", {
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          const result = (await response.json()) as Partial<UpdateInfo> & {
+            error?: string;
+            status?: UpdateStatus;
+          };
+          if (!response.ok)
+            throw new Error(result.error || "update_check_failed");
+          const next = toUpdateInfo(result);
+          const nextTask = result.status
+            ? taskFromStatus({
+                ...result.status,
+                installInstanceId: next.installInstanceId,
+                buildCommit: next.buildCommit,
+              })
+            : null;
+          const checkedAt = new Date().toISOString();
+          if (id === requestId.current) {
+            setInfo((previous) =>
+              next.authRequired && previous?.updateAvailable
+                ? {
+                    ...previous,
+                    currentVersion: next.currentVersion,
+                    authRequired: true,
+                  }
+                : next,
+            );
+            setCurrentVersion(next.currentVersion || initialVersion);
+            if (nextTask) {
+              setTask((previous) => ({
+                ...nextTask,
+                lastTrustedStatus:
+                  nextTask.lastTrustedStatus || previous.lastTrustedStatus,
+              }));
+              if (isUpdateTaskMonitorable(nextTask.phase))
+                startMonitoringRef.current();
+            }
+            lastSuccessfulCheck.current = Date.parse(checkedAt);
+            writeUpdateCheckCache(next.installInstanceId, next.currentVersion, {
+              checkedAt,
+              info: next,
+            });
+            setCheck({
+              phase: classifyUpdateCheck(next),
+              lastCheckedAt: checkedAt,
+              lastSuccessfulCheckAt: checkedAt,
+            });
+          }
+          return true;
+        } catch (cause) {
+          if (id === requestId.current) {
+            setCheck((current) => ({
+              ...current,
+              phase: "failed",
+              lastCheckedAt: new Date().toISOString(),
+              error: redactDiagnostic(
+                cause instanceof Error && cause.name !== "AbortError"
+                  ? cause.message
+                  : "update_check_timeout",
+              ),
+            }));
+          }
+          return false;
+        } finally {
+          window.clearTimeout(timeout);
+          if (id === requestId.current) checkPromise.current = null;
+        }
+      })();
+      checkPromise.current = request;
+      return request;
+    },
+    [
+      currentVersion,
+      info?.installInstanceId,
+      initialVersion,
+      task.status?.installInstanceId,
+    ],
+  );
 
-  const ensureChecked = useCallback(() => {
+  const ensureChecked = useCallback(async () => {
+    await initializationPromise.current;
     if (checkPromise.current) return checkPromise.current;
+    const cached = readUpdateCheckCache<UpdateInfo>(
+      task.status?.installInstanceId || info?.installInstanceId,
+      currentVersion,
+    );
+    if (cached) {
+      setInfo(cached.info);
+      lastSuccessfulCheck.current = Date.parse(cached.checkedAt);
+      setCheck({
+        phase: classifyUpdateCheck(cached.info),
+        lastCheckedAt: cached.checkedAt,
+        lastSuccessfulCheckAt: cached.checkedAt,
+      });
+      return true;
+    }
     if (
       lastSuccessfulCheck.current &&
       Date.now() - lastSuccessfulCheck.current < 5 * 60_000
     )
-      return Promise.resolve(true);
-    return checkForUpdates();
-  }, [checkForUpdates]);
+      return true;
+    return checkForUpdates(false);
+  }, [
+    checkForUpdates,
+    currentVersion,
+    info?.installInstanceId,
+    task.status?.installInstanceId,
+  ]);
 
   const stopMonitoring = useCallback(() => {
     monitorId.current += 1;
@@ -194,26 +256,57 @@ export function UpdateStateProvider({
       window.clearTimeout(monitorTimer.current);
       monitorTimer.current = null;
     }
+    monitorController.current?.abort();
+    monitorController.current = null;
   }, []);
 
   const startMonitoring = useCallback(() => {
     stopMonitoring();
     const id = monitorId.current;
     let failures = 0;
-    let attempts = 0;
     const poll = async () => {
       if (id !== monitorId.current) return;
-      attempts += 1;
+      const controller = new AbortController();
+      monitorController.current = controller;
+      const timeout = window.setTimeout(() => controller.abort(), 10_000);
       try {
         const response = await fetch("/api/system-update/status", {
           cache: "no-store",
+          signal: controller.signal,
         });
         if (!response.ok) throw new Error("status_unavailable");
         const status = (await response.json()) as UpdateStatus;
+        if (id !== monitorId.current) return;
         failures = 0;
         const next = taskFromStatus(status);
+        const staleAfter =
+          status.stage === "downloading"
+            ? 120_000
+            : status.stage === "backing-up"
+              ? 600_000
+              : status.stage === "installing"
+                ? 900_000
+                : status.stage === "rolling-back"
+                  ? 1_200_000
+                  : status.stage === "validating"
+                    ? 300_000
+                    : 120_000;
+        const lastProgressAt = Date.parse(
+          status.updatedAt || status.createdAt || "",
+        );
+        const noRecentProgress =
+          isUpdateTaskMonitorable(next.phase) &&
+          Number.isFinite(lastProgressAt) &&
+          Date.now() - lastProgressAt > staleAfter;
+        const visibleNext = noRecentProgress
+          ? {
+              ...next,
+              phase: "reconnecting" as const,
+              message: "update_status_no_progress",
+            }
+          : next;
         setTask((previous) => ({
-          ...next,
+          ...visibleNext,
           lastTrustedStatus:
             next.lastTrustedStatus || previous.lastTrustedStatus,
         }));
@@ -239,49 +332,37 @@ export function UpdateStateProvider({
             });
           }
         }
-        if (
-          [
-            "succeeded",
-            "failed",
-            "rollback-succeeded",
-            "rollback-failed",
-          ].includes(next.phase)
-        )
-          void checkForUpdates();
-        if (!isUpdateTaskMonitorable(next.phase)) return;
+        if (!isUpdateTaskMonitorable(visibleNext.phase)) return;
       } catch {
+        if (id !== monitorId.current) return;
         failures += 1;
         setTask((previous) => ({
           ...previous,
           phase: previous.lastTrustedStatus ? "reconnecting" : "verifying",
           message: "update_status_reconnecting",
         }));
-        if (failures >= 30) {
-          setTask((previous) => ({
-            ...previous,
-            phase: "verifying",
-            message: "update_status_needs_verification",
-          }));
-          return;
-        }
+      } finally {
+        window.clearTimeout(timeout);
+        if (monitorController.current === controller)
+          monitorController.current = null;
       }
-      if (attempts >= 120) {
-        setTask((previous) => ({
-          ...previous,
-          phase: "verifying",
-          message: "update_status_needs_verification",
-        }));
-        return;
-      }
-      monitorTimer.current = window.setTimeout(() => void poll(), 2_000);
+      if (id !== monitorId.current) return;
+      const delay = failures
+        ? Math.min(30_000, 2_000 * 2 ** Math.min(failures - 1, 4))
+        : 2_000;
+      monitorTimer.current = window.setTimeout(() => void poll(), delay);
     };
     monitorTimer.current = window.setTimeout(() => void poll(), 1_000);
-  }, [checkForUpdates, stopMonitoring]);
+  }, [stopMonitoring]);
+  startMonitoringRef.current = startMonitoring;
 
   const refreshTask = useCallback(async () => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 10_000);
     try {
       const response = await fetch("/api/system-update/status", {
         cache: "no-store",
+        signal: controller.signal,
       });
       if (!response.ok) throw new Error("status_unavailable");
       const status = (await response.json()) as UpdateStatus;
@@ -303,19 +384,24 @@ export function UpdateStateProvider({
             return current;
           return { ...current, updateAvailable: false, notInstallable: false };
         });
-        void checkForUpdates();
       }
       if (isUpdateTaskMonitorable(next.phase)) startMonitoring();
       return next;
     } catch {
-      const next: TaskState = {
+      setTask((previous) => ({
+        ...previous,
+        phase: previous.lastTrustedStatus ? "reconnecting" : "verifying",
+        message: "update_status_reconnecting",
+      }));
+      startMonitoring();
+      return {
         phase: "verifying",
-        message: "update_status_needs_verification",
+        message: "update_status_reconnecting",
       };
-      setTask(next);
-      return next;
+    } finally {
+      window.clearTimeout(timeout);
     }
-  }, [checkForUpdates, startMonitoring]);
+  }, [startMonitoring]);
 
   const startUpdate = useCallback(
     async (targetVersion: string) => {
@@ -346,17 +432,31 @@ export function UpdateStateProvider({
   );
 
   useEffect(() => {
-    void refreshTask();
-    if (
-      readAutoUpdateCheck() &&
-      window.sessionStorage.getItem(UPDATE_CHECKED_SESSION_KEY) !== "true"
-    ) {
-      void checkForUpdates().then((success) => {
-        if (success)
-          window.sessionStorage.setItem(UPDATE_CHECKED_SESSION_KEY, "true");
-      });
-    }
-    return stopMonitoring;
+    let cancelled = false;
+    const initialization = (async () => {
+      const initialTask = await refreshTask();
+      if (cancelled) return;
+      const cached = readUpdateCheckCache<UpdateInfo>(
+        initialTask.status?.installInstanceId,
+        initialTask.status?.currentVersion || initialVersion,
+      );
+      if (cached) {
+        setInfo(cached.info);
+        lastSuccessfulCheck.current = Date.parse(cached.checkedAt);
+        setCheck({
+          phase: classifyUpdateCheck(cached.info),
+          lastCheckedAt: cached.checkedAt,
+          lastSuccessfulCheckAt: cached.checkedAt,
+        });
+      }
+      if (readAutoUpdateCheck() && !cached) await checkForUpdates(false);
+    })();
+    initializationPromise.current = initialization;
+    return () => {
+      cancelled = true;
+      requestId.current += 1;
+      stopMonitoring();
+    };
   }, [checkForUpdates, refreshTask, stopMonitoring]);
 
   const value = useMemo<UpdateStateValue>(

@@ -1,6 +1,7 @@
 param(
   [string]$DataRoot = (Join-Path $env:LOCALAPPDATA "NGT\data-store"),
   [string]$InstallRoot = (Join-Path $env:LOCALAPPDATA "NGT"),
+  [string]$PreviousReleaseRoot,
   [switch]$InPlace
 )
 $ErrorActionPreference = "Stop"
@@ -70,6 +71,11 @@ Copy-Item -LiteralPath (Join-Path $script:NgtProjectRoot "scripts\uninstall-wind
   -Destination $stableServiceDirectory -Force
 Copy-Item -LiteralPath (Join-Path $script:NgtProjectRoot "assets\ngt-studio.ico") `
   -Destination $stableAssetDirectory -Force
+$previousActiveRelease = $PreviousReleaseRoot
+$existingStableConfig = Join-Path $stableStateDirectory "studio.json"
+if ((-not $previousActiveRelease) -and (Test-Path -LiteralPath $existingStableConfig)) {
+  $previousActiveRelease = [string](Get-Content -LiteralPath $existingStableConfig -Raw | ConvertFrom-Json).activeRelease
+}
 @{
   dataRoot = $stableDataRoot
   installRoot = $stableInstallRoot
@@ -83,6 +89,9 @@ $env:NGT_DATA_ROOT = $stableDataRoot
 
 $isRelease = Test-Path -LiteralPath (Join-Path $script:NgtProjectRoot "studio-release.json")
 if ($isRelease) {
+  & (Join-Path $PSScriptRoot "verify-windows-studio-release.ps1") `
+    -ReleaseRoot $script:NgtProjectRoot `
+    -ExpectedVersion ([string](Get-Content -LiteralPath (Join-Path $script:NgtProjectRoot "studio-release.json") -Raw | ConvertFrom-Json).version) | Out-Null
   Install-NgtSharedRuntime -ProjectRoot $script:NgtProjectRoot -InstallRoot $stableInstallRoot
   $nodeExecutable = Get-NgtNodeExecutable
   $prismaCli = Join-Path $script:NgtProjectRoot "node_modules\prisma\build\index.js"
@@ -117,11 +126,17 @@ Invoke-NgtInstallStage "application-start" {
 Invoke-NgtInstallStage "health-validation" {
   Wait-NgtStudioHealth
 }
-$releaseDirectories = @(Get-ChildItem -LiteralPath (Join-Path $stableInstallRoot "releases") -Directory -ErrorAction SilentlyContinue |
-  Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "studio-release.json") } |
-  Sort-Object { [version]((Get-Content -LiteralPath (Join-Path $_.FullName "studio-release.json") -Raw | ConvertFrom-Json).version) } -Descending)
-foreach ($oldRelease in @($releaseDirectories | Select-Object -Skip 2)) {
-  Remove-Item -LiteralPath $oldRelease.FullName -Recurse -Force
+try {
+  & (Join-Path $PSScriptRoot "retain-windows-studio-releases.ps1") `
+    -InstallRoot $stableInstallRoot `
+    -CurrentReleaseRoot $projectRoot `
+    -TargetReleaseRoot $projectRoot `
+    -PreviousReleaseRoot $previousActiveRelease
+  Remove-NgtUnusedRuntimes -InstallRoot $stableInstallRoot
+} catch {
+  $cleanupWarning = "The studio is healthy, but old release cleanup needs retry: " + $_.Exception.Message
+  Write-Warning $cleanupWarning
+  Add-Content -LiteralPath (Join-Path $env:LOCALAPPDATA "NGT\install-stages.log") `
+    -Value ("{0:o} WARNING post-install-cleanup reason={1}" -f (Get-Date).ToUniversalTime(), $cleanupWarning)
 }
-Remove-NgtUnusedRuntimes -InstallRoot $stableInstallRoot
 Write-Output "NGT studio installation is ready at http://127.0.0.1:3000"

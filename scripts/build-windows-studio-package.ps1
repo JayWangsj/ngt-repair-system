@@ -109,13 +109,18 @@ Copy-Item -LiteralPath "assets\ngt-studio.ico" -Destination $stageAssets -Force
 
 $runtimeScripts = @(
   "backup-windows-studio.ps1",
+  "check-windows-credential-store.ps1",
+  "test-windows-studio-backup.ps1",
+  "test-windows-studio-update-safety.ps1",
   "install-windows-startup.ps1",
   "install-windows-studio.ps1",
+  "retain-windows-studio-releases.ps1",
   "studio-runtime.ps1",
   "start.mjs",
   "uninstall-windows-startup.ps1",
   "uninstall-windows-studio.ps1",
   "update-windows-studio.ps1",
+  "verify-windows-studio-release.ps1",
   "windows-db.mjs",
   "windows-service.ps1",
   "windows-studio-launcher.vbs",
@@ -205,13 +210,19 @@ Copy-Item -LiteralPath "licenses\github-cli.txt" `
   -Destination $licenseDirectory -Force
 
 $runtimeHash = Get-NgtRuntimeHash $runtimeDirectory
+$fileManifest = @{}
+Get-ChildItem -LiteralPath $stage -File -Recurse -Force | ForEach-Object {
+  $relativePath = $_.FullName.Substring(([System.IO.Path]::GetFullPath($stage).TrimEnd("\") + "\").Length).Replace("\", "/")
+  $fileManifest[$relativePath] = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+}
 
 @{
   version = $version
   commit = $commit
   runtimeHash = $runtimeHash
+  files = $fileManifest
   createdAt = (Get-Date).ToUniversalTime().ToString("o")
-} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $stage "studio-release.json") -Encoding utf8
+} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stage "studio-release.json") -Encoding utf8
 
 New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
 $archive = Join-Path $outputRoot ("ngt-studio-windows-v" + $version + ".zip")

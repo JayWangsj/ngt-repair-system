@@ -36,10 +36,13 @@ function Write-SmokeLogs {
 try {
   & tar.exe -xf $ArchivePath -C $releaseRoot
   if ($LASTEXITCODE -ne 0) { throw "Studio package extraction failed." }
+  & (Join-Path $releaseRoot "scripts\test-windows-studio-update-safety.ps1")
 
   $env:NGT_DATA_ROOT = $dataRoot
   Set-Location -LiteralPath $releaseRoot
   . (Join-Path $releaseRoot "scripts\windows-studio-common.ps1")
+
+  & (Join-Path $releaseRoot "scripts\check-windows-credential-store.ps1") | Out-Null
 
   if ($IntegrityOnly) {
     $nodeExecutable = Get-NgtNodeExecutable
@@ -117,6 +120,7 @@ try {
   $authStatus = Invoke-RestMethod `
     -Uri "http://127.0.0.1:3000/api/system-update/auth" `
     -Method Get `
+    -Headers @{ Origin = "http://127.0.0.1:3000"; "Sec-Fetch-Site" = "same-origin" } `
     -TimeoutSec 35
   if ($authStatus.status -ne "idle") {
     throw "Studio package GitHub authorization status endpoint is not ready."
@@ -124,6 +128,7 @@ try {
   $updateInfo = Invoke-RestMethod `
     -Uri "http://127.0.0.1:3000/api/system-update" `
     -Method Get `
+    -Headers @{ Origin = "http://127.0.0.1:3000"; "Sec-Fetch-Site" = "same-origin" } `
     -TimeoutSec 35
   if (-not $updateInfo.installed) {
     throw "Studio package update check did not recognize the installed release."

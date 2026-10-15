@@ -1,14 +1,25 @@
-import { getGitHubLoginStatus, startGitHubLogin } from "@/lib/studio-update";
-import { isSameOriginWriteRequest } from "@/lib/request-source";
+import {
+  getGitHubLoginStatus,
+  sanitizeUpdateDiagnostic,
+  startGitHubLogin,
+} from "@/lib/studio-update";
+import {
+  isSameOriginRequest,
+  isSameOriginWriteRequest,
+} from "@/lib/request-source";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!isSameOriginRequest(request))
+    return Response.json({ error: "local_request_required" }, { status: 403 });
   try {
     return Response.json(await getGitHubLoginStatus());
   } catch (cause) {
-    const error = cause instanceof Error ? cause.message : "auth_status_failed";
+    const error = sanitizeUpdateDiagnostic(
+      cause instanceof Error ? cause.message : "auth_status_failed",
+    );
     return Response.json({ error }, { status: 500 });
   }
 }
@@ -23,7 +34,9 @@ export async function POST(request: Request) {
     const status = await startGitHubLogin();
     return Response.json({ started: true, ...status }, { status: 202 });
   } catch (cause) {
-    const error = cause instanceof Error ? cause.message : "auth_failed";
+    const error = sanitizeUpdateDiagnostic(
+      cause instanceof Error ? cause.message : "auth_failed",
+    );
     return Response.json({ error }, { status: 409 });
   }
 }

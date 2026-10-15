@@ -32,6 +32,8 @@ export type UpdateStatus = {
   currentVersion?: string;
   previousVersion?: string;
   actualVersion?: string;
+  installInstanceId?: string;
+  buildCommit?: string;
   executorPid?: number;
   executorAlive?: boolean;
   executorConfirmed?: boolean;
@@ -63,6 +65,8 @@ export type UpdateInfo = {
   releaseNotes?: string;
   publishedAt?: string;
   downloadSize?: number;
+  installInstanceId?: string;
+  buildCommit?: string;
 };
 
 export function classifyUpdateCheck(info: UpdateInfo | null): UpdateCheckPhase {

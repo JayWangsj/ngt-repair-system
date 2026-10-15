@@ -407,3 +407,164 @@ test("shows rollback as a result instead of a normal upgrade step", async ({
     animations: "disabled",
   });
 });
+
+test("retries the first status read automatically and keeps the update page as a manual check entry", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("ngt-auto-update-check", "false");
+  });
+  let statusReads = 0;
+  let updateChecks = 0;
+  await page.route("**/api/system-update/status", (route) => {
+    statusReads += 1;
+    return route.fulfill({
+      status: statusReads === 1 ? 503 : 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        statusReads === 1
+          ? { status: "verifying-task", message: "temporary failure" }
+          : {
+              status: "idle",
+              currentVersion: "2.0.9",
+              installInstanceId: "test-install-a",
+            },
+      ),
+    });
+  });
+  await page.route("**/api/system-update", (route) => {
+    updateChecks += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...availableRelease(),
+        updateAvailable: false,
+        latestVersion: "2.0.9",
+        installInstanceId: "test-install-a",
+        status: { status: "idle", currentVersion: "2.0.9" },
+      }),
+    });
+  });
+
+  await page.goto("/settings");
+  await expect.poll(() => statusReads).toBeGreaterThan(1);
+  expect(updateChecks).toBe(0);
+
+  await page.goto("/settings/system-update");
+  await expect(
+    page.getByRole("button", { name: "Controlla aggiornamenti", exact: true }),
+  ).toBeEnabled();
+  expect(updateChecks).toBe(1);
+  await page
+    .getByRole("button", { name: "Controlla aggiornamenti", exact: true })
+    .click();
+  await expect.poll(() => updateChecks).toBe(2);
+});
+
+test("reuses a recent install-scoped update result after a page reload", async ({
+  page,
+}) => {
+  let updateChecks = 0;
+  await page.route("**/api/system-update/status", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "idle",
+        currentVersion: "2.0.9",
+        installInstanceId: "test-install-cache",
+      }),
+    }),
+  );
+  await page.route("**/api/system-update", (route) => {
+    updateChecks += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...availableRelease(),
+        updateAvailable: false,
+        latestVersion: "2.0.9",
+        installInstanceId: "test-install-cache",
+        status: { status: "idle", currentVersion: "2.0.9" },
+      }),
+    });
+  });
+
+  await page.goto("/settings/system-update");
+  await expect(
+    page.getByText("Il sistema è aggiornato.", { exact: true }),
+  ).toBeVisible();
+  expect(updateChecks).toBe(1);
+  await page.reload();
+  await expect(
+    page.getByText("Il sistema è aggiornato.", { exact: true }),
+  ).toBeVisible();
+  expect(updateChecks).toBe(1);
+});
+
+test("continues monitoring an active update beyond the previous four-minute limit", async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date("2026-10-15T12:00:00.000Z") });
+  let started = false;
+  let statusReads = 0;
+  await page.route("**/api/system-update/status", (route) => {
+    statusReads += 1;
+    const status = started
+      ? {
+          status: "running",
+          stage: "installing",
+          updateId: "0bd7d5ac-4cd6-4a7e-9fd4-d11c136caf16",
+          targetVersion: "2.0.10",
+          currentVersion: "2.0.9",
+          executorAlive: true,
+          executorConfirmed: true,
+          updatedAt: "2026-10-15T12:00:00.000Z",
+        }
+      : { status: "idle", currentVersion: "2.0.9" };
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(status),
+    });
+  });
+  await page.route("**/api/system-update", (route) => {
+    if (route.request().method() === "POST") {
+      started = true;
+      return route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "starting",
+          stage: "starting",
+          updateId: "0bd7d5ac-4cd6-4a7e-9fd4-d11c136caf16",
+          targetVersion: "2.0.10",
+          currentVersion: "2.0.9",
+        }),
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(availableRelease()),
+    });
+  });
+
+  await page.goto("/settings/system-update");
+  await page
+    .locator(".update-release-card")
+    .getByRole("button", { name: "Aggiorna ora" })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Aggiorna ora" })
+    .click();
+  await page.clock.runFor(250_000);
+
+  expect(statusReads).toBeGreaterThan(120);
+  await expect(page.locator(".update-progress-card")).toContainText(
+    "Installazione",
+  );
+});

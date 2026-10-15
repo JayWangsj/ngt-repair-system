@@ -1,5 +1,5 @@
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -8,6 +8,13 @@ import { appVersion } from "./version";
 const repository = "JayWangsj/ngt-repair-system";
 
 type CommandResult = { stdout: string; stderr: string };
+type StudioUpdateLock = {
+  updateId?: string;
+  targetVersion?: string;
+  createdAt?: string;
+  executorPid?: number;
+  executorScriptPath?: string;
+};
 type CommandRunner = (
   executable: string,
   args: string[],
@@ -43,6 +50,7 @@ type AuthProcessLauncher = (
     windowsHide: boolean;
   },
 ) => AuthProcess;
+type CredentialStoreProbe = () => Promise<void>;
 
 export type StudioUpdateStatus = {
   status:
@@ -71,7 +79,10 @@ export type StudioUpdateStatus = {
   previousVersion?: string;
   currentVersion?: string;
   actualVersion?: string;
+  installInstanceId?: string;
+  buildCommit?: string;
   executorPid?: number;
+  executorScriptPath?: string;
   executorAlive?: boolean;
   executorConfirmed?: boolean;
   createdAt?: string;
@@ -103,6 +114,8 @@ export type StudioUpdateInfo = {
   releaseNotes?: string;
   publishedAt?: string;
   downloadSize?: number;
+  installInstanceId?: string;
+  buildCommit?: string;
   status?: StudioUpdateStatus;
 };
 
@@ -122,13 +135,138 @@ const processInspectionCache = new Map<
   { checkedAt: number; alive: boolean | undefined }
 >();
 const activeUpdateRoots = new Set<string>();
+const updateMutationTails = new Map<string, Promise<void>>();
+const updateChecksInFlight = new Map<string, Promise<StudioUpdateInfo>>();
+
+function updateMutexName(installRoot: string) {
+  const root = path
+    .resolve(installRoot)
+    .replace(/[\\/]+$/, "")
+    .toLowerCase();
+  const digest = createHash("sha256").update(root).digest("hex");
+  return `Global\\NGTStudioUpdate-${digest}`;
+}
+
+async function acquireUpdateMutationMutex(installRoot: string) {
+  const mutexName = updateMutexName(installRoot);
+  const script = [
+    `$mutex = [System.Threading.Mutex]::new($false, '${mutexName}')`,
+    "$owned = $false",
+    "try {",
+    "  try { $owned = $mutex.WaitOne(10000) } catch [System.Threading.AbandonedMutexException] { $owned = $true }",
+    "  if (-not $owned) { throw 'Timed out waiting for the update lock.' }",
+    "  [Console]::Out.WriteLine('NGT_UPDATE_MUTEX_ACQUIRED')",
+    "  [Console]::Out.Flush()",
+    "  [Console]::In.ReadLine() | Out-Null",
+    "} finally { if ($owned) { $mutex.ReleaseMutex() }; $mutex.Dispose() }",
+  ].join("\n");
+  const child = spawn(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command", script],
+    { stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
+  );
+  let stdout = "";
+  let stderr = "";
+  let closed = false;
+  let acquired = false;
+  const closePromise = new Promise<void>((resolve) => {
+    child.once("close", () => {
+      closed = true;
+      resolve();
+    });
+  });
+
+  return new Promise<() => Promise<void>>((resolve, reject) => {
+    let settled = false;
+    const timeout = setTimeout(() => {
+      fail(new Error("Timed out acquiring the update lock."));
+    }, 12_000);
+    const fail = (cause: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      child.kill();
+      reject(cause);
+    };
+    child.stdout?.on("data", (chunk: Buffer | string) => {
+      stdout += chunk.toString();
+      if (settled || !stdout.includes("NGT_UPDATE_MUTEX_ACQUIRED")) return;
+      settled = true;
+      acquired = true;
+      clearTimeout(timeout);
+      resolve(async () => {
+        if (!acquired || closed) return;
+        acquired = false;
+        child.stdin?.end("\n");
+        await Promise.race([
+          closePromise,
+          new Promise<void>((done) => setTimeout(done, 2_000)),
+        ]);
+        if (!closed) {
+          child.kill();
+          await closePromise;
+        }
+      });
+    });
+    child.stderr?.on("data", (chunk: Buffer | string) => {
+      stderr += chunk.toString();
+    });
+    child.once("error", (cause) => {
+      fail(new Error(`Unable to acquire the update lock: ${cause.message}`));
+    });
+    child.once("close", (code) => {
+      if (!settled)
+        fail(
+          new Error(
+            stderr.trim() ||
+              `Update lock process exited with code ${code ?? "unknown"}.`,
+          ),
+        );
+    });
+  });
+}
+
+async function withLocalUpdateMutationMutex<T>(
+  installRoot: string,
+  action: () => Promise<T>,
+) {
+  const key = path.resolve(installRoot).toLowerCase();
+  const previous = updateMutationTails.get(key) || Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tail = previous.catch(() => undefined).then(() => gate);
+  updateMutationTails.set(key, tail);
+  await previous.catch(() => undefined);
+  try {
+    return await action();
+  } finally {
+    release();
+    if (updateMutationTails.get(key) === tail) updateMutationTails.delete(key);
+  }
+}
+
+async function withUpdateMutationMutex<T>(
+  installRoot: string,
+  action: () => Promise<T>,
+) {
+  if (process.platform !== "win32")
+    return withLocalUpdateMutationMutex(installRoot, action);
+  const release = await acquireUpdateMutationMutex(installRoot);
+  try {
+    return await action();
+  } finally {
+    await release();
+  }
+}
 
 function runCommand(executable: string, args: string[]) {
   return new Promise<CommandResult>((resolve, reject) => {
     execFile(
       executable,
       args,
-      { timeout: 30_000, windowsHide: true },
+      { timeout: 12_000, windowsHide: true },
       (error, stdout, stderr) => {
         if (error) {
           const detail = stderr.trim();
@@ -187,11 +325,7 @@ async function readUpdateLock(filePath: string) {
     try {
       return {
         exists: true,
-        value: JSON.parse(contents) as {
-          updateId?: string;
-          executorPid?: number;
-          createdAt?: string;
-        },
+        value: JSON.parse(contents) as StudioUpdateLock,
         unreadable: false,
       };
     } catch {
@@ -221,29 +355,57 @@ async function writeJsonAtomically(filePath: string, value: unknown) {
   }
 }
 
+async function withUpdateOwnership(
+  installRoot: string,
+  updateId: string,
+  action: (lock: StudioUpdateLock) => Promise<void>,
+) {
+  return withUpdateMutationMutex(installRoot, async () => {
+    const current = await readUpdateLock(lockPath(installRoot));
+    if (current.unreadable || current.value?.updateId !== updateId)
+      return false;
+    await action(current.value);
+    return true;
+  });
+}
+
 function inspectUpdaterProcess(
   options: Parameters<ProcessInspector>[0],
 ): Promise<boolean | undefined> {
   if (process.platform !== "win32") return Promise.resolve(undefined);
-  const cacheKey = `${options.executorPid || "scan"}:${options.updateId || "legacy"}`;
+  const targetPath = path.resolve(options.scriptPath).toLowerCase();
+  const cacheKey = `${targetPath}:${options.executorPid || "scan"}:${options.updateId || "legacy"}`;
   const cached = processInspectionCache.get(cacheKey);
   if (cached && Date.now() - cached.checkedAt < 3_000)
     return Promise.resolve(cached.alive);
 
-  const scriptPath = options.scriptPath.replace(/'/g, "''");
+  const scriptPath = targetPath.replace(/'/g, "''");
   const updateId = options.updateId?.match(/^[a-f\d-]{36}$/i)?.[0];
   const pid = Number.isInteger(options.executorPid) ? options.executorPid : 0;
   const script = [
     `$target = '${scriptPath}'`,
-    `$process = if (${pid}) { Get-CimInstance Win32_Process -Filter 'ProcessId = ${pid}' } else { Get-CimInstance Win32_Process }`,
-    `$matches = @($process | Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($target, [StringComparison]::OrdinalIgnoreCase) -ge 0 })`,
-    updateId
-      ? `$matches = @($matches | Where-Object { $_.CommandLine -match '(?i)-UpdateId\\s+"?${updateId}("|\\s|$)' })`
-      : "",
-    `if ($matches.Count -gt 0) { 'true' } else { 'false' }`,
-  ]
-    .filter(Boolean)
-    .join("; ");
+    `$expectedPid = ${pid}`,
+    `$expectedUpdateId = '${updateId || ""}'`,
+    "$processes = @(Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -ne $PID -and $_.Name -match '^(powershell|pwsh)\\.exe$' })",
+    "if ($expectedPid -gt 0) { $processes = @($processes | Where-Object { $_.ProcessId -eq $expectedPid }) }",
+    "$target = [System.IO.Path]::GetFullPath($target)",
+    "$alive = $false",
+    "foreach ($candidate in $processes) {",
+    '  $arguments = @([regex]::Matches([string]$candidate.CommandLine, \'"([^"]*)"|(\\S+)\') | ForEach-Object { if ($_.Groups[1].Success) { $_.Groups[1].Value } else { $_.Groups[2].Value } })',
+    "  for ($index = 0; $index -lt $arguments.Count - 1; $index++) {",
+    "    if ($arguments[$index].TrimStart('-', '/').ToLowerInvariant() -ne 'file') { continue }",
+    "    try { $candidateScript = [System.IO.Path]::GetFullPath($arguments[$index + 1]) } catch { continue }",
+    "    if (-not $candidateScript.Equals($target, [System.StringComparison]::OrdinalIgnoreCase)) { continue }",
+    "    if (-not $expectedUpdateId) { $alive = $true; break }",
+    "    for ($idIndex = 0; $idIndex -lt $arguments.Count - 1; $idIndex++) {",
+    "      if ($arguments[$idIndex].TrimStart('-', '/').ToLowerInvariant() -eq 'updateid' -and $arguments[$idIndex + 1] -eq $expectedUpdateId) { $alive = $true; break }",
+    "    }",
+    "    if ($alive) { break }",
+    "  }",
+    "  if ($alive) { break }",
+    "}",
+    "if ($alive) { 'true' } else { 'false' }",
+  ].join("; ");
 
   return new Promise((resolve) => {
     execFile(
@@ -322,7 +484,7 @@ function resolveGitHubCli(root: string) {
 }
 
 async function getStudioContext(root: string) {
-  const release = await readJson<{ version?: string }>(
+  const release = await readJson<{ version?: string; commit?: string }>(
     path.join(root, "studio-release.json"),
   );
   const config = await readJson<{
@@ -333,6 +495,11 @@ async function getStudioContext(root: string) {
     release,
     config,
     currentVersion: release?.version || appVersion,
+    buildCommit: release?.commit,
+    installInstanceId: createHash("sha256")
+      .update(path.resolve(config?.installRoot || root).toLowerCase())
+      .digest("hex")
+      .slice(0, 16),
     repository: config?.repository || repository,
   };
 }
@@ -343,6 +510,10 @@ function statusPath(installRoot: string) {
 
 function lockPath(installRoot: string) {
   return path.join(installRoot, "update.lock");
+}
+
+function maintenancePath(installRoot: string) {
+  return path.join(installRoot, ".local", "update-maintenance.json");
 }
 
 function updateLogPath(installRoot: string, updateId: string) {
@@ -408,15 +579,19 @@ function resolveStudioRoot(root?: string) {
 
 export async function getStudioUpdateStatus(
   root?: string,
-  options: { inspect?: ProcessInspector } = {},
+  options: {
+    inspect?: ProcessInspector;
+    skipMaintenanceCleanup?: boolean;
+  } = {},
 ): Promise<StudioUpdateStatus> {
   const studioRoot = resolveStudioRoot(root);
   const { config, currentVersion } = await getStudioContext(studioRoot);
-  if (!config?.installRoot) return { status: "idle" };
+  const installRoot = config?.installRoot;
+  if (!installRoot) return { status: "idle" };
   const statusFile = await readJsonState<StudioUpdateStatus>(
-    statusPath(config.installRoot),
+    statusPath(installRoot),
   );
-  const lockFile = await readUpdateLock(lockPath(config.installRoot));
+  const lockFile = await readUpdateLock(lockPath(installRoot));
   if (lockFile.unreadable)
     return {
       status: "verifying-task",
@@ -437,18 +612,16 @@ export async function getStudioUpdateStatus(
   const status = statusFile.value;
   if (!status) {
     if (!lockFile.exists) return { status: "idle", currentVersion };
-    if (lockFile.value?.updateId && activeUpdateRoots.has(config.installRoot))
+    if (lockFile.value?.updateId && activeUpdateRoots.has(installRoot))
       return {
         status: "verifying-task",
         updateId: lockFile.value.updateId,
         currentVersion,
         message: "The update executor is starting.",
       };
-    const scriptPath = path.join(
-      studioRoot,
-      "scripts",
-      "update-windows-studio.ps1",
-    );
+    const scriptPath =
+      lockFile.value?.executorScriptPath ||
+      path.join(studioRoot, "scripts", "update-windows-studio.ps1");
     const alive = await (options.inspect || inspectUpdaterProcess)({
       updateId: lockFile.value?.updateId,
       executorPid: lockFile.value?.executorPid,
@@ -477,6 +650,21 @@ export async function getStudioUpdateStatus(
         message: `The task reported completion, but the running version is ${currentVersion}.`,
         manualReview: true,
       };
+    }
+    if (status.updateId && target && !options.skipMaintenanceCleanup) {
+      await withUpdateMutationMutex(installRoot, async () => {
+        const marker = await readJson<{ updateId?: string }>(
+          maintenancePath(installRoot),
+        );
+        if (marker?.updateId !== status.updateId) return;
+        const lock = await readUpdateLock(lockPath(installRoot));
+        if (
+          lock.unreadable ||
+          (lock.exists && lock.value?.updateId !== status.updateId)
+        )
+          return;
+        await unlink(maintenancePath(installRoot)).catch(() => undefined);
+      }).catch(() => undefined);
     }
     return { ...status, currentVersion, actualVersion: currentVersion };
   }
@@ -518,11 +706,10 @@ export async function getStudioUpdateStatus(
   if (recentConfirmed)
     return { ...status, executorAlive: true, currentVersion };
 
-  const scriptPath = path.join(
-    studioRoot,
-    "scripts",
-    "update-windows-studio.ps1",
-  );
+  const scriptPath =
+    status.executorScriptPath ||
+    lockFile.value?.executorScriptPath ||
+    path.join(studioRoot, "scripts", "update-windows-studio.ps1");
   const alive = await (options.inspect || inspectUpdaterProcess)({
     updateId: status.updateId || lockFile.value?.updateId,
     executorPid: status.executorPid || lockFile.value?.executorPid,
@@ -565,6 +752,8 @@ export async function getStudioRuntimeInfo(root?: string) {
   const context = await getStudioContext(resolveStudioRoot(root));
   return {
     currentVersion: context.currentVersion,
+    installInstanceId: context.installInstanceId,
+    buildCommit: context.buildCommit,
     versionSource: context.release?.version
       ? "studio-release.json"
       : "package.json",
@@ -574,12 +763,13 @@ export async function getStudioRuntimeInfo(root?: string) {
 export async function getStudioUpdateLog(root?: string) {
   const studioRoot = resolveStudioRoot(root);
   const { config } = await getStudioContext(studioRoot);
-  if (!config?.installRoot) return "";
+  const installRoot = config?.installRoot;
+  if (!installRoot) return "";
   const status = await getStudioUpdateStatus(studioRoot);
   if (!status.updateId) return "";
   try {
     const contents = await readFile(
-      updateLogPath(config.installRoot, status.updateId),
+      updateLogPath(installRoot, status.updateId),
       "utf8",
     );
     return redactUpdateLog(contents.slice(-20_000));
@@ -623,7 +813,7 @@ export async function getGitHubLoginStatus(
   );
 }
 
-export async function checkStudioUpdate(
+async function performStudioUpdateCheck(
   options: {
     root?: string;
     run?: CommandRunner;
@@ -642,6 +832,8 @@ export async function checkStudioUpdate(
       currentVersion: context.currentVersion,
       authRequired: false,
       updateAvailable: false,
+      installInstanceId: context.installInstanceId,
+      buildCommit: context.buildCommit,
       status,
     };
   }
@@ -662,6 +854,8 @@ export async function checkStudioUpdate(
       currentVersion: context.currentVersion,
       authRequired: true,
       updateAvailable: false,
+      installInstanceId: context.installInstanceId,
+      buildCommit: context.buildCommit,
       status,
     };
   }
@@ -712,8 +906,29 @@ export async function checkStudioUpdate(
     publishedAt: latest.publishedAt,
     downloadSize:
       typeof studioArchive?.size === "number" ? studioArchive.size : undefined,
+    installInstanceId: context.installInstanceId,
+    buildCommit: context.buildCommit,
     status,
   };
+}
+
+export function checkStudioUpdate(
+  options: {
+    root?: string;
+    run?: CommandRunner;
+    inspect?: ProcessInspector;
+  } = {},
+): Promise<StudioUpdateInfo> {
+  const root = resolveStudioRoot(options.root);
+  const key = path.resolve(root).toLowerCase();
+  const pending = updateChecksInFlight.get(key);
+  if (pending) return pending;
+  const request = performStudioUpdateCheck({ ...options, root }).finally(() => {
+    if (updateChecksInFlight.get(key) === request)
+      updateChecksInFlight.delete(key);
+  });
+  updateChecksInFlight.set(key, request);
+  return request;
 }
 
 export async function startGitHubLogin(
@@ -721,6 +936,7 @@ export async function startGitHubLogin(
     root?: string;
     launch?: AuthProcessLauncher;
     run?: CommandRunner;
+    checkCredentialStore?: CredentialStoreProbe;
     timeoutMs?: number;
   } = {},
 ) {
@@ -733,6 +949,39 @@ export async function startGitHubLogin(
   if (activeGitHubLogins.has(root)) return getGitHubLoginStatus(root);
 
   const githubCli = resolveGitHubCli(root);
+  if (process.env.GH_TOKEN) {
+    const run = options.run || runCommand;
+    await run(githubCli, [
+      "auth",
+      "status",
+      "--hostname",
+      "github.com",
+      "--active",
+    ]);
+    await run(githubCli, [
+      "release",
+      "view",
+      "--repo",
+      context.repository,
+      "--json",
+      "tagName",
+    ]);
+    const status = { status: "success" as const };
+    await writeGitHubLoginStatus(installRoot, status);
+    return status;
+  }
+
+  if (options.checkCredentialStore) {
+    await options.checkCredentialStore();
+  } else if (process.platform === "win32") {
+    await runCommand("powershell.exe", [
+      "-NoProfile",
+      "-NonInteractive",
+      "-File",
+      path.join(root, "scripts", "check-windows-credential-store.ps1"),
+    ]);
+  }
+
   const initialStatus: GitHubLoginStatus = {
     status: "opening",
     verificationUrl: githubDeviceUrl,
@@ -750,8 +999,6 @@ export async function startGitHubLogin(
       "--clipboard",
       "--git-protocol",
       "https",
-      "--scopes",
-      "repo",
     ],
     {
       cwd: root,
@@ -899,179 +1146,212 @@ export async function startStudioUpdate(
       );
   }
 
-  if (activeUpdateRoots.has(installRoot))
-    throw new Error("studio_update_in_progress");
-
-  const previousTask = await getStudioUpdateStatus(root, {
-    inspect: options.inspect,
-  });
-  if (
-    previousTask.manualReview ||
-    [
-      "starting",
-      "queued",
-      "running",
-      "checking",
-      "downloading",
-      "downloaded",
-      "verifying",
-      "preparing-runtime",
-      "backing-up",
-      "installing",
-      "validating",
-      "rolling-back",
-      "verifying-task",
-      "unknown",
-    ].includes(previousTask.status)
-  )
-    throw new Error(
-      previousTask.manualReview
-        ? "studio_update_needs_manual_review"
-        : "studio_update_in_progress",
-    );
-  if (previousTask.recoveryStatus === "failed")
-    throw new Error("studio_update_needs_manual_review");
-
-  const existingLock = await readUpdateLock(lockFile);
-  if (existingLock.unreadable)
-    throw new Error("studio_update_needs_manual_review");
-  if (existingLock.exists) {
-    const lock = existingLock.value;
-    const createdAt = Date.parse(lock?.createdAt || "");
-    const recentlyCreated =
-      Number.isFinite(createdAt) && Date.now() - createdAt < 10_000;
-    const alive = await (options.inspect || inspectUpdaterProcess)({
-      updateId: lock?.updateId,
-      executorPid: lock?.executorPid,
-      scriptPath,
-    });
-    if (alive === true || alive === undefined || recentlyCreated)
+  return withUpdateMutationMutex(installRoot, async () => {
+    if (activeUpdateRoots.has(installRoot))
       throw new Error("studio_update_in_progress");
-    await unlink(lockFile);
-  }
 
-  const updateId = randomUUID();
-  const createdAt = new Date().toISOString();
-  try {
-    const handle = await open(lockFile, "wx");
-    await handle.writeFile(
-      JSON.stringify({ updateId, targetVersion, createdAt }),
-      "utf8",
-    );
-    await handle.close();
-  } catch (cause) {
-    throw (cause as NodeJS.ErrnoException).code === "EEXIST"
-      ? new Error("studio_update_in_progress")
-      : cause;
-  }
-
-  const status: StudioUpdateStatus = {
-    status: "starting",
-    stage: "starting",
-    updateId,
-    targetVersion,
-    previousVersion: context.currentVersion,
-    createdAt,
-    updatedAt: createdAt,
-    executorConfirmed: false,
-  };
-  activeUpdateRoots.add(installRoot);
-  try {
-    await writeJsonAtomically(taskStatusFile, status);
-    const logFile = updateLogPath(installRoot, updateId);
-    const child = (options.launch || launchProcess)(
-      "powershell.exe",
-      [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        scriptPath,
-        "-UpdateId",
-        updateId,
-        "-ExpectedTargetVersion",
-        targetVersion || "",
-        "-StatusFile",
-        taskStatusFile,
-        "-UpdateLockFile",
-        lockFile,
-        "-LogFile",
-        logFile,
-      ],
-      { cwd: root, detached: true, stdio: "ignore", windowsHide: true },
-    );
-    child.unref();
-    child.once("spawn", () => {
-      void (async () => {
-        const lock = await readJson<{ updateId?: string }>(lockFile);
-        if (lock?.updateId === updateId)
-          await writeJsonAtomically(lockFile, {
-            updateId,
-            targetVersion,
-            createdAt,
-            executorPid: child.pid,
-          }).catch(() => undefined);
-      })();
+    const previousTask = await getStudioUpdateStatus(root, {
+      inspect: options.inspect,
+      skipMaintenanceCleanup: true,
     });
-    let finished = false;
-    const failBeforeCompletion = async (message: string) => {
-      if (finished) return;
-      finished = true;
-      const latest = await readJson<StudioUpdateStatus>(taskStatusFile);
+    if (
+      previousTask.manualReview ||
+      [
+        "starting",
+        "queued",
+        "running",
+        "checking",
+        "downloading",
+        "downloaded",
+        "verifying",
+        "preparing-runtime",
+        "backing-up",
+        "installing",
+        "validating",
+        "rolling-back",
+        "verifying-task",
+        "unknown",
+      ].includes(previousTask.status)
+    )
+      throw new Error(
+        previousTask.manualReview
+          ? "studio_update_needs_manual_review"
+          : "studio_update_in_progress",
+      );
+    if (previousTask.recoveryStatus === "failed")
+      throw new Error("studio_update_needs_manual_review");
+
+    const existingLock = await readUpdateLock(lockFile);
+    if (existingLock.unreadable)
+      throw new Error("studio_update_needs_manual_review");
+    if (existingLock.exists) {
+      const lock = existingLock.value;
+      const createdAt = Date.parse(lock?.createdAt || "");
+      const recentlyCreated =
+        Number.isFinite(createdAt) && Date.now() - createdAt < 10_000;
+      const alive = await (options.inspect || inspectUpdaterProcess)({
+        updateId: lock?.updateId,
+        executorPid: lock?.executorPid,
+        scriptPath: lock?.executorScriptPath || scriptPath,
+      });
+      if (alive === true || alive === undefined || recentlyCreated)
+        throw new Error("studio_update_in_progress");
+
+      const latestLock = await readUpdateLock(lockFile);
       if (
-        latest?.updateId === updateId &&
-        latest.status !== "complete" &&
-        latest.status !== "failed"
-      ) {
+        latestLock.unreadable ||
+        !latestLock.exists ||
+        latestLock.value?.updateId !== lock?.updateId ||
+        latestLock.value?.createdAt !== lock?.createdAt
+      )
+        throw new Error("studio_update_in_progress");
+      await unlink(lockFile);
+    }
+
+    const updateId = randomUUID();
+    const createdAt = new Date().toISOString();
+    const lock = {
+      updateId,
+      targetVersion,
+      createdAt,
+      executorScriptPath: path.resolve(scriptPath),
+    };
+    let lockCreated = false;
+    let lockHandle: Awaited<ReturnType<typeof open>> | undefined;
+    try {
+      lockHandle = await open(lockFile, "wx");
+      lockCreated = true;
+      await lockHandle.writeFile(JSON.stringify(lock), "utf8");
+    } catch (cause) {
+      if (lockCreated) await unlink(lockFile).catch(() => undefined);
+      throw (cause as NodeJS.ErrnoException).code === "EEXIST"
+        ? new Error("studio_update_in_progress")
+        : cause;
+    } finally {
+      await lockHandle?.close().catch(() => undefined);
+    }
+
+    const status: StudioUpdateStatus = {
+      status: "starting",
+      stage: "starting",
+      updateId,
+      targetVersion,
+      previousVersion: context.currentVersion,
+      executorScriptPath: path.resolve(scriptPath),
+      createdAt,
+      updatedAt: createdAt,
+      executorConfirmed: false,
+    };
+    activeUpdateRoots.add(installRoot);
+    try {
+      await writeJsonAtomically(taskStatusFile, status);
+      const logFile = updateLogPath(installRoot, updateId);
+      const child = (options.launch || launchProcess)(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          scriptPath,
+          "-UpdateId",
+          updateId,
+          "-ExpectedTargetVersion",
+          targetVersion || "",
+          "-StatusFile",
+          taskStatusFile,
+          "-UpdateLockFile",
+          lockFile,
+          "-LogFile",
+          logFile,
+        ],
+        { cwd: root, detached: true, stdio: "ignore", windowsHide: true },
+      );
+      let finished = false;
+      const failBeforeCompletion = async (message: string) => {
+        if (finished) return;
+        finished = true;
+        await withUpdateOwnership(installRoot, updateId, async () => {
+          const latest = await readJson<StudioUpdateStatus>(taskStatusFile);
+          if (
+            latest?.updateId === updateId &&
+            latest.status !== "complete" &&
+            latest.status !== "failed"
+          )
+            await writeJsonAtomically(taskStatusFile, {
+              ...latest,
+              status: "failed",
+              stage: latest.stage || "starting",
+              failedStage: latest.stage || "starting",
+              message,
+              executorConfirmed: false,
+              updatedAt: new Date().toISOString(),
+            });
+          await unlink(lockFile).catch(() => undefined);
+        }).catch(() => undefined);
+        activeUpdateRoots.delete(installRoot);
+      };
+      child.once("spawn", () => {
+        void withUpdateOwnership(installRoot, updateId, async (currentLock) => {
+          if (!child.pid) return;
+          const latest = await readJson<StudioUpdateStatus>(taskStatusFile);
+          if (latest?.updateId !== updateId) return;
+          await writeJsonAtomically(lockFile, {
+            ...currentLock,
+            executorPid: child.pid,
+          });
+        }).catch(() => undefined);
+      });
+      child.once("error", (error) => {
+        void failBeforeCompletion(
+          `Unable to start the update executor: ${error.message}`,
+        );
+      });
+      child.once("close", (code) => {
+        void (async () => {
+          if (finished) {
+            activeUpdateRoots.delete(installRoot);
+            return;
+          }
+          finished = true;
+          await withUpdateOwnership(installRoot, updateId, async () => {
+            const latest = await readJson<StudioUpdateStatus>(taskStatusFile);
+            if (latest?.updateId !== updateId) return;
+            if (latest.status === "complete" || latest.status === "failed") {
+              await unlink(lockFile).catch(() => undefined);
+              return;
+            }
+            await writeJsonAtomically(taskStatusFile, {
+              ...latest,
+              status: "failed",
+              stage: latest.stage || "starting",
+              failedStage: latest.stage || "starting",
+              message: `The update executor exited before recording a final result (code ${code ?? "unknown"}).`,
+              executorConfirmed: false,
+              updatedAt: new Date().toISOString(),
+            });
+            await unlink(lockFile).catch(() => undefined);
+          }).catch(() => undefined);
+          activeUpdateRoots.delete(installRoot);
+        })();
+      });
+      child.unref();
+      return { ...status, logAvailable: true };
+    } catch (cause) {
+      activeUpdateRoots.delete(installRoot);
+      const latest = await readJson<StudioUpdateStatus>(taskStatusFile);
+      if (latest?.updateId === updateId && latest.status === "starting")
         await writeJsonAtomically(taskStatusFile, {
           ...latest,
           status: "failed",
-          stage: latest.stage || "starting",
-          failedStage: latest.stage || "starting",
-          message,
-          executorConfirmed: false,
+          failedStage: "starting",
+          message: `Unable to create the update executor: ${cause instanceof Error ? cause.message : String(cause)}`,
           updatedAt: new Date().toISOString(),
         }).catch(() => undefined);
-      }
-      const lock = await readJson<{ updateId?: string }>(lockFile);
-      if (lock?.updateId === updateId)
+      const currentLock = await readUpdateLock(lockFile);
+      if (currentLock.value?.updateId === updateId)
         await unlink(lockFile).catch(() => undefined);
-      activeUpdateRoots.delete(installRoot);
-    };
-    child.once("error", (error) => {
-      void failBeforeCompletion(
-        `Unable to start the update executor: ${error.message}`,
-      );
-    });
-    child.once("close", (code) => {
-      void (async () => {
-        const latest = await readJson<StudioUpdateStatus>(taskStatusFile);
-        if (latest?.updateId !== updateId) return;
-        if (latest.status === "complete" || latest.status === "failed") {
-          const lock = await readJson<{ updateId?: string }>(lockFile);
-          if (lock?.updateId === updateId)
-            await unlink(lockFile).catch(() => undefined);
-          activeUpdateRoots.delete(installRoot);
-          return;
-        }
-        await failBeforeCompletion(
-          `The update executor exited before recording a final result (code ${code ?? "unknown"}).`,
-        );
-      })();
-    });
-    return { ...status, updateId, logAvailable: true };
-  } catch (cause) {
-    activeUpdateRoots.delete(installRoot);
-    const latest = await readJson<StudioUpdateStatus>(taskStatusFile);
-    if (latest?.updateId === updateId && latest.status === "starting")
-      await writeJsonAtomically(taskStatusFile, {
-        ...latest,
-        status: "failed",
-        failedStage: "starting",
-        message: `Unable to create the update executor: ${cause instanceof Error ? cause.message : String(cause)}`,
-        updatedAt: new Date().toISOString(),
-      }).catch(() => undefined);
-    await unlink(lockFile).catch(() => undefined);
-    throw cause;
-  }
+      throw cause;
+    }
+  });
 }

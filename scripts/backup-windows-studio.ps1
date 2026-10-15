@@ -23,7 +23,9 @@ try {
   $backupRoot = Join-Path ([System.IO.Path]::GetFullPath($Destination)) (Get-Date -Format "yyyyMMdd-HHmmss")
   $databaseBackup = Join-Path $backupRoot "postgres-data"
   New-Item -ItemType Directory -Path $databaseBackup -Force | Out-Null
-  Copy-Item -Path (Join-Path $dataDirectory "*") -Destination $databaseBackup -Recurse -Force
+  Get-ChildItem -LiteralPath $dataDirectory -Force | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination $databaseBackup -Recurse -Force
+  }
 
   $configBackup = Join-Path $backupRoot "config"
   New-Item -ItemType Directory -Path $configBackup -Force | Out-Null

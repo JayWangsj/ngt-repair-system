@@ -2,6 +2,7 @@ import { BusinessError } from "@/lib/domain";
 import { importBusinessData } from "@/lib/data-transfer";
 import { isSameOriginWriteRequest } from "@/lib/request-source";
 import { requireActor } from "@/lib/session";
+import { assertStudioWritesAvailable } from "@/lib/studio-maintenance";
 
 export async function POST(request: Request) {
   if (!isSameOriginWriteRequest(request))
@@ -10,6 +11,7 @@ export async function POST(request: Request) {
       { status: 403 },
     );
   try {
+    await assertStudioWritesAvailable();
     const size = Number(request.headers.get("content-length") ?? "0");
     if (size > 20 * 1024 * 1024)
       return Response.json({ error: "File troppo grande." }, { status: 413 });

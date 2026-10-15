@@ -4,12 +4,17 @@ import {
   sanitizeUpdateStatus,
   startStudioUpdate,
 } from "@/lib/studio-update";
-import { isSameOriginWriteRequest } from "@/lib/request-source";
+import {
+  isSameOriginRequest,
+  isSameOriginWriteRequest,
+} from "@/lib/request-source";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
+  if (!isSameOriginRequest(request))
+    return Response.json({ error: "local_request_required" }, { status: 403 });
   try {
     const result = await checkStudioUpdate();
     return Response.json({

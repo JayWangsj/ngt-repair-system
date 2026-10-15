@@ -56,6 +56,7 @@ import {
   normalizeModel,
 } from "./catalog";
 import { getBusinessDay } from "./business-date";
+import { assertStudioWritesAvailable } from "./studio-maintenance";
 
 type Tx = Prisma.TransactionClient;
 type Amount = string | { toString(): string };
@@ -303,6 +304,7 @@ export async function transact<T>(
   work: (tx: Tx) => Promise<T>,
   client: PrismaClient = db,
 ): Promise<T> {
+  await assertStudioWritesAvailable();
   for (let i = 0; i < 4; i++) {
     try {
       return await client.$transaction(work, {

@@ -19,7 +19,6 @@ import { FormDialog } from "./forms";
 import { useUpdateState } from "./update-state";
 import {
   classifyUpdateTask,
-  isUpdateTaskMonitorable,
   shouldShowDownloadProgress,
   shouldShowUpdateProgress,
   type UpdateStatus,
@@ -117,7 +116,6 @@ export function SystemUpdate({
     task,
     ensureChecked,
     checkForUpdates,
-    refreshTask,
     startUpdate: launchUpdate,
   } = useUpdateState();
   const [confirmationOpen, setConfirmationOpen] = useState(false);
@@ -309,7 +307,12 @@ export function SystemUpdate({
   const showProgress =
     shouldShowUpdateProgress(taskPhase) ||
     (taskPhase === "reconnecting" && shouldShowUpdateProgress(progressPhase));
-  const taskBusy = isUpdateTaskMonitorable(taskPhase);
+  const taskBusy = ["starting", "queued", "running", "rolling-back"].includes(
+    taskPhase,
+  );
+  const installBlocked =
+    taskBusy ||
+    ["reconnecting", "verifying", "interrupted"].includes(taskPhase);
   const showRelease = Boolean(
     (info?.updateAvailable || info?.notInstallable) &&
     !["starting", "queued", "running", "reconnecting", "rolling-back"].includes(
@@ -402,7 +405,7 @@ export function SystemUpdate({
         <div className="update-primary-actions">
           <Button
             type="button"
-            disabled={checkPhase === "checking" || taskBusy}
+            disabled={checkPhase === "checking"}
             onClick={() => void checkForUpdates()}
           >
             <RefreshCw
@@ -437,13 +440,26 @@ export function SystemUpdate({
         >
           {taskSummary(taskStatus, taskPhase, it)}
           {taskPhase === "verifying" && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void refreshTask()}
-            >
-              {it.verifyUpdateTask}
-            </Button>
+            <>
+              <span>
+                {task.message === "update_status_no_progress"
+                  ? it.updateNoRecentProgress
+                  : taskStatus?.message}
+              </span>
+              <button
+                type="button"
+                className="update-diagnostics-toggle"
+                aria-expanded={diagnosticsOpen}
+                onClick={() => void loadDiagnostics()}
+              >
+                {it.updateLogDetails}
+              </button>
+              {diagnosticsOpen && (
+                <pre className="update-diagnostics">
+                  {diagnosticsLoading ? it.loading : diagnostics || ""}
+                </pre>
+              )}
+            </>
           )}
         </p>
       )}
@@ -456,13 +472,19 @@ export function SystemUpdate({
               ? ` ${it.currentVersion}: ${stageLabel(taskStatus.stage, it)}`
               : ""}
           </span>
-          <Button
+          <button
             type="button"
-            variant="outline"
-            onClick={() => void refreshTask()}
+            className="update-diagnostics-toggle"
+            aria-expanded={diagnosticsOpen}
+            onClick={() => void loadDiagnostics()}
           >
-            {it.verifyUpdateTask}
-          </Button>
+            {it.updateLogDetails}
+          </button>
+          {diagnosticsOpen && (
+            <pre className="update-diagnostics">
+              {diagnosticsLoading ? it.loading : diagnostics || ""}
+            </pre>
+          )}
         </div>
       )}
 
@@ -552,7 +574,9 @@ export function SystemUpdate({
               <Button
                 type="button"
                 disabled={
-                  taskBusy || checkPhase === "checking" || info.authRequired
+                  installBlocked ||
+                  checkPhase === "checking" ||
+                  info.authRequired
                 }
                 onClick={() => setConfirmationOpen(true)}
               >
@@ -671,6 +695,16 @@ export function SystemUpdate({
               )}
               {taskStatus.recoveryMessage && (
                 <p>{taskStatus.recoveryMessage}</p>
+              )}
+              {taskStatus.buildCommit && (
+                <p>
+                  {it.updateBuildCommit}: {taskStatus.buildCommit}
+                </p>
+              )}
+              {taskStatus.installInstanceId && (
+                <p>
+                  {it.updateInstallInstance}: {taskStatus.installInstanceId}
+                </p>
               )}
               <pre>{diagnosticsLoading ? it.loading : diagnostics || ""}</pre>
             </div>

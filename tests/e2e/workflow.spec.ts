@@ -7344,7 +7344,13 @@ test("settings exports data and re-import skips existing records", async ({
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Esporta dati", exact: true }).click();
   expect((await download).suggestedFilename()).toMatch(/^ngt-backup-.*\.json$/);
-  const exported = await page.request.get("/api/data/export");
+  const sameOriginHeaders = {
+    Origin: new URL(page.url()).origin,
+    "Sec-Fetch-Site": "same-origin",
+  };
+  const exported = await page.request.get("/api/data/export", {
+    headers: sameOriginHeaders,
+  });
   expect(exported.ok()).toBe(true);
   expect(exported.headers()["content-disposition"]).toContain("ngt-backup-");
   const backup = await exported.json();
@@ -7354,6 +7360,7 @@ test("settings exports data and re-import skips existing records", async ({
   });
   const imported = await page.request.post("/api/data/import", {
     data: backup,
+    headers: sameOriginHeaders,
   });
   expect(imported.ok()).toBe(true);
   const result = await imported.json();

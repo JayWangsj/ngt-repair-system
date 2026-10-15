@@ -12,12 +12,83 @@ $script:NgtCompletedUpdateStages = @()
 $script:NgtSkippedUpdateStages = @()
 $script:NgtCurrentTargetVersion = $ExpectedTargetVersion
 $script:NgtUpdateExecutorConfirmed = $false
+$script:NgtUpdateCommitted = $false
+$script:NgtUpdateMaintenanceFile = $null
+$script:NgtUpdateScriptPath = [System.IO.Path]::GetFullPath($PSCommandPath)
 
 function Protect-NgtUpdateText([string]$Value) {
   return $Value `
     -replace "github_pat_[A-Za-z0-9_]+", "[redacted token]" `
     -replace "gh[pousr]_[A-Za-z0-9]{20,}", "[redacted token]" `
     -replace "(?i)(token\s*[:=]\s*)\S+", '$1[redacted]'
+}
+
+function Invoke-NgtUpdateOwnership([scriptblock]$Action) {
+  $mutexRoot = [System.IO.Path]::GetFullPath((Split-Path -Parent $UpdateLockFile)).TrimEnd("\").ToLowerInvariant()
+  $sha256 = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    $rootBytes = [System.Text.Encoding]::UTF8.GetBytes($mutexRoot)
+    $rootHash = [System.BitConverter]::ToString($sha256.ComputeHash($rootBytes)).Replace("-", "").ToLowerInvariant()
+  } finally {
+    $sha256.Dispose()
+  }
+  $mutex = [System.Threading.Mutex]::new($false, "Global\NGTStudioUpdate-$rootHash")
+  $owned = $false
+  try {
+    try { $owned = $mutex.WaitOne(10000) }
+    catch [System.Threading.AbandonedMutexException] { $owned = $true }
+    if (-not $owned) { throw "Timed out waiting for the update lock." }
+    if (-not (Test-Path -LiteralPath $UpdateLockFile)) { return $false }
+    try {
+      $lock = Get-Content -LiteralPath $UpdateLockFile -Raw | ConvertFrom-Json
+    } catch {
+      return $false
+    }
+    if ([string]$lock.updateId -ne $UpdateId) { return $false }
+    & $Action
+    return $true
+  } finally {
+    if ($owned) { $mutex.ReleaseMutex() }
+    $mutex.Dispose()
+  }
+}
+
+function Write-NgtUpdateMaintenance(
+  [string]$Stage,
+  [hashtable]$Details = @{}
+) {
+  if (-not $script:NgtUpdateMaintenanceFile) { return }
+  $payload = @{
+    updateId = $UpdateId
+    stage = $Stage
+    targetVersion = $script:NgtCurrentTargetVersion
+    previousVersion = $previousVersion
+    backupRoot = $backupRoot
+    updatedAt = (Get-Date).ToUniversalTime().ToString("o")
+  }
+  foreach ($key in $Details.Keys) { $payload[$key] = $Details[$key] }
+  $owned = Invoke-NgtUpdateOwnership {
+    $temporaryFile = "$script:NgtUpdateMaintenanceFile.$UpdateId.tmp"
+    $json = $payload | ConvertTo-Json -Depth 8
+    [System.IO.File]::WriteAllText($temporaryFile, $json, (New-Object System.Text.UTF8Encoding($false)))
+    try {
+      if (Test-Path -LiteralPath $script:NgtUpdateMaintenanceFile) {
+        [System.IO.File]::Replace($temporaryFile, $script:NgtUpdateMaintenanceFile, $null)
+      } else {
+        [System.IO.File]::Move($temporaryFile, $script:NgtUpdateMaintenanceFile)
+      }
+    } finally {
+      Remove-Item -LiteralPath $temporaryFile -Force -ErrorAction SilentlyContinue
+    }
+  }
+  if (-not $owned) { throw "Update task no longer owns the lock." }
+}
+
+function Clear-NgtUpdateMaintenance {
+  if (-not $script:NgtUpdateMaintenanceFile) { return $false }
+  return [bool](Invoke-NgtUpdateOwnership {
+    Remove-Item -LiteralPath $script:NgtUpdateMaintenanceFile -Force -ErrorAction SilentlyContinue
+  })
 }
 
 function Write-NgtUpdateStatus(
@@ -31,6 +102,7 @@ function Write-NgtUpdateStatus(
     updateId = $UpdateId
     targetVersion = $script:NgtCurrentTargetVersion
     executorPid = $PID
+    executorScriptPath = $script:NgtUpdateScriptPath
     executorConfirmed = $script:NgtUpdateExecutorConfirmed
     createdAt = $script:NgtUpdateCreatedAt
     updatedAt = (Get-Date).ToUniversalTime().ToString("o")
@@ -42,29 +114,97 @@ function Write-NgtUpdateStatus(
     if ($value -is [string]) { $value = Protect-NgtUpdateText $value }
     $payload[$key] = $value
   }
-  $temporaryStatusFile = "$StatusFile.$UpdateId.tmp"
-  $json = $payload | ConvertTo-Json -Depth 8
-  [System.IO.File]::WriteAllText(
-    $temporaryStatusFile,
-    $json,
-    (New-Object System.Text.UTF8Encoding($false))
-  )
-  try {
-    if (Test-Path -LiteralPath $StatusFile) {
-      [System.IO.File]::Replace($temporaryStatusFile, $StatusFile, $null)
-    } else {
-      [System.IO.File]::Move($temporaryStatusFile, $StatusFile)
+  $owned = Invoke-NgtUpdateOwnership {
+    $temporaryStatusFile = "$StatusFile.$UpdateId.tmp"
+    $json = $payload | ConvertTo-Json -Depth 8
+    [System.IO.File]::WriteAllText(
+      $temporaryStatusFile,
+      $json,
+      (New-Object System.Text.UTF8Encoding($false))
+    )
+    try {
+      if (Test-Path -LiteralPath $StatusFile) {
+        [System.IO.File]::Replace($temporaryStatusFile, $StatusFile, $null)
+      } else {
+        [System.IO.File]::Move($temporaryStatusFile, $StatusFile)
+      }
+    } catch {
+      Move-Item -LiteralPath $temporaryStatusFile -Destination $StatusFile -Force
+    } finally {
+      Remove-Item -LiteralPath $temporaryStatusFile -Force -ErrorAction SilentlyContinue
     }
-  } catch {
-    Move-Item -LiteralPath $temporaryStatusFile -Destination $StatusFile -Force
-  } finally {
-    Remove-Item -LiteralPath $temporaryStatusFile -Force -ErrorAction SilentlyContinue
+    if ($script:NgtUpdateMaintenanceFile -and $Status -in @("backing-up", "installing", "validating", "rolling-back")) {
+      $maintenance = @{
+        updateId = $UpdateId
+        stage = $Status
+        targetVersion = $script:NgtCurrentTargetVersion
+        previousVersion = $previousVersion
+        backupRoot = $backupRoot
+        updatedAt = (Get-Date).ToUniversalTime().ToString("o")
+      } | ConvertTo-Json -Depth 8
+      $maintenanceFile = "$script:NgtUpdateMaintenanceFile.$UpdateId.tmp"
+      [System.IO.File]::WriteAllText($maintenanceFile, $maintenance, (New-Object System.Text.UTF8Encoding($false)))
+      try {
+        if (Test-Path -LiteralPath $script:NgtUpdateMaintenanceFile) {
+          [System.IO.File]::Replace($maintenanceFile, $script:NgtUpdateMaintenanceFile, $null)
+        } else {
+          [System.IO.File]::Move($maintenanceFile, $script:NgtUpdateMaintenanceFile)
+        }
+      } finally {
+        Remove-Item -LiteralPath $maintenanceFile -Force -ErrorAction SilentlyContinue
+      }
+    }
   }
+  if (-not $owned) { throw "Update task no longer owns the lock." }
 }
 
 function Complete-NgtUpdateStage([string]$Stage) {
   if ($script:NgtCompletedUpdateStages -notcontains $Stage) {
     $script:NgtCompletedUpdateStages += $Stage
+  }
+}
+
+function Get-NgtFileBytes([string]$Directory) {
+  if (-not (Test-Path -LiteralPath $Directory)) { return [long]0 }
+  $measure = Get-ChildItem -LiteralPath $Directory -File -Recurse -Force -ErrorAction Stop |
+    Measure-Object -Property Length -Sum
+  return [long]($measure.Sum -as [long])
+}
+
+function Assert-NgtWritableDirectory([string]$Directory) {
+  New-Item -ItemType Directory -Path $Directory -Force | Out-Null
+  $probe = Join-Path $Directory (".ngt-update-write-test-" + [guid]::NewGuid().ToString("N"))
+  try {
+    [System.IO.File]::WriteAllText($probe, "test")
+  } catch {
+    throw "Update path is not writable: $Directory"
+  } finally {
+    Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+  }
+}
+
+function Assert-NgtUpdateSpace(
+  [string]$InstallRoot,
+  [string]$DataRoot,
+  [long]$ApplicationArchiveBytes,
+  [long]$RuntimeArchiveBytes,
+  [string]$CurrentReleaseRoot
+) {
+  Assert-NgtWritableDirectory (Join-Path $InstallRoot "downloads")
+  Assert-NgtWritableDirectory (Join-Path $DataRoot "backups")
+  $installDrive = New-Object System.IO.DriveInfo([System.IO.Path]::GetPathRoot($InstallRoot))
+  $dataDrive = New-Object System.IO.DriveInfo([System.IO.Path]::GetPathRoot($DataRoot))
+  $currentReleaseBytes = Get-NgtFileBytes $CurrentReleaseRoot
+  $dataBytes = Get-NgtFileBytes (Join-Path $DataRoot "data")
+  $installRequired = [long]([Math]::Max($currentReleaseBytes, $ApplicationArchiveBytes * 4) + $ApplicationArchiveBytes + ($RuntimeArchiveBytes * 2) + 536870912)
+  $dataRequired = [long]($dataBytes * 2 + 268435456)
+  $sameDrive = $installDrive.Name.Equals($dataDrive.Name, [System.StringComparison]::OrdinalIgnoreCase)
+  $requiredOnInstall = if ($sameDrive) { $installRequired + $dataRequired } else { $installRequired }
+  if ($installDrive.AvailableFreeSpace -lt $requiredOnInstall) {
+    throw "Not enough free space on $($installDrive.Name). The update needs about $([Math]::Ceiling($requiredOnInstall / 1GB)) GB, with $([Math]::Round($installDrive.AvailableFreeSpace / 1GB, 2)) GB available."
+  }
+  if (-not $sameDrive -and $dataDrive.AvailableFreeSpace -lt $dataRequired) {
+    throw "Not enough free space on $($dataDrive.Name) for a verified database backup and rollback copy."
   }
 }
 
@@ -108,6 +248,7 @@ try {
   $previousStudioConfig = Get-Content -LiteralPath (Join-Path $script:NgtStateDirectory "studio.json") -Raw | ConvertFrom-Json
   $repository = if ($config.repository) { [string]$config.repository } else { "JayWangsj/ngt-repair-system" }
   $installRoot = [System.IO.Path]::GetFullPath([string]$config.installRoot)
+  $script:NgtUpdateMaintenanceFile = Join-Path (Join-Path $installRoot ".local") "update-maintenance.json"
   $currentStage = "reading-release"
   $script:NgtUpdateExecutorConfirmed = $true
   Write-NgtUpdateStatus "running" "" @{ stage = $currentStage; previousVersion = $previousVersion }
@@ -135,24 +276,31 @@ try {
   $checksumAsset = @($release.assets) |
     Where-Object { $_.name -eq $checksumName } |
     Select-Object -First 1
-  if ((-not $archiveAsset) -or (-not $checksumAsset)) {
-    throw "GitHub release is missing the studio archive or checksum."
+  $runtimeArchiveName = "ngt-studio-runtime-$latestTag.zip"
+  $runtimeChecksumName = "$runtimeArchiveName.sha256"
+  $runtimeArchiveAsset = @($release.assets) | Where-Object { $_.name -eq $runtimeArchiveName } | Select-Object -First 1
+  $runtimeChecksumAsset = @($release.assets) | Where-Object { $_.name -eq $runtimeChecksumName } | Select-Object -First 1
+  if ((-not $archiveAsset) -or (-not $checksumAsset) -or (-not $runtimeArchiveAsset) -or (-not $runtimeChecksumAsset)) {
+    throw "GitHub release is missing the studio archive, runtime package, or checksum."
   }
   Complete-NgtUpdateStage "reading-release"
 
   $downloadRoot = Join-Path $installRoot ("downloads\" + $latestTag)
   $newReleaseRoot = Join-Path $installRoot ("releases\" + $latestTag)
+  Assert-NgtUpdateSpace $installRoot ([string]$config.dataRoot) ([long]$archiveAsset.size) ([long]$runtimeArchiveAsset.size) $previousReleaseRoot
   $reuseRelease = $false
   if (Test-Path -LiteralPath $newReleaseRoot) {
-    $existingMetadata = Join-Path $newReleaseRoot "studio-release.json"
-    if (-not (Test-Path -LiteralPath $existingMetadata)) {
-      throw "An incomplete release directory needs manual review: $newReleaseRoot"
+    try {
+      & (Join-Path $PSScriptRoot "verify-windows-studio-release.ps1") `
+        -ReleaseRoot $newReleaseRoot -ExpectedVersion $latestTag | Out-Null
+      $reuseRelease = $true
+    } catch {
+      $quarantineRoot = Join-Path $installRoot "downloads\quarantine"
+      New-Item -ItemType Directory -Path $quarantineRoot -Force | Out-Null
+      $quarantinePath = Join-Path $quarantineRoot ($latestTag + "-" + [guid]::NewGuid().ToString("N"))
+      Move-Item -LiteralPath $newReleaseRoot -Destination $quarantinePath
+      Write-Warning "An incomplete target release was isolated and will be downloaded again."
     }
-    $existingRelease = Get-Content -LiteralPath $existingMetadata -Raw | ConvertFrom-Json
-    if (("v" + $existingRelease.version) -ne $latestTag) {
-      throw "An unrelated release directory already exists: $newReleaseRoot"
-    }
-    $reuseRelease = $true
   }
   if (-not $reuseRelease) {
     if (Test-Path -LiteralPath $downloadRoot) {
@@ -289,39 +437,9 @@ try {
       if (("v" + $stagedRelease.version) -ne $latestTag) {
         throw "Downloaded studio release version does not match its GitHub tag."
       }
+      & (Join-Path $PSScriptRoot "verify-windows-studio-release.ps1") `
+        -ReleaseRoot $stagingRoot -ExpectedVersion $latestTag | Out-Null
       Complete-NgtUpdateStage "verifying"
-      $currentStage = "preparing-runtime"
-      Write-NgtUpdateStatus "preparing-runtime" "" @{
-        stage = $currentStage
-        latestVersion = $latestTag
-        bytesDownloaded = $downloadedBytes
-        totalBytes = $totalBytes
-        progressKnown = ($totalBytes -gt 0)
-      }
-      $sharedRuntime = Join-Path (Join-Path $installRoot "runtimes") ([string]$stagedRelease.runtimeHash)
-      if (-not (Test-Path -LiteralPath $sharedRuntime)) {
-        $runtimeArchiveName = "ngt-studio-runtime-$latestTag.zip"
-        $runtimeChecksumName = "$runtimeArchiveName.sha256"
-        $runtimeArchiveAsset = @($release.assets) | Where-Object { $_.name -eq $runtimeArchiveName } | Select-Object -First 1
-        $runtimeChecksumAsset = @($release.assets) | Where-Object { $_.name -eq $runtimeChecksumName } | Select-Object -First 1
-        if ((-not $runtimeArchiveAsset) -or (-not $runtimeChecksumAsset)) {
-          throw "GitHub release is missing the required runtime package or checksum."
-        }
-        Invoke-NgtCommand $githubCli @(
-          "release", "download", $latestTag, "--repo", $repository,
-          "--pattern", $runtimeChecksumName, "--pattern", $runtimeArchiveName,
-          "--dir", $downloadRoot
-        )
-        $runtimeArchivePath = Join-Path $downloadRoot $runtimeArchiveName
-        $runtimeChecksumPath = Join-Path $downloadRoot $runtimeChecksumName
-        $expectedRuntimeHash = ((Get-Content -LiteralPath $runtimeChecksumPath -Raw).Trim() -split "\s+")[0]
-        $actualRuntimeHash = (Get-FileHash -LiteralPath $runtimeArchivePath -Algorithm SHA256).Hash
-        if ($actualRuntimeHash -ne $expectedRuntimeHash) {
-          throw "Studio runtime package checksum does not match."
-        }
-        Install-NgtRuntimeArchive -ArchivePath $runtimeArchivePath `
-          -ExpectedHash ([string]$stagedRelease.runtimeHash) -InstallRoot $installRoot
-      }
       Move-Item -LiteralPath $stagingRoot -Destination $newReleaseRoot
     } finally {
       if (Test-Path -LiteralPath $stagingRoot) {
@@ -339,11 +457,52 @@ try {
   if (("v" + $newRelease.version) -ne $latestTag) {
     throw "Downloaded studio release version does not match its GitHub tag."
   }
+  & (Join-Path $PSScriptRoot "verify-windows-studio-release.ps1") `
+    -ReleaseRoot $newReleaseRoot -ExpectedVersion $latestTag | Out-Null
 
-  if ($script:NgtSkippedUpdateStages -notcontains "preparing-runtime") {
-    Complete-NgtUpdateStage "preparing-runtime"
+  $currentStage = "preparing-runtime"
+  Write-NgtUpdateStatus "preparing-runtime" "" @{
+    stage = $currentStage
+    latestVersion = $latestTag
+    bytesDownloaded = $downloadedBytes
+    totalBytes = $totalBytes
+    progressKnown = ($totalBytes -gt 0)
   }
+  $sharedRuntime = Join-Path (Join-Path $installRoot "runtimes") ([string]$newRelease.runtimeHash)
+  if (Test-Path -LiteralPath $sharedRuntime) {
+    try {
+      if ((Get-NgtRuntimeHash $sharedRuntime) -ne [string]$newRelease.runtimeHash) {
+        throw "Cached runtime checksum does not match."
+      }
+    } catch {
+      $runtimeQuarantine = Join-Path $installRoot "runtimes\quarantine"
+      New-Item -ItemType Directory -Path $runtimeQuarantine -Force | Out-Null
+      Move-Item -LiteralPath $sharedRuntime -Destination (Join-Path $runtimeQuarantine ([string]$newRelease.runtimeHash + "-" + [guid]::NewGuid().ToString("N")))
+    }
+  }
+  if (-not (Test-Path -LiteralPath $sharedRuntime)) {
+    Invoke-NgtCommand $githubCli @(
+      "release", "download", $latestTag, "--repo", $repository,
+      "--pattern", $runtimeChecksumName, "--pattern", $runtimeArchiveName,
+      "--dir", $downloadRoot
+    )
+    $runtimeArchivePath = Join-Path $downloadRoot $runtimeArchiveName
+    $runtimeChecksumPath = Join-Path $downloadRoot $runtimeChecksumName
+    $expectedRuntimeHash = ((Get-Content -LiteralPath $runtimeChecksumPath -Raw).Trim() -split "\s+")[0]
+    $actualRuntimeHash = (Get-FileHash -LiteralPath $runtimeArchivePath -Algorithm SHA256).Hash
+    if ($actualRuntimeHash -ne $expectedRuntimeHash) {
+      throw "Studio runtime package checksum does not match."
+    }
+    Install-NgtRuntimeArchive -ArchivePath $runtimeArchivePath `
+      -ExpectedHash ([string]$newRelease.runtimeHash) -InstallRoot $installRoot
+  }
+  Complete-NgtUpdateStage "preparing-runtime"
+
+  if ($reuseRelease) { $script:NgtSkippedUpdateStages += "preparing-application" }
   $currentStage = "backing-up"
+  Assert-NgtUpdateSpace $installRoot ([string]$config.dataRoot) 0 0 $previousReleaseRoot
+  New-Item -ItemType Directory -Path (Split-Path -Parent $script:NgtUpdateMaintenanceFile) -Force | Out-Null
+  Write-NgtUpdateMaintenance $currentStage @{ previousVersion = $previousVersion; targetVersion = $script:NgtCurrentTargetVersion }
   Write-NgtUpdateStatus "backing-up" "" @{
     stage = $currentStage
     latestVersion = $latestTag
@@ -357,6 +516,7 @@ try {
   $backupLine = @($backupOutput | Where-Object { $_ -like "Studio backup created: *" } | Select-Object -Last 1)
   if (-not $backupLine) { throw "Studio backup did not return its destination." }
   $backupRoot = [string]$backupLine[0].Substring("Studio backup created: ".Length)
+  & (Join-Path $PSScriptRoot "test-windows-studio-backup.ps1") -BackupRoot $backupRoot | Out-Null
   $backupOutput | Write-Output
   Complete-NgtUpdateStage "backing-up"
   $currentStage = "installing"
@@ -367,9 +527,16 @@ try {
     totalBytes = $totalBytes
     progressKnown = ($totalBytes -gt 0)
   }
+  $nextStudioConfig = $previousStudioConfig | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+  $nextStudioConfig | Add-Member -NotePropertyName activeRelease -NotePropertyValue $newReleaseRoot -Force
+  $newReleaseState = Join-Path $newReleaseRoot ".local"
+  New-Item -ItemType Directory -Path $newReleaseState -Force | Out-Null
+  $nextStudioConfig | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $newReleaseState "studio.json") -Encoding utf8
+  $nextStudioConfig | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $installRoot ".local\studio.json") -Encoding utf8
   & (Join-Path $newReleaseRoot "scripts\install-windows-studio.ps1") `
     -DataRoot ([string]$config.dataRoot) `
     -InstallRoot $installRoot `
+    -PreviousReleaseRoot $previousReleaseRoot `
     -InPlace
   if ($LASTEXITCODE -ne 0) {
     throw "New studio release installer failed."
@@ -385,13 +552,6 @@ try {
   }
   Wait-NgtStudioHealth -ExpectedVersion ([string]$newRelease.version)
   Complete-NgtUpdateStage "validating"
-  Remove-Item -LiteralPath $downloadRoot -Recurse -Force -ErrorAction SilentlyContinue
-  $releaseDirectories = @(Get-ChildItem -LiteralPath (Join-Path $installRoot "releases") -Directory |
-    Sort-Object { [version](($_.Name -replace "^v", "").Split("-")[0]) } -Descending)
-  foreach ($oldRelease in @($releaseDirectories | Select-Object -Skip 2)) {
-    Remove-Item -LiteralPath $oldRelease.FullName -Recurse -Force
-  }
-  Remove-NgtUnusedRuntimes -InstallRoot $installRoot
   Write-NgtUpdateStatus "complete" "" @{
     stage = "complete"
     latestVersion = $latestTag
@@ -400,11 +560,43 @@ try {
     totalBytes = $totalBytes
     progressKnown = ($totalBytes -gt 0)
   }
+  $script:NgtUpdateCommitted = $true
+  if (-not (Clear-NgtUpdateMaintenance)) {
+    Write-Warning "The update succeeded, but the maintenance marker could not be cleared."
+  }
+  try {
+    Remove-Item -LiteralPath $downloadRoot -Recurse -Force -ErrorAction Stop
+    & (Join-Path $PSScriptRoot "retain-windows-studio-releases.ps1") `
+      -InstallRoot $installRoot `
+      -CurrentReleaseRoot $newReleaseRoot `
+      -PreviousReleaseRoot $previousReleaseRoot
+    Remove-NgtUnusedRuntimes -InstallRoot $installRoot
+  } catch {
+    $cleanupWarning = Protect-NgtUpdateText $_.Exception.Message
+    Write-Warning ("The update succeeded, but post-update cleanup needs retry: " + $cleanupWarning)
+    Write-NgtUpdateStatus "complete" $cleanupWarning @{
+      stage = "complete"
+      latestVersion = $latestTag
+      actualVersion = [string]$newRelease.version
+      cleanupWarning = $cleanupWarning
+    }
+  }
   Write-Output "NGT studio updated: v$($currentRelease.version) -> $latestTag"
 } catch {
   $failure = $_.Exception.Message
   $failedStage = $currentStage
-  if ($studioStopped) {
+  if ($script:NgtUpdateCommitted) {
+    $cleanupWarning = Protect-NgtUpdateText $failure
+    Write-Warning ("The update succeeded, but post-update cleanup needs retry: " + $cleanupWarning)
+    try {
+      Write-NgtUpdateStatus "complete" $cleanupWarning @{
+        stage = "complete"
+        latestVersion = $script:NgtCurrentTargetVersion
+        actualVersion = $script:NgtCurrentTargetVersion
+        cleanupWarning = $cleanupWarning
+      }
+    } catch { Write-Warning "The completed update status could not be refreshed." }
+  } elseif ($studioStopped) {
     $recoveryStatus = "running"
     try {
       $currentStage = "rolling-back"
@@ -417,6 +609,7 @@ try {
       }
       Stop-NgtStudioProcesses
       if ($backupRoot) {
+        & (Join-Path $PSScriptRoot "test-windows-studio-backup.ps1") -BackupRoot $backupRoot | Out-Null
         $dataDirectory = Join-Path ([string]$config.dataRoot) "data"
         $failedDataDirectory = $dataDirectory + ".failed-" + (Get-Date -Format "yyyyMMdd-HHmmss")
         if (Test-Path -LiteralPath $dataDirectory) {
@@ -445,29 +638,36 @@ try {
       Wait-NgtStudioHealth -ExpectedVersion $previousVersion
       $recoveryStatus = "succeeded"
       $recoveryMessage = "The previous studio version was restored and verified."
+      [void](Clear-NgtUpdateMaintenance)
     } catch {
       $recoveryStatus = "failed"
       $recoveryMessage = $_.Exception.Message
       $failure += " Previous release restart also failed: $recoveryMessage"
     }
   }
-  Write-NgtUpdateStatus "failed" $failure @{
-    stage = $failedStage
-    failedStage = $failedStage
-    previousVersion = $previousVersion
-    actualVersion = if ($recoveryStatus -eq "succeeded") { $previousVersion } else { "" }
-    recoveryStatus = $recoveryStatus
-    recoveryMessage = $recoveryMessage
-    bytesDownloaded = $downloadedBytes
-    totalBytes = $totalBytes
-    bytesPerSecond = $bytesPerSecond
-    etaSeconds = $etaSeconds
-    progressKnown = (($totalBytes -gt 0) -and ($downloadedBytes -gt 0))
+  if (-not $script:NgtUpdateCommitted) {
+    Write-NgtUpdateStatus "failed" $failure @{
+      stage = $failedStage
+      failedStage = $failedStage
+      previousVersion = $previousVersion
+      actualVersion = if ($recoveryStatus -eq "succeeded") { $previousVersion } else { "" }
+      recoveryStatus = $recoveryStatus
+      recoveryMessage = $recoveryMessage
+      bytesDownloaded = $downloadedBytes
+      totalBytes = $totalBytes
+      bytesPerSecond = $bytesPerSecond
+      etaSeconds = $etaSeconds
+      progressKnown = (($totalBytes -gt 0) -and ($downloadedBytes -gt 0))
+    }
+    throw "Studio update failed. $failure"
   }
-  throw "Studio update failed. $failure"
 } finally {
   if ($transcriptStarted) {
     try { Stop-Transcript | Out-Null } catch { }
   }
-  Remove-Item -LiteralPath $updateLockFile -Force -ErrorAction SilentlyContinue
+  try {
+    [void](Invoke-NgtUpdateOwnership {
+      Remove-Item -LiteralPath $UpdateLockFile -Force -ErrorAction SilentlyContinue
+    })
+  } catch { Write-Warning "The update lock could not be safely released." }
 }

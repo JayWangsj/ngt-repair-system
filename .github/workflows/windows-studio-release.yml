@@ -80,16 +80,78 @@ jobs:
         run: ./scripts/prepare-windows-studio-update-assets.ps1
       - shell: powershell
         run: |
-          $assets = Get-ChildItem -LiteralPath dist -File | Select-Object -ExpandProperty FullName
-          $previousErrorActionPreference = $ErrorActionPreference
-          $ErrorActionPreference = "SilentlyContinue"
-          gh release view $env:GITHUB_REF_NAME *> $null
-          $releaseExists = $LASTEXITCODE -eq 0
-          $ErrorActionPreference = $previousErrorActionPreference
-          if ($releaseExists) {
-            gh release upload $env:GITHUB_REF_NAME @assets --clobber
-          } else {
-            gh release create $env:GITHUB_REF_NAME @assets --verify-tag --generate-notes
+          $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+          $expectedNames = @(
+            "ngt-studio-windows-v$version.zip",
+            "ngt-studio-windows-v$version.zip.sha256",
+            "ngt-studio-runtime-v$version.zip",
+            "ngt-studio-runtime-v$version.zip.sha256",
+            "ngt-studio-windows-setup-v$version.exe",
+            "ngt-studio-windows-setup-v$version.exe.sha256"
+          ) | Sort-Object
+          $assetFiles = @(Get-ChildItem -LiteralPath dist -File | Sort-Object Name)
+          $actualNames = @($assetFiles | ForEach-Object Name | Sort-Object)
+          if (Compare-Object -ReferenceObject $expectedNames -DifferenceObject $actualNames) {
+            throw "The release asset set is incomplete or contains unexpected files."
           }
+          foreach ($checksumFile in $assetFiles | Where-Object { $_.Name.EndsWith(".sha256") }) {
+            $checksum = Get-Content -LiteralPath $checksumFile.FullName -Raw
+            $match = [regex]::Match($checksum, "(?m)^([A-Fa-f0-9]{64})\s+(.+?)\s*$")
+            if (-not $match.Success) {
+              throw "Invalid release checksum file: $($checksumFile.Name)"
+            }
+            $expectedHash = $match.Groups[1].Value
+            $targetName = $match.Groups[2].Value
+            $asset = Join-Path $checksumFile.DirectoryName $targetName
+            if (-not (Test-Path -LiteralPath $asset -PathType Leaf)) {
+              throw "Checksum target is missing for $($checksumFile.Name)."
+            }
+            if ((Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash -ne $expectedHash) {
+              throw "Release checksum does not match $($checksumFile.Name)."
+            }
+          }
+          $assets = @($assetFiles | Select-Object -ExpandProperty FullName)
+          $existingRelease = $null
+          $releaseEndpoint = "repos/JayWangsj/ngt-repair-system/releases/tags/$env:GITHUB_REF_NAME"
+          $existingJson = gh api $releaseEndpoint 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            $existingRelease = $existingJson | ConvertFrom-Json
+            if (-not $existingRelease.draft) {
+              throw "Release $env:GITHUB_REF_NAME already exists; published versions are never overwritten."
+            }
+          } else {
+            gh release create $env:GITHUB_REF_NAME @assets --verify-tag --generate-notes --draft
+            if ($LASTEXITCODE -ne 0) { throw "Draft release preparation failed." }
+          }
+          $draftJson = gh api $releaseEndpoint
+          if ($LASTEXITCODE -ne 0) { throw "Unable to verify prepared draft release assets." }
+          $draft = $draftJson | ConvertFrom-Json
+          if (-not $draft.draft) { throw "Prepared release is unexpectedly public." }
+          $localAssets = @($assetFiles | ForEach-Object {
+            $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "{0}`t{1}`tsha256:{2}" -f $_.Name, $_.Length, $hash
+          } | Sort-Object)
+          $remoteAssets = @($draft.assets | ForEach-Object {
+            "{0}`t{1}`t{2}" -f $_.name, $_.size, $_.digest
+          } | Sort-Object)
+          if (Compare-Object -ReferenceObject $localAssets -DifferenceObject $remoteAssets) {
+            throw "Draft release asset names, sizes, or SHA256 digests do not match the verified local assets."
+          }
+          gh release edit $env:GITHUB_REF_NAME --draft=false --verify-tag
+          if ($LASTEXITCODE -ne 0) { throw "Verified release could not be published." }
+          $publishedJson = gh api $releaseEndpoint
+          if ($LASTEXITCODE -ne 0) { throw "Published release could not be verified." }
+          $published = $publishedJson | ConvertFrom-Json
+          if ($published.draft) { throw "Release remained a draft after publishing." }
+          $publishedAssets = @($published.assets | ForEach-Object {
+            "{0}`t{1}`t{2}" -f $_.name, $_.size, $_.digest
+          } | Sort-Object)
+          if (Compare-Object -ReferenceObject $localAssets -DifferenceObject $publishedAssets) {
+            throw "Published release asset names, sizes, or SHA256 digests do not match the verified local assets."
+          }
+          if (-not $published.immutable) {
+            Write-Warning "This repository does not enforce immutable releases; external repository settings are still required to prevent post-publication changes."
+          }
+          Write-Host "Published verified release: $($published.html_url)"
         env:
           GH_TOKEN: ${{ github.token }}

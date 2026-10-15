@@ -107,28 +107,26 @@ export function Sidebar() {
     "rollback-succeeded",
     "rollback-failed",
     "interrupted",
-    "verifying",
   ].includes(task.phase);
   const updateRunning = [
     "starting",
     "queued",
     "running",
     "reconnecting",
+    "verifying",
     "rolling-back",
   ].includes(task.phase);
   const availableVersion = info?.updateAvailable
     ? info.latestVersion
     : undefined;
   const updateSummary = updateFailed
-    ? task.phase === "verifying"
-      ? it.updateVerifyingTask
-      : task.phase === "interrupted"
-        ? it.updateInterrupted
-        : task.phase === "rollback-succeeded"
-          ? it.updateRollbackSucceeded
-          : task.phase === "rollback-failed"
-            ? it.updateRollbackFailed
-            : it.updateFailed
+    ? task.phase === "interrupted"
+      ? it.updateInterrupted
+      : task.phase === "rollback-succeeded"
+        ? it.updateRollbackSucceeded
+        : task.phase === "rollback-failed"
+          ? it.updateRollbackFailed
+          : it.updateFailed
     : task.phase === "starting" || task.phase === "queued"
       ? it.updateTaskStarting
       : task.phase === "reconnecting"
@@ -137,11 +135,13 @@ export function Sidebar() {
           ? it.updateRollingBack
           : task.phase === "running"
             ? it.updateInstalling
-            : availableVersion
-              ? check.phase === "failed"
-                ? it.updateCheckStale.replace("{version}", availableVersion)
-                : it.updateAvailable.replace("{version}", availableVersion)
-              : it.systemUpdate;
+            : task.phase === "verifying"
+              ? it.updateVerifyingTask
+              : availableVersion
+                ? check.phase === "failed"
+                  ? it.updateCheckStale.replace("{version}", availableVersion)
+                  : it.updateAvailable.replace("{version}", availableVersion)
+                : it.systemUpdate;
   const updateLabel = `${currentVersion}: ${updateSummary}`;
   const updateHref = "/settings/system-update";
   const UpdateIcon = updateFailed

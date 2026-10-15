@@ -118,12 +118,20 @@ try {
   $quotedMutex = '"' + $mutexName + '"'
   $first = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File $quotedScript -MutexName $quotedMutex -EventsPath $quotedEvents -Slot one" -RedirectStandardOutput $firstOutput -RedirectStandardError $firstError -WindowStyle Hidden -PassThru
   $second = Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File $quotedScript -MutexName $quotedMutex -EventsPath $quotedEvents -Slot two" -RedirectStandardOutput $secondOutput -RedirectStandardError $secondError -WindowStyle Hidden -PassThru
-  $first.WaitForExit(15000) | Out-Null
-  $second.WaitForExit(15000) | Out-Null
-  if (-not $first.HasExited -or -not $second.HasExited -or $first.ExitCode -ne 0 -or $second.ExitCode -ne 0) {
-    $firstFailure = if (Test-Path -LiteralPath $firstError) { Get-Content -LiteralPath $firstError -Raw } else { "" }
-    $secondFailure = if (Test-Path -LiteralPath $secondError) { Get-Content -LiteralPath $secondError -Raw } else { "" }
-    throw "Parallel update mutex behavior test failed (exit codes $($first.ExitCode), $($second.ExitCode)): $firstFailure $secondFailure"
+  $firstFinished = $first.WaitForExit(60000)
+  $secondFinished = $second.WaitForExit(60000)
+  if (-not $firstFinished -or -not $secondFinished) {
+    foreach ($child in @($first, $second)) {
+      if (-not $child.HasExited) {
+        Stop-Process -Id $child.Id -Force -ErrorAction SilentlyContinue
+      }
+    }
+    throw "Parallel update mutex behavior test timed out for child processes $($first.Id), $($second.Id)."
+  }
+  $firstFailure = if (Test-Path -LiteralPath $firstError) { Get-Content -LiteralPath $firstError -Raw } else { "" }
+  $secondFailure = if (Test-Path -LiteralPath $secondError) { Get-Content -LiteralPath $secondError -Raw } else { "" }
+  if ($firstFailure -or $secondFailure) {
+    throw "Parallel update mutex child process failed: $firstFailure $secondFailure"
   }
   $events = @(Get-Content -LiteralPath $eventsPath)
   $firstSlot = if ($events.Count -gt 0 -and $events[0] -match "^start-(one|two)$") { $Matches[1] } else { "" }

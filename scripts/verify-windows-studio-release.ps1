@@ -67,7 +67,8 @@ foreach ($requiredFile in @(
   "scripts/test-windows-studio-update-safety.ps1",
   "prisma/schema.prisma"
 )) {
-  if (-not (Test-Path -LiteralPath (Join-Path $root $requiredFile.Replace("/", "\")) -PathType Leaf)) {
+  $normalizedRequiredFile = $requiredFile.Replace("\", "/")
+  if ($actualAppPaths -notcontains $normalizedRequiredFile) {
     throw "Studio release is missing a required runtime file: $requiredFile"
   }
 }

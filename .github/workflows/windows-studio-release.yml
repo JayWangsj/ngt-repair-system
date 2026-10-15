@@ -113,27 +113,35 @@ jobs:
           $assets = @($assetFiles | Select-Object -ExpandProperty FullName)
           $existingRelease = $null
           $releaseEndpoint = "repos/JayWangsj/ngt-repair-system/releases/tags/$env:GITHUB_REF_NAME"
-          $previousErrorActionPreference = $ErrorActionPreference
-          try {
-            $ErrorActionPreference = "Continue"
-            $existingJson = gh api $releaseEndpoint 2>$null
-            $existingExitCode = $LASTEXITCODE
-          } finally {
-            $ErrorActionPreference = $previousErrorActionPreference
+          $releaseListEndpoint = "repos/JayWangsj/ngt-repair-system/releases?per_page=100"
+          $releasesJson = gh api $releaseListEndpoint
+          if ($LASTEXITCODE -ne 0) { throw "Unable to list existing releases." }
+          $existingReleases = @(
+            $releasesJson | ConvertFrom-Json | Where-Object { $_.tag_name -eq $env:GITHUB_REF_NAME }
+          )
+          if ($existingReleases.Count -gt 1) {
+            throw "Multiple releases exist for $env:GITHUB_REF_NAME."
           }
-          if ($existingExitCode -eq 0) {
-            $existingRelease = $existingJson | ConvertFrom-Json
-            if (-not $existingRelease.draft) {
+          if ($existingReleases.Count -eq 1) {
+            $existingRelease = $existingReleases[0]
+            if (-not ($existingRelease.draft)) {
               throw "Release $env:GITHUB_REF_NAME already exists; published versions are never overwritten."
             }
           } else {
             gh release create $env:GITHUB_REF_NAME @assets --verify-tag --generate-notes --draft
             if ($LASTEXITCODE -ne 0) { throw "Draft release preparation failed." }
+            $releasesJson = gh api $releaseListEndpoint
+            if ($LASTEXITCODE -ne 0) { throw "Unable to verify prepared draft release assets." }
+            $draftReleases = @(
+              $releasesJson | ConvertFrom-Json | Where-Object { $_.tag_name -eq $env:GITHUB_REF_NAME }
+            )
+            if (($draftReleases.Count -ne 1) -or (-not ($draftReleases[0].draft))) {
+              throw "Prepared draft release could not be found."
+            }
+            $existingRelease = $draftReleases[0]
           }
-          $draftJson = gh api $releaseEndpoint
-          if ($LASTEXITCODE -ne 0) { throw "Unable to verify prepared draft release assets." }
-          $draft = $draftJson | ConvertFrom-Json
-          if (-not $draft.draft) { throw "Prepared release is unexpectedly public." }
+          $draft = $existingRelease
+          if (-not ($draft.draft)) { throw "Prepared release is unexpectedly public." }
           $localAssets = @($assetFiles | ForEach-Object {
             $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             "{0}`t{1}`tsha256:{2}" -f $_.Name, $_.Length, $hash

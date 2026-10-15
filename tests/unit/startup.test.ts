@@ -291,10 +291,19 @@ describe("Windows persistent startup", () => {
     expect(workflow).toContain("gh release create");
     expect(workflow).toContain("--verify-tag --generate-notes --draft");
     expect(workflow).toContain(
-      '$ErrorActionPreference = "Continue"\n            $existingJson = gh api $releaseEndpoint 2>$null\n            $existingExitCode = $LASTEXITCODE',
+      '$releaseListEndpoint = "repos/JayWangsj/ngt-repair-system/releases?per_page=100"',
     );
-    expect(workflow).toContain("if ($existingExitCode -eq 0)");
-    expect(workflow).toContain("if (-not $existingRelease.draft)");
+    expect(workflow).toContain("$_.tag_name -eq $env:GITHUB_REF_NAME");
+    expect(workflow).toContain("-not ($draftReleases[0].draft)");
+    expect(workflow).toContain("$draft = $existingRelease");
+    expect(
+      workflow.indexOf("$publishedJson = gh api $releaseEndpoint"),
+    ).toBeGreaterThan(
+      workflow.indexOf(
+        "gh release edit $env:GITHUB_REF_NAME --draft=false --verify-tag",
+      ),
+    );
+    expect(workflow).toContain("if (-not ($existingRelease.draft))");
     expect(workflow).toContain("published versions are never overwritten");
     expect(workflow).toContain('"{0}`t{1}`tsha256:{2}"');
     expect(workflow).toContain("$draft.draft");

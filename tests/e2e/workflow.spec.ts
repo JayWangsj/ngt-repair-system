@@ -1,4 +1,5 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
+import { mkdir } from "node:fs/promises";
 
 async function expectMatchingColumn(
   header: Locator,
@@ -1144,9 +1145,9 @@ test("manages one quick service for held service orders and retail checkout", as
   });
   const quickCalendar = page.getByRole("dialog", { name: "Scegli data" });
   await expect(quickCalendar).toBeVisible();
-  await expect(quickCalendar.locator(".date-picker-days > button")).toHaveCount(
-    42,
-  );
+  await expect(
+    quickCalendar.locator(".date-picker-days [role=gridcell]"),
+  ).toHaveCount(42);
   await page.keyboard.press("Escape");
   await expectedDate.fill("2099-12-31");
   await page.getByLabel("Ora", { exact: true }).fill("18:30");
@@ -1266,10 +1267,79 @@ test("manages one quick service for held service orders and retail checkout", as
     exact: true,
   });
   await expect(expectedAtInput).toHaveAttribute("type", "datetime-local");
-  await expectedAtInput.fill("2099-12-30T17:45");
-  await expectedAtInput.press("Tab");
+  await mkdir(".local/date-picker-evidence", { recursive: true });
+  let dueDateCommits = 0;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.headers()["next-action"])
+      dueDateCommits += 1;
+  });
+  const originalExpectedAt = await expectedAtInput.inputValue();
+  await expectedAtInput.click();
+  let dateTimePicker = page.locator(".date-picker-popover");
+  await dateTimePicker
+    .getByRole("button", { name: "Scegli anno", exact: true })
+    .click();
+  await dateTimePicker.getByLabel("Vai all'anno", { exact: true }).fill("2099");
+  await dateTimePicker
+    .getByRole("button", { name: "Scegli mese", exact: true })
+    .click();
+  await dateTimePicker.locator('[data-month="2099-12"]').click();
+  await dateTimePicker.locator('[data-date="2099-12-30"]').click();
+  const draftTime = dateTimePicker.locator('input[type="time"]');
+  const timeBox = await draftTime.boundingBox();
+  await page.mouse.move(
+    timeBox!.x + timeBox!.width - 24,
+    timeBox!.y + timeBox!.height / 2,
+  );
+  await expect
+    .poll(() =>
+      draftTime.evaluate(
+        (element) => getComputedStyle(element).backgroundImage,
+      ),
+    )
+    .toContain("radial-gradient");
+  await draftTime.fill("");
+  await expect(draftTime).toHaveValue("");
+  await expect(
+    dateTimePicker.getByRole("button", { name: "Conferma", exact: true }),
+  ).toBeDisabled();
+  await expect(dateTimePicker.getByRole("alert")).toHaveText(
+    "Completa l'ora per confermare la data.",
+  );
+  await draftTime.fill("17:45");
+  await expect(expectedAtInput).toHaveValue("2099-12-30T17:45");
+  expect(dueDateCommits).toBe(0);
+  await page.setViewportSize({ width: 375, height: 300 });
+  await dateTimePicker.screenshot({
+    path: ".local/date-picker-evidence/low-height.png",
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await dateTimePicker.screenshot({
+    path: ".local/date-picker-evidence/datetime-confirm.png",
+  });
+  await page.keyboard.press("Escape");
+  await expect(expectedAtInput).toHaveValue(originalExpectedAt);
+  expect(dueDateCommits).toBe(0);
+
+  await expectedAtInput.click();
+  dateTimePicker = page.locator(".date-picker-popover");
+  await dateTimePicker
+    .getByRole("button", { name: "Scegli anno", exact: true })
+    .click();
+  await dateTimePicker.getByLabel("Vai all'anno", { exact: true }).fill("2099");
+  await dateTimePicker
+    .getByRole("button", { name: "Scegli mese", exact: true })
+    .click();
+  await dateTimePicker.locator('[data-month="2099-12"]').click();
+  await dateTimePicker.locator('[data-date="2099-12-30"]').click();
+  await dateTimePicker.locator('input[type="time"]').fill("17:45");
+  await dateTimePicker
+    .getByRole("button", { name: "Conferma", exact: true })
+    .click();
+  await expect.poll(() => dueDateCommits).toBe(1);
   await page.getByRole("heading", { name: "Schede di servizio" }).click();
   await expect(quickOrderRow).toContainText("2099-12-30 17:45");
+  expect(dueDateCommits).toBe(1);
   await page.evaluate(() => {
     const tag = document.createElement("span");
     tag.className = "order-type-tag order-type-repair e2e-repair-tag";

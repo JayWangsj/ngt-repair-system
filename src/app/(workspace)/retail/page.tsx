@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { cents, dateTime, romeDay } from "@/lib/domain";
-import { getMessages } from "@/lib/i18n-server";
+import { getLocale, getMessages } from "@/lib/i18n-server";
 import { requireActor } from "@/lib/session";
 import { RetailWorkbench } from "@/components/retail-workbench";
 
@@ -11,6 +11,7 @@ export default async function RetailPage({
 }) {
   await requireActor();
   const it = await getMessages();
+  const locale = await getLocale();
   const query = await searchParams;
   const [products, categories, sales, quickServices] = await Promise.all([
     db.product.findMany({
@@ -70,7 +71,7 @@ export default async function RetailPage({
       sales={sales.map((sale) => ({
         id: sale.id,
         code: sale.code,
-        date: dateTime(sale.createdAt),
+        date: dateTime(sale.createdAt, locale),
         period: romeDay(sale.createdAt).slice(0, 7),
         itemCount: sale.itemCount,
         method: sale.payments[0]?.method ?? null,

@@ -8,6 +8,7 @@ import {
   cents,
   dateOnly,
   dateTime,
+  dateTimeLocal,
   money,
   orderCode,
   promisedDate,
@@ -271,7 +272,7 @@ export default async function Detail({
       acceptedAt={dateTime(order.createdAt)}
       expectedAt={
         order.type === "QUICK_SERVICE"
-          ? order.expectedAt?.replace("T", " ") || "—"
+          ? dateTimeLocal(order.expectedAt)
           : dateOnly(promisedDate(order))
       }
       customerName={order.customerName || order.device.customer.name}
@@ -336,11 +337,11 @@ export default async function Detail({
             />
           </div>
           <span>
-            {it.created}: {dateTime(order.createdAt)}
+            {it.created}: {dateTime(order.createdAt, locale)}
           </span>
           <span>
             {it.quickService.expectedAt}:{" "}
-            {order.expectedAt?.replace("T", " ") ?? "—"}
+            {dateTimeLocal(order.expectedAt, locale)}
           </span>
         </div>
         <div className="detail-grid">
@@ -414,7 +415,7 @@ export default async function Detail({
                     {it.kinds[payment.kind]} · {it.methods[payment.method]}
                   </span>
                   <small>
-                    {dateTime(payment.receivedAt)} · {payment.actorName}
+                    {dateTime(payment.receivedAt, locale)} · {payment.actorName}
                   </small>
                 </div>
               ))}
@@ -636,10 +637,10 @@ export default async function Detail({
           />
         </div>
         <span>
-          {it.created}: {dateTime(order.createdAt)}
+          {it.created}: {dateTime(order.createdAt, locale)}
         </span>
         <span>
-          {it.dueDate}: {dateOnly(promisedDate(order))}
+          {it.dueDate}: {dateOnly(promisedDate(order), locale)}
         </span>
       </div>
       {order.status === "COMPLETED" && (
@@ -787,7 +788,7 @@ export default async function Detail({
               )}
               <div>
                 <dt>{it.dueDate}</dt>
-                <dd>{dateOnly(promisedDate(order))}</dd>
+                <dd>{dateOnly(promisedDate(order), locale)}</dd>
               </div>
               <div>
                 <dt>{it.notes}</dt>
@@ -797,7 +798,7 @@ export default async function Detail({
             {order.pickedUpAt && (
               <p className="message success">
                 {it.delivered}: {order.pickedUpBy} ·{" "}
-                {dateTime(order.pickedUpAt)}
+                {dateTime(order.pickedUpAt, locale)}
               </p>
             )}
           </OrderDetailCard>
@@ -1043,7 +1044,7 @@ export default async function Detail({
                   <span className="timeline-dot" />
                   <strong>{event.title}</strong>
                   <small>
-                    {dateTime(event.at)} · {event.actor}
+                    {dateTime(event.at, locale)} · {event.actor}
                   </small>
                   {event.detail && <p>{event.detail}</p>}
                 </li>
@@ -1099,7 +1100,7 @@ export default async function Detail({
             <section className="panel padded current-status-card">
               <h2>{it.currentStatus}</h2>
               <Badge status={order.status} />
-              {order.pickedUpAt && <p>{dateTime(order.pickedUpAt)}</p>}
+              {order.pickedUpAt && <p>{dateTime(order.pickedUpAt, locale)}</p>}
             </section>
           )}
 
@@ -1116,7 +1117,7 @@ export default async function Detail({
                     {it.kinds[payment.kind]} · {it.methods[payment.method]}
                   </span>
                   <small>
-                    {dateTime(payment.receivedAt)} · {payment.actorName}
+                    {dateTime(payment.receivedAt, locale)} · {payment.actorName}
                   </small>
                 </div>
               ))

@@ -705,6 +705,7 @@ export function NewOrderWizard({
                   <DatePicker
                     name="dueDate"
                     min={today}
+                    quickDays={[0, 1, 2, 3, 7]}
                     value={dueDate}
                     disabled={!validDevice || !validFault}
                     onChange={(event) => setDueDate(event.target.value)}

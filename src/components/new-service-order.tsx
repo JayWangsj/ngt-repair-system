@@ -24,6 +24,7 @@ import {
   type CustomerDevice,
 } from "./customers";
 import { RecordIcon } from "./ui/record-icon";
+import { useBusinessDay } from "./business-date";
 
 type Customer = CustomerOption & { devices: { id: string }[] };
 
@@ -49,6 +50,7 @@ export function NewServiceOrder({
   initialMode?: "REPAIR" | "QUICK_SERVICE";
 }) {
   const it = useMessages();
+  const today = useBusinessDay();
   const router = useRouter();
   const [mode, setMode] = useState<"REPAIR" | "QUICK_SERVICE">(initialMode);
   const [customer, setCustomer] = useState<CustomerDetail>(null);
@@ -371,6 +373,8 @@ export function NewServiceOrder({
                   <DatePicker
                     value={expectedDate}
                     required
+                    min={today}
+                    quickDays={[0, 1, 2, 3, 7]}
                     onChange={(event) => setExpectedDate(event.target.value)}
                   />
                 </Field>

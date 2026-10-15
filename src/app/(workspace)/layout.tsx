@@ -2,7 +2,7 @@ import { getMessages } from "@/lib/i18n-server";
 import { requireActor } from "@/lib/session";
 import { Sidebar } from "@/components/sidebar";
 import { BusinessDayProvider } from "@/components/business-date";
-import { getBusinessDay } from "@/lib/business-date";
+import { getBusinessClock, resolveBusinessDay } from "@/lib/business-date";
 import { BrandLogo } from "@/components/brand-logo";
 import { UpdateStartupCheck } from "@/components/update-startup-check";
 import { UpdateStateProvider } from "@/components/update-state";
@@ -17,10 +17,11 @@ export default async function WorkspaceLayout({
 }) {
   await requireActor();
   const it = await getMessages();
-  const today = await getBusinessDay();
+  const businessClock = await getBusinessClock();
+  const today = resolveBusinessDay(businessClock);
   const currentVersion = await getStudioCurrentVersion();
   return (
-    <BusinessDayProvider today={today}>
+    <BusinessDayProvider today={today} mode={businessClock.mode}>
       <UpdateStateProvider initialVersion={currentVersion}>
         <div className="app-shell">
           <Sidebar />

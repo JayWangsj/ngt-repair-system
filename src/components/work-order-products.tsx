@@ -15,6 +15,7 @@ import {
   money,
   type StatusMutationSnapshot,
 } from "@/lib/domain";
+import { formatRomeDateTimeLocal } from "@/lib/date-picker";
 import { useMessages } from "./language";
 import { Button } from "./ui/button";
 import { QuantityStepper } from "./ui/quantity-stepper";
@@ -256,12 +257,7 @@ export function WorkOrderCheckout({
   const [error, setError] = useState("");
   const [requestId] = useState(() => crypto.randomUUID());
   const [method, setMethod] = useState("CASH");
-  const now = () => {
-    const date = new Date();
-    return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-      .toISOString()
-      .slice(0, 16);
-  };
+  const now = () => formatRomeDateTimeLocal();
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");

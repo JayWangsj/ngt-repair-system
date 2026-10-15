@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { db } from "@/lib/db";
 import { cents, dateTime, inventoryStatus, money, romeDay } from "@/lib/domain";
-import { getMessages } from "@/lib/i18n-server";
+import { getLocale, getMessages } from "@/lib/i18n-server";
 import { requireActor } from "@/lib/session";
 import { PageHeader } from "@/components/common";
 import {
@@ -24,6 +24,7 @@ export default async function InventoryPage({
 }) {
   await requireActor();
   const it = await getMessages();
+  const locale = await getLocale();
   const requestedStatus = (await searchParams).status;
   const initialStatus =
     requestedStatus === "IN_STOCK" ||
@@ -177,7 +178,7 @@ export default async function InventoryPage({
             stockBefore: movement.stockBefore,
             stockAfter: movement.stockAfter,
             type: movement.type,
-            at: dateTime(movement.createdAt),
+            at: dateTime(movement.createdAt, locale),
             period: romeDay(movement.createdAt).slice(0, 7),
           }))}
         />

@@ -2554,7 +2554,11 @@ export function NewOrderForm({
           <textarea {...register("fault")} maxLength={2000} rows={2} />
         </Field>
         <Field label={it.dueDate}>
-          <DatePicker {...register("dueDate")} min={today} />
+          <DatePicker
+            {...register("dueDate")}
+            min={today}
+            quickDays={[0, 1, 2, 3, 7]}
+          />
         </Field>
       </Section>
       <Section number="03" title={it.quoteSection}>
@@ -2998,6 +3002,7 @@ export function EditOrderForm({
           <DatePicker
             name="dueDate"
             min={today}
+            quickDays={[0, 1, 2, 3, 7]}
             defaultValue={values.dueDate ?? ""}
           />
         </Field>
@@ -3698,7 +3703,7 @@ export function AfterSalesForm({
       </Field>
       <div className="after-sales-grid">
         <Field label={it.afterSales.dueDate}>
-          <DatePicker name="dueDate" min={today} />
+          <DatePicker name="dueDate" min={today} quickDays={[0, 1, 2, 3, 7]} />
         </Field>
       </div>
       {creatingPart && (

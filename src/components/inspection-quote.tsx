@@ -141,6 +141,7 @@ export function CompleteInspectionButton({
                   <Field label={it.dueDate}>
                     <DatePicker
                       min={today}
+                      quickDays={[0, 1, 2, 3, 7]}
                       value={dueDate}
                       onChange={(event) => setDueDate(event.target.value)}
                     />

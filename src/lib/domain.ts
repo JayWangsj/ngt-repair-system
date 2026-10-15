@@ -312,8 +312,32 @@ export const dateTime = (date: Date | string, locale: "it" | "zh" = "it") =>
     timeStyle: "short",
     timeZone: "Europe/Rome",
   }).format(new Date(date));
-export const dateOnly = (date: string | null) =>
-  date ? date.split("-").reverse().join("/") : "—";
+export const dateOnly = (date: string | null, locale: "it" | "zh" = "it") =>
+  date
+    ? new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "it-IT", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        timeZone: "UTC",
+      }).format(new Date(`${date}T00:00:00Z`))
+    : "—";
+export const dateTimeLocal = (
+  value: string | null,
+  locale: "it" | "zh" = "it",
+) => {
+  if (!value) return "—";
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(
+    value,
+  );
+  if (!match) return value.replace("T", " ");
+  return new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "it-IT", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "UTC",
+  }).format(
+    new Date(`${match[1]}T${match[2]}:${match[3]}:${match[4] ?? "00"}Z`),
+  );
+};
 export const orderCode = (code: string | number) =>
   typeof code === "string" ? code : `NGT-${String(code).padStart(5, "0")}`;
 export const saleCode = (code: string | number) =>

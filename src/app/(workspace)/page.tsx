@@ -709,7 +709,7 @@ export default async function Dashboard({
             >
               <span>
                 <strong>{saleCode(sale.code)}</strong>
-                <small>{dateTime(sale.createdAt)}</small>
+                <small>{dateTime(sale.createdAt, locale)}</small>
               </span>
               <strong>{money(cents(sale.total))}</strong>
             </Link>

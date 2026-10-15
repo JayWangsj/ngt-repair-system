@@ -8,6 +8,8 @@ import {
   balance,
   cents,
   dateTime,
+  dateTimeLocal,
+  dateOnly,
   decimal,
   isOverdue,
   isActiveOrderStatus,
@@ -223,6 +225,12 @@ describe("Italian localization and validation", () => {
     const timestamp = new Date("2026-10-14T00:51:00Z");
     expect(dateTime(timestamp, "it")).toBe("14/10/26, 02:51");
     expect(dateTime(timestamp, "zh")).toBe("2026/10/14 02:51");
+  });
+  it("formats plain dates and local date-times without changing their day", () => {
+    expect(dateOnly("2026-10-14", "it")).toBe("14/10/2026");
+    expect(dateOnly("2026-10-14", "zh")).toBe("2026/10/14");
+    expect(dateTimeLocal("2026-10-14T09:05", "it")).toBe("14/10/26, 09:05");
+    expect(dateTimeLocal("2026-10-14T09:05", "zh")).toBe("2026/10/14 09:05");
   });
   it("starts warranty at actual delivery and adds exact days", () => {
     expect(

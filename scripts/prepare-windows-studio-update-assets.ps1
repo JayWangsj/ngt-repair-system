@@ -34,9 +34,14 @@ if ($actualRuntimeHash -ne [string]$releaseMetadata.runtimeHash) {
 
 Remove-Item -LiteralPath $appArchive, ($appArchive + ".sha256"), $runtimeArchive, ($runtimeArchive + ".sha256") `
   -Force -ErrorAction SilentlyContinue
+$applicationEntries = @(
+  Get-ChildItem -LiteralPath $stage -Force |
+    Where-Object { $_.Name -ne "runtime" } |
+    ForEach-Object Name
+)
 Push-Location -LiteralPath $stage
 try {
-  & tar.exe -a -c -f $appArchive --exclude=runtime .
+  & tar.exe -a -c -f $appArchive @applicationEntries
   if ($LASTEXITCODE -ne 0) { throw "Application update archive creation failed." }
   & tar.exe -a -c -f $runtimeArchive runtime
   if ($LASTEXITCODE -ne 0) { throw "Studio runtime archive creation failed." }
@@ -52,5 +57,9 @@ $entries = & tar.exe -tf $appArchive
 if ($LASTEXITCODE -ne 0) { throw "Application update archive verification failed." }
 if ($entries | Where-Object { $_ -match "^(\./)?runtime(/|$)" }) {
   throw "Application update archive unexpectedly includes the runtime."
+}
+$requiredPrismaRuntimeEntry = ".next/standalone/node_modules/@prisma/client/runtime/library.js"
+if (-not ($entries | Where-Object { $_ -like ("*" + $requiredPrismaRuntimeEntry) })) {
+  throw "Application update archive is missing the Prisma client runtime."
 }
 Write-Output "Prepared application and reusable runtime release assets for v$version."

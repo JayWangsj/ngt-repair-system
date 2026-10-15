@@ -206,7 +206,13 @@ describe("Windows persistent startup", () => {
     expect(runtime).toContain("Install-NgtSharedRuntime");
     expect(runtime).toContain("New-Item -ItemType HardLink");
     expect(runtime).toContain("Remove-NgtUnusedRuntimes");
-    expect(updateAssets).toContain("--exclude=runtime");
+    expect(updateAssets).toContain('Where-Object { $_.Name -ne "runtime" }');
+    expect(updateAssets).toContain(
+      '".next/standalone/node_modules/@prisma/client/runtime/library.js"',
+    );
+    expect(updateAssets).toContain(
+      "Application update archive is missing the Prisma client runtime.",
+    );
     expect(updateAssets).toContain(
       "$actualRuntimeHash -ne [string]$releaseMetadata.runtimeHash",
     );
@@ -312,6 +318,13 @@ describe("Windows persistent startup", () => {
     expect(workflow).toContain("published versions are never overwritten");
     expect(workflow).toContain('"{0}`t{1}`tsha256:{2}"');
     expect(workflow).toContain("$draft.draft");
+    expect(workflow).toContain(
+      "for ($attempt = 0; $attempt -lt 12; $attempt++)",
+    );
+    expect(workflow).toContain('$_ -notmatch "`tsha256:[a-f0-9]{64}$"');
+    expect(workflow).toContain(
+      "GitHub did not calculate SHA256 digests for all draft release assets.",
+    );
     expect(workflow).toContain(
       "gh release edit $env:GITHUB_REF_NAME --draft=false --verify-tag",
     );

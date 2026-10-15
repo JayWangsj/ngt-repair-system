@@ -1291,9 +1291,7 @@ test("manages one quick service for held service orders and retail checkout", as
   ).toHaveCount(0);
   await page.keyboard.press("Escape");
   await page.goto(serviceDetailUrl);
-  await expect(page.locator(".detail-status")).toContainText(
-    "2099-12-30 17:45",
-  );
+  await expect(page.locator(".detail-status")).toContainText("31/12/99, 18:30");
   const secondaryActions = page.locator(".secondary-actions");
   const moreActions = secondaryActions.getByText("Altre azioni", {
     exact: true,
@@ -2745,7 +2743,7 @@ test("repair list exposes month, status, due-date and payment controls", async (
   ).toHaveCount(0);
   await expect(
     localizedRow.locator(".order-due-cell .order-static-value"),
-  ).toContainText("2099/12/31");
+  ).toContainText("31/12/2099");
 });
 test("repair list separates explicit collection from payment correction", async ({
   page,

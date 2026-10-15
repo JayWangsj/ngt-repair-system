@@ -290,6 +290,10 @@ describe("Windows persistent startup", () => {
     expect(workflow).toContain("--config.package-import-method=copy");
     expect(workflow).toContain("gh release create");
     expect(workflow).toContain("--verify-tag --generate-notes --draft");
+    expect(workflow).toContain(
+      '$ErrorActionPreference = "Continue"\n            $existingJson = gh api $releaseEndpoint 2>$null\n            $existingExitCode = $LASTEXITCODE',
+    );
+    expect(workflow).toContain("if ($existingExitCode -eq 0)");
     expect(workflow).toContain("if (-not $existingRelease.draft)");
     expect(workflow).toContain("published versions are never overwritten");
     expect(workflow).toContain('"{0}`t{1}`tsha256:{2}"');

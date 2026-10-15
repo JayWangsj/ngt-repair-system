@@ -113,8 +113,15 @@ jobs:
           $assets = @($assetFiles | Select-Object -ExpandProperty FullName)
           $existingRelease = $null
           $releaseEndpoint = "repos/JayWangsj/ngt-repair-system/releases/tags/$env:GITHUB_REF_NAME"
-          $existingJson = gh api $releaseEndpoint 2>$null
-          if ($LASTEXITCODE -eq 0) {
+          $previousErrorActionPreference = $ErrorActionPreference
+          try {
+            $ErrorActionPreference = "Continue"
+            $existingJson = gh api $releaseEndpoint 2>$null
+            $existingExitCode = $LASTEXITCODE
+          } finally {
+            $ErrorActionPreference = $previousErrorActionPreference
+          }
+          if ($existingExitCode -eq 0) {
             $existingRelease = $existingJson | ConvertFrom-Json
             if (-not $existingRelease.draft) {
               throw "Release $env:GITHUB_REF_NAME already exists; published versions are never overwritten."

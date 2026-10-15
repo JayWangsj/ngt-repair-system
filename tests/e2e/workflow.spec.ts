@@ -2576,7 +2576,7 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await expect(monthPicker).toHaveCSS("width", "170px");
   const monthBox = await month.boundingBox();
   await month.click({ position: { x: 8, y: monthBox!.height / 2 } });
-  const monthCalendar = page.getByRole("dialog", { name: "Scegli data" });
+  const monthCalendar = page.getByRole("dialog", { name: "Scegli mese" });
   await expect(monthCalendar).toBeVisible();
   await expect(monthCalendar.locator(".date-picker-months button")).toHaveCount(
     12,
@@ -3617,7 +3617,7 @@ test("sales history uses a monthly filter", async ({ page }) => {
   const dialogBox = await dialog.boundingBox();
   expect(dialogBox?.width).toBeGreaterThan(800);
   expect(dialogBox?.height).toBeGreaterThan(600);
-  const period = dialog.getByLabel("Mese");
+  const period = dialog.getByLabel("Mese", { exact: true });
   await expect(period).toHaveAttribute("type", "month");
   await expect(period).toHaveCSS("cursor", "pointer");
   const close = dialog.getByRole("button", { name: "Chiudi" });

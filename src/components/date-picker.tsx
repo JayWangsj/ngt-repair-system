@@ -76,7 +76,7 @@ function pickerPosition(anchor: HTMLElement, panel: HTMLDivElement) {
   const rect = anchor.getBoundingClientRect();
   const panelWidth = panel.offsetWidth;
   const panelHeight = panel.offsetHeight;
-  const edge = 8;
+  const edge = 12;
   const below = rect.bottom + 5;
   const above = rect.top - panelHeight - 5;
   const top =

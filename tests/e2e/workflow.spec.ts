@@ -4159,13 +4159,21 @@ test("system update page checks a private release and shows real progress", asyn
 }) => {
   let updateStarted = false;
   let statusPolls = 0;
+  const updateId = "0bd7d5ac-4cd6-4a7e-9fd4-d11c136caf16";
   await page.route("**/api/system-update", async (route) => {
     if (route.request().method() === "POST") {
       updateStarted = true;
       return route.fulfill({
         status: 202,
         contentType: "application/json",
-        body: JSON.stringify({ started: true }),
+        body: JSON.stringify({
+          started: true,
+          status: "starting",
+          stage: "starting",
+          updateId,
+          targetVersion: "1.11.58",
+          currentVersion: "1.11.57",
+        }),
       });
     }
     return route.fulfill({
@@ -4184,33 +4192,53 @@ test("system update page checks a private release and shows real progress", asyn
     });
   });
   await page.route("**/api/system-update/status", (route) => {
+    if (!updateStarted)
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ status: "idle", currentVersion: "1.11.57" }),
+      });
     statusPolls += 1;
+    const shared = {
+      updateId,
+      targetVersion: "1.11.58",
+      previousVersion: "1.11.57",
+      currentVersion: "1.11.57",
+      actualVersion: "1.11.57",
+      executorAlive: true,
+      executorConfirmed: true,
+    };
     const nextStatus =
       statusPolls === 1
-        ? {
-            status: "downloading",
-            stage: "downloading",
-            bytesDownloaded: 120000000,
-            totalBytes: 240000000,
-            bytesPerSecond: 8000000,
-            etaSeconds: 15,
-            progressKnown: true,
-          }
+        ? { ...shared, status: "starting", stage: "starting" }
         : statusPolls === 2
           ? {
-              status: "verifying",
-              stage: "verifying",
-              bytesDownloaded: 240000000,
+              ...shared,
+              status: "downloading",
+              stage: "downloading",
+              completedStages: ["reading-release"],
+              bytesDownloaded: 120000000,
               totalBytes: 240000000,
+              bytesPerSecond: 8000000,
+              etaSeconds: 15,
               progressKnown: true,
             }
           : {
+              ...shared,
               status: "failed",
-              stage: "verifying",
+              stage: "validating",
+              failedStage: "validating",
+              recoveryStatus: "succeeded",
+              completedStages: [
+                "reading-release",
+                "downloading",
+                "verifying",
+                "backing-up",
+                "installing",
+              ],
               message: "Aggiornamento di prova interrotto.",
-              bytesDownloaded: 240000000,
-              totalBytes: 240000000,
-              progressKnown: true,
+              recoveryMessage:
+                "La versione precedente è stata ripristinata e verificata.",
             };
     return route.fulfill({
       status: 200,
@@ -4218,6 +4246,15 @@ test("system update page checks a private release and shows real progress", asyn
       body: JSON.stringify(nextStatus),
     });
   });
+  await page.route("**/api/system-update/status/log", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        log: "Rollback verificato in ambiente di prova.",
+      }),
+    }),
+  );
 
   await page.goto("/settings/system-update");
   const italianButton = page.getByRole("button", {
@@ -4246,31 +4283,26 @@ test("system update page checks a private release and shows real progress", asyn
     "aria-valuenow",
     "50",
   );
-  await expect(
-    page
-      .locator(".update-stage-list li")
-      .filter({ hasText: "Download completato" }),
-  ).toHaveClass(/active/);
   await expect(page.locator(".download-progress-meta")).toContainText(
     "7.6 MB/s",
   );
   await expect(page.locator(".download-progress-meta")).toContainText("15 s");
-  await expect(page.locator(".download-progress-complete")).toContainText(
-    "Download completato",
+  await expect(page.locator(".update-result-card")).toContainText(
+    "Aggiornamento non riuscito; la versione precedente è stata ripristinata e verificata.",
+    { timeout: 10_000 },
   );
-  await expect(page.locator(".download-progress-track")).toHaveCount(0);
-  await expect(page.locator(".download-progress-meta")).toHaveCount(0);
+  await page.locator(".update-diagnostics-toggle").click();
   await expect(
-    page
-      .locator(".update-stage-list li")
-      .filter({ hasText: "Download completato" }),
-  ).toHaveClass(/complete/);
-  await expect(page.locator(".update-error")).toContainText(
+    page.locator(".update-stage-list li").filter({
+      hasText: "Avvio e verifica database",
+    }),
+  ).toHaveClass(/failed/);
+  await expect(page.locator(".update-diagnostics")).toContainText(
     "Aggiornamento di prova interrotto.",
   );
-  await expect(
-    page.getByText("Verifica pacchetto", { exact: true }).locator(".."),
-  ).toHaveClass(/failed/);
+  await expect(page.locator(".update-diagnostics")).toContainText(
+    "Rollback verificato in ambiente di prova.",
+  );
 });
 test("system update keeps the check action visible when an old run completed", async ({
   page,

@@ -567,7 +567,7 @@ test("continues monitoring an active update beyond the previous four-minute limi
     .click();
   for (
     let elapsed = 0;
-    elapsed < 250_000 && monitoringReads <= 120;
+    elapsed < 400_000 && monitoringReads <= 120;
     elapsed += 1_000
   ) {
     const previousReads = statusReads;

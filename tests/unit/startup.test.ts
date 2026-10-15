@@ -229,8 +229,14 @@ describe("Windows persistent startup", () => {
     expect(packager).toContain(
       'Get-ChildItem -LiteralPath $stage -File -Recurse -Filter "*.map"',
     );
-    expect(start).toContain("await access(destination)");
-    expect(start).toContain('if (error.code !== "ENOENT") throw error;');
+    expect(start).toContain('nextConfig.distDir ?? ".next"');
+    expect(start).toContain("await access(source)");
+    expect(start).toContain(
+      "await rm(destination, { recursive: true, force: true })",
+    );
+    expect(start).toContain(
+      "await cp(source, destination, { recursive: true })",
+    );
     expect(packager).toContain('$env:GITHUB_REF_TYPE -eq "tag"');
   });
 

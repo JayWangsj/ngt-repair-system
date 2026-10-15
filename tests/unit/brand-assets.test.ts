@@ -55,8 +55,13 @@ describe("NGT brand assets", () => {
       "scripts/build-windows-studio-package.ps1",
       "utf8",
     );
-    expect(launcher).toContain('["public", ".next/standalone/public"]');
-    expect(launcher).toContain("await access(destination)");
+    expect(launcher).toContain(
+      '[join(buildDirectory, "static"), join(standaloneBuildDirectory, "static")]',
+    );
+    expect(launcher).toContain(
+      '[join(projectRoot, "public"), join(standaloneRoot, "public")]',
+    );
+    expect(launcher).toContain("await access(source)");
     expect(launcher).toContain(
       "await cp(source, destination, { recursive: true })",
     );

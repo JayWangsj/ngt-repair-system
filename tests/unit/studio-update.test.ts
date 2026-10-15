@@ -451,16 +451,18 @@ describe("studio update", () => {
     ).resolves.toContain(nextId);
   });
 
-  it("does not mistake the process inspection command for a legacy updater", async () => {
+  it("treats a legacy lock as inactive when no updater process is found", async () => {
     const { root, installRoot } = await studioRoot();
     await writeFile(
       path.join(installRoot, "update.lock"),
       "2020-01-01T00:00:00.000Z",
     );
 
-    const result = await getStudioUpdateStatus(root);
+    const result = await getStudioUpdateStatus(root, {
+      inspect: async () => false,
+    });
 
-    expect(result.status).not.toBe("verifying-task");
+    expect(result.status).toBe("interrupted");
     expect(result.executorAlive).not.toBe(true);
   });
 

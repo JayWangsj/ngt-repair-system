@@ -273,13 +273,13 @@ describe("Windows persistent startup", () => {
     );
     expect(updater).toContain('Write-NgtUpdateStatus "rolling-back"');
     expect(updater).toContain(
-      "An incomplete release directory needs manual review",
+      "An incomplete target release was isolated and will be downloaded again.",
     );
     expect(updater).toContain(
       "& tar.exe -xf $archive.FullName -C $stagingRoot",
     );
     expect(updater).toContain(
-      "Remove-Item -LiteralPath $downloadRoot -Recurse -Force -ErrorAction SilentlyContinue",
+      "Remove-Item -LiteralPath $downloadRoot -Recurse -Force -ErrorAction Stop",
     );
     expect(updater.indexOf('Write-NgtUpdateStatus "backing-up"')).toBeLessThan(
       updater.indexOf('Write-NgtUpdateStatus "installing"'),
@@ -289,9 +289,15 @@ describe("Windows persistent startup", () => {
     expect(workflow).toContain("--config.node-linker=hoisted");
     expect(workflow).toContain("--config.package-import-method=copy");
     expect(workflow).toContain("gh release create");
-    expect(workflow).toContain('$ErrorActionPreference = "SilentlyContinue"');
-    expect(workflow).toContain("$releaseExists = $LASTEXITCODE -eq 0");
-    expect(workflow).toContain("if ($releaseExists)");
+    expect(workflow).toContain("--verify-tag --generate-notes --draft");
+    expect(workflow).toContain("if (-not $existingRelease.draft)");
+    expect(workflow).toContain("published versions are never overwritten");
+    expect(workflow).toContain('"{0}`t{1}`tsha256:{2}"');
+    expect(workflow).toContain("$draft.draft");
+    expect(workflow).toContain(
+      "gh release edit $env:GITHUB_REF_NAME --draft=false --verify-tag",
+    );
+    expect(workflow).not.toContain("--clobber");
     expect(workflow).toContain("package-manager-cache: false");
     expect(workflow).toContain("pnpm/action-setup@v4");
     expect(workflow).not.toContain("npm install -g pnpm");

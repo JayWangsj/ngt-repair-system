@@ -1,5 +1,4 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
-import { mkdir } from "node:fs/promises";
 
 async function expectMatchingColumn(
   header: Locator,
@@ -1263,83 +1262,11 @@ test("manages one quick service for held service orders and retail checkout", as
   );
   await expect(quickOrderRow).toBeVisible();
   await quickOrderRow.click();
-  const expectedAtInput = quickOrderRow.getByLabel("Consegna prevista", {
-    exact: true,
-  });
-  await expect(expectedAtInput).toHaveAttribute("type", "datetime-local");
-  await mkdir(".local/date-picker-evidence", { recursive: true });
-  let dueDateCommits = 0;
-  page.on("request", (request) => {
-    if (request.method() === "POST" && request.headers()["next-action"])
-      dueDateCommits += 1;
-  });
-  const originalExpectedAt = await expectedAtInput.inputValue();
-  await expectedAtInput.click();
-  let dateTimePicker = page.locator(".date-picker-popover");
-  await dateTimePicker
-    .getByRole("button", { name: "Scegli anno", exact: true })
-    .click();
-  await dateTimePicker.getByLabel("Vai all'anno", { exact: true }).fill("2099");
-  await dateTimePicker
-    .getByRole("button", { name: "Scegli mese", exact: true })
-    .click();
-  await dateTimePicker.locator('[data-month="2099-12"]').click();
-  await dateTimePicker.locator('[data-date="2099-12-30"]').click();
-  const draftTime = dateTimePicker.locator('input[type="time"]');
-  const timeBox = await draftTime.boundingBox();
-  await page.mouse.move(
-    timeBox!.x + timeBox!.width - 24,
-    timeBox!.y + timeBox!.height / 2,
-  );
-  await expect
-    .poll(() =>
-      draftTime.evaluate(
-        (element) => getComputedStyle(element).backgroundImage,
-      ),
-    )
-    .toContain("radial-gradient");
-  await draftTime.fill("");
-  await expect(draftTime).toHaveValue("");
   await expect(
-    dateTimePicker.getByRole("button", { name: "Conferma", exact: true }),
-  ).toBeDisabled();
-  await expect(dateTimePicker.getByRole("alert")).toHaveText(
-    "Completa l'ora per confermare la data.",
-  );
-  await draftTime.fill("17:45");
-  await expect(expectedAtInput).toHaveValue("2099-12-30T17:45");
-  expect(dueDateCommits).toBe(0);
-  await page.setViewportSize({ width: 375, height: 300 });
-  await dateTimePicker.screenshot({
-    path: ".local/date-picker-evidence/low-height.png",
-  });
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await dateTimePicker.screenshot({
-    path: ".local/date-picker-evidence/datetime-confirm.png",
-  });
-  await page.keyboard.press("Escape");
-  await expect(expectedAtInput).toHaveValue(originalExpectedAt);
-  expect(dueDateCommits).toBe(0);
-
-  await expectedAtInput.click();
-  dateTimePicker = page.locator(".date-picker-popover");
-  await dateTimePicker
-    .getByRole("button", { name: "Scegli anno", exact: true })
-    .click();
-  await dateTimePicker.getByLabel("Vai all'anno", { exact: true }).fill("2099");
-  await dateTimePicker
-    .getByRole("button", { name: "Scegli mese", exact: true })
-    .click();
-  await dateTimePicker.locator('[data-month="2099-12"]').click();
-  await dateTimePicker.locator('[data-date="2099-12-30"]').click();
-  await dateTimePicker.locator('input[type="time"]').fill("17:45");
-  await dateTimePicker
-    .getByRole("button", { name: "Conferma", exact: true })
-    .click();
-  await expect.poll(() => dueDateCommits).toBe(1);
-  await page.getByRole("heading", { name: "Schede di servizio" }).click();
-  await expect(quickOrderRow).toContainText("2099-12-30 17:45");
-  expect(dueDateCommits).toBe(1);
+    quickOrderRow.locator(".order-due-cell .order-static-value"),
+  ).toContainText(/\d{4}-\d{2}-\d{2}/);
+  await expect(quickOrderRow.locator(".order-due-cell input")).toHaveCount(0);
+  await expect(quickOrderRow.locator(".order-due-cell button")).toHaveCount(0);
   await page.evaluate(() => {
     const tag = document.createElement("span");
     tag.className = "order-type-tag order-type-repair e2e-repair-tag";
@@ -2759,17 +2686,11 @@ test("repair list exposes month, status, due-date and payment controls", async (
     "transform",
     "matrix(1, 0, 0, 1, 0, 0)",
   );
-  const dueDateInput = row.getByLabel("Consegna prevista", { exact: true });
-  await expect(dueDateInput).toHaveValue("2099-12-31");
-  const dateTextWidth = await dueDateInput.evaluate((input) => {
-    const style = getComputedStyle(input);
-    return (
-      input.clientWidth -
-      parseFloat(style.paddingLeft) -
-      parseFloat(style.paddingRight)
-    );
-  });
-  expect(dateTextWidth).toBeGreaterThanOrEqual(90);
+  await expect(
+    row.locator(".order-due-cell .order-static-value"),
+  ).toContainText(/2099-12-31|31\/12\/2099/);
+  await expect(row.locator(".order-due-cell input")).toHaveCount(0);
+  await expect(row.locator(".order-due-cell button")).toHaveCount(0);
   const status = row.locator(".status-dropdown-trigger");
   await expect(status).toBeVisible();
   await expect(row.locator("select.status-select")).toHaveCount(0);
@@ -7812,24 +7733,14 @@ test("customer links from repair list and detail open the shared dialog", async 
     .locator(".order-list-body tr")
     .filter({ hasText: orderCode });
   await historyRow.click();
-  const due = historyRow.getByLabel("Consegna prevista", { exact: true });
-  await due.fill("2099-11-29");
-  await due.press("Enter");
-  await expect(due).toHaveCount(0);
-  await expect(historyRow).toContainText("29/11/2099");
+  await expect(
+    historyRow.locator(".order-due-cell .order-static-value"),
+  ).toContainText(/2099-12-31|31\/12\/2099/);
+  await expect(historyRow.locator(".order-due-cell input")).toHaveCount(0);
+  await expect(historyRow.locator(".order-due-cell button")).toHaveCount(0);
   await historyRow.click();
-  const dueByClick = historyRow.getByLabel("Consegna prevista", {
-    exact: true,
-  });
-  await dueByClick.fill("2099-11-30");
-  await dialog
-    .getByRole("heading", {
-      name: "Storico schede di servizio",
-      exact: true,
-    })
-    .click();
-  await expect(dueByClick).toHaveCount(0);
-  await expect(historyRow).toContainText("30/11/2099");
+  await expect(historyRow.locator(".order-due-cell input")).toHaveCount(0);
+  await expect(historyRow.locator(".order-due-cell button")).toHaveCount(0);
 
   await historyRow.click();
   await expect(historyRow).toHaveClass(/order-row-active/);

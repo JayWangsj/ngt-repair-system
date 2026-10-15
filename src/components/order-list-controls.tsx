@@ -10,7 +10,7 @@ import {
   useTransition,
 } from "react";
 import { useRouter } from "next/navigation";
-import { setPaidTotalAction, updateDueDateAction } from "@/app/actions";
+import { setPaidTotalAction } from "@/app/actions";
 import { dateOnly, decimal, money, type OrderStatus } from "@/lib/domain";
 import { translateError } from "@/lib/i18n";
 import {
@@ -22,7 +22,7 @@ import {
   readOrderViewportFollow,
 } from "@/lib/order-motion";
 import { useBusinessDay } from "./business-date";
-import { useLanguage, useMessages } from "./language";
+import { useMessages } from "./language";
 import {
   StatusDropdown,
   type PrimaryStatusAction,
@@ -128,62 +128,16 @@ export function DetailStatusControl({
   );
 }
 
-function DueDateControl({
-  row,
-  active,
-}: {
-  row: OrderListRow;
-  active: boolean;
-}) {
+function DueDateControl({ row }: { row: OrderListRow }) {
   const it = useMessages();
-  const { locale } = useLanguage();
-  const today = useBusinessDay();
-  const router = useRouter();
-  const [value, setValue] = useState(
-    row.type === "QUICK_SERVICE" ? row.expectedAt : row.dueDate,
-  );
-  const [pending, startTransition] = useTransition();
-  const [error, setError] = useState("");
-  const closed = ["COMPLETED", "REFUNDED", "CANCELLED"].includes(row.status);
-  const currentValue =
-    row.type === "QUICK_SERVICE" ? row.expectedAt : row.dueDate;
-  if (!active || closed)
-    return (
-      <div className="order-static-value">
-        <span>
-          {row.type === "QUICK_SERVICE"
-            ? row.expectedAt.replace("T", " ") || dateOnly(row.dueDate || null)
-            : dateOnly(row.dueDate || null)}
-        </span>
-        {row.overdue && <small>{it.overdue}</small>}
-      </div>
-    );
-  function save(nextValue = value) {
-    if (nextValue === currentValue) return;
-    startTransition(async () => {
-      const result = await updateDueDateAction(row.id, nextValue);
-      if (!result.ok) return setError(result.error);
-      setError("");
-      router.refresh();
-    });
-  }
   return (
-    <div className="inline-order-control">
-      <DatePicker
-        className="order-due-input"
-        aria-label={it.dueDate}
-        type={row.type === "QUICK_SERVICE" ? "datetime-local" : "date"}
-        min={row.type === "QUICK_SERVICE" ? `${today}T00:00` : today}
-        value={value}
-        disabled={pending}
-        onChange={(event) => setValue(event.target.value)}
-        onBlur={(event) => save(event.currentTarget.value)}
-      />
-      {error && (
-        <small className="inline-control-error">
-          {translateError(error, locale)}
-        </small>
-      )}
+    <div className="order-static-value">
+      <span>
+        {row.type === "QUICK_SERVICE"
+          ? row.expectedAt.replace("T", " ") || dateOnly(row.dueDate || null)
+          : dateOnly(row.dueDate || null)}
+      </span>
+      {row.overdue && <small>{it.overdue}</small>}
     </div>
   );
 }
@@ -830,11 +784,7 @@ export function OrderListBody({
             <td
               className={`order-inline-edit-cell order-due-cell${row.overdue ? " danger-text" : ""}`}
             >
-              <DueDateControl
-                key={row.expectedAt || row.dueDate}
-                row={row}
-                active={active}
-              />
+              <DueDateControl key={row.expectedAt || row.dueDate} row={row} />
             </td>
             <td className="order-updated-cell">{row.lastUpdated}</td>
             <td className="numeric order-inline-edit-cell order-payment-cell">

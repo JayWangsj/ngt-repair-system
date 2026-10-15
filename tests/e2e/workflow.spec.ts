@@ -2728,31 +2728,16 @@ test("repair list exposes month, status, due-date and payment controls", async (
   await page.keyboard.press("Escape");
   await expect(
     row.getByLabel("Consegna prevista", { exact: true }),
-  ).toBeEnabled();
+  ).toHaveCount(0);
+  await expect(
+    row.locator(".order-due-cell .order-static-value"),
+  ).toContainText("31/12/2099");
+  await expect(row.locator(".order-due-cell .date-picker-toggle")).toHaveCount(
+    0,
+  );
   await expect(
     row.getByRole("button", { name: "Registra incasso", exact: true }),
   ).toBeVisible();
-  await row.getByLabel("Consegna prevista", { exact: true }).click();
-  const dueDatePicker = page.getByRole("dialog", {
-    name: "Scegli data",
-    exact: true,
-  });
-  await dueDatePicker
-    .getByRole("button", { name: "Mese precedente", exact: true })
-    .click();
-  await dueDatePicker
-    .locator(".date-picker-days button:not(.is-outside)")
-    .filter({ hasText: /^30$/ })
-    .click();
-  await expect(row.locator(".inline-control-error")).toHaveCount(0);
-  await expect(
-    row.getByLabel("Consegna prevista", { exact: true }),
-  ).toHaveValue("2099-11-30");
-  await page.getByRole("heading", { name: "Schede di servizio" }).click();
-  await expect(
-    row.getByLabel("Consegna prevista", { exact: true }),
-  ).toHaveCount(0);
-  await expect(row).toContainText("30/11/2099");
 
   await page.goto("/settings/language");
   await page.getByRole("button", { name: "中文", exact: true }).click();
@@ -2764,14 +2749,12 @@ test("repair list exposes month, status, due-date and payment controls", async (
     /\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}/,
   );
   await localizedRow.click();
-  const localizedDueDate = localizedRow.getByLabel("预计交付日期", {
-    exact: true,
-  });
-  await localizedDueDate.fill("2000-01-01");
-  await localizedDueDate.evaluate((input) => input.blur());
-  await expect(localizedRow.locator(".inline-control-error")).toHaveText(
-    "交付日期不能早于今天。",
-  );
+  await expect(
+    localizedRow.getByLabel("预计交付日期", { exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    localizedRow.locator(".order-due-cell .order-static-value"),
+  ).toContainText("2099/12/31");
 });
 test("repair list separates explicit collection from payment correction", async ({
   page,

@@ -148,7 +148,7 @@ jobs:
           } | Sort-Object)
           $remoteAssets = @()
           $remoteDigestsReady = $false
-          for ($attempt = 0; $attempt -lt 12; $attempt++) {
+          for ($attempt = 0; $attempt -lt 60; $attempt++) {
             $releasesJson = gh api $releaseListEndpoint
             if ($LASTEXITCODE -ne 0) { throw "Unable to verify prepared draft release assets." }
             $draftReleases = @(
@@ -164,7 +164,12 @@ jobs:
             $missingDigests = @($remoteAssets | Where-Object { $_ -notmatch "`tsha256:[a-f0-9]{64}$" })
             $remoteDigestsReady = ($remoteAssets.Count -eq $localAssets.Count) -and ($missingDigests.Count -eq 0)
             if ($remoteDigestsReady) { break }
-            if ($attempt -lt 11) { Start-Sleep -Seconds 5 }
+            if ($attempt -lt 59) {
+              if ((($attempt + 1) % 6) -eq 0) {
+                Write-Host "Waiting for GitHub asset SHA256 digests ($($attempt + 1)/60)."
+              }
+              Start-Sleep -Seconds 5
+            }
           }
           if (-not $remoteDigestsReady) {
             throw "GitHub did not calculate SHA256 digests for all draft release assets."

@@ -319,7 +319,10 @@ describe("Windows persistent startup", () => {
     expect(workflow).toContain('"{0}`t{1}`tsha256:{2}"');
     expect(workflow).toContain("$draft.draft");
     expect(workflow).toContain(
-      "for ($attempt = 0; $attempt -lt 12; $attempt++)",
+      "for ($attempt = 0; $attempt -lt 60; $attempt++)",
+    );
+    expect(workflow).toContain(
+      'Write-Host "Waiting for GitHub asset SHA256 digests',
     );
     expect(workflow).toContain('$_ -notmatch "`tsha256:[a-f0-9]{64}$"');
     expect(workflow).toContain(

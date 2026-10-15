@@ -356,7 +356,7 @@ export function UpdateStateProvider({
   }, [stopMonitoring]);
   startMonitoringRef.current = startMonitoring;
 
-  const refreshTask = useCallback(async () => {
+  const refreshTask = useCallback(async (): Promise<TaskState> => {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 10_000);
     try {

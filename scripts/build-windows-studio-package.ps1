@@ -61,6 +61,20 @@ $requiredNextEnvironment = ".next\standalone\node_modules\@next\env\dist\index.j
 if (-not (Test-Path -LiteralPath (Join-Path $stage $requiredNextEnvironment))) {
   throw "The standalone @next/env runtime is incomplete."
 }
+$prismaRuntimeSource = Join-Path $projectRoot "node_modules\@prisma\client\runtime"
+if (-not (Test-Path -LiteralPath (Join-Path $prismaRuntimeSource "library.js"))) {
+  throw "The @prisma/client runtime is missing."
+}
+$prismaRuntimeDestination = Join-Path $standaloneDestination "node_modules\@prisma\client\runtime"
+& node (Join-Path $projectRoot "scripts\copy-directory-materialized.mjs") `
+  $prismaRuntimeSource $prismaRuntimeDestination
+if ($LASTEXITCODE -ne 0) {
+  throw "The @prisma/client runtime copy failed."
+}
+$requiredPrismaRuntime = ".next\standalone\node_modules\@prisma\client\runtime\library.js"
+if (-not (Test-Path -LiteralPath (Join-Path $stage $requiredPrismaRuntime))) {
+  throw "The standalone @prisma/client runtime is incomplete."
+}
 $prismaClientSourceOutput = & node -e "const path = require('node:path'); console.log(path.dirname(require.resolve('.prisma/client/default', { paths: [path.dirname(require.resolve('@prisma/client'))] })));"
 if (($LASTEXITCODE -ne 0) -or (-not $prismaClientSourceOutput)) {
   throw "Unable to resolve the generated Prisma client."

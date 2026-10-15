@@ -50,7 +50,8 @@ try {
     Invoke-NgtCommand $nodeExecutable @("-e", "require('pg');")
     foreach ($requiredPath in @(
       "node_modules\prisma\build\index.js",
-      ".next\standalone\node_modules\.prisma\client\default.js"
+      ".next\standalone\node_modules\.prisma\client\default.js",
+      ".next\standalone\node_modules\@prisma\client\runtime\library.js"
     )) {
       if (-not (Test-Path -LiteralPath (Join-Path $releaseRoot $requiredPath))) {
         throw "Studio package is missing runtime file: $requiredPath"

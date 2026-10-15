@@ -55,6 +55,7 @@ foreach ($requiredFile in @(
   "scripts/update-windows-studio.ps1",
   "scripts/check-windows-credential-store.ps1",
   "scripts/install-windows-studio.ps1",
+  "scripts/install-windows-studio-bootstrap.ps1",
   "scripts/retain-windows-studio-releases.ps1",
   "scripts/verify-windows-studio-release.ps1",
   "scripts/test-windows-studio-update-safety.ps1",

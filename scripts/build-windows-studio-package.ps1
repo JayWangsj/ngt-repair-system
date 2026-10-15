@@ -128,6 +128,7 @@ $runtimeScripts = @(
   "test-windows-studio-update-safety.ps1",
   "install-windows-startup.ps1",
   "install-windows-studio.ps1",
+  "install-windows-studio-bootstrap.ps1",
   "retain-windows-studio-releases.ps1",
   "studio-runtime.ps1",
   "start.mjs",

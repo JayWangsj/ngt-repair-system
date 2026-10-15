@@ -348,6 +348,7 @@ describe("Windows persistent startup", () => {
     expect(packageSmokeTest).toContain('"initdb.exe"');
     expect(packageSmokeTest).toContain("require('pg')");
     expect(packageSmokeTest).toContain("new PrismaClient()");
+    expect(packageSmokeTest).toContain("verify-windows-studio-release.ps1");
     expect(packageSmokeTest).toContain(
       '".next\\standalone\\node_modules\\.prisma\\client\\default.js"',
     );
@@ -404,6 +405,7 @@ describe("Windows persistent startup", () => {
     const icon = await readFile("assets/ngt-studio.ico");
     expect(definition).toContain("PrivilegesRequired=lowest");
     expect(definition).toContain("UsePreviousAppDir=no");
+    expect(definition).not.toContain("BootstrapPath");
     expect(definition).toContain("install-windows-studio.ps1");
     expect(definition).toContain("uninstall-windows-studio.ps1");
     expect(definition).toContain("{autodesktop}");
@@ -425,6 +427,7 @@ describe("Windows persistent startup", () => {
     );
     expect(definition).not.toContain("{sys}\\explorer.exe");
     expect(builder).toContain("ISCC.exe");
+    expect(builder).not.toContain("BootstrapPath");
     expect(builder.indexOf("$compilerCandidates")).toBeLessThan(
       builder.indexOf('Get-Command "iscc.exe"'),
     );
@@ -432,6 +435,7 @@ describe("Windows persistent startup", () => {
     expect(builder).toContain("Inno Setup compiler:");
     expect(builder).toContain("Get-FileHash");
     expect(packager).toContain('"windows-studio-launcher.vbs"');
+    expect(packager).toContain('"install-windows-studio-bootstrap.ps1"');
     expect(packager).toContain('"assets\\ngt-studio.ico"');
     expect(packager).toContain('(Join-Path $runtimeDirectory "gh.exe")');
     expect(packager).toContain('"licenses\\github-cli.txt"');

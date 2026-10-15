@@ -36,6 +36,8 @@ function Write-SmokeLogs {
 try {
   & tar.exe -xf $ArchivePath -C $releaseRoot
   if ($LASTEXITCODE -ne 0) { throw "Studio package extraction failed." }
+  & (Join-Path $releaseRoot "scripts\verify-windows-studio-release.ps1") `
+    -ReleaseRoot $releaseRoot -ExpectedVersion ([string]$package.version) | Out-Null
   & (Join-Path $releaseRoot "scripts\test-windows-studio-update-safety.ps1")
 
   $env:NGT_DATA_ROOT = $dataRoot

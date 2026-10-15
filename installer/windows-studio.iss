@@ -4,9 +4,6 @@
 #ifndef PackageDirectory
   #error PackageDirectory is required
 #endif
-#ifndef BootstrapPath
-  #error BootstrapPath is required
-#endif
 #ifndef IconPath
   #error IconPath is required
 #endif
@@ -46,7 +43,6 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 Source: "{#PackageDirectory}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: "{#BootstrapPath}"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "{#PackageDirectory}\assets\ngt-studio.ico"; DestDir: "{localappdata}\NGT\assets"; Flags: ignoreversion uninsneveruninstall
 Source: "{#PackageDirectory}\scripts\windows-service.ps1"; DestDir: "{localappdata}\NGT\service"; Flags: ignoreversion uninsneveruninstall
 Source: "{#PackageDirectory}\scripts\windows-studio-common.ps1"; DestDir: "{localappdata}\NGT\service"; Flags: ignoreversion uninsneveruninstall

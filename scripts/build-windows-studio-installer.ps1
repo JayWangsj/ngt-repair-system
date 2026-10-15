@@ -10,15 +10,14 @@ $package = Get-Content -LiteralPath "package.json" -Raw | ConvertFrom-Json
 $version = [string]$package.version
 $outputRoot = [System.IO.Path]::GetFullPath((Join-Path $projectRoot $OutputDirectory))
 $installerDefinition = Join-Path $projectRoot "installer\windows-studio.iss"
-$bootstrapPath = Join-Path $projectRoot "scripts\install-windows-studio-bootstrap.ps1"
 $iconPath = Join-Path $projectRoot "assets\ngt-studio.ico"
 $packageDirectory = Join-Path $projectRoot ".local\studio-package"
 
 if (-not (Test-Path -LiteralPath (Join-Path $packageDirectory "studio-release.json"))) {
   throw "Studio package directory is missing. Run scripts/build-windows-studio-package.ps1 first."
 }
-if (-not (Test-Path -LiteralPath $bootstrapPath)) {
-  throw "Studio installer bootstrap is missing: $bootstrapPath"
+if (-not (Test-Path -LiteralPath (Join-Path $packageDirectory "scripts\install-windows-studio-bootstrap.ps1"))) {
+  throw "Studio installer bootstrap is missing from the package. Rebuild the studio package first."
 }
 if (-not (Test-Path -LiteralPath $iconPath)) {
   throw "Studio package icon is missing: $iconPath"
@@ -63,7 +62,6 @@ try {
   & $CompilerPath `
     ("/DAppVersion=" + $version) `
     ("/DPackageDirectory=" + $packageDrive) `
-    ("/DBootstrapPath=" + $bootstrapPath) `
     ("/DIconPath=" + $iconPath) `
     ("/DOutputDir=" + $outputRoot) `
     $installerDefinition

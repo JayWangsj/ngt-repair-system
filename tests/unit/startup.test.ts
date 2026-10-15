@@ -353,7 +353,7 @@ describe("Windows persistent startup", () => {
     expect(packageSmokeTest).toContain("--- Archive bootstrap entries ---");
     expect(packageSmokeTest).toContain("--- Extracted release scripts ---");
     expect(releaseVerifier).toContain(
-      "$actualAppPaths -notcontains $normalizedRequiredFile",
+      "$expectedAppPaths -notcontains $normalizedRequiredFile",
     );
     expect(packageSmokeTest).toContain("require('pg')");
     expect(packageSmokeTest).toContain("new PrismaClient()");

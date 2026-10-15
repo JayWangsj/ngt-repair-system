@@ -68,7 +68,7 @@ foreach ($requiredFile in @(
   "prisma/schema.prisma"
 )) {
   $normalizedRequiredFile = $requiredFile.Replace("\", "/")
-  if ($actualAppPaths -notcontains $normalizedRequiredFile) {
+  if ($expectedAppPaths -notcontains $normalizedRequiredFile) {
     throw "Studio release is missing a required runtime file: $requiredFile"
   }
 }

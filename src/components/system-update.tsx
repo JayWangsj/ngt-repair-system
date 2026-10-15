@@ -13,61 +13,27 @@ import {
   RefreshCw,
   XCircle,
 } from "lucide-react";
-import { useMessages } from "./language";
+import { useLanguage, useMessages } from "./language";
 import { Button } from "./ui/button";
 import { FormDialog } from "./forms";
+import { useUpdateState } from "./update-state";
+import {
+  classifyUpdateTask,
+  isUpdateTaskMonitorable,
+  shouldShowDownloadProgress,
+  shouldShowUpdateProgress,
+  type UpdateStatus,
+} from "@/lib/system-update-state";
 import {
   readAutoUpdateCheck,
   writeAutoUpdateCheck,
 } from "@/lib/update-preference";
-
-type UpdateStatus = {
-  status?: string;
-  stage?: string;
-  message?: string;
-  latestVersion?: string;
-  bytesDownloaded?: number;
-  totalBytes?: number;
-  bytesPerSecond?: number;
-  etaSeconds?: number;
-  progressKnown?: boolean;
-};
-
-type UpdateInfo = {
-  installed: boolean;
-  currentVersion: string;
-  authRequired: boolean;
-  updateAvailable: boolean;
-  latestVersion?: string;
-  releaseName?: string;
-  releaseNotes?: string;
-  publishedAt?: string;
-  downloadSize?: number;
-  status?: UpdateStatus;
-};
 
 type GitHubAuth = {
   status: "opening" | "waiting";
   verificationUrl?: string;
   userCode?: string;
 };
-
-const activeUpdateStatuses = [
-  "queued",
-  "checking",
-  "downloading",
-  "downloaded",
-  "verifying",
-  "preparing-runtime",
-  "backing-up",
-  "installing",
-  "validating",
-  "rolling-back",
-];
-
-function isActiveUpdateStatus(status?: string) {
-  return activeUpdateStatuses.includes(status || "");
-}
 
 function formatBytes(value?: number) {
   if (!value || value < 0) return "—";
@@ -89,96 +55,100 @@ function formatEta(seconds: number, messages: ReturnType<typeof useMessages>) {
     .replace("{seconds}", `${seconds % 60}`);
 }
 
-export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
+function errorMessage(value: string | undefined, fallback: string) {
+  switch (value) {
+    case "update_target_changed":
+    case "update_no_longer_available":
+      return "target-changed";
+    case "update_not_installable":
+      return "not-installable";
+    case "studio_update_in_progress":
+      return "task-in-progress";
+    case "studio_update_needs_manual_review":
+      return "task-verification-required";
+    default:
+      return value || fallback;
+  }
+}
+
+function stageLabel(stage: string, messages: ReturnType<typeof useMessages>) {
+  if (stage === "reading-release" || stage === "checking")
+    return messages.updateStageReadingRelease;
+  if (stage === "downloading") return messages.updateStageDownloading;
+  if (stage === "verifying") return messages.updateStageVerifying;
+  if (stage === "preparing-runtime") return messages.updateStageRuntime;
+  if (stage === "backing-up") return messages.updateStageBackup;
+  if (stage === "installing") return messages.updateStageInstalling;
+  if (stage === "validating") return messages.updateStageValidating;
+  if (stage === "complete") return messages.updateStageComplete;
+  return stage;
+}
+
+function taskSummary(
+  status: UpdateStatus | undefined,
+  phase: string,
+  it: ReturnType<typeof useMessages>,
+) {
+  if (phase === "starting" || phase === "queued") return it.updateTaskStarting;
+  if (phase === "reconnecting") return it.updateReconnecting;
+  if (phase === "verifying") return it.updateVerifyingTask;
+  if (phase === "interrupted") return it.updateInterrupted;
+  if (phase === "rolling-back") return it.updateRollingBack;
+  if (phase === "rollback-succeeded") return it.updateRollbackSucceeded;
+  if (phase === "rollback-failed") return it.updateRollbackFailed;
+  if (phase === "failed") return it.updateFailed;
+  if (phase === "succeeded") return it.updateSuccess;
+  if (phase === "running")
+    return stageLabel(status?.stage || "reading-release", it);
+  return "";
+}
+
+export function SystemUpdate({
+  currentVersion: fallbackVersion,
+}: {
+  currentVersion: string;
+}) {
   const it = useMessages();
-  const [pending, setPending] = useState(false);
-  const [info, setInfo] = useState<UpdateInfo | null>(null);
-  const [status, setStatus] = useState<UpdateStatus>({ status: "idle" });
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const { locale } = useLanguage();
+  const {
+    currentVersion,
+    info,
+    check,
+    task,
+    ensureChecked,
+    checkForUpdates,
+    refreshTask,
+    startUpdate: launchUpdate,
+  } = useUpdateState();
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const [githubAuth, setGitHubAuth] = useState<GitHubAuth | null>(null);
+  const [authPending, setAuthPending] = useState(false);
+  const [authMessage, setAuthMessage] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [startError, setStartError] = useState("");
   const [autoCheck, setAutoCheck] = useState(true);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [diagnostics, setDiagnostics] = useState<string | null>(null);
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
       setAutoCheck(readAutoUpdateCheck());
     });
-    void checkForUpdates(false);
-    // The initial check intentionally runs once when this page opens.
+    void ensureChecked();
     return () => window.cancelAnimationFrame(frame);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function checkForUpdates(showResult = true) {
-    let resumeActiveUpdate = false;
-    setPending(true);
-    setError("");
-    if (showResult) setMessage("");
-    try {
-      const response = await fetch("/api/system-update", { cache: "no-store" });
-      const result = (await response.json()) as Partial<UpdateInfo> & {
-        error?: string;
-      };
-      if (!response.ok) throw new Error(result.error || it.updateCheckFailed);
-      const next: UpdateInfo = {
-        installed: Boolean(result.installed),
-        currentVersion: result.currentVersion || currentVersion,
-        authRequired: Boolean(result.authRequired),
-        updateAvailable: Boolean(result.updateAvailable),
-        latestVersion: result.latestVersion,
-        releaseName: result.releaseName,
-        releaseNotes: result.releaseNotes,
-        publishedAt: result.publishedAt,
-        downloadSize: result.downloadSize,
-        status: result.status,
-      };
-      setInfo(next);
-      if (next.status) {
-        const statusIsActive = isActiveUpdateStatus(next.status.status);
-        const statusMatchesRelease =
-          (!statusIsActive || next.updateAvailable) &&
-          (!next.updateAvailable || next.status.status !== "complete") &&
-          (!next.status.latestVersion ||
-            next.status.latestVersion.replace(/^v/i, "") ===
-              next.latestVersion);
-        const nextStatus = statusMatchesRelease
-          ? next.status
-          : { status: "idle" };
-        setStatus(nextStatus);
-        if (isActiveUpdateStatus(nextStatus.status)) {
-          resumeActiveUpdate = true;
-          setPending(true);
-          void monitorUpdate();
-        }
-      }
-      if (!next.installed) setMessage(it.updateInstalledOnly);
-      else if (next.authRequired) setMessage(it.updateAuthRequired);
-      else if (next.updateAvailable)
-        setMessage(
-          it.updateAvailable.replace(
-            "{version}",
-            next.latestVersion || currentVersion,
-          ),
-        );
-      else setMessage(it.updateCurrent);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : it.updateCheckFailed);
-    } finally {
-      setPending(resumeActiveUpdate);
-    }
-  }
+  }, [ensureChecked]);
 
   async function beginGitHubLogin() {
     if (info?.installed && !info.authRequired) {
       setGitHubAuth(null);
-      setError("");
-      setMessage(it.updateLoginSuccess);
+      setAuthError("");
+      setAuthMessage(it.updateLoginSuccess);
       return;
     }
-    setPending(true);
-    setError("");
-    setMessage(it.updateLoginOpening);
+    setAuthPending(true);
+    setAuthError("");
+    setAuthMessage(it.updateLoginOpening);
     try {
       const response = await fetch("/api/system-update/auth", {
         method: "POST",
@@ -197,9 +167,11 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
       });
       await monitorGitHubLogin();
     } catch (cause) {
-      setMessage("");
-      setError(cause instanceof Error ? cause.message : it.updateLoginFailed);
-      setPending(false);
+      setAuthMessage("");
+      setAuthError(
+        cause instanceof Error ? cause.message : it.updateLoginFailed,
+      );
+      setAuthPending(false);
     }
   }
 
@@ -220,11 +192,8 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
         if (!response.ok) throw new Error(result.error || it.updateLoginFailed);
         if (result.status === "success") {
           setGitHubAuth(null);
-          setInfo((current) =>
-            current ? { ...current, authRequired: false } : current,
-          );
-          setMessage(it.updateLoginSuccess);
-          setPending(false);
+          setAuthMessage(it.updateLoginSuccess);
+          setAuthPending(false);
           await checkForUpdates();
           return;
         }
@@ -234,109 +203,76 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
             verificationUrl: result.verificationUrl,
             userCode: result.userCode,
           });
-          setMessage("");
-          setError(
+          setAuthMessage("");
+          setAuthError(
             result.message
               ? `${it.updateLoginFailed} ${result.message}`
               : it.updateLoginFailed,
           );
-          setPending(false);
+          setAuthPending(false);
           return;
         }
-        const authStatus = result.status === "waiting" ? "waiting" : "opening";
+        const waiting = result.status === "waiting";
         setGitHubAuth({
-          status: authStatus,
+          status: waiting ? "waiting" : "opening",
           verificationUrl: result.verificationUrl,
           userCode: result.userCode,
         });
-        setMessage(
-          authStatus === "waiting"
-            ? it.updateLoginWaiting
-            : it.updateLoginOpening,
-        );
+        setAuthMessage(waiting ? it.updateLoginWaiting : it.updateLoginOpening);
       } catch (cause) {
-        setMessage("");
-        setError(cause instanceof Error ? cause.message : it.updateLoginFailed);
-        setPending(false);
+        setAuthMessage("");
+        setAuthError(
+          cause instanceof Error ? cause.message : it.updateLoginFailed,
+        );
+        setAuthPending(false);
         return;
       }
     }
-    setMessage("");
-    setError(it.updateLoginTimeout);
-    setPending(false);
+    setAuthMessage("");
+    setAuthError(it.updateLoginTimeout);
+    setAuthPending(false);
   }
 
   async function copyGitHubAuth(value: string) {
     try {
       await navigator.clipboard.writeText(value);
-      setMessage(it.updateLoginCopied);
-      setError("");
+      setAuthMessage(it.updateLoginCopied);
+      setAuthError("");
     } catch {
-      setError(it.updateLoginCopyFailed);
+      setAuthError(it.updateLoginCopyFailed);
     }
   }
 
-  async function startUpdate() {
+  async function confirmUpdate() {
     setConfirmationOpen(false);
-    setPending(true);
-    setError("");
-    setMessage(it.updateStarting);
+    setStartError("");
     try {
-      const response = await fetch("/api/system-update", { method: "POST" });
-      const result = (await response.json()) as { error?: string };
-      if (!response.ok) throw new Error(result.error || it.updateFailed);
-      setStatus({ status: "queued", stage: "checking" });
-      await monitorUpdate();
+      await launchUpdate(info?.latestVersion || "");
     } catch (cause) {
-      setPending(false);
-      setError(cause instanceof Error ? cause.message : it.updateFailed);
+      setStartError(
+        errorMessage(
+          cause instanceof Error ? cause.message : undefined,
+          it.updateFailed,
+        ),
+      );
     }
   }
 
-  async function monitorUpdate() {
-    for (let attempt = 0; attempt < 600; attempt += 1) {
-      await new Promise((resolve) => window.setTimeout(resolve, 2000));
-      try {
-        const response = await fetch("/api/system-update/status", {
-          cache: "no-store",
-        });
-        if (!response.ok) continue;
-        const result = (await response.json()) as UpdateStatus;
-        setStatus(result);
-        setMessage("");
-        if (result.status === "failed") {
-          setPending(false);
-          setError(result.message || it.updateFailed);
-          return;
-        }
-        if (result.status === "complete") {
-          setPending(false);
-          setError("");
-          setMessage(it.updateSuccess);
-          setInfo((current) =>
-            current
-              ? {
-                  ...current,
-                  currentVersion:
-                    result.latestVersion?.replace(/^v/i, "") ||
-                    current.latestVersion ||
-                    current.currentVersion,
-                  updateAvailable: false,
-                }
-              : current,
-          );
-          return;
-        }
-        if (!isActiveUpdateStatus(result.status)) {
-          setPending(false);
-          return;
-        }
-      } catch {
-        // The local server can be briefly unavailable while versions switch.
-      }
+  async function loadDiagnostics() {
+    setDiagnosticsOpen((open) => !open);
+    if (diagnostics !== null) return;
+    setDiagnosticsLoading(true);
+    try {
+      const response = await fetch("/api/system-update/status/log", {
+        cache: "no-store",
+      });
+      const result = (await response.json()) as { log?: string };
+      setDiagnostics(result.log || it.updateLogUnavailable);
+    } catch {
+      setDiagnostics(it.updateLogUnavailable);
+    } finally {
+      setDiagnosticsLoading(false);
     }
-    setPending(false);
-    setError(it.updateTimeout);
   }
 
   function changeAutoCheck(enabled: boolean) {
@@ -344,96 +280,219 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
     setAutoCheck(enabled);
   }
 
-  const updateActive = pending && isActiveUpdateStatus(status.status);
-  const stageOrder = [
-    "checking",
-    "downloading",
-    "downloaded",
-    "verifying",
-    "preparing-runtime",
-    "backing-up",
-    "installing",
-    "validating",
-    "rolling-back",
-    "complete",
-  ];
-  const currentStage = status.stage || status.status;
-  const currentIndex = stageOrder.indexOf(currentStage || "");
-  const downloaded = status.bytesDownloaded || 0;
-  const total = status.totalBytes || info?.downloadSize || 0;
-  const downloadComplete =
-    downloaded > 0 && currentIndex >= stageOrder.indexOf("downloaded");
-  const showDownloadProgress = status.status === "downloading";
-  const progressKnown =
-    total > 0 && (status.progressKnown === true || downloadComplete);
-  const displayedDownloaded = downloadComplete ? total : downloaded;
-  const percentage = progressKnown
-    ? Math.min(100, Math.round((displayedDownloaded / total) * 100))
-    : 0;
+  const version = currentVersion || fallbackVersion;
+  const checkPhase = check.phase;
+  const checkDescription = (() => {
+    if (checkPhase === "not-checked") return it.updateNotChecked;
+    if (checkPhase === "checking") return it.checkingUpdates;
+    if (checkPhase === "failed")
+      return check.error === "update_check_timeout"
+        ? it.updateCheckTimeout
+        : info?.updateAvailable
+          ? it.updateCheckStale.replace("{version}", info.latestVersion || "")
+          : it.updateCheckFailed;
+    if (checkPhase === "up-to-date") return it.updateCurrent;
+    if (checkPhase === "available")
+      return it.updateAvailable.replace("{version}", info?.latestVersion || "");
+    if (checkPhase === "not-installable")
+      return info?.latestVersion
+        ? `${it.updateNotInstallable} v${info.latestVersion}`
+        : it.updateNotInstallable;
+    if (checkPhase === "auth-required") return it.updateAuthRequired;
+    return it.updateInstalledOnly;
+  })();
+  const taskStatus = task.status || task.lastTrustedStatus;
+  const taskPhase = task.phase;
+  const trustedProgressStatus =
+    taskPhase === "reconnecting" ? task.lastTrustedStatus : task.status;
+  const progressPhase = classifyUpdateTask(trustedProgressStatus);
+  const showProgress =
+    shouldShowUpdateProgress(taskPhase) ||
+    (taskPhase === "reconnecting" && shouldShowUpdateProgress(progressPhase));
+  const taskBusy = isUpdateTaskMonitorable(taskPhase);
+  const showRelease = Boolean(
+    (info?.updateAvailable || info?.notInstallable) &&
+    !["starting", "queued", "running", "reconnecting", "rolling-back"].includes(
+      taskPhase,
+    ),
+  );
   const stages = [
-    ["downloaded", it.updateStageDownloaded],
+    ["reading-release", it.updateStageReadingRelease],
+    ["downloading", it.updateStageDownloading],
     ["verifying", it.updateStageVerifying],
     ["preparing-runtime", it.updateStageRuntime],
     ["backing-up", it.updateStageBackup],
     ["installing", it.updateStageInstalling],
     ["validating", it.updateStageValidating],
-    ["rolling-back", it.updateStageRollback],
-    ["complete", it.updateStageComplete],
   ];
+  const downloaded = trustedProgressStatus?.bytesDownloaded || 0;
+  const total = trustedProgressStatus?.totalBytes || info?.downloadSize || 0;
+  const progressKnown =
+    total > 0 && trustedProgressStatus?.progressKnown === true;
+  const percentage = progressKnown
+    ? Math.min(100, Math.round((downloaded / total) * 100))
+    : 0;
+  const lastCheck = check.lastSuccessfulCheckAt
+    ? new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "it-IT", {
+        dateStyle: "short",
+        timeStyle: "short",
+      }).format(new Date(check.lastSuccessfulCheckAt))
+    : "";
+  const shouldShowResult = [
+    "succeeded",
+    "failed",
+    "rollback-succeeded",
+    "rollback-failed",
+  ].includes(taskPhase);
+  const renderStages = (status: UpdateStatus) => (
+    <ol className="update-stage-list">
+      {stages.map(([stage, label]) => {
+        const skipped = (status.skippedStages || []).includes(stage);
+        const complete = (status.completedStages || []).includes(stage);
+        const active =
+          status.stage === stage ||
+          (stage === "reading-release" && status.stage === "checking");
+        const failed =
+          status.status === "failed" && status.failedStage === stage;
+        return (
+          <li
+            key={stage}
+            className={
+              failed
+                ? "failed"
+                : skipped
+                  ? "skipped"
+                  : complete
+                    ? "complete"
+                    : active
+                      ? "active"
+                      : ""
+            }
+          >
+            {failed ? (
+              <XCircle />
+            ) : complete ? (
+              <CheckCircle2 />
+            ) : active ? (
+              <LoaderCircle className="spin" />
+            ) : (
+              <Circle />
+            )}
+            <span>{label}</span>
+            {skipped && <small>{it.updateStepSkipped}</small>}
+          </li>
+        );
+      })}
+    </ol>
+  );
+
   return (
     <div className="system-update-page">
-      {info?.installed && (
-        <section className="panel padded update-overview">
-          <div className="update-version-block">
-            <span>{it.currentVersion}</span>
-            <strong>v{info?.currentVersion || currentVersion}</strong>
-            {!info?.authRequired && info && <small>{it.updateCurrent}</small>}
-          </div>
-          <div className="update-primary-actions">
-            <Button
-              type="button"
-              disabled={pending}
-              onClick={() => void checkForUpdates()}
-            >
-              <RefreshCw size={17} className={pending ? "spin" : undefined} />
-              {pending ? it.checkingUpdates : it.checkForUpdates}
-            </Button>
-            {info.authRequired && (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={pending}
-                onClick={() => void beginGitHubLogin()}
-              >
-                <GitBranch size={18} />
-                {it.authorizeGitHub}
-              </Button>
-            )}
-          </div>
-        </section>
-      )}
-
-      <div className="system-update-feedback" aria-live="polite">
-        {message && (
-          <p className="message success" role="status">
-            {message}
-          </p>
-        )}
-        {error && (
-          <div className="message error update-error" role="alert">
-            <span>{error}</span>
+      <section className="panel padded update-overview">
+        <div className="update-version-block">
+          <span>{it.currentVersion}</span>
+          <strong>v{version}</strong>
+          <small aria-live="polite">{checkDescription}</small>
+          {checkPhase === "up-to-date" && lastCheck && (
+            <small>
+              {it.updateCheckTime}: {lastCheck}
+            </small>
+          )}
+        </div>
+        <div className="update-primary-actions">
+          <Button
+            type="button"
+            disabled={checkPhase === "checking" || taskBusy}
+            onClick={() => void checkForUpdates()}
+          >
+            <RefreshCw
+              size={17}
+              className={checkPhase === "checking" ? "spin" : undefined}
+            />
+            {checkPhase === "checking"
+              ? it.checkingUpdates
+              : it.checkForUpdates}
+          </Button>
+          {info?.authRequired && (
             <Button
               type="button"
               variant="outline"
-              onClick={() =>
-                void (status.status === "failed"
-                  ? startUpdate()
-                  : checkForUpdates())
-              }
+              disabled={authPending}
+              onClick={() => void beginGitHubLogin()}
             >
-              {status.status === "failed" ? it.retryUpdate : it.retry}
+              <GitBranch size={18} />
+              {it.authorizeGitHub}
             </Button>
-          </div>
+          )}
+        </div>
+      </section>
+
+      {(taskPhase === "starting" ||
+        taskPhase === "queued" ||
+        taskPhase === "verifying") && (
+        <p
+          className="message update-task-compact"
+          role="status"
+          aria-live="polite"
+        >
+          {taskSummary(taskStatus, taskPhase, it)}
+          {taskPhase === "verifying" && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void refreshTask()}
+            >
+              {it.verifyUpdateTask}
+            </Button>
+          )}
+        </p>
+      )}
+
+      {taskPhase === "interrupted" && (
+        <div className="message error update-task-compact" role="alert">
+          <span>
+            {it.updateInterrupted}
+            {taskStatus?.stage
+              ? ` ${it.currentVersion}: ${stageLabel(taskStatus.stage, it)}`
+              : ""}
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void refreshTask()}
+          >
+            {it.verifyUpdateTask}
+          </Button>
+        </div>
+      )}
+
+      {taskPhase === "reconnecting" && (
+        <p
+          className="message update-task-compact"
+          role="status"
+          aria-live="polite"
+        >
+          {it.updateReconnecting}
+        </p>
+      )}
+
+      <div className="system-update-feedback" aria-live="polite">
+        {(authMessage || authError || startError) && (
+          <p
+            className={`message ${authError || startError ? "error" : "success"}`}
+            role={authError || startError ? "alert" : "status"}
+          >
+            {authMessage ||
+              (startError === "target-changed"
+                ? it.updateTargetChanged
+                : startError === "not-installable"
+                  ? it.updateNotInstallable
+                  : startError === "task-in-progress"
+                    ? it.updateTaskStarting
+                    : startError === "task-verification-required"
+                      ? it.updateVerifyingTask
+                      : startError || authError)}
+          </p>
         )}
         {githubAuth?.verificationUrl && (
           <div className="github-auth-fallback panel padded">
@@ -466,51 +525,75 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
         )}
       </div>
 
-      {info?.updateAvailable &&
-        !updateActive &&
-        status.status !== "complete" && (
-          <section className="panel padded update-release-card">
-            <div className="update-release-heading">
-              <div>
-                <span>{it.updateAvailableLabel}</span>
-                <strong>v{info.latestVersion}</strong>
-                {info.publishedAt && (
-                  <small>
-                    {it.updatePublishedAt}:{" "}
-                    {new Date(info.publishedAt).toLocaleDateString()}
-                  </small>
-                )}
-              </div>
-              <Button type="button" onClick={() => setConfirmationOpen(true)}>
+      {showRelease && info?.latestVersion && (
+        <section className="panel padded update-release-card">
+          <div className="update-release-heading">
+            <div>
+              <span>{it.updateAvailableLabel}</span>
+              <strong>v{info.latestVersion}</strong>
+              {info.publishedAt && (
+                <small>
+                  {it.updatePublishedAt}:{" "}
+                  {new Intl.DateTimeFormat(
+                    locale === "zh" ? "zh-CN" : "it-IT",
+                    {
+                      dateStyle: "short",
+                    },
+                  ).format(new Date(info.publishedAt))}
+                </small>
+              )}
+              {checkPhase === "failed" && (
+                <small>
+                  {it.updateCheckStale.replace("{version}", info.latestVersion)}
+                </small>
+              )}
+            </div>
+            {!info.notInstallable && (
+              <Button
+                type="button"
+                disabled={
+                  taskBusy || checkPhase === "checking" || info.authRequired
+                }
+                onClick={() => setConfirmationOpen(true)}
+              >
                 <Download size={17} />
                 {it.updateNow}
               </Button>
-            </div>
-            <div className="update-release-notes">
-              <strong>{it.updateReleaseNotes}</strong>
-              <p>
-                {info.releaseNotes ||
-                  info.releaseName ||
-                  it.updateNoReleaseNotes}
-              </p>
-            </div>
-          </section>
-        )}
+            )}
+          </div>
+          <div className="update-release-notes">
+            <strong>{it.updateReleaseNotes}</strong>
+            <p>
+              {info.releaseNotes || info.releaseName || it.updateNoReleaseNotes}
+            </p>
+          </div>
+        </section>
+      )}
 
-      {(updateActive ||
-        status.status === "failed" ||
-        status.status === "complete") && (
+      {showProgress && trustedProgressStatus && (
         <section className="panel padded update-progress-card">
-          {showDownloadProgress && (
+          <div
+            className="update-progress-summary"
+            role="status"
+            aria-live="polite"
+          >
+            <strong>{taskSummary(trustedProgressStatus, taskPhase, it)}</strong>
+            {trustedProgressStatus.targetVersion && (
+              <span>
+                {it.latestVersion}: v{trustedProgressStatus.targetVersion}
+              </span>
+            )}
+            {taskPhase === "reconnecting" && (
+              <small>{it.updateReconnecting}</small>
+            )}
+          </div>
+
+          {shouldShowDownloadProgress(trustedProgressStatus) && (
             <div className="download-progress">
               <div className="download-progress-heading">
-                <strong>
-                  {downloadComplete
-                    ? it.updateStageDownloaded
-                    : it.updateDownloading}
-                </strong>
+                <strong>{it.updateDownloading}</strong>
                 <span>
-                  {progressKnown ? `${percentage}%` : it.updateCalculating}
+                  {progressKnown ? `${percentage}%` : it.updateIndeterminate}
                 </span>
               </div>
               <div
@@ -525,72 +608,71 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
               </div>
               <div className="download-progress-meta">
                 <span>
-                  {formatBytes(displayedDownloaded)} / {formatBytes(total)}
+                  {formatBytes(downloaded)}
+                  {total > 0 ? ` / ${formatBytes(total)}` : ""}
                 </span>
-                {status.status === "downloading" &&
-                  Boolean(status.bytesPerSecond) && (
-                    <span>
-                      {it.updateSpeed}: {formatBytes(status.bytesPerSecond)}/s
-                    </span>
-                  )}
-                {status.status === "downloading" &&
-                  Boolean(status.etaSeconds) && (
-                    <span>
-                      {it.updateEta}: {formatEta(status.etaSeconds || 0, it)}
-                    </span>
-                  )}
+                {Boolean(trustedProgressStatus.bytesPerSecond) && (
+                  <span>
+                    {it.updateSpeed}:{" "}
+                    {formatBytes(trustedProgressStatus.bytesPerSecond)}/s
+                  </span>
+                )}
+                {Boolean(trustedProgressStatus.etaSeconds) && (
+                  <span>
+                    {it.updateEta}:{" "}
+                    {formatEta(trustedProgressStatus.etaSeconds || 0, it)}
+                  </span>
+                )}
               </div>
             </div>
           )}
-          {downloadComplete && !showDownloadProgress && (
-            <p className="download-progress-complete">
-              {it.updateStageDownloaded}
-            </p>
+
+          {renderStages(trustedProgressStatus)}
+
+          {taskPhase === "rolling-back" && (
+            <div className="update-recovery active" role="status">
+              <LoaderCircle className="spin" />
+              <span>{it.updateRollingBack}</span>
+            </div>
           )}
-          <ol className="update-stage-list">
-            {stages.map(([stage, label]) => {
-              const index = stageOrder.indexOf(stage);
-              const complete =
-                status.status === "complete" ||
-                currentIndex > index ||
-                (stage === "downloaded" && currentStage === "downloaded");
-              const active =
-                currentStage === stage ||
-                (stage === "downloaded" &&
-                  ["checking", "downloading"].includes(currentStage || ""));
-              const failed =
-                status.status === "failed" && currentStage === stage;
-              return (
-                <li
-                  key={stage}
-                  className={
-                    failed
-                      ? "failed"
-                      : complete
-                        ? "complete"
-                        : active
-                          ? "active"
-                          : ""
-                  }
-                >
-                  {failed ? (
-                    <XCircle />
-                  ) : complete ? (
-                    <CheckCircle2 />
-                  ) : active ? (
-                    <LoaderCircle className="spin" />
-                  ) : (
-                    <Circle />
-                  )}
-                  <span>{label}</span>
-                </li>
-              );
-            })}
-          </ol>
-          {status.status === "complete" && (
-            <div className="update-complete">
-              <Check size={28} />
-              <strong>{it.updateSuccess}</strong>
+        </section>
+      )}
+
+      {shouldShowResult && taskStatus && (
+        <section className={`panel padded update-result-card ${taskPhase}`}>
+          <div className={`update-task-result ${taskPhase}`} role="status">
+            {taskPhase === "succeeded" ? (
+              <Check size={24} />
+            ) : (
+              <XCircle size={24} />
+            )}
+            <div>
+              <strong>{taskSummary(taskStatus, taskPhase, it)}</strong>
+              {taskStatus.currentVersion && (
+                <small>
+                  {it.currentVersion}: v{taskStatus.currentVersion}
+                </small>
+              )}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="update-diagnostics-toggle"
+            aria-expanded={diagnosticsOpen}
+            onClick={() => void loadDiagnostics()}
+          >
+            {it.updateLogDetails}
+          </button>
+          {diagnosticsOpen && (
+            <div className="update-diagnostics">
+              {taskStatus.executorConfirmed && renderStages(taskStatus)}
+              {taskStatus.message && taskPhase !== "succeeded" && (
+                <p>{taskStatus.message}</p>
+              )}
+              {taskStatus.recoveryMessage && (
+                <p>{taskStatus.recoveryMessage}</p>
+              )}
+              <pre>{diagnosticsLoading ? it.loading : diagnostics || ""}</pre>
             </div>
           )}
         </section>
@@ -628,7 +710,7 @@ export function SystemUpdate({ currentVersion }: { currentVersion: string }) {
             data-form-dialog-body
             onSubmit={(event) => {
               event.preventDefault();
-              void startUpdate();
+              void confirmUpdate();
             }}
           >
             <div className="confirm-update-icon" aria-hidden="true">

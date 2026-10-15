@@ -235,7 +235,7 @@ function Start-NgtStudioTask {
   Start-ScheduledTask -TaskName $script:NgtTaskName
 }
 
-function Wait-NgtStudioHealth {
+function Wait-NgtStudioHealth([string]$ExpectedVersion = "") {
   $routes = @("http://127.0.0.1:3000/api/health", "http://127.0.0.1:3000/orders")
   foreach ($route in $routes) {
     $ready = $false
@@ -243,6 +243,13 @@ function Wait-NgtStudioHealth {
       try {
         $response = Invoke-WebRequest -Uri $route -UseBasicParsing -TimeoutSec 5
         if ($response.StatusCode -eq 200) {
+          if (($ExpectedVersion) -and ($route -like "*/api/health")) {
+            $health = $response.Content | ConvertFrom-Json
+            if ([string]$health.currentVersion -ne $ExpectedVersion) {
+              Start-Sleep -Seconds 1
+              continue
+            }
+          }
           $ready = $true
           break
         }

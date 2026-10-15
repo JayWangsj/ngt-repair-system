@@ -2,57 +2,52 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { useState } from "react";
 import { useMessages } from "./language";
-import {
-  readAutoUpdateCheck,
-  UPDATE_CHECKED_SESSION_KEY,
-} from "@/lib/update-preference";
+import { useUpdateState } from "./update-state";
 
 export function UpdateStartupCheck() {
   const it = useMessages();
   const path = usePathname();
-  const [version, setVersion] = useState("");
+  const { check, info, task } = useUpdateState();
+  const [dismissedVersion, setDismissedVersion] = useState("");
+  const version = info?.latestVersion || "";
+  if (
+    !version ||
+    !info?.updateAvailable ||
+    path.startsWith("/settings/system-update") ||
+    [
+      "starting",
+      "queued",
+      "running",
+      "reconnecting",
+      "verifying",
+      "rolling-back",
+    ].includes(task.phase) ||
+    dismissedVersion === version
+  )
+    return null;
 
-  useEffect(() => {
-    if (path.startsWith("/settings/system-update")) return;
-    if (!readAutoUpdateCheck()) return;
-    if (window.sessionStorage.getItem(UPDATE_CHECKED_SESSION_KEY)) return;
-    window.sessionStorage.setItem(UPDATE_CHECKED_SESSION_KEY, "true");
-    const controller = new AbortController();
-    void fetch("/api/system-update", {
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (!response.ok) return;
-        const result = (await response.json()) as {
-          updateAvailable?: boolean;
-          latestVersion?: string;
-        };
-        if (result.updateAvailable && result.latestVersion) {
-          setVersion(result.latestVersion);
-        }
-      })
-      .catch(() => undefined);
-    return () => controller.abort();
-    // One check per application session; navigation must not start polling.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  if (!version) return null;
   return (
-    <aside className="update-notification" aria-live="polite">
-      <Link href="/settings/system-update">
-        {it.updateAvailable.replace("{version}", version)}
+    <aside className="update-notification" role="status" aria-live="polite">
+      <div className="update-notification-copy">
+        <strong>{it.updateNoticeTitle.replace("{version}", version)}</strong>
+        <span>
+          {check.phase === "failed"
+            ? it.updateCheckStale.replace("{version}", version)
+            : it.updateNoticeBody}
+        </span>
+      </div>
+      <Link className="button button-primary" href="/settings/system-update">
+        {it.viewUpdate}
       </Link>
       <button
         type="button"
+        className="button button-outline update-notification-later"
         aria-label={it.close}
-        onClick={() => setVersion("")}
+        onClick={() => setDismissedVersion(version)}
       >
-        <X size={16} />
+        {it.later}
       </button>
     </aside>
   );

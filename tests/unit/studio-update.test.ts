@@ -1,5 +1,6 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { EventEmitter } from "node:events";
+import type { ChildProcess } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough, Writable } from "node:stream";
@@ -8,6 +9,8 @@ import {
   checkStudioUpdate,
   compareVersions,
   getGitHubLoginStatus,
+  getStudioUpdateLog,
+  getStudioUpdateStatus,
   startGitHubLogin,
   startStudioUpdate,
 } from "../../src/lib/studio-update";
@@ -34,6 +37,18 @@ function authProcess() {
     },
     emit: events.emit.bind(events),
     input: () => input,
+  };
+}
+
+function updateProcess() {
+  const events = new EventEmitter();
+  return {
+    process: {
+      pid: 4242,
+      unref() {},
+      once: events.once.bind(events),
+    } as unknown as ChildProcess,
+    emit: events.emit.bind(events),
   };
 }
 
@@ -110,12 +125,13 @@ describe("studio update", () => {
       ),
       writeFile(
         path.join(installRoot, "update-status.json"),
-        `\uFEFF${JSON.stringify({ status: "checking" })}`,
+        `\uFEFF${JSON.stringify({ status: "checking", stage: "checking" })}`,
       ),
     ]);
 
     const result = await checkStudioUpdate({
       root,
+      inspect: async () => true,
       run: async () => {
         throw new Error("You are not logged into any GitHub hosts.");
       },
@@ -233,6 +249,151 @@ describe("studio update", () => {
     ).rejects.toThrow("connection timed out");
   });
 
+  it("shows an unreadable saved state as requiring verification", async () => {
+    const { root, installRoot } = await studioRoot();
+    await writeFile(path.join(installRoot, "update-status.json"), "{broken");
+
+    await expect(getStudioUpdateStatus(root)).resolves.toMatchObject({
+      status: "verifying-task",
+      manualReview: true,
+    });
+  });
+
+  it("does not trust an old checking task when its identified process is gone", async () => {
+    const { root, installRoot } = await studioRoot();
+    await writeFile(
+      path.join(installRoot, "update-status.json"),
+      JSON.stringify({
+        status: "checking",
+        stage: "checking",
+        updateId: "0bd7d5ac-4cd6-4a7e-9fd4-d11c136caf16",
+        executorPid: 4242,
+        executorConfirmed: true,
+        updatedAt: "2020-01-01T00:00:00.000Z",
+      }),
+    );
+
+    await expect(
+      getStudioUpdateStatus(root, { inspect: async () => false }),
+    ).resolves.toMatchObject({
+      status: "interrupted",
+      previousStatus: "checking",
+      currentVersion: "1.11.57",
+    });
+  });
+
+  it("does not treat a reported completion as success unless the running version matches", async () => {
+    const { root, installRoot } = await studioRoot();
+    await writeFile(
+      path.join(installRoot, "update-status.json"),
+      JSON.stringify({
+        status: "complete",
+        updateId: "0bd7d5ac-4cd6-4a7e-9fd4-d11c136caf16",
+        targetVersion: "1.11.58",
+        latestVersion: "v1.11.58",
+      }),
+    );
+
+    await expect(getStudioUpdateStatus(root)).resolves.toMatchObject({
+      status: "interrupted",
+      actualVersion: "1.11.57",
+      manualReview: true,
+    });
+  });
+
+  it("does not claim a rollback is verified without a recorded previous version", async () => {
+    const { root, installRoot } = await studioRoot();
+    await writeFile(
+      path.join(installRoot, "update-status.json"),
+      JSON.stringify({
+        status: "failed",
+        recoveryStatus: "succeeded",
+        updateId: "0bd7d5ac-4cd6-4a7e-9fd4-d11c136caf16",
+      }),
+    );
+
+    await expect(getStudioUpdateStatus(root)).resolves.toMatchObject({
+      status: "failed",
+      recoveryStatus: "failed",
+      currentVersion: "1.11.57",
+      actualVersion: "1.11.57",
+      manualReview: true,
+      recoveryMessage:
+        "The previous version was not recorded, so the rollback cannot be verified.",
+    });
+  });
+
+  it("keeps a stale lock while its updater identity is still alive", async () => {
+    const { root, installRoot } = await studioRoot();
+    const updateId = "0bd7d5ac-4cd6-4a7e-9fd4-d11c136caf16";
+    const lockFile = path.join(installRoot, "update.lock");
+    await writeFile(
+      lockFile,
+      JSON.stringify({
+        updateId,
+        executorPid: 4242,
+        createdAt: "2020-01-01T00:00:00.000Z",
+      }),
+    );
+    await writeFile(
+      path.join(installRoot, "update-status.json"),
+      JSON.stringify({ status: "running", updateId, executorPid: 4242 }),
+    );
+
+    await expect(
+      startStudioUpdate({ root, inspect: async () => true }),
+    ).rejects.toThrow("studio_update_in_progress");
+    await expect(readFile(lockFile, "utf8")).resolves.toContain(updateId);
+  });
+
+  it("records an asynchronous process start failure as a terminal task result", async () => {
+    const { root, installRoot } = await studioRoot();
+    const child = updateProcess();
+    await startStudioUpdate({ root, launch: () => child.process });
+    child.emit("error", new Error("simulated spawn failure"));
+
+    await expect
+      .poll(async () => {
+        const status = JSON.parse(
+          await readFile(path.join(installRoot, "update-status.json"), "utf8"),
+        ) as { status: string; message?: string };
+        return status;
+      })
+      .toMatchObject({
+        status: "failed",
+        message: "Unable to start the update executor: simulated spawn failure",
+      });
+    await expect(
+      readFile(path.join(installRoot, "update.lock"), "utf8"),
+    ).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("redacts tokens from diagnostic logs read from an isolated install root", async () => {
+    const { root, installRoot } = await studioRoot();
+    const updateId = "0bd7d5ac-4cd6-4a7e-9fd4-d11c136caf16";
+    await mkdir(path.join(installRoot, "logs"));
+    await writeFile(
+      path.join(installRoot, "update-status.json"),
+      JSON.stringify({
+        status: "complete",
+        updateId,
+        targetVersion: "1.11.57",
+        latestVersion: "1.11.57",
+        actualVersion: "1.11.57",
+      }),
+    );
+    await writeFile(
+      path.join(installRoot, "logs", `update-${updateId}.log`),
+      "failed request token: ghp_123456789012345678901234567890123456\n",
+    );
+
+    const log = await getStudioUpdateLog(root);
+    expect(log).toContain("[redacted]");
+    expect(log).not.toContain("ghp_");
+  });
+
   it("advances browser authorization and verifies private release access", async () => {
     const { root, installRoot } = await studioRoot();
     const child = authProcess();
@@ -281,11 +442,12 @@ describe("studio update", () => {
     expect(calls[1]).toContain("JayWangsj/ngt-repair-system");
 
     const updateLaunches: { executable: string; args: string[] }[] = [];
+    const updateChild = updateProcess();
     await startStudioUpdate({
       root,
       launch: (executable, args) => {
         updateLaunches.push({ executable, args });
-        return { unref() {} };
+        return updateChild.process;
       },
     });
     expect(updateLaunches[0].executable).toBe("powershell.exe");
@@ -297,7 +459,7 @@ describe("studio update", () => {
     const status = JSON.parse(
       await readFile(path.join(installRoot, "update-status.json"), "utf8"),
     ) as { status: string };
-    expect(status.status).toBe("queued");
+    expect(status.status).toBe("starting");
     await expect(startStudioUpdate({ root })).rejects.toThrow(
       "studio_update_in_progress",
     );

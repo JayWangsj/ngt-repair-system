@@ -12,9 +12,13 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
+  CircleArrowUp,
+  CircleAlert,
+  LoaderCircle,
 } from "lucide-react";
 import { useMessages } from "./language";
 import { BrandLogo } from "./brand-logo";
+import { useUpdateState } from "./update-state";
 import {
   applySidebarPreference,
   clampSidebarWidth,
@@ -27,6 +31,7 @@ import {
 export function Sidebar() {
   const it = useMessages();
   const path = usePathname();
+  const { currentVersion, check, info, task } = useUpdateState();
   const [width, setWidth] = useState(240);
   const [collapsed, setCollapsed] = useState(false);
   const links = [
@@ -97,6 +102,54 @@ export function Sidebar() {
     }
   }
 
+  const updateFailed = [
+    "failed",
+    "rollback-succeeded",
+    "rollback-failed",
+    "interrupted",
+    "verifying",
+  ].includes(task.phase);
+  const updateRunning = [
+    "starting",
+    "queued",
+    "running",
+    "reconnecting",
+    "rolling-back",
+  ].includes(task.phase);
+  const availableVersion = info?.updateAvailable
+    ? info.latestVersion
+    : undefined;
+  const updateSummary = updateFailed
+    ? task.phase === "verifying"
+      ? it.updateVerifyingTask
+      : task.phase === "interrupted"
+        ? it.updateInterrupted
+        : task.phase === "rollback-succeeded"
+          ? it.updateRollbackSucceeded
+          : task.phase === "rollback-failed"
+            ? it.updateRollbackFailed
+            : it.updateFailed
+    : task.phase === "starting" || task.phase === "queued"
+      ? it.updateTaskStarting
+      : task.phase === "reconnecting"
+        ? it.updateReconnecting
+        : task.phase === "rolling-back"
+          ? it.updateRollingBack
+          : task.phase === "running"
+            ? it.updateInstalling
+            : availableVersion
+              ? check.phase === "failed"
+                ? it.updateCheckStale.replace("{version}", availableVersion)
+                : it.updateAvailable.replace("{version}", availableVersion)
+              : it.systemUpdate;
+  const updateLabel = `${currentVersion}: ${updateSummary}`;
+  const updateHref = "/settings/system-update";
+  const UpdateIcon = updateFailed
+    ? CircleAlert
+    : updateRunning
+      ? LoaderCircle
+      : CircleArrowUp;
+
   return (
     <aside className="sidebar">
       <Link href="/" className="brand">
@@ -112,25 +165,51 @@ export function Sidebar() {
       >
         {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
       </button>
-      <div className="nav-label">{it.navigation}</div>
-      <nav aria-label={it.navigation}>
-        {links.map(({ href, label, icon: Icon }) => (
-          <Link
-            key={href}
-            href={href}
-            className={
-              (href === "/" ? path === href : path.startsWith(href))
-                ? "nav-item active"
-                : "nav-item"
-            }
-            data-tooltip={label}
-            aria-label={label}
-          >
-            <Icon size={19} />
-            <span className="nav-item-label">{label}</span>
-          </Link>
-        ))}
-      </nav>
+      <div className="sidebar-navigation">
+        <div className="nav-label">{it.navigation}</div>
+        <nav aria-label={it.navigation}>
+          {links.map(({ href, label, icon: Icon }) => (
+            <Link
+              key={href}
+              href={href}
+              className={
+                (href === "/" ? path === href : path.startsWith(href))
+                  ? "nav-item active"
+                  : "nav-item"
+              }
+              data-tooltip={label}
+              aria-label={label}
+            >
+              <Icon size={19} />
+              <span className="nav-item-label">{label}</span>
+            </Link>
+          ))}
+        </nav>
+        <Link
+          href={updateHref}
+          className={`sidebar-update-entry${path.startsWith(updateHref) ? " active" : ""}`}
+          aria-label={updateLabel}
+          aria-current={path.startsWith(updateHref) ? "page" : undefined}
+          title={updateLabel}
+        >
+          <span className="sidebar-update-icon" aria-hidden="true">
+            <UpdateIcon
+              size={19}
+              className={updateRunning ? "spin" : undefined}
+            />
+            {availableVersion && !updateRunning && !updateFailed && (
+              <span className="sidebar-update-dot" />
+            )}
+            {updateFailed && (
+              <span className="sidebar-update-alert-mark">!</span>
+            )}
+          </span>
+          <span className="sidebar-update-copy">
+            <strong>v{currentVersion}</strong>
+            <small>{updateSummary}</small>
+          </span>
+        </Link>
+      </div>
       <div
         className="sidebar-resizer"
         role="separator"

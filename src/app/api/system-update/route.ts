@@ -1,4 +1,9 @@
-import { checkStudioUpdate, startStudioUpdate } from "@/lib/studio-update";
+import {
+  checkStudioUpdate,
+  sanitizeUpdateDiagnostic,
+  sanitizeUpdateStatus,
+  startStudioUpdate,
+} from "@/lib/studio-update";
 import { isSameOriginWriteRequest } from "@/lib/request-source";
 
 export const dynamic = "force-dynamic";
@@ -6,10 +11,15 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    return Response.json(await checkStudioUpdate());
+    const result = await checkStudioUpdate();
+    return Response.json({
+      ...result,
+      status: result.status ? sanitizeUpdateStatus(result.status) : undefined,
+    });
   } catch (cause) {
-    const error =
-      cause instanceof Error ? cause.message : "update_check_failed";
+    const error = sanitizeUpdateDiagnostic(
+      cause instanceof Error ? cause.message : "update_check_failed",
+    );
     return Response.json({ error }, { status: 502 });
   }
 }
@@ -21,10 +31,23 @@ export async function POST(request: Request) {
       { status: 403 },
     );
   try {
-    await startStudioUpdate();
-    return Response.json({ started: true }, { status: 202 });
+    const body = (await request.json()) as { targetVersion?: unknown };
+    if (
+      typeof body.targetVersion !== "string" ||
+      !/^v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(body.targetVersion)
+    )
+      return Response.json(
+        { error: "update_target_required" },
+        { status: 400 },
+      );
+    const status = await startStudioUpdate({
+      targetVersion: body.targetVersion,
+    });
+    return Response.json({ started: true, ...status }, { status: 202 });
   } catch (cause) {
-    const error = cause instanceof Error ? cause.message : "update_failed";
+    const error = sanitizeUpdateDiagnostic(
+      cause instanceof Error ? cause.message : "update_failed",
+    );
     return Response.json({ error }, { status: 409 });
   }
 }

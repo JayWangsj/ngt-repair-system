@@ -540,6 +540,33 @@ export const it = {
   updateLoginCopyFailed:
     "Copia automatica non riuscita. Seleziona manualmente il link o il codice.",
   updateCheckFailed: "Impossibile controllare gli aggiornamenti. Riprova.",
+  updateCheckTimeout: "Il controllo aggiornamenti è scaduto. Puoi riprovare.",
+  updateNotChecked: "Non ancora controllato.",
+  updateNotInstallable:
+    "È stata trovata una versione più recente, ma il pacchetto necessario non è disponibile.",
+  updateCheckStale:
+    "La versione {version} era disponibile nell'ultimo controllo riuscito; il controllo attuale non è riuscito.",
+  updateCheckTime: "Ultimo controllo riuscito",
+  updateNoticeTitle: "È disponibile la versione {version}",
+  updateNoticeBody:
+    "Puoi consultare le novità. Prima dell'installazione verrà creato un backup.",
+  viewUpdate: "Dettagli aggiornamento",
+  later: "Più tardi",
+  updateTaskStarting: "Avvio dell'attività di aggiornamento…",
+  updateVerifyingTask: "Verifica dell'attività di aggiornamento precedente…",
+  updateReconnecting: "Riconnessione al servizio di aggiornamento…",
+  updateInterrupted:
+    "L'attività di aggiornamento si è interrotta. Verifica i dettagli prima di riprovare.",
+  updateRollingBack: "Ripristino della versione precedente…",
+  updateRollbackSucceeded:
+    "Aggiornamento non riuscito; la versione precedente è stata ripristinata e verificata.",
+  updateRollbackFailed:
+    "Aggiornamento non riuscito e ripristino non verificato. È necessaria una verifica manuale.",
+  updateTargetChanged:
+    "La versione disponibile è cambiata. Controlla di nuovo prima di aggiornare.",
+  verifyUpdateTask: "Verifica attività",
+  updateLogDetails: "Dettagli diagnostici",
+  updateLogUnavailable: "Il registro non è disponibile.",
   updateNow: "Aggiorna ora",
   updateConfirmTitle: "Conferma aggiornamento",
   updateConfirm:
@@ -564,6 +591,10 @@ export const it = {
   updateEtaShort: "{seconds} s",
   updateEtaFormat: "{minutes} min {seconds} s",
   updateStageDownloaded: "Download completato",
+  updateStageReadingRelease: "Lettura dei dati della versione",
+  updateStageDownloading: "Download del pacchetto",
+  updateIndeterminate: "Avanzamento non disponibile",
+  updateStepSkipped: "Saltato",
   updateStageVerifying: "Verifica pacchetto",
   updateStageRuntime: "Preparazione dell'ambiente condiviso",
   updateStageBackup: "Backup dati",

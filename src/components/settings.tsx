@@ -23,6 +23,7 @@ import { LanguageSwitch, useMessages } from "./language";
 import { Button } from "./ui/button";
 import { DatePicker, SimpleSelect } from "./business-select";
 import { Field } from "./forms";
+import { useUpdateState } from "./update-state";
 import {
   FaultCatalogManager,
   type FaultCatalogItem,
@@ -80,6 +81,23 @@ export function SettingsOverview({
   testToolsEnabled: boolean;
 }) {
   const it = useMessages();
+  const update = useUpdateState();
+  const updateDescription = update.info?.updateAvailable
+    ? update.check.phase === "failed"
+      ? it.updateCheckStale.replace(
+          "{version}",
+          update.info.latestVersion || "",
+        )
+      : it.updateAvailable.replace("{version}", update.info.latestVersion || "")
+    : update.check.phase === "not-installable"
+      ? it.updateNotInstallable
+      : update.task.phase === "running" || update.task.phase === "rolling-back"
+        ? it.updateInstalling
+        : ["failed", "rollback-failed", "interrupted"].includes(
+              update.task.phase,
+            )
+          ? it.updateFailed
+          : `${it.currentVersion}: ${update.currentVersion || currentVersion}`;
   return (
     <div className="settings-grid settings-overview">
       <SettingsEntry
@@ -112,7 +130,7 @@ export function SettingsOverview({
         href="/settings/system-update"
         icon={<RefreshCw size={20} />}
         title={it.systemUpdate}
-        description={`${it.currentVersion}: ${currentVersion}`}
+        description={updateDescription}
         className="system-update-entry"
       />
       <SettingsEntry

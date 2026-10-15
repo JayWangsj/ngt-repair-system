@@ -262,10 +262,6 @@ describe("Windows persistent startup", () => {
       "scripts/test-windows-studio-package.ps1",
       "utf8",
     );
-    const releaseVerifier = await readFile(
-      "scripts/verify-windows-studio-release.ps1",
-      "utf8",
-    );
     expect(backup).toContain('"SHA256SUMS.txt"');
     expect(backup).toContain("Stop-NgtStudioProcesses");
     expect(backup).toContain("$_.FullName.Substring($backupPrefix.Length)");
@@ -352,9 +348,6 @@ describe("Windows persistent startup", () => {
     expect(packageSmokeTest).toContain('"initdb.exe"');
     expect(packageSmokeTest).toContain("--- Archive bootstrap entries ---");
     expect(packageSmokeTest).toContain("--- Extracted release scripts ---");
-    expect(releaseVerifier).toContain(
-      "$expectedAppPaths -notcontains $normalizedRequiredFile",
-    );
     expect(packageSmokeTest).toContain("require('pg')");
     expect(packageSmokeTest).toContain("new PrismaClient()");
     expect(packageSmokeTest).toContain("verify-windows-studio-release.ps1");

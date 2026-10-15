@@ -315,7 +315,7 @@ export function UpdateStateProvider({
       setTask(next);
       return next;
     }
-  }, [startMonitoring]);
+  }, [checkForUpdates, startMonitoring]);
 
   const startUpdate = useCallback(
     async (targetVersion: string) => {

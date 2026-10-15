@@ -20,12 +20,17 @@ const nextConfig = JSON.parse(
   serverSource.slice(configStart + configStartMarker.length, configEnd),
 );
 const buildDirectory = resolve(projectRoot, nextConfig.distDir ?? ".next");
-const standaloneBuildDirectory = resolve(standaloneRoot, nextConfig.distDir ?? ".next");
+const standaloneBuildDirectory = resolve(
+  standaloneRoot,
+  nextConfig.distDir ?? ".next",
+);
 if (
   !buildDirectory.startsWith(`${resolve(projectRoot)}${sep}`) ||
   !standaloneBuildDirectory.startsWith(`${standaloneRoot}${sep}`)
 ) {
-  throw new Error("The standalone build directory must stay inside the project.");
+  throw new Error(
+    "The standalone build directory must stay inside the project.",
+  );
 }
 
 for (const [source, destination] of [

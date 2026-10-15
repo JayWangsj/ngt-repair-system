@@ -33,6 +33,10 @@ $standaloneDestination = Join-Path $stage ".next\standalone"
 if ($LASTEXITCODE -ne 0) {
   throw "Standalone build copy failed."
 }
+$standaloneDocs = Join-Path $standaloneDestination "docs"
+if (Test-Path -LiteralPath $standaloneDocs) {
+  Remove-Item -LiteralPath $standaloneDocs -Recurse -Force
+}
 $swcHelpersSource = Join-Path $projectRoot "node_modules\@swc\helpers"
 $swcHelpersDestination = Join-Path $standaloneDestination "node_modules\@swc\helpers"
 if (-not (Test-Path -LiteralPath $swcHelpersSource)) {

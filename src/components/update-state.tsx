@@ -219,6 +219,7 @@ export function UpdateStateProvider({
       task.status?.installInstanceId,
     ],
   );
+  const checkForUpdatesRef = useRef(checkForUpdates);
 
   const ensureChecked = useCallback(async () => {
     await initializationPromise.current;
@@ -402,6 +403,12 @@ export function UpdateStateProvider({
       window.clearTimeout(timeout);
     }
   }, [startMonitoring]);
+  const refreshTaskRef = useRef(refreshTask);
+
+  useEffect(() => {
+    checkForUpdatesRef.current = checkForUpdates;
+    refreshTaskRef.current = refreshTask;
+  }, [checkForUpdates, refreshTask]);
 
   const startUpdate = useCallback(
     async (targetVersion: string) => {
@@ -434,7 +441,7 @@ export function UpdateStateProvider({
   useEffect(() => {
     let cancelled = false;
     const initialization = (async () => {
-      const initialTask = await refreshTask();
+      const initialTask = await refreshTaskRef.current();
       if (cancelled) return;
       const cached = readUpdateCheckCache<UpdateInfo>(
         initialTask.status?.installInstanceId,
@@ -449,7 +456,8 @@ export function UpdateStateProvider({
           lastSuccessfulCheckAt: cached.checkedAt,
         });
       }
-      if (readAutoUpdateCheck() && !cached) await checkForUpdates(false);
+      if (readAutoUpdateCheck() && !cached)
+        await checkForUpdatesRef.current(false);
     })();
     initializationPromise.current = initialization;
     return () => {
@@ -457,7 +465,7 @@ export function UpdateStateProvider({
       requestId.current += 1;
       stopMonitoring();
     };
-  }, [checkForUpdates, refreshTask, stopMonitoring]);
+  }, [initialVersion, stopMonitoring]);
 
   const value = useMemo<UpdateStateValue>(
     () => ({

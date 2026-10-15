@@ -31,8 +31,14 @@ $expectedAppPaths = @($expectedPaths | Where-Object {
 $actualAppPaths = @($actualPaths | Where-Object {
   $_ -notmatch "^(?i)runtime/" -and $_ -ne ".local/studio.json"
 } | Sort-Object)
-if (Compare-Object -ReferenceObject $expectedAppPaths -DifferenceObject $actualAppPaths) {
-  throw "Studio release files do not match the installed file manifest."
+$pathDifferences = @(Compare-Object -ReferenceObject $expectedAppPaths -DifferenceObject $actualAppPaths)
+if ($pathDifferences.Count -gt 0) {
+  $missingPaths = @($pathDifferences | Where-Object SideIndicator -eq "<=" | ForEach-Object InputObject)
+  $unexpectedPaths = @($pathDifferences | Where-Object SideIndicator -eq "=>" | ForEach-Object InputObject)
+  $missingSample = [string]::Join(", ", @($missingPaths | Select-Object -First 20))
+  $unexpectedSample = [string]::Join(", ", @($unexpectedPaths | Select-Object -First 20))
+  throw ("Studio release files do not match the installed file manifest. Missing: {0} ({1}); unexpected: {2} ({3})." -f `
+    $missingSample, $missingPaths.Count, $unexpectedSample, $unexpectedPaths.Count)
 }
 
 foreach ($entry in $metadata.files.PSObject.Properties) {

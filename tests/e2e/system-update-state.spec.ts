@@ -510,8 +510,11 @@ test("continues monitoring an active update beyond the previous four-minute limi
   await page.clock.install({ time: new Date("2026-10-15T12:00:00.000Z") });
   let started = false;
   let statusReads = 0;
-  await page.route("**/api/system-update/status", (route) => {
+  let monitoringReads = 0;
+  let completedStatusReads = 0;
+  await page.route("**/api/system-update/status", async (route) => {
     statusReads += 1;
+    if (started) monitoringReads += 1;
     const status = started
       ? {
           status: "running",
@@ -524,11 +527,12 @@ test("continues monitoring an active update beyond the previous four-minute limi
           updatedAt: "2026-10-15T12:00:00.000Z",
         }
       : { status: "idle", currentVersion: "2.0.9" };
-    return route.fulfill({
+    await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify(status),
     });
+    completedStatusReads += 1;
   });
   await page.route("**/api/system-update", (route) => {
     if (route.request().method() === "POST") {
@@ -561,11 +565,19 @@ test("continues monitoring an active update beyond the previous four-minute limi
     .getByRole("dialog")
     .getByRole("button", { name: "Aggiorna ora" })
     .click();
-  await page.clock.runFor(1_000);
-  await page.clock.setFixedTime(new Date("2026-10-15T12:05:00.000Z"));
-  await page.clock.runFor(2_000);
+  for (
+    let elapsed = 0;
+    elapsed < 250_000 && monitoringReads <= 120;
+    elapsed += 1_000
+  ) {
+    const previousReads = statusReads;
+    await page.clock.runFor(1_000);
+    if (statusReads > previousReads) {
+      await expect.poll(() => completedStatusReads).toBe(statusReads);
+    }
+  }
 
-  expect(statusReads).toBeGreaterThan(2);
+  expect(monitoringReads).toBeGreaterThan(120);
   await expect(page.locator(".update-progress-card")).toContainText(
     "Installazione",
   );

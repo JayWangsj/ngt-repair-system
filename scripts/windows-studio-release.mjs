@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
@@ -393,6 +393,88 @@ function retryable(error) {
     error?.retryable === true ||
     [408, 429, 500, 502, 503, 504].includes(error?.status)
   );
+}
+
+// Draft Releases are the transport between isolated GitHub-hosted runners.
+// Recreate the local manifest from downloaded bytes instead of trusting
+// mutable remote metadata or an Actions artifact.
+export async function downloadDraft(api, directory, { tag, sha, version }) {
+  if (
+    tag !== "v" + version ||
+    !/^v\d+\.\d+\.\d+$/.test(tag) ||
+    !/^[a-f0-9]{40}$/i.test(sha)
+  ) {
+    throw new Error("Draft Release download has an invalid source identity.");
+  }
+  const expectedSha = sha.toLowerCase();
+  if ((await api.resolveTagCommit(tag)) !== expectedSha) {
+    throw new Error(
+      "Draft Release Git tag does not match the qualified Commit SHA.",
+    );
+  }
+  const release = await api.findRelease(tag);
+  const marker = parseReleaseMarker(release?.body);
+  if (
+    !release?.draft ||
+    release.tag_name !== tag ||
+    marker?.tag !== tag ||
+    marker.sha !== expectedSha ||
+    marker.version !== version
+  ) {
+    throw new Error(
+      "Draft Release is missing or has an unexpected identity marker.",
+    );
+  }
+  const expectedNames = expectedAssetNames(tag);
+  const remoteAssets = release.assets || [];
+  if (
+    remoteAssets.length !== expectedNames.length ||
+    JSON.stringify(remoteAssets.map((asset) => asset.name).sort()) !==
+      JSON.stringify(expectedNames)
+  ) {
+    throw new Error("Draft Release contains incomplete or unexpected assets.");
+  }
+  await mkdir(directory, { recursive: true });
+  if ((await readdir(directory)).length !== 0) {
+    throw new Error(
+      "Refusing to overwrite a nonempty Draft download directory.",
+    );
+  }
+  for (const name of expectedNames) {
+    const remote = remoteAssets.find((asset) => asset.name === name);
+    const bytes = await api.downloadAsset(remote);
+    if (
+      !Buffer.isBuffer(bytes) ||
+      !Number.isSafeInteger(remote.size) ||
+      bytes.length !== remote.size ||
+      (remote.digest &&
+        String(remote.digest).toLowerCase() !== "sha256:" + sha256(bytes))
+    ) {
+      throw new Error(
+        "Draft Release downloaded asset size or digest mismatch: " + name,
+      );
+    }
+    await writeFile(path.join(directory, name), bytes, { flag: "wx" });
+  }
+  const manifest = await createLocalManifest(
+    directory,
+    tag,
+    expectedSha,
+    version,
+  );
+  if (!markerMatches(release, manifest)) {
+    throw new Error(
+      "Draft Release downloaded bytes do not match the marked build identity.",
+    );
+  }
+  const latest = await api.findRelease(tag);
+  if (!latest?.draft || !markerMatches(latest, manifest)) {
+    throw new Error(
+      "Draft Release changed identity or became public during download.",
+    );
+  }
+  await verifyRemoteAssets(api, latest, manifest, true);
+  return manifest;
 }
 
 export async function prepareDraft(api, directory, manifest) {
@@ -895,6 +977,23 @@ async function main() {
     console.log("Verified Windows package artifact " + manifest.buildIdentity);
     return;
   }
+  if (command === "download-draft") {
+    if (!directoryArg)
+      throw new Error("download-draft requires an empty download directory.");
+    const { tag, sha, version } = await readExpectedEnvironment();
+    const api = new GitHubReleaseApi({
+      token: process.env.GITHUB_TOKEN || process.env.GH_TOKEN,
+    });
+    const manifest = await downloadDraft(api, directoryArg, {
+      tag,
+      sha,
+      version,
+    });
+    console.log(
+      "Downloaded and verified Draft Release " + manifest.buildIdentity,
+    );
+    return;
+  }
   if (
     command === "verify-artifact" ||
     command === "prepare-draft" ||
@@ -959,7 +1058,7 @@ async function main() {
     return;
   }
   throw new Error(
-    "Command must be manifest, package-manifest, verify-package, verify-artifact, prepare-draft, publish, or qualify.",
+    "Command must be manifest, package-manifest, verify-package, verify-artifact, download-draft, prepare-draft, publish, or qualify.",
   );
 }
 

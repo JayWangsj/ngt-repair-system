@@ -1,22 +1,25 @@
 name: Verify MVP
+
 on:
   push:
     branches: [master]
-    paths-ignore:
-      - "**/*.md"
   pull_request:
     branches: [master]
     paths-ignore:
       - "**/*.md"
 
 concurrency:
-  group: verify-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: verify-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
+
 jobs:
   verify:
+    concurrency:
+      group: verify-main-${{ github.ref }}
+      queue: max
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -47,6 +50,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: node --test tests/release/windows-studio-release.node-test.mjs
       - run: pnpm db:generate
       - run: pnpm typecheck
       - run: pnpm lint
@@ -55,18 +59,23 @@ jobs:
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
       - run: node scripts/verify.mjs
+      - name: Validate container build
+        run: docker build --target runner -t ngt-mvp:ci .
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: browser-diagnostics
+          name: browser-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             playwright-report/
             test-results/
-      - name: Validate container build
-        run: docker build --target runner -t ngt-mvp:ci .
+          if-no-files-found: warn
+          retention-days: 7
 
   windows-studio-smoke:
+    concurrency:
+      group: verify-windows-smoke-${{ github.ref }}
+      queue: max
     runs-on: windows-2022
     timeout-minutes: 30
     steps:
@@ -92,3 +101,44 @@ jobs:
         run: ./scripts/build-windows-studio-package.ps1
       - shell: powershell
         run: ./scripts/test-windows-studio-package.ps1 -IntegrityOnly
+      - name: Prepare exact-SHA Windows package artifact for release reuse
+        if: github.event_name == 'push'
+        shell: powershell
+        run: |
+          $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+          $artifactDirectory = Join-Path $env:RUNNER_TEMP "ngt-windows-package"
+          New-Item -ItemType Directory -Path $artifactDirectory -Force | Out-Null
+          $archiveName = "ngt-studio-windows-v$version.zip"
+          Copy-Item -LiteralPath (Join-Path "dist" $archiveName) -Destination $artifactDirectory
+          Copy-Item -LiteralPath (Join-Path "dist" ($archiveName + ".sha256")) -Destination $artifactDirectory
+          node scripts/windows-studio-release.mjs package-manifest $artifactDirectory ".local\studio-package"
+          if ($LASTEXITCODE -ne 0) { throw "Windows package provenance manifest creation failed." }
+      - name: Upload exact-SHA Windows package artifact
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-studio-package-${{ github.sha }}
+          path: ${{ runner.temp }}/ngt-windows-package/
+          if-no-files-found: error
+          retention-days: 30
+
+  full-verification:
+    needs: [verify, windows-studio-smoke]
+    if: ${{ always() }}
+    concurrency:
+      group: verify-full-gate-${{ github.ref }}
+      queue: max
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every release verification gate
+        env:
+          VERIFY_RESULT: ${{ needs.verify.result }}
+          WINDOWS_SMOKE_RESULT: ${{ needs.windows-studio-smoke.result }}
+        run: |
+          if [[ "$VERIFY_RESULT" != "success" || "$WINDOWS_SMOKE_RESULT" != "success" ]]; then
+            echo "::error::Full verification requires verify and windows-studio-smoke to both succeed."
+            echo "verify=$VERIFY_RESULT windows-studio-smoke=$WINDOWS_SMOKE_RESULT"
+            exit 1
+          fi
+          echo "Full verification passed for both required jobs."

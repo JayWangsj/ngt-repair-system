@@ -7,194 +7,352 @@ on:
 
 permissions:
   actions: read
-  contents: write
+  contents: read
 
 concurrency:
   group: windows-studio-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  package:
-    runs-on: windows-2022
-    timeout-minutes: 180
+  qualify:
+    name: Release qualification
+    runs-on: ubuntu-latest
+    outputs:
+      verify_run_id: ${{ steps.qualification.outputs.run_id }}
+    timeout-minutes: 25
+    permissions:
+      actions: read
+      contents: read
     steps:
       - uses: actions/checkout@v5
-      - name: Validate release version
-        shell: powershell
-        run: |
-          $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
-          if ($env:GITHUB_REF_NAME -ne "v$version") {
-            throw "Tag $env:GITHUB_REF_NAME does not match package version $version."
-          }
-      - name: Wait for successful verification
-        shell: powershell
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          $deadline = (Get-Date).AddMinutes(35)
-          do {
-            $runs = gh run list --workflow ci.yml --commit $env:GITHUB_SHA --event push --limit 1 --json status,conclusion,url | ConvertFrom-Json
-            if ($runs.Count -gt 0) {
-              $run = $runs[0]
-              if ($run.status -eq "completed") {
-                if ($run.conclusion -ne "success") {
-                  throw "Verification failed: $($run.url)"
-                }
-                Write-Host "Verification succeeded: $($run.url)"
-                exit 0
-              }
-              Write-Host "Verification is $($run.status); waiting..."
-            } else {
-              Write-Host "Verification run is not available yet; waiting..."
-            }
-            Start-Sleep -Seconds 15
-          } while ((Get-Date) -lt $deadline)
-          throw "Timed out waiting for Verify MVP on commit $env:GITHUB_SHA."
+        with:
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@v5
         with:
           node-version: 24
           package-manager-cache: false
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.19.0
-          run_install: false
-      - run: pnpm install --frozen-lockfile --config.node-linker=hoisted --config.package-import-method=copy
-      - run: pnpm build
+      - name: Validate tag and exact-SHA Verify MVP
+        id: qualification
         env:
-          DATABASE_URL: postgresql://ngt:release-only@127.0.0.1:55432/ngt?schema=public
-          AUTH_SECRET: release-only-secret
-          AUTH_URL: http://127.0.0.1:3000
-          AUTH_TRUST_HOST: "true"
-          NEXT_TELEMETRY_DISABLED: "1"
-          NODE_OPTIONS: --max-old-space-size=2048
-      - shell: powershell
-        run: ./scripts/build-windows-studio-package.ps1
-      - name: Smoke test packaged studio
+          GITHUB_TOKEN: ${{ github.token }}
+          NGT_VERIFY_TIMEOUT_MINUTES: "20"
+        run: node scripts/windows-studio-release.mjs qualify
+      - name: Record qualification failure metadata
+        if: failure()
         shell: powershell
-        run: ./scripts/test-windows-studio-package.ps1 -IntegrityOnly
-      - shell: powershell
         run: |
-          choco install innosetup --no-progress --yes
-          ./scripts/build-windows-studio-installer.ps1
-      - shell: powershell
-        run: ./scripts/prepare-windows-studio-update-assets.ps1
-      - shell: powershell
+          $directory = Join-Path $env:RUNNER_TEMP "release-qualification-diagnostics"
+          New-Item -ItemType Directory -Path $directory -Force | Out-Null
+          @{ stage = "qualification"; tag = $env:GITHUB_REF_NAME; commit = $env:GITHUB_SHA; runId = $env:GITHUB_RUN_ID } |
+            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory "summary.json") -Encoding utf8
+      - name: Upload qualification diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-qualification-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-qualification-diagnostics/
+          if-no-files-found: warn
+          retention-days: 14
+
+  build:
+    name: Build verified Windows release artifact
+    needs: qualify
+    runs-on: windows-2022
+    timeout-minutes: 120
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Download package from the exact successful Verify MVP run
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-studio-package-${{ github.sha }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ needs.qualify.outputs.verify_run_id }}
+          path: windows-package
+      - name: Verify package provenance and restore installer inputs
+        shell: powershell
         run: |
+          node scripts/windows-studio-release.mjs verify-package windows-package
+          if ($LASTEXITCODE -ne 0) { throw "Same-SHA Windows package artifact verification failed." }
           $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
-          $expectedNames = @(
-            "ngt-studio-windows-v$version.zip",
-            "ngt-studio-windows-v$version.zip.sha256",
-            "ngt-studio-runtime-v$version.zip",
-            "ngt-studio-runtime-v$version.zip.sha256",
-            "ngt-studio-windows-setup-v$version.exe",
-            "ngt-studio-windows-setup-v$version.exe.sha256"
-          ) | Sort-Object
-          $assetFiles = @(Get-ChildItem -LiteralPath dist -File | Sort-Object Name)
-          $actualNames = @($assetFiles | ForEach-Object Name | Sort-Object)
-          if (Compare-Object -ReferenceObject $expectedNames -DifferenceObject $actualNames) {
-            throw "The release asset set is incomplete or contains unexpected files."
+          $archive = Join-Path "windows-package" ("ngt-studio-windows-v" + $version + ".zip")
+          $packageDirectory = Join-Path ".local" "studio-package"
+          New-Item -ItemType Directory -Path $packageDirectory -Force | Out-Null
+          & tar.exe -xf $archive -C $packageDirectory
+          if ($LASTEXITCODE -ne 0) { throw "Verified Windows package extraction failed." }
+          $metadata = Get-Content -LiteralPath (Join-Path $packageDirectory "studio-release.json") -Raw | ConvertFrom-Json
+          if ([string]$metadata.commit -ne $env:GITHUB_SHA -or [string]$metadata.version -ne $version) {
+            throw "Extracted Studio package does not match the release Commit SHA and package version."
           }
-          foreach ($checksumFile in $assetFiles | Where-Object { $_.Name.EndsWith(".sha256") }) {
-            $checksum = Get-Content -LiteralPath $checksumFile.FullName -Raw
-            $match = [regex]::Match($checksum, "(?m)^([A-Fa-f0-9]{64})\s+(.+?)\s*$")
-            if (-not $match.Success) {
-              throw "Invalid release checksum file: $($checksumFile.Name)"
-            }
-            $expectedHash = $match.Groups[1].Value
-            $targetName = $match.Groups[2].Value
-            $asset = Join-Path $checksumFile.DirectoryName $targetName
-            if (-not (Test-Path -LiteralPath $asset -PathType Leaf)) {
-              throw "Checksum target is missing for $($checksumFile.Name)."
-            }
-            if ((Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash -ne $expectedHash) {
-              throw "Release checksum does not match $($checksumFile.Name)."
-            }
-          }
-          $assets = @($assetFiles | Select-Object -ExpandProperty FullName)
-          $existingRelease = $null
-          $releaseEndpoint = "repos/JayWangsj/ngt-repair-system/releases/tags/$env:GITHUB_REF_NAME"
-          $releaseListEndpoint = "repos/JayWangsj/ngt-repair-system/releases?per_page=100"
-          $releasesJson = gh api $releaseListEndpoint
-          if ($LASTEXITCODE -ne 0) { throw "Unable to list existing releases." }
-          $existingReleases = @(
-            $releasesJson | ConvertFrom-Json | Where-Object { $_.tag_name -eq $env:GITHUB_REF_NAME }
-          )
-          if ($existingReleases.Count -gt 1) {
-            throw "Multiple releases exist for $env:GITHUB_REF_NAME."
-          }
-          if ($existingReleases.Count -eq 1) {
-            $existingRelease = $existingReleases[0]
-            if (-not ($existingRelease.draft)) {
-              throw "Release $env:GITHUB_REF_NAME already exists; published versions are never overwritten."
-            }
-          } else {
-            gh release create $env:GITHUB_REF_NAME @assets --verify-tag --generate-notes --draft
-            if ($LASTEXITCODE -ne 0) { throw "Draft release preparation failed." }
-            $releasesJson = gh api $releaseListEndpoint
-            if ($LASTEXITCODE -ne 0) { throw "Unable to verify prepared draft release assets." }
-            $draftReleases = @(
-              $releasesJson | ConvertFrom-Json | Where-Object { $_.tag_name -eq $env:GITHUB_REF_NAME }
-            )
-            if (($draftReleases.Count -ne 1) -or (-not ($draftReleases[0].draft))) {
-              throw "Prepared draft release could not be found."
-            }
-            $existingRelease = $draftReleases[0]
-          }
-          $draft = $existingRelease
-          if (-not ($draft.draft)) { throw "Prepared release is unexpectedly public." }
-          $localAssets = @($assetFiles | ForEach-Object {
-            $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            "{0}`t{1}`tsha256:{2}" -f $_.Name, $_.Length, $hash
-          } | Sort-Object)
-          $remoteAssets = @()
-          $remoteDigestsReady = $false
-          for ($attempt = 0; $attempt -lt 60; $attempt++) {
-            $releasesJson = gh api $releaseListEndpoint
-            if ($LASTEXITCODE -ne 0) { throw "Unable to verify prepared draft release assets." }
-            $draftReleases = @(
-              $releasesJson | ConvertFrom-Json | Where-Object { $_.tag_name -eq $env:GITHUB_REF_NAME }
-            )
-            if (($draftReleases.Count -ne 1) -or (-not ($draftReleases[0].draft))) {
-              throw "Prepared draft release could not be found."
-            }
-            $draft = $draftReleases[0]
-            $remoteAssets = @($draft.assets | ForEach-Object {
-              "{0}`t{1}`t{2}" -f $_.name, $_.size, $_.digest
-            } | Sort-Object)
-            $missingDigests = @($remoteAssets | Where-Object { $_ -notmatch "`tsha256:[a-f0-9]{64}$" })
-            $remoteDigestsReady = ($remoteAssets.Count -eq $localAssets.Count) -and ($missingDigests.Count -eq 0)
-            if ($remoteDigestsReady) { break }
-            if ($attempt -lt 59) {
-              if ((($attempt + 1) % 6) -eq 0) {
-                Write-Host "Waiting for GitHub asset SHA256 digests ($($attempt + 1)/60)."
-              }
-              Start-Sleep -Seconds 5
-            }
-          }
-          if (-not $remoteDigestsReady) {
-            throw "GitHub did not calculate SHA256 digests for all draft release assets."
-          }
-          if (Compare-Object -ReferenceObject $localAssets -DifferenceObject $remoteAssets) {
-            throw "Draft release asset names, sizes, or SHA256 digests do not match the verified local assets."
-          }
-          ./scripts/test-windows-studio-online-update.ps1 -TargetTag $env:GITHUB_REF_NAME
-          $installerPath = Join-Path "dist" ("ngt-studio-windows-setup-" + $env:GITHUB_REF_NAME + ".exe")
-          ./scripts/test-windows-studio-installer.ps1 -InstallerPath $installerPath
-          gh release edit $env:GITHUB_REF_NAME --draft=false --verify-tag
-          if ($LASTEXITCODE -ne 0) { throw "Verified release could not be published." }
-          $publishedJson = gh api $releaseEndpoint
-          if ($LASTEXITCODE -ne 0) { throw "Published release could not be verified." }
-          $published = $publishedJson | ConvertFrom-Json
-          if ($published.draft) { throw "Release remained a draft after publishing." }
-          $publishedAssets = @($published.assets | ForEach-Object {
-            "{0}`t{1}`t{2}" -f $_.name, $_.size, $_.digest
-          } | Sort-Object)
-          if (Compare-Object -ReferenceObject $localAssets -DifferenceObject $publishedAssets) {
-            throw "Published release asset names, sizes, or SHA256 digests do not match the verified local assets."
-          }
-          if (-not $published.immutable) {
-            Write-Warning "This repository does not enforce immutable releases; external repository settings are still required to prevent post-publication changes."
-          }
-          Write-Host "Published verified release: $($published.html_url)"
+          New-Item -ItemType Directory -Path "dist" -Force | Out-Null
+          Copy-Item -LiteralPath $archive -Destination "dist"
+          Copy-Item -LiteralPath ($archive + ".sha256") -Destination "dist"
+          ./scripts/verify-windows-studio-release.ps1 -ReleaseRoot $packageDirectory -ExpectedVersion ("v" + $version) | Out-Null
+      - name: Install pinned Inno Setup and build installer
+        shell: powershell
+        run: |
+          choco install innosetup --version=6.7.1 --no-progress --yes
+          if ($LASTEXITCODE -ne 0) { throw "Pinned Inno Setup installation failed." }
+          $compiler = @(
+            "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe",
+            "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
+            "C:\Program Files\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+          if (-not $compiler) { throw "Pinned Inno Setup compiler was not installed." }
+          $compilerVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($compiler).ProductVersion
+          if ($compilerVersion -notlike "6.7.1*") { throw "Expected Inno Setup 6.7.1; found $compilerVersion." }
+          ./scripts/build-windows-studio-installer.ps1
+      - name: Generate candidate runtime archives and checksums
+        shell: powershell
+        run: ./scripts/prepare-windows-studio-update-assets.ps1
+      - name: Create exact-SHA internal release artifact
+        shell: powershell
+        run: |
+          $artifactDirectory = Join-Path $env:RUNNER_TEMP "ngt-windows-release-assets"
+          New-Item -ItemType Directory -Path $artifactDirectory -Force | Out-Null
+          Get-ChildItem -LiteralPath dist -File | Copy-Item -Destination $artifactDirectory
+          $env:NGT_RELEASE_ASSET_DIR = $artifactDirectory
+          node scripts/windows-studio-release.mjs manifest
+          if ($LASTEXITCODE -ne 0) { throw "Release artifact manifest creation failed." }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-studio-release-${{ github.run_id }}
+          path: ${{ runner.temp }}/ngt-windows-release-assets/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Record build failure metadata
+        if: failure()
+        shell: powershell
+        run: |
+          $directory = Join-Path $env:RUNNER_TEMP "windows-release-build-diagnostics"
+          New-Item -ItemType Directory -Path $directory -Force | Out-Null
+          @{ stage = "windows-build"; tag = $env:GITHUB_REF_NAME; commit = $env:GITHUB_SHA; runId = $env:GITHUB_RUN_ID } |
+            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory "summary.json") -Encoding utf8
+      - name: Upload build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release-build-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/windows-release-build-diagnostics/
+          if-no-files-found: warn
+          retention-days: 14
+
+  prepare-candidate:
+    name: Prepare or safely resume Draft Release
+    needs: [qualify, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-studio-release-${{ github.run_id }}
+          path: release-assets
+      - name: Verify artifact provenance and prepare resumable Draft
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/windows-studio-release.mjs prepare-draft release-assets
+      - name: Record Draft preparation diagnostics
+        if: failure()
+        shell: powershell
+        run: |
+          $directory = Join-Path $env:RUNNER_TEMP "draft-preparation-diagnostics"
+          New-Item -ItemType Directory -Path $directory -Force | Out-Null
+          @{ stage = "draft-preparation"; tag = $env:GITHUB_REF_NAME; commit = $env:GITHUB_SHA; runId = $env:GITHUB_RUN_ID } |
+            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory "summary.json") -Encoding utf8
+      - name: Upload Draft preparation diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: draft-preparation-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/draft-preparation-diagnostics/
+          if-no-files-found: warn
+          retention-days: 14
+
+  online-update-acceptance:
+    name: Disposable Windows online-update acceptance
+    needs: [qualify, build, prepare-candidate]
+    runs-on: windows-2022
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-studio-release-${{ github.run_id }}
+          path: release-assets
+      - name: Verify exact artifact SHA and manifest
+        run: node scripts/windows-studio-release.mjs verify-artifact release-assets
+      - name: Exercise real online upgrade through the isolated Draft candidate channel
+        shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
+        run: ./scripts/test-windows-studio-online-update.ps1 -TargetTag $env:GITHUB_REF_NAME -ExpectedCommitSha $env:GITHUB_SHA -ExpectedManifestPath "release-assets\release-manifest.json"
+      - name: Record online-update failure metadata
+        if: failure()
+        shell: powershell
+        run: |
+          $directory = Join-Path $env:RUNNER_TEMP "ngt-online-update-diagnostics"
+          New-Item -ItemType Directory -Path $directory -Force | Out-Null
+          @{ stage = "online-update"; tag = $env:GITHUB_REF_NAME; commit = $env:GITHUB_SHA; runId = $env:GITHUB_RUN_ID } |
+            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory "summary.json") -Encoding utf8
+      - name: Upload sanitized online-update diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: online-update-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ngt-online-update-diagnostics/
+          if-no-files-found: warn
+          retention-days: 14
+
+  installer-acceptance:
+    name: Disposable Windows installer acceptance
+    needs: [qualify, build, prepare-candidate]
+    runs-on: windows-2022
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-studio-release-${{ github.run_id }}
+          path: release-assets
+      - name: Verify exact artifact SHA and manifest
+        run: node scripts/windows-studio-release.mjs verify-artifact release-assets
+      - name: Install the exact installer from the verified artifact
+        shell: powershell
+        run: |
+          $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
+          $installerPath = "release-assets\ngt-studio-windows-setup-v$version.exe"
+          ./scripts/test-windows-studio-installer.ps1 -InstallerPath $installerPath -ExpectedVersion $version
+      - name: Record installer failure metadata
+        if: failure()
+        shell: powershell
+        run: |
+          $directory = Join-Path $env:RUNNER_TEMP "ngt-installer-acceptance-diagnostics"
+          New-Item -ItemType Directory -Path $directory -Force | Out-Null
+          @{ stage = "installer-acceptance"; tag = $env:GITHUB_REF_NAME; commit = $env:GITHUB_SHA; runId = $env:GITHUB_RUN_ID } |
+            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory "summary.json") -Encoding utf8
+      - name: Upload sanitized installer diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-acceptance-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/ngt-installer-acceptance-diagnostics/
+          if-no-files-found: warn
+          retention-days: 14
+
+  publish:
+    name: Publish verified Release
+    needs:
+      [
+        qualify,
+        build,
+        prepare-candidate,
+        online-update-acceptance,
+        installer-acceptance,
+      ]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-studio-release-${{ github.run_id }}
+          path: release-assets
+      - name: Re-verify artifact, Draft identity, and every Release asset before publishing
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/windows-studio-release.mjs publish release-assets
+      - name: Record publication failure metadata
+        if: failure()
+        shell: powershell
+        run: |
+          $directory = Join-Path $env:RUNNER_TEMP "release-publication-diagnostics"
+          New-Item -ItemType Directory -Path $directory -Force | Out-Null
+          @{ stage = "publish"; tag = $env:GITHUB_REF_NAME; commit = $env:GITHUB_SHA; runId = $env:GITHUB_RUN_ID } |
+            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory "summary.json") -Encoding utf8
+      - name: Upload publication diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-publication-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-publication-diagnostics/
+          if-no-files-found: warn
+          retention-days: 14
+
+  release-metrics:
+    name: Record Release run metrics
+    needs:
+      [
+        qualify,
+        build,
+        prepare-candidate,
+        online-update-acceptance,
+        installer-acceptance,
+        publish,
+      ]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Record queue, job, critical-path, and runner time
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/windows-studio-release-metrics.mjs
+      - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: windows-studio-release-metrics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-metrics.json
+          if-no-files-found: warn
+          retention-days: 90

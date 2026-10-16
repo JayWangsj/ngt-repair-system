@@ -1,6 +1,10 @@
 param(
   [Parameter(Mandatory = $true)]
-  [string]$TargetTag
+  [string]$TargetTag,
+  [Parameter(Mandatory = $true)]
+  [string]$ExpectedCommitSha,
+  [Parameter(Mandatory = $true)]
+  [string]$ExpectedManifestPath
 )
 $ErrorActionPreference = "Stop"
 
@@ -11,28 +15,56 @@ if ($env:GITHUB_ACTIONS -ne "true" -or $env:RUNNER_ENVIRONMENT -ne "github-hoste
 $repository = "JayWangsj/ngt-repair-system"
 $githubCli = Get-Command gh -ErrorAction Stop | Select-Object -ExpandProperty Source
 $authOutput = & $githubCli auth status --hostname github.com 2>&1
-if ($LASTEXITCODE -ne 0) { throw "GitHub release read authorization is unavailable: $authOutput" }
+if ($LASTEXITCODE -ne 0) { throw "GitHub release read authorization is unavailable." }
 
-$candidateOutput = & $githubCli release view $TargetTag --repo $repository --json tagName,isDraft,assets
+$manifest = Get-Content -LiteralPath $ExpectedManifestPath -Raw | ConvertFrom-Json
+$targetVersion = $TargetTag -replace "^v", ""
+if ($targetVersion -notmatch '^\d+\.\d+\.\d+$' -or
+    $manifest.tag -ne $TargetTag -or $manifest.version -ne $targetVersion -or
+    $manifest.sha -ne $ExpectedCommitSha.ToLowerInvariant() -or
+    $ExpectedCommitSha -ne $env:GITHUB_SHA) {
+  throw "Online update acceptance artifact identity does not match the target tag and triggering Commit SHA."
+}
+
+$candidateOutput = & $githubCli release view $TargetTag --repo $repository --json tagName,isDraft,assets,body
 if ($LASTEXITCODE -ne 0) { throw "Candidate release assets are not readable: $TargetTag" }
 $candidate = ($candidateOutput | Out-String) | ConvertFrom-Json
-if ($candidate.tagName -ne $TargetTag -or -not $candidate.isDraft) {
-  throw "Online update acceptance requires the current release to remain a draft."
+$expectedMarker = "<!-- ngt-release-build:v1 tag=$TargetTag sha=$ExpectedCommitSha version=$targetVersion identity=$($manifest.buildIdentity) -->"
+if ($candidate.tagName -ne $TargetTag -or -not $candidate.isDraft -or
+    -not ([string]$candidate.body).Contains($expectedMarker)) {
+  throw "Online update acceptance requires the exact verified candidate to remain a Draft Release."
 }
 
-$targetVersion = $TargetTag -replace "^v", ""
-if ($targetVersion -notmatch '^\d+\.\d+\.\d+$') {
-  throw "Online update acceptance requires a stable semantic version tag."
-}
-$candidateAssetNames = @($candidate.assets | ForEach-Object name)
-$candidateRequired = @(
+$candidateRequired = @($manifest.assets | ForEach-Object name | Sort-Object)
+$expectedNames = @(
   "ngt-studio-windows-$TargetTag.zip",
   "ngt-studio-windows-$TargetTag.zip.sha256",
   "ngt-studio-runtime-$TargetTag.zip",
-  "ngt-studio-runtime-$TargetTag.zip.sha256"
-)
-if (@($candidateRequired | Where-Object { $_ -notin $candidateAssetNames }).Count -gt 0) {
-  throw "Candidate draft is missing an application/runtime archive or checksum."
+  "ngt-studio-runtime-$TargetTag.zip.sha256",
+  "ngt-studio-windows-setup-$TargetTag.exe",
+  "ngt-studio-windows-setup-$TargetTag.exe.sha256"
+) | Sort-Object
+if (Compare-Object -ReferenceObject $expectedNames -DifferenceObject $candidateRequired) {
+  throw "Online update acceptance manifest has an incomplete candidate asset set."
+}
+$candidateAssetNames = @($candidate.assets | ForEach-Object name | Sort-Object)
+if (Compare-Object -ReferenceObject $expectedNames -DifferenceObject $candidateAssetNames) {
+  throw "Candidate Draft asset names do not match the verified build."
+}
+$candidateNeedsContentCheck = $false
+foreach ($asset in $manifest.assets) {
+  $remoteAsset = @($candidate.assets | Where-Object name -eq $asset.name)
+  if ($remoteAsset.Count -ne 1 -or [long]$remoteAsset[0].size -ne [long]$asset.size) {
+    throw "Candidate Draft asset size or inventory does not match the verified build: $($asset.name)"
+  }
+  $digest = [string]$remoteAsset[0].digest
+  if ($digest) {
+    if ($digest.ToLowerInvariant() -ne "sha256:$($asset.sha256)") {
+      throw "Candidate Draft asset SHA256 does not match the verified build: $($asset.name)"
+    }
+  } else {
+    $candidateNeedsContentCheck = $true
+  }
 }
 
 $releaseList = & $githubCli release list --repo $repository --exclude-drafts --exclude-pre-releases --limit 100 --json tagName,isDraft
@@ -136,6 +168,18 @@ const db = new PrismaClient();
 }
 
 try {
+  if ($candidateNeedsContentCheck) {
+    $candidateVerifyRoot = Join-Path $testRoot "candidate-assets"
+    Invoke-GhDownload -Tag $TargetTag -Directory $candidateVerifyRoot -AssetNames $candidateRequired
+    foreach ($asset in $manifest.assets) {
+      $candidatePath = Join-Path $candidateVerifyRoot $asset.name
+      if (-not (Test-Path -LiteralPath $candidatePath -PathType Leaf) -or
+          (Get-Item -LiteralPath $candidatePath).Length -ne [long]$asset.size -or
+          (Get-FileHash -LiteralPath $candidatePath -Algorithm SHA256).Hash.ToLowerInvariant() -ne [string]$asset.sha256) {
+        throw "Downloaded Draft candidate asset did not match the verified build: $($asset.name)"
+      }
+    }
+  }
   $oldTag = $baseline.tagName
   $appName = "ngt-studio-windows-$oldTag.zip"
   $appChecksumName = "$appName.sha256"
@@ -251,6 +295,16 @@ try {
   if (-not $backup) { throw "Online update did not create a database and service backup." }
   & (Join-Path $activeReleaseRoot "scripts\test-windows-studio-backup.ps1") -BackupRoot $backup.FullName | Out-Null
   Write-Output "Windows online update acceptance passed: $oldTag -> $TargetTag."
+} catch {
+  try {
+    $diagnosticSources = @()
+    if (Test-Path -LiteralPath $updateLog -PathType Leaf) { $diagnosticSources += $updateLog }
+    if (Test-Path -LiteralPath $updateStatus -PathType Leaf) { $diagnosticSources += $updateStatus }
+    & (Join-Path $PSScriptRoot "write-windows-studio-diagnostics.ps1") -Stage "online-update" -Tag $TargetTag -Commit $ExpectedCommitSha -Version $targetVersion -Message $_.Exception.Message -SourcePaths $diagnosticSources
+  } catch {
+    Write-Warning "Sanitized online-update diagnostics could not be written."
+  }
+  throw
 } finally {
   if ($updateProcess -and -not $updateProcess.HasExited) {
     $cleanupSafe = $false

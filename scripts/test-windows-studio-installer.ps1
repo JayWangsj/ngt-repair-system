@@ -1,6 +1,8 @@
 param(
   [Parameter(Mandatory = $true)]
-  [string]$InstallerPath
+  [string]$InstallerPath,
+  [Parameter(Mandatory = $true)]
+  [string]$ExpectedVersion
 )
 $ErrorActionPreference = "Stop"
 
@@ -36,10 +38,11 @@ foreach ($port in @(3000, 55432)) {
 
 $installationAttempted = $false
 $cleanupSafe = $true
+$installerLog = Join-Path $env:RUNNER_TEMP "installer.log"
 try {
   $installationAttempted = $true
   $installer = Start-Process -FilePath $installerPath `
-    -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART") `
+    -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=$installerLog") `
     -WindowStyle Hidden -Wait -PassThru
   if ($installer.ExitCode -ne 0) {
     throw "The Windows installer exited with code $($installer.ExitCode)."
@@ -56,6 +59,9 @@ try {
     throw "The installer did not activate a complete Studio release."
   }
   $metadata = Get-Content -LiteralPath $metadataPath -Raw | ConvertFrom-Json
+  if ([string]$metadata.version -ne $ExpectedVersion) {
+    throw "Installed release version does not match the verified build artifact."
+  }
   if (-not (Test-Path -LiteralPath (Join-Path $releaseRoot "runtime\node.exe"))) {
     throw "The installed release is missing its verified Node runtime."
   }
@@ -84,6 +90,13 @@ try {
     throw "The installer did not complete its health-validation stage."
   }
   Write-Output "Windows installer acceptance passed for v$($metadata.version)."
+} catch {
+  try {
+    & (Join-Path $PSScriptRoot "write-windows-studio-diagnostics.ps1") -Stage "installer-acceptance" -Tag ("v" + $ExpectedVersion) -Commit $env:GITHUB_SHA -Version $ExpectedVersion -Message $_.Exception.Message -SourcePaths @($installerLog)
+  } catch {
+    Write-Warning "Sanitized installer diagnostics could not be written."
+  }
+  throw
 } finally {
   if ($installationAttempted) {
     $uninstaller = Join-Path $installRoot "uninstall\unins000.exe"

@@ -596,6 +596,12 @@ test("sidebar version entry hover stays contained and collapses cleanly", async 
   const version = entry.locator(".sidebar-update-copy strong");
   const summary = entry.locator(".sidebar-update-copy small");
   const arrow = entry.locator(".sidebar-update-arrow");
+  expect(
+    await entry.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return [style.paddingTop, style.paddingBottom];
+    }),
+  ).toEqual(["6px", "6px"]);
   await expect(icon).toHaveClass(/lucide-refresh-cw/);
   await expect(icon).toHaveAttribute("width", "19");
   await expect(arrow).toBeVisible();
@@ -636,12 +642,12 @@ test("sidebar version entry hover stays contained and collapses cleanly", async 
     }),
   ).toEqual(["8px", "8px", "8px", "8px"]);
   const underlineGeometry = await version.evaluate((node) => {
-      const style = getComputedStyle(node, "::after");
-      return {
-        scaleX: new DOMMatrixReadOnly(style.transform).m11,
-        underlineWidth: Number.parseFloat(style.width),
-        textWidth: node.getBoundingClientRect().width,
-      };
+    const style = getComputedStyle(node, "::after");
+    return {
+      scaleX: new DOMMatrixReadOnly(style.transform).m11,
+      underlineWidth: Number.parseFloat(style.width),
+      textWidth: node.getBoundingClientRect().width,
+    };
   });
   expect(underlineGeometry.scaleX).toBe(1);
   expect(underlineGeometry.underlineWidth).toBeCloseTo(

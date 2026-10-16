@@ -615,7 +615,7 @@ test("sidebar version entry hover stays contained and collapses cleanly", async 
   const initialGeometry = await Promise.all(
     [icon, version, summary].map((node) => node.boundingBox()),
   );
-  await entry.hover();
+  await version.hover();
   await expect
     .poll(() =>
       arrow.evaluate(
@@ -629,7 +629,13 @@ test("sidebar version entry hover stays contained and collapses cleanly", async 
   expect(await icon.evaluate((node) => getComputedStyle(node).color)).toBe(
     "rgb(98, 93, 76)",
   );
+  expect(await arrow.evaluate((node) => getComputedStyle(node).color)).toBe(
+    "rgb(98, 93, 76)",
+  );
   expect(initialIconColor).toBe("rgb(112, 107, 88)");
+  expect(
+    await version.evaluate((node) => getComputedStyle(node).overflow),
+  ).toBe("visible");
   expect(
     await entry.evaluate((node) => {
       const style = getComputedStyle(node);

@@ -390,6 +390,7 @@ small {
   position: relative;
   width: fit-content;
   max-width: 100%;
+  overflow: visible;
   color: var(--ink);
   font-size: 12px;
   font-variant-numeric: tabular-nums;

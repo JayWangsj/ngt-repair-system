@@ -120,6 +120,7 @@ export function Sidebar() {
   const availableVersion = info?.updateAvailable
     ? info.latestVersion
     : undefined;
+  const currentVersionLabel = `v${currentVersion.replace(/^v/i, "")}`;
   const availableVersionLabel = availableVersion
     ? `v${availableVersion.replace(/^v/i, "")}`
     : undefined;
@@ -180,7 +181,7 @@ export function Sidebar() {
         return sidebarStatus.notChecked;
     }
   })();
-  const updateLabel = `${currentVersion}: ${updateSummary}`;
+  const updateLabel = `${currentVersionLabel}: ${updateSummary}`;
   const updateHref = "/settings/system-update";
   const UpdateIcon = updateFailed
     ? CircleAlert
@@ -243,7 +244,7 @@ export function Sidebar() {
             )}
           </span>
           <span className="sidebar-update-copy">
-            <strong>v{currentVersion}</strong>
+            <strong>{currentVersionLabel}</strong>
             <small>{updateSummary}</small>
           </span>
           <ChevronRight

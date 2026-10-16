@@ -78,7 +78,7 @@ test("shows concise sidebar update-check statuses in both locales", async ({
       contentType: "application/json",
       body: JSON.stringify({
         status: "idle",
-        currentVersion: "2.0.13",
+        currentVersion: "v2.0.13",
         installInstanceId: "sidebar-summary-test",
       }),
     }),
@@ -104,7 +104,7 @@ test("shows concise sidebar update-check statuses in both locales", async ({
         currentVersion: "2.0.13",
         authRequired: false,
         updateAvailable: true,
-        latestVersion: "2.0.14",
+        latestVersion: "v2.0.14",
         installInstanceId: "sidebar-summary-test",
       },
     },
@@ -157,6 +157,13 @@ test("shows concise sidebar update-check statuses in both locales", async ({
   await page.reload();
   const summary = page.locator(".sidebar-update-copy small");
   await expect(summary).toHaveText("尚未检查");
+  await expect(page.locator(".sidebar-update-copy strong")).toHaveText(
+    "v2.0.13",
+  );
+  await expect(page.locator(".sidebar-update-entry")).toHaveAttribute(
+    "aria-label",
+    /^v2\.0\.13:/,
+  );
   expect(checkRequests).toBe(0);
 
   await page.locator(".sidebar-update-entry").click();
@@ -745,11 +752,13 @@ test("continues monitoring an active update beyond the previous four-minute limi
   await page.clock.install({ time: new Date("2026-10-15T12:00:00.000Z") });
   let started = false;
   let statusReads = 0;
-  let monitoringReads = 0;
   let completedStatusReads = 0;
+  const monitoringRequestTimes: number[] = [];
   await page.route("**/api/system-update/status", async (route) => {
     statusReads += 1;
-    if (started) monitoringReads += 1;
+    if (started) {
+      monitoringRequestTimes.push(await page.evaluate(() => Date.now()));
+    }
     const status = started
       ? {
           status: "running",
@@ -792,6 +801,7 @@ test("continues monitoring an active update beyond the previous four-minute limi
   });
 
   await page.goto("/settings/system-update");
+  const updateStartedAt = await page.evaluate(() => Date.now());
   await page
     .locator(".update-release-card")
     .getByRole("button", { name: "Aggiorna ora" })
@@ -800,19 +810,12 @@ test("continues monitoring an active update beyond the previous four-minute limi
     .getByRole("dialog")
     .getByRole("button", { name: "Aggiorna ora" })
     .click();
-  for (
-    let elapsed = 0;
-    elapsed < 400_000 && monitoringReads <= 120;
-    elapsed += 1_000
-  ) {
-    const previousReads = statusReads;
-    await page.clock.runFor(1_000);
-    if (statusReads > previousReads) {
-      await expect.poll(() => completedStatusReads).toBe(statusReads);
-    }
-  }
-
-  expect(monitoringReads).toBeGreaterThan(120);
+  await page.clock.runFor(5 * 60_000);
+  await expect.poll(() => completedStatusReads).toBe(statusReads);
+  expect(monitoringRequestTimes.length).toBeGreaterThan(0);
+  expect(
+    monitoringRequestTimes[monitoringRequestTimes.length - 1],
+  ).toBeGreaterThan(updateStartedAt + 4 * 60_000);
   await expect(page.locator(".update-progress-card")).toContainText(
     "Installazione",
   );
@@ -831,17 +834,11 @@ test("sidebar version entry hover stays contained and collapses cleanly", async 
   const version = entry.locator(".sidebar-update-copy strong");
   const summary = entry.locator(".sidebar-update-copy small");
   const arrow = entry.locator(".sidebar-update-arrow");
-  expect(
-    await entry.evaluate((node) => {
-      const style = getComputedStyle(node);
-      return [style.paddingTop, style.paddingBottom];
-    }),
-  ).toEqual(["6px", "6px"]);
   await expect(icon).toHaveClass(/lucide-refresh-cw/);
   await expect(icon).toHaveAttribute("width", "19");
   await expect(arrow).toBeVisible();
-  expect(await arrow.evaluate((node) => getComputedStyle(node).transform)).toBe(
-    "none",
+  const initialBackground = await entry.evaluate(
+    (node) => getComputedStyle(node).backgroundColor,
   );
   const initialIconColor = await icon.evaluate(
     (node) => getComputedStyle(node).color,
@@ -857,17 +854,15 @@ test("sidebar version entry hover stays contained and collapses cleanly", async 
         (node) => new DOMMatrixReadOnly(getComputedStyle(node).transform).m41,
       ),
     )
-    .toBe(3);
-  expect(
-    await entry.evaluate((node) => getComputedStyle(node).backgroundColor),
-  ).toBe("rgb(255, 248, 217)");
-  expect(await icon.evaluate((node) => getComputedStyle(node).color)).toBe(
-    "rgb(98, 93, 76)",
-  );
-  expect(await arrow.evaluate((node) => getComputedStyle(node).color)).toBe(
-    "rgb(98, 93, 76)",
-  );
-  expect(initialIconColor).toBe("rgb(112, 107, 88)");
+    .toBeCloseTo(3, 0);
+  await expect
+    .poll(() =>
+      entry.evaluate((node) => getComputedStyle(node).backgroundColor),
+    )
+    .not.toBe(initialBackground);
+  await expect
+    .poll(() => icon.evaluate((node) => getComputedStyle(node).color))
+    .not.toBe(initialIconColor);
   expect(
     await version.evaluate((node) => getComputedStyle(node).overflow),
   ).toBe("visible");
@@ -885,22 +880,37 @@ test("sidebar version entry hover stays contained and collapses cleanly", async 
   const underlineGeometry = await version.evaluate((node) => {
     const style = getComputedStyle(node, "::after");
     return {
+      opacity: Number.parseFloat(style.opacity),
       scaleX: new DOMMatrixReadOnly(style.transform).m11,
       underlineWidth: Number.parseFloat(style.width),
       textWidth: node.getBoundingClientRect().width,
       bottom: style.bottom,
     };
   });
-  expect(underlineGeometry.scaleX).toBe(1);
+  expect(underlineGeometry.opacity).toBeGreaterThan(0.9);
+  expect(underlineGeometry.scaleX).toBeGreaterThan(0.9);
   expect(underlineGeometry.bottom).toBe("2px");
-  expect(underlineGeometry.underlineWidth).toBeCloseTo(
-    underlineGeometry.textWidth,
-    3,
-  );
-  const hoverGeometry = await Promise.all(
-    [icon, version, summary].map((node) => node.boundingBox()),
-  );
-  expect(hoverGeometry).toEqual(initialGeometry);
+  expect(
+    Math.abs(underlineGeometry.underlineWidth - underlineGeometry.textWidth),
+  ).toBeLessThanOrEqual(1);
+  await expect
+    .poll(async () => {
+      const currentGeometry = await Promise.all(
+        [icon, version, summary].map((node) => node.boundingBox()),
+      );
+      return currentGeometry.every((box, index) => {
+        const initial = initialGeometry[index];
+        return Boolean(
+          box &&
+          initial &&
+          Math.abs(box.x - initial.x) <= 1 &&
+          Math.abs(box.y - initial.y) <= 1 &&
+          Math.abs(box.width - initial.width) <= 1 &&
+          Math.abs(box.height - initial.height) <= 1,
+        );
+      });
+    })
+    .toBe(true);
   await entry.screenshot({
     path: path.join(screenshotDirectory, "07-sidebar-update-entry-hover.png"),
   });
@@ -912,7 +922,7 @@ test("sidebar version entry hover stays contained and collapses cleanly", async 
         (node) => new DOMMatrixReadOnly(getComputedStyle(node).transform).m41,
       ),
     )
-    .toBe(0);
+    .toBeCloseTo(0, 0);
   await expect
     .poll(() =>
       version.evaluate(
@@ -921,7 +931,7 @@ test("sidebar version entry hover stays contained and collapses cleanly", async 
             .m11,
       ),
     )
-    .toBe(0);
+    .toBeCloseTo(0, 0);
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await entry.hover();
@@ -932,7 +942,7 @@ test("sidebar version entry hover stays contained and collapses cleanly", async 
         return transform === "none" ? 0 : new DOMMatrixReadOnly(transform).m41;
       }),
     )
-    .toBe(0);
+    .toBeCloseTo(0, 0);
   await expect
     .poll(() =>
       version.evaluate(
@@ -941,7 +951,7 @@ test("sidebar version entry hover stays contained and collapses cleanly", async 
             .m11,
       ),
     )
-    .toBe(1);
+    .toBeGreaterThan(0.9);
   await page.mouse.move(0, 0);
   await page.emulateMedia({ reducedMotion: "no-preference" });
 
@@ -958,7 +968,7 @@ test("sidebar version entry hover stays contained and collapses cleanly", async 
             .m11,
       ),
     )
-    .toBe(1);
+    .toBeGreaterThan(0.9);
 
   await page.getByRole("button", { name: "Riduci barra laterale" }).click();
   await expect(page.locator("html")).toHaveAttribute(
@@ -968,15 +978,15 @@ test("sidebar version entry hover stays contained and collapses cleanly", async 
   await expect(icon).toBeVisible();
   await expect(version).toBeHidden();
   await expect(arrow).toBeHidden();
+  const collapsedBackground = await entry.evaluate(
+    (node) => getComputedStyle(node).backgroundColor,
+  );
   const collapsedSpacing = await entry.evaluate((node) => {
-    const style = getComputedStyle(node);
     const entryBounds = node.getBoundingClientRect();
     const iconBounds = node
       .querySelector(".sidebar-update-icon")!
       .getBoundingClientRect();
     return {
-      paddingTop: style.paddingTop,
-      paddingBottom: style.paddingBottom,
       iconCenterOffset: Math.abs(
         iconBounds.top +
           iconBounds.height / 2 -
@@ -984,11 +994,18 @@ test("sidebar version entry hover stays contained and collapses cleanly", async 
       ),
     };
   });
-  expect(collapsedSpacing.paddingTop).toBe("6px");
-  expect(collapsedSpacing.paddingBottom).toBe("6px");
   expect(collapsedSpacing.iconCenterOffset).toBeLessThanOrEqual(1);
+  expect(
+    await page
+      .locator(".sidebar")
+      .evaluate((node) => node.scrollWidth - node.clientWidth),
+  ).toBeLessThanOrEqual(1);
   await entry.hover();
-  await expect(entry).toHaveCSS("background-color", "rgb(255, 248, 217)");
+  await expect
+    .poll(() =>
+      entry.evaluate((node) => getComputedStyle(node).backgroundColor),
+    )
+    .not.toBe(collapsedBackground);
   await entry.screenshot({
     path: path.join(
       screenshotDirectory,

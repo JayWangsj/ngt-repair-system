@@ -62,8 +62,30 @@ describe("Windows persistent startup", () => {
     );
     expect(service).toContain('"test.env"');
     expect(service).toContain('$env:PORT = "3236"');
-    expect(service).toContain('"scripts/windows-test-db.mjs" -Port 55510');
-    expect(service).toContain('"scripts/start.mjs" -Port 3236');
+    expect(service).toContain(
+      'Join-Path $projectRoot "scripts\\windows-test-db.mjs"',
+    );
+    expect(service).toContain(
+      'Join-Path $projectRoot "node_modules\\next\\dist\\bin\\next"',
+    );
+    expect(service).toContain("dev --hostname 127.0.0.1 --port 3236");
+    expect(service).toContain(
+      "Get-NetTCPConnection -LocalPort $Port -State Listen",
+    );
+    expect(service).toContain("CmdletizationQuery_NotFound,*");
+    expect(service).toContain("Get-NgtPortConnections");
+    expect(service).toContain("Select-Object -ExpandProperty OwningProcess");
+    expect(service).toContain("Get-CimInstance -ClassName Win32_Process");
+    expect(service).toContain("Test-NgtListenerOwnership");
+    expect(service).toContain("Test-NgtProcessTree");
+    expect(service).toContain("Test-NgtProjectSupervisor");
+    expect(service).toContain("Test-NgtServiceHealth");
+    expect(service).toContain("127.0.0.1:3236/api/health");
+    expect(service).toContain("runtime\\bin\\pg_ctl.exe");
+    expect(service).toContain("TcpClient");
+    expect(service).toContain('"ngt_test"');
+    expect(service).toContain("refusing to reuse or stop it");
+    expect(service).not.toContain("Stop-Process");
     expect(testDatabase).toContain('"CREATE DATABASE ngt_test"');
     expect(testDatabase).toContain('"55510"');
     expect(testDatabase).not.toContain('CREATE DATABASE ngt"');

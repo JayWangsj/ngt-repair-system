@@ -725,4 +725,31 @@ test("sidebar version entry hover stays contained and collapses cleanly", async 
   await expect(icon).toBeVisible();
   await expect(version).toBeHidden();
   await expect(arrow).toBeHidden();
+  const collapsedSpacing = await entry.evaluate((node) => {
+    const style = getComputedStyle(node);
+    const entryBounds = node.getBoundingClientRect();
+    const iconBounds = node
+      .querySelector(".sidebar-update-icon")!
+      .getBoundingClientRect();
+    return {
+      paddingTop: style.paddingTop,
+      paddingBottom: style.paddingBottom,
+      iconCenterOffset: Math.abs(
+        iconBounds.top +
+          iconBounds.height / 2 -
+          (entryBounds.top + entryBounds.height / 2),
+      ),
+    };
+  });
+  expect(collapsedSpacing.paddingTop).toBe("6px");
+  expect(collapsedSpacing.paddingBottom).toBe("6px");
+  expect(collapsedSpacing.iconCenterOffset).toBeLessThanOrEqual(1);
+  await entry.hover();
+  await expect(entry).toHaveCSS("background-color", "rgb(255, 248, 217)");
+  await entry.screenshot({
+    path: path.join(
+      screenshotDirectory,
+      "08-sidebar-update-entry-collapsed.png",
+    ),
+  });
 });

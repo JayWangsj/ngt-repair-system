@@ -2290,7 +2290,7 @@ html[data-sidebar-collapsed="true"] .nav-item {
 }
 html[data-sidebar-collapsed="true"] .sidebar-update-entry {
   justify-content: center;
-  padding: 11px 12px 0;
+  padding: 6px 12px;
 }
 html[data-sidebar-collapsed="true"] .sidebar-update-copy,
 html[data-sidebar-collapsed="true"] .sidebar-update-arrow {

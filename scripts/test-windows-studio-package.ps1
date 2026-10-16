@@ -43,6 +43,13 @@ try {
   $env:NGT_DATA_ROOT = $dataRoot
   Set-Location -LiteralPath $releaseRoot
   . (Join-Path $releaseRoot "scripts\windows-studio-common.ps1")
+  $smokeInstallRoot = Join-Path $smokeRoot "install"
+  Set-NgtStudioConfig -Path (Join-Path $releaseRoot ".local\studio.json") -Configuration ([pscustomobject]@{
+    dataRoot = $dataRoot
+    installRoot = $smokeInstallRoot
+    activeRelease = $releaseRoot
+    repository = "JayWangsj/ngt-repair-system"
+  })
 
   & (Join-Path $releaseRoot "scripts\check-windows-credential-store.ps1") | Out-Null
 
@@ -104,7 +111,7 @@ try {
   $applicationLog = Join-Path $releaseRoot ".local\application.log"
   $applicationErrorLog = Join-Path $releaseRoot ".local\application.error.log"
   $application = Start-Process -FilePath $nodeExecutable `
-    -ArgumentList "scripts/start.mjs" `
+    -ArgumentList (Join-Path $releaseRoot "scripts\start.mjs") `
     -WorkingDirectory $releaseRoot `
     -RedirectStandardOutput $applicationLog `
     -RedirectStandardError $applicationErrorLog `

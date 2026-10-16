@@ -66,6 +66,248 @@ async function mockIdleTask(page: Page) {
   );
 }
 
+test("shows concise sidebar update-check statuses in both locales", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("ngt-auto-update-check", "false");
+  });
+  await page.route("**/api/system-update/status", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "idle",
+        currentVersion: "v2.0.13",
+        installInstanceId: "sidebar-summary-test",
+      }),
+    }),
+  );
+
+  const checkResponses = [
+    {
+      status: 200,
+      body: {
+        installed: true,
+        currentVersion: "2.0.13",
+        authRequired: false,
+        updateAvailable: false,
+        latestVersion: "2.0.13",
+        installInstanceId: "sidebar-summary-test",
+      },
+    },
+    { status: 503, body: { error: "check_failed" } },
+    {
+      status: 200,
+      body: {
+        installed: true,
+        currentVersion: "2.0.13",
+        authRequired: false,
+        updateAvailable: true,
+        latestVersion: "v2.0.14",
+        installInstanceId: "sidebar-summary-test",
+      },
+    },
+    { status: 503, body: { error: "check_failed" } },
+    {
+      status: 200,
+      body: {
+        installed: true,
+        currentVersion: "2.0.13",
+        authRequired: false,
+        updateAvailable: false,
+        notInstallable: true,
+        latestVersion: "2.0.14",
+        installInstanceId: "sidebar-summary-test",
+      },
+    },
+    {
+      status: 200,
+      body: {
+        installed: true,
+        currentVersion: "2.0.13",
+        authRequired: true,
+        updateAvailable: false,
+        installInstanceId: "sidebar-summary-test",
+      },
+    },
+  ];
+  let checkRequests = 0;
+  let releaseInitialCheck!: () => void;
+  const initialCheckBlocked = new Promise<void>((resolve) => {
+    releaseInitialCheck = resolve;
+  });
+  await page.route("**/api/system-update", async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const index = checkRequests++;
+    if (index === 0) await initialCheckBlocked;
+    const response =
+      checkResponses[index] || checkResponses[checkResponses.length - 1];
+    return route.fulfill({
+      status: response.status,
+      contentType: "application/json",
+      body: JSON.stringify(response.body),
+    });
+  });
+
+  await page.goto("/settings");
+  await page.evaluate(() => {
+    document.cookie = "ngt-locale=zh; Path=/; SameSite=Lax";
+  });
+  await page.reload();
+  const summary = page.locator(".sidebar-update-copy small");
+  await expect(summary).toHaveText("尚未检查");
+  await expect(page.locator(".sidebar-update-copy strong")).toHaveText(
+    "v2.0.13",
+  );
+  await expect(page.locator(".sidebar-update-entry")).toHaveAttribute(
+    "aria-label",
+    /^v2\.0\.13:/,
+  );
+  expect(checkRequests).toBe(0);
+
+  await page.locator(".sidebar-update-entry").click();
+  await expect(page).toHaveURL(/settings\/system-update/);
+  await expect(summary).toHaveText("正在检查…");
+  releaseInitialCheck();
+  await expect(summary).toHaveText("已是最新");
+
+  const chineseCheckButton = page.getByRole("button", {
+    name: "检查更新",
+    exact: true,
+  });
+  await chineseCheckButton.click();
+  await expect(summary).toHaveText("检查失败");
+  await chineseCheckButton.click();
+  await expect(summary).toHaveText("发现 v2.0.14");
+  await expect(page.locator(".sidebar-update-dot")).toBeVisible();
+  await chineseCheckButton.click();
+  await expect(summary).toHaveText("检查失败 · 上次发现 v2.0.14");
+  await chineseCheckButton.click();
+  await expect(summary).toHaveText("更新不可用");
+  await chineseCheckButton.click();
+  await expect(summary).toHaveText("需要授权");
+});
+
+test("prioritizes active and failed update-task statuses in the sidebar", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("ngt-auto-update-check", "false");
+  });
+  let taskStatus: Record<string, unknown> = {
+    status: "idle",
+    currentVersion: "2.0.13",
+    installInstanceId: "sidebar-task-summary-test",
+  };
+  await page.route("**/api/system-update/status", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(taskStatus),
+    }),
+  );
+  const checkResponses = [
+    {
+      status: 200,
+      body: {
+        installed: true,
+        currentVersion: "2.0.13",
+        authRequired: false,
+        updateAvailable: true,
+        latestVersion: "2.0.14",
+        installInstanceId: "sidebar-task-summary-test",
+      },
+    },
+    { status: 503, body: { error: "check_failed" } },
+    {
+      status: 200,
+      body: {
+        installed: true,
+        currentVersion: "2.0.13",
+        authRequired: false,
+        updateAvailable: false,
+        latestVersion: "2.0.13",
+        installInstanceId: "sidebar-task-summary-test",
+      },
+    },
+    { status: 503, body: { error: "check_failed" } },
+  ];
+  let checkRequests = 0;
+  await page.route("**/api/system-update", (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const response = checkResponses[checkRequests++];
+    return route.fulfill({
+      status: response.status,
+      contentType: "application/json",
+      body: JSON.stringify(response.body),
+    });
+  });
+
+  await page.goto("/settings");
+  await switchToItalian(page);
+  const summary = page.locator(".sidebar-update-copy small");
+  await expect(summary).toHaveText("Non ancora controllato");
+
+  await page.locator(".sidebar-update-entry").click();
+  await expect(summary).toHaveText("Nuova versione v2.0.14");
+  const italianCheckButton = page.getByRole("button", {
+    name: "Controlla aggiornamenti",
+    exact: true,
+  });
+  await italianCheckButton.click();
+  await expect(summary).toHaveText(
+    "Controllo non riuscito · già disponibile v2.0.14",
+  );
+  await italianCheckButton.click();
+  await expect(summary).toHaveText("Aggiornato");
+  await italianCheckButton.click();
+  await expect(summary).toHaveText("Controllo non riuscito");
+  await page.goto("/settings");
+
+  taskStatus = {
+    status: "running",
+    stage: "checking",
+    executorAlive: true,
+    currentVersion: "2.0.13",
+  };
+  await page.reload();
+  await expect(summary).toHaveText("Controllo in corso…");
+
+  taskStatus = {
+    status: "running",
+    stage: "installing",
+    executorAlive: true,
+    currentVersion: "2.0.13",
+  };
+  await page.reload();
+  await expect(summary).toHaveText("Aggiornamento in corso…");
+
+  taskStatus = {
+    status: "failed",
+    currentVersion: "2.0.13",
+  };
+  await page.reload();
+  await expect(summary).toHaveText("Aggiornamento non riuscito");
+
+  taskStatus = {
+    status: "failed",
+    recoveryStatus: "succeeded",
+    currentVersion: "2.0.13",
+  };
+  await page.reload();
+  await expect(summary).toHaveText(
+    "Aggiornamento non riuscito · versione ripristinata",
+  );
+
+  taskStatus = {
+    status: "interrupted",
+    currentVersion: "2.0.13",
+  };
+  await page.reload();
+  await expect(summary).toHaveText("Aggiornamento interrotto");
+});
+
 test("ignores a stale active status when already current", async ({ page }) => {
   await page.route("**/api/system-update", (route) =>
     route.fulfill({
@@ -232,6 +474,38 @@ test("shows a newer but incomplete release without offering installation", async
   await expect(
     page.locator(".update-release-card").getByRole("button"),
   ).toHaveCount(0);
+});
+
+test("localizes the manual-review guidance for an interrupted update", async ({
+  page,
+}) => {
+  await mockAvailableCheck(page);
+  await page.route("**/api/system-update/status", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "verifying-task",
+        currentVersion: "2.0.9",
+        manualReview: true,
+        message: "The update lock and saved task do not match.",
+      }),
+    }),
+  );
+
+  await page.goto("/settings/system-update");
+  await switchToItalian(page);
+  await expect(page.locator(".update-task-compact")).toContainText(
+    "Il ripristino dell'ultimo aggiornamento non è verificabile",
+  );
+
+  await page.evaluate(() => {
+    document.cookie = "ngt-locale=zh; Path=/; SameSite=Lax";
+  });
+  await page.reload();
+  await expect(page.locator(".update-task-compact")).toContainText(
+    "上次更新的恢复状态无法确认，已阻止再次更新。",
+  );
 });
 
 test("keeps the version link and red dot usable when the sidebar is collapsed", async ({
@@ -510,11 +784,13 @@ test("continues monitoring an active update beyond the previous four-minute limi
   await page.clock.install({ time: new Date("2026-10-15T12:00:00.000Z") });
   let started = false;
   let statusReads = 0;
-  let monitoringReads = 0;
   let completedStatusReads = 0;
+  const monitoringRequestTimes: number[] = [];
   await page.route("**/api/system-update/status", async (route) => {
     statusReads += 1;
-    if (started) monitoringReads += 1;
+    if (started) {
+      monitoringRequestTimes.push(await page.evaluate(() => Date.now()));
+    }
     const status = started
       ? {
           status: "running",
@@ -557,6 +833,7 @@ test("continues monitoring an active update beyond the previous four-minute limi
   });
 
   await page.goto("/settings/system-update");
+  const updateStartedAt = await page.evaluate(() => Date.now());
   await page
     .locator(".update-release-card")
     .getByRole("button", { name: "Aggiorna ora" })
@@ -565,20 +842,206 @@ test("continues monitoring an active update beyond the previous four-minute limi
     .getByRole("dialog")
     .getByRole("button", { name: "Aggiorna ora" })
     .click();
-  for (
-    let elapsed = 0;
-    elapsed < 400_000 && monitoringReads <= 120;
-    elapsed += 1_000
-  ) {
-    const previousReads = statusReads;
-    await page.clock.runFor(1_000);
-    if (statusReads > previousReads) {
-      await expect.poll(() => completedStatusReads).toBe(statusReads);
-    }
-  }
-
-  expect(monitoringReads).toBeGreaterThan(120);
+  await page.clock.runFor(5 * 60_000);
+  await expect.poll(() => completedStatusReads).toBe(statusReads);
+  expect(monitoringRequestTimes.length).toBeGreaterThan(0);
+  expect(
+    monitoringRequestTimes[monitoringRequestTimes.length - 1],
+  ).toBeGreaterThan(updateStartedAt + 4 * 60_000);
   await expect(page.locator(".update-progress-card")).toContainText(
     "Installazione",
   );
+});
+
+test("sidebar version entry hover stays contained and collapses cleanly", async ({
+  page,
+}) => {
+  await mockAvailableCheck(page);
+  await mockIdleTask(page);
+  await page.goto("/settings");
+  await switchToItalian(page);
+
+  const entry = page.locator(".sidebar-update-entry");
+  const icon = entry.locator(".sidebar-update-icon svg");
+  const version = entry.locator(".sidebar-update-copy strong");
+  const summary = entry.locator(".sidebar-update-copy small");
+  const arrow = entry.locator(".sidebar-update-arrow");
+  await expect(icon).toHaveClass(/lucide-refresh-cw/);
+  await expect(icon).toHaveAttribute("width", "19");
+  await expect(arrow).toBeVisible();
+  const initialBackground = await entry.evaluate(
+    (node) => getComputedStyle(node).backgroundColor,
+  );
+  const initialIconColor = await icon.evaluate(
+    (node) => getComputedStyle(node).color,
+  );
+
+  const initialGeometry = await Promise.all(
+    [icon, version, summary].map((node) => node.boundingBox()),
+  );
+  await version.hover();
+  await expect
+    .poll(() =>
+      arrow.evaluate(
+        (node) => new DOMMatrixReadOnly(getComputedStyle(node).transform).m41,
+      ),
+    )
+    .toBeCloseTo(3, 0);
+  await expect
+    .poll(() =>
+      entry.evaluate((node) => getComputedStyle(node).backgroundColor),
+    )
+    .not.toBe(initialBackground);
+  await expect
+    .poll(() => icon.evaluate((node) => getComputedStyle(node).color))
+    .not.toBe(initialIconColor);
+  expect(
+    await version.evaluate((node) => getComputedStyle(node).overflow),
+  ).toBe("visible");
+  expect(
+    await entry.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return [
+        style.borderTopLeftRadius,
+        style.borderTopRightRadius,
+        style.borderBottomRightRadius,
+        style.borderBottomLeftRadius,
+      ];
+    }),
+  ).toEqual(["8px", "8px", "8px", "8px"]);
+  const underlineGeometry = await version.evaluate((node) => {
+    const style = getComputedStyle(node, "::after");
+    return {
+      opacity: Number.parseFloat(style.opacity),
+      scaleX: new DOMMatrixReadOnly(style.transform).m11,
+      underlineWidth: Number.parseFloat(style.width),
+      textWidth: node.getBoundingClientRect().width,
+      bottom: style.bottom,
+    };
+  });
+  expect(underlineGeometry.opacity).toBeGreaterThan(0.9);
+  expect(underlineGeometry.scaleX).toBeGreaterThan(0.9);
+  expect(underlineGeometry.bottom).toBe("2px");
+  expect(
+    Math.abs(underlineGeometry.underlineWidth - underlineGeometry.textWidth),
+  ).toBeLessThanOrEqual(1);
+  await expect
+    .poll(async () => {
+      const currentGeometry = await Promise.all(
+        [icon, version, summary].map((node) => node.boundingBox()),
+      );
+      return currentGeometry.every((box, index) => {
+        const initial = initialGeometry[index];
+        return Boolean(
+          box &&
+          initial &&
+          Math.abs(box.x - initial.x) <= 1 &&
+          Math.abs(box.y - initial.y) <= 1 &&
+          Math.abs(box.width - initial.width) <= 1 &&
+          Math.abs(box.height - initial.height) <= 1,
+        );
+      });
+    })
+    .toBe(true);
+  await entry.screenshot({
+    path: path.join(screenshotDirectory, "07-sidebar-update-entry-hover.png"),
+  });
+
+  await page.mouse.move(0, 0);
+  await expect
+    .poll(() =>
+      arrow.evaluate(
+        (node) => new DOMMatrixReadOnly(getComputedStyle(node).transform).m41,
+      ),
+    )
+    .toBeCloseTo(0, 0);
+  await expect
+    .poll(() =>
+      version.evaluate(
+        (node) =>
+          new DOMMatrixReadOnly(getComputedStyle(node, "::after").transform)
+            .m11,
+      ),
+    )
+    .toBeCloseTo(0, 0);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await entry.hover();
+  await expect
+    .poll(() =>
+      arrow.evaluate((node) => {
+        const transform = getComputedStyle(node).transform;
+        return transform === "none" ? 0 : new DOMMatrixReadOnly(transform).m41;
+      }),
+    )
+    .toBeCloseTo(0, 0);
+  await expect
+    .poll(() =>
+      version.evaluate(
+        (node) =>
+          new DOMMatrixReadOnly(getComputedStyle(node, "::after").transform)
+            .m11,
+      ),
+    )
+    .toBeGreaterThan(0.9);
+  await page.mouse.move(0, 0);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+
+  await page.keyboard.press("Tab");
+  await entry.focus();
+  await expect
+    .poll(() => entry.evaluate((node) => node.matches(":focus-visible")))
+    .toBe(true);
+  await expect
+    .poll(() =>
+      version.evaluate(
+        (node) =>
+          new DOMMatrixReadOnly(getComputedStyle(node, "::after").transform)
+            .m11,
+      ),
+    )
+    .toBeGreaterThan(0.9);
+
+  await page.getByRole("button", { name: "Riduci barra laterale" }).click();
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-sidebar-collapsed",
+    "true",
+  );
+  await expect(icon).toBeVisible();
+  await expect(version).toBeHidden();
+  await expect(arrow).toBeHidden();
+  const collapsedBackground = await entry.evaluate(
+    (node) => getComputedStyle(node).backgroundColor,
+  );
+  const collapsedSpacing = await entry.evaluate((node) => {
+    const entryBounds = node.getBoundingClientRect();
+    const iconBounds = node
+      .querySelector(".sidebar-update-icon")!
+      .getBoundingClientRect();
+    return {
+      iconCenterOffset: Math.abs(
+        iconBounds.top +
+          iconBounds.height / 2 -
+          (entryBounds.top + entryBounds.height / 2),
+      ),
+    };
+  });
+  expect(collapsedSpacing.iconCenterOffset).toBeLessThanOrEqual(1);
+  expect(
+    await page
+      .locator(".sidebar")
+      .evaluate((node) => node.scrollWidth - node.clientWidth),
+  ).toBeLessThanOrEqual(1);
+  await entry.hover();
+  await expect
+    .poll(() =>
+      entry.evaluate((node) => getComputedStyle(node).backgroundColor),
+    )
+    .not.toBe(collapsedBackground);
+  await entry.screenshot({
+    path: path.join(
+      screenshotDirectory,
+      "08-sidebar-update-entry-collapsed.png",
+    ),
+  });
 });

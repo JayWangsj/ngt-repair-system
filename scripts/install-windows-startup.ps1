@@ -1,7 +1,10 @@
+param(
+  [string]$InstallRoot = (Join-Path $env:LOCALAPPDATA "NGT")
+)
 $ErrorActionPreference = "Stop"
 
 $taskName = "NGT Management System"
-$launcherScript = Join-Path $env:LOCALAPPDATA "NGT\service\windows-studio-launcher.vbs"
+$launcherScript = Join-Path ([System.IO.Path]::GetFullPath($InstallRoot)) "service\windows-studio-launcher.vbs"
 if (-not (Test-Path -LiteralPath $launcherScript)) {
   throw "Stable studio launcher is missing: $launcherScript"
 }
@@ -9,6 +12,16 @@ $wscriptPath = Join-Path $env:WINDIR "System32\wscript.exe"
 $runKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $runValueName = "NGT Management System"
 $launcherArguments = '//B //Nologo "' + $launcherScript + '"'
+$existing = $null
+if (Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue) {
+  $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+  if ($existing) {
+    . (Join-Path (Split-Path -Parent $launcherScript) "windows-studio-common.ps1")
+    if (-not (Test-NgtStudioScheduledTask -Task $existing -LauncherPath $launcherScript)) {
+      throw "The NGT startup task has an unexpected action; refusing to replace it."
+    }
+  }
+}
 
 try {
   $action = New-ScheduledTaskAction -Execute $wscriptPath -Argument $launcherArguments
@@ -17,7 +30,6 @@ try {
     New-TimeSpan -Minutes 1
   ) -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
-  $existing = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
   if ($existing) {
     Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
   }

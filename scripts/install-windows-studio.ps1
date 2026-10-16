@@ -59,6 +59,20 @@ $stableStateDirectory = Join-Path $stableInstallRoot ".local"
 New-Item -ItemType Directory -Path $stableServiceDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $stableAssetDirectory -Force | Out-Null
 New-Item -ItemType Directory -Path $stableStateDirectory -Force | Out-Null
+$previousActiveRelease = $PreviousReleaseRoot
+$existingStableConfig = Join-Path $stableStateDirectory "studio.json"
+if (Test-Path -LiteralPath $existingStableConfig) {
+  if (-not $previousActiveRelease) {
+    $previousActiveRelease = [string](Get-Content -LiteralPath $existingStableConfig -Raw | ConvertFrom-Json).activeRelease
+  }
+  $sourceStateDirectory = $script:NgtStateDirectory
+  $script:NgtStateDirectory = $stableStateDirectory
+  try {
+    Stop-NgtStudioProcesses
+  } finally {
+    $script:NgtStateDirectory = $sourceStateDirectory
+  }
+}
 Copy-Item -LiteralPath (Join-Path $script:NgtProjectRoot "scripts\windows-service.ps1") `
   -Destination $stableServiceDirectory -Force
 Copy-Item -LiteralPath (Join-Path $script:NgtProjectRoot "scripts\windows-studio-common.ps1") `
@@ -71,20 +85,19 @@ Copy-Item -LiteralPath (Join-Path $script:NgtProjectRoot "scripts\uninstall-wind
   -Destination $stableServiceDirectory -Force
 Copy-Item -LiteralPath (Join-Path $script:NgtProjectRoot "assets\ngt-studio.ico") `
   -Destination $stableAssetDirectory -Force
-$previousActiveRelease = $PreviousReleaseRoot
-$existingStableConfig = Join-Path $stableStateDirectory "studio.json"
-if ((-not $previousActiveRelease) -and (Test-Path -LiteralPath $existingStableConfig)) {
-  $previousActiveRelease = [string](Get-Content -LiteralPath $existingStableConfig -Raw | ConvertFrom-Json).activeRelease
-}
-@{
+$previousActiveRelease = if ($PreviousReleaseRoot) { $PreviousReleaseRoot } else { $previousActiveRelease }
+$studioConfig = [pscustomobject]@{
   dataRoot = $stableDataRoot
   installRoot = $stableInstallRoot
   activeRelease = $projectRoot
   repository = "JayWangsj/ngt-repair-system"
-} | ConvertTo-Json | Set-Content `
-  -LiteralPath (Join-Path $script:NgtStateDirectory "studio.json") -Encoding utf8
-Copy-Item -LiteralPath (Join-Path $script:NgtStateDirectory "studio.json") `
-  -Destination (Join-Path $stableStateDirectory "studio.json") -Force
+}
+Set-NgtStudioConfig `
+  -Path (Join-Path $script:NgtStateDirectory "studio.json") `
+  -Configuration $studioConfig
+Set-NgtStudioConfig `
+  -Path (Join-Path $stableStateDirectory "studio.json") `
+  -Configuration $studioConfig
 $env:NGT_DATA_ROOT = $stableDataRoot
 
 $isRelease = Test-Path -LiteralPath (Join-Path $script:NgtProjectRoot "studio-release.json")
@@ -121,7 +134,7 @@ Invoke-NgtInstallStage "migrations" {
   Stop-NgtStudioProcesses
 }
 Invoke-NgtInstallStage "application-start" {
-  & (Join-Path $PSScriptRoot "install-windows-startup.ps1")
+  & (Join-Path $PSScriptRoot "install-windows-startup.ps1") -InstallRoot $stableInstallRoot
 }
 Invoke-NgtInstallStage "health-validation" {
   Wait-NgtStudioHealth

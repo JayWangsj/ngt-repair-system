@@ -15,6 +15,9 @@ type StudioUpdateLock = {
   executorPid?: number;
   executorScriptPath?: string;
 };
+type StudioUpdateMaintenance = {
+  updateId?: string;
+};
 type CommandRunner = (
   executable: string,
   args: string[],
@@ -463,6 +466,76 @@ function statusMessage(status: StudioUpdateStatus, currentVersion: string) {
   };
 }
 
+function sameVersion(left?: string, right?: string) {
+  return Boolean(
+    left &&
+    right &&
+    left.replace(/^v/i, "").toLowerCase() ===
+      right.replace(/^v/i, "").toLowerCase(),
+  );
+}
+
+function validUpdateId(value?: string) {
+  return Boolean(
+    value && /^[a-f\d]{8}-(?:[a-f\d]{4}-){3}[a-f\d]{12}$/i.test(value),
+  );
+}
+
+function samePath(left?: string, right?: string) {
+  if (!left || !right) return false;
+  return (
+    path
+      .resolve(left)
+      .replace(/[\\/]+$/, "")
+      .toLowerCase() ===
+    path
+      .resolve(right)
+      .replace(/[\\/]+$/, "")
+      .toLowerCase()
+  );
+}
+
+function safePreMutationStage(status: StudioUpdateStatus) {
+  const stage = status.stage || status.failedStage || status.status;
+  return (
+    [
+      "starting",
+      "reading-release",
+      "checking",
+      "downloading",
+      "downloaded",
+      "verifying",
+      "preparing-runtime",
+    ].includes(stage || "") &&
+    !(status.completedStages || []).some((completed) =>
+      ["backing-up", "installing", "validating", "rolling-back"].includes(
+        completed,
+      ),
+    )
+  );
+}
+
+function safeToRetryUpdate(
+  status: StudioUpdateStatus,
+  currentVersion: string,
+  activeRelease: string | undefined,
+  root: string,
+  maintenanceExists: boolean,
+) {
+  if (
+    maintenanceExists ||
+    !validUpdateId(status.updateId) ||
+    !sameVersion(status.previousVersion, currentVersion) ||
+    !samePath(activeRelease, root) ||
+    status.recoveryStatus === "running" ||
+    status.recoveryStatus === "failed"
+  )
+    return false;
+  if (status.recoveryStatus === "succeeded")
+    return sameVersion(status.actualVersion || currentVersion, currentVersion);
+  return safePreMutationStage(status);
+}
+
 function normalizeVersion(value: string) {
   return value.replace(/^v/i, "").split("-")[0];
 }
@@ -489,6 +562,7 @@ async function getStudioContext(root: string) {
   );
   const config = await readJson<{
     installRoot?: string;
+    activeRelease?: string;
     repository?: string;
   }>(path.join(root, ".local", "studio.json"));
   return {
@@ -582,6 +656,7 @@ export async function getStudioUpdateStatus(
   options: {
     inspect?: ProcessInspector;
     skipMaintenanceCleanup?: boolean;
+    skipLockCleanup?: boolean;
   } = {},
 ): Promise<StudioUpdateStatus> {
   const studioRoot = resolveStudioRoot(root);
@@ -592,6 +667,9 @@ export async function getStudioUpdateStatus(
     statusPath(installRoot),
   );
   const lockFile = await readUpdateLock(lockPath(installRoot));
+  const maintenanceFile = await readJsonState<StudioUpdateMaintenance>(
+    maintenancePath(installRoot),
+  );
   if (lockFile.unreadable)
     return {
       status: "verifying-task",
@@ -608,9 +686,25 @@ export async function getStudioUpdateStatus(
       manualReview: true,
       currentVersion,
     };
+  if (maintenanceFile.unreadable)
+    return {
+      status: "verifying-task",
+      message:
+        "The update maintenance state cannot be read. Verify the task before retrying.",
+      manualReview: true,
+      currentVersion,
+    };
 
   const status = statusFile.value;
   if (!status) {
+    if (maintenanceFile.exists)
+      return {
+        status: "verifying-task",
+        currentVersion,
+        message:
+          "An update maintenance marker exists without a readable task status.",
+        manualReview: true,
+      };
     if (!lockFile.exists) return { status: "idle", currentVersion };
     if (lockFile.value?.updateId && activeUpdateRoots.has(installRoot))
       return {
@@ -628,7 +722,12 @@ export async function getStudioUpdateStatus(
       scriptPath,
     });
     return alive === false
-      ? statusMessage({ status: "queued" }, currentVersion)
+      ? {
+          ...statusMessage({ status: "queued" }, currentVersion),
+          manualReview: true,
+          message:
+            "An update lock exists without a readable task status. Verify the installed version and database before retrying.",
+        }
       : {
           status: "verifying-task",
           updateId: lockFile.value?.updateId,
@@ -638,6 +737,20 @@ export async function getStudioUpdateStatus(
           manualReview: alive === undefined,
         };
   }
+
+  if (
+    (lockFile.exists && lockFile.value?.updateId !== status.updateId) ||
+    (maintenanceFile.exists &&
+      maintenanceFile.value?.updateId !== status.updateId)
+  )
+    return {
+      ...status,
+      status: "verifying-task",
+      currentVersion,
+      message:
+        "The update lock, task status, and maintenance marker do not identify the same task.",
+      manualReview: true,
+    };
 
   if (status.status === "complete") {
     const target = status.targetVersion || status.latestVersion;
@@ -651,20 +764,115 @@ export async function getStudioUpdateStatus(
         manualReview: true,
       };
     }
-    if (status.updateId && target && !options.skipMaintenanceCleanup) {
-      await withUpdateMutationMutex(installRoot, async () => {
-        const marker = await readJson<{ updateId?: string }>(
+    if (!samePath(config?.activeRelease, studioRoot))
+      return {
+        ...status,
+        status: "interrupted",
+        currentVersion,
+        actualVersion: currentVersion,
+        message:
+          "The running release does not match the active release configuration.",
+        manualReview: true,
+      };
+    if (lockFile.exists) {
+      if (options.skipLockCleanup)
+        return {
+          ...status,
+          status: "complete",
+          currentVersion,
+          actualVersion: currentVersion,
+        };
+      const alive = await (options.inspect || inspectUpdaterProcess)({
+        updateId: status.updateId,
+        executorPid: lockFile.value?.executorPid,
+        scriptPath:
+          lockFile.value?.executorScriptPath ||
+          path.join(studioRoot, "scripts", "update-windows-studio.ps1"),
+      });
+      if (alive !== false)
+        return {
+          ...status,
+          status: "verifying-task",
+          currentVersion,
+          executorAlive: alive,
+          message:
+            "The update passed validation and is releasing its task lock.",
+          manualReview: alive === undefined,
+        };
+      const cleared = await withUpdateMutationMutex(installRoot, async () => {
+        const latestStatus = await readJsonState<StudioUpdateStatus>(
+          statusPath(installRoot),
+        );
+        const latestLock = await readUpdateLock(lockPath(installRoot));
+        const latestMarker = await readJsonState<StudioUpdateMaintenance>(
           maintenancePath(installRoot),
         );
-        if (marker?.updateId !== status.updateId) return;
-        const lock = await readUpdateLock(lockPath(installRoot));
         if (
-          lock.unreadable ||
-          (lock.exists && lock.value?.updateId !== status.updateId)
+          latestStatus.unreadable ||
+          latestStatus.value?.status !== "complete" ||
+          latestStatus.value?.updateId !== status.updateId ||
+          latestLock.unreadable ||
+          latestLock.value?.updateId !== status.updateId ||
+          latestLock.value?.createdAt !== lockFile.value?.createdAt ||
+          latestLock.value?.executorPid !== lockFile.value?.executorPid ||
+          latestLock.value?.executorScriptPath !==
+            lockFile.value?.executorScriptPath ||
+          latestMarker.unreadable ||
+          latestMarker.exists
         )
-          return;
-        await unlink(maintenancePath(installRoot)).catch(() => undefined);
-      }).catch(() => undefined);
+          return false;
+        await unlink(lockPath(installRoot));
+        return true;
+      }).catch(() => false);
+      const remainingLock = await readUpdateLock(lockPath(installRoot));
+      if (!cleared || remainingLock.exists || remainingLock.unreadable)
+        return {
+          ...status,
+          status: "verifying-task",
+          currentVersion,
+          message:
+            "The update passed validation, but its task lock could not be safely released.",
+          manualReview: true,
+        };
+    }
+    if (
+      maintenanceFile.exists &&
+      status.updateId &&
+      !options.skipMaintenanceCleanup
+    ) {
+      const cleared = await withUpdateMutationMutex(installRoot, async () => {
+        const latestStatus = await readJsonState<StudioUpdateStatus>(
+          statusPath(installRoot),
+        );
+        const latestLock = await readUpdateLock(lockPath(installRoot));
+        const latestMarker = await readJsonState<StudioUpdateMaintenance>(
+          maintenancePath(installRoot),
+        );
+        if (
+          latestStatus.unreadable ||
+          latestStatus.value?.updateId !== status.updateId ||
+          latestLock.unreadable ||
+          latestLock.exists ||
+          latestMarker.unreadable ||
+          latestMarker.value?.updateId !== status.updateId
+        )
+          return false;
+        await unlink(maintenancePath(installRoot));
+        return true;
+      }).catch(() => false);
+      const remainingMarker = await readJsonState<StudioUpdateMaintenance>(
+        maintenancePath(installRoot),
+      );
+      if (!cleared || remainingMarker.exists || remainingMarker.unreadable)
+        return {
+          ...status,
+          status: "interrupted",
+          currentVersion,
+          actualVersion: currentVersion,
+          message:
+            "The update completed, but its maintenance marker could not be safely cleared.",
+          manualReview: true,
+        };
     }
     return { ...status, currentVersion, actualVersion: currentVersion };
   }
@@ -672,14 +880,18 @@ export async function getStudioUpdateStatus(
   if (status.status === "failed" && status.recoveryStatus === "succeeded") {
     if (
       !status.previousVersion ||
-      compareVersions(currentVersion, status.previousVersion) !== 0
+      !sameVersion(currentVersion, status.previousVersion) ||
+      !samePath(config?.activeRelease, studioRoot) ||
+      maintenanceFile.exists
     ) {
       return {
         ...status,
         recoveryStatus: "failed",
-        recoveryMessage: status.previousVersion
-          ? `The running version ${currentVersion} does not match the previous version ${status.previousVersion}.`
-          : "The previous version was not recorded, so the rollback cannot be verified.",
+        recoveryMessage: !status.previousVersion
+          ? "The previous version was not recorded, so the rollback cannot be verified."
+          : maintenanceFile.exists
+            ? "The update maintenance marker remains, so business writes are still blocked."
+            : `The running version ${currentVersion} does not match the previous version ${status.previousVersion}.`,
         currentVersion,
         actualVersion: currentVersion,
         manualReview: true,
@@ -715,7 +927,24 @@ export async function getStudioUpdateStatus(
     executorPid: status.executorPid || lockFile.value?.executorPid,
     scriptPath,
   });
-  if (alive === false) return statusMessage(status, currentVersion);
+  if (alive === false) {
+    const interrupted = statusMessage(status, currentVersion);
+    const safeToRetry = safeToRetryUpdate(
+      interrupted,
+      currentVersion,
+      config?.activeRelease,
+      studioRoot,
+      maintenanceFile.exists,
+    );
+    return safeToRetry
+      ? interrupted
+      : {
+          ...interrupted,
+          manualReview: true,
+          message:
+            "The interrupted update may have stopped services or changed files. Verify the installed version, database, and maintenance state before retrying.",
+        };
+  }
 
   const starting = status.status === "starting" || status.status === "queued";
   if (alive === true && starting && status.updateId)
@@ -945,6 +1174,8 @@ export async function startGitHubLogin(
   if (!context.release?.version || !context.config?.installRoot) {
     throw new Error("studio_not_installed");
   }
+  if (!samePath(context.config.activeRelease, root))
+    throw new Error("studio_update_needs_manual_review");
   const installRoot = context.config.installRoot;
   if (activeGitHubLogins.has(root)) return getGitHubLoginStatus(root);
 
@@ -1123,10 +1354,11 @@ export async function startStudioUpdate(
 ) {
   const root = resolveStudioRoot(options.root);
   const context = await getStudioContext(root);
-  if (!context.release?.version || !context.config?.installRoot) {
+  const studioConfig = context.config;
+  if (!context.release?.version || !studioConfig?.installRoot) {
     throw new Error("studio_not_installed");
   }
-  const installRoot = context.config.installRoot;
+  const installRoot = studioConfig.installRoot;
   const lockFile = lockPath(installRoot);
   const taskStatusFile = statusPath(installRoot);
   const scriptPath = path.join(root, "scripts", "update-windows-studio.ps1");
@@ -1153,7 +1385,13 @@ export async function startStudioUpdate(
     const previousTask = await getStudioUpdateStatus(root, {
       inspect: options.inspect,
       skipMaintenanceCleanup: true,
+      skipLockCleanup: true,
     });
+    const maintenance = await readJsonState<StudioUpdateMaintenance>(
+      maintenancePath(installRoot),
+    );
+    if (maintenance.unreadable || maintenance.exists)
+      throw new Error("studio_update_needs_manual_review");
     if (
       previousTask.manualReview ||
       [
@@ -1178,7 +1416,21 @@ export async function startStudioUpdate(
           ? "studio_update_needs_manual_review"
           : "studio_update_in_progress",
       );
-    if (previousTask.recoveryStatus === "failed")
+    if (
+      ["failed", "interrupted"].includes(previousTask.status) &&
+      !safeToRetryUpdate(
+        previousTask,
+        context.currentVersion,
+        studioConfig.activeRelease,
+        root,
+        false,
+      )
+    )
+      throw new Error("studio_update_needs_manual_review");
+    if (
+      previousTask.recoveryStatus === "failed" ||
+      previousTask.recoveryStatus === "running"
+    )
       throw new Error("studio_update_needs_manual_review");
 
     const existingLock = await readUpdateLock(lockFile);
@@ -1186,6 +1438,26 @@ export async function startStudioUpdate(
       throw new Error("studio_update_needs_manual_review");
     if (existingLock.exists) {
       const lock = existingLock.value;
+      const lockUpdateId = lock?.updateId;
+      const completedTask =
+        previousTask.status === "complete" &&
+        sameVersion(
+          previousTask.actualVersion || previousTask.currentVersion,
+          context.currentVersion,
+        );
+      if (
+        !validUpdateId(lockUpdateId) ||
+        previousTask.updateId !== lockUpdateId ||
+        (!completedTask &&
+          !safeToRetryUpdate(
+            previousTask,
+            context.currentVersion,
+            studioConfig.activeRelease,
+            root,
+            false,
+          ))
+      )
+        throw new Error("studio_update_needs_manual_review");
       const createdAt = Date.parse(lock?.createdAt || "");
       const recentlyCreated =
         Number.isFinite(createdAt) && Date.now() - createdAt < 10_000;
@@ -1201,8 +1473,10 @@ export async function startStudioUpdate(
       if (
         latestLock.unreadable ||
         !latestLock.exists ||
-        latestLock.value?.updateId !== lock?.updateId ||
-        latestLock.value?.createdAt !== lock?.createdAt
+        latestLock.value?.updateId !== lockUpdateId ||
+        latestLock.value?.createdAt !== lock?.createdAt ||
+        latestLock.value?.executorPid !== lock?.executorPid ||
+        latestLock.value?.executorScriptPath !== lock?.executorScriptPath
       )
         throw new Error("studio_update_in_progress");
       await unlink(lockFile);

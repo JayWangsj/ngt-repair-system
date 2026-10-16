@@ -12,7 +12,8 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
-  CircleArrowUp,
+  ChevronRight,
+  RefreshCw,
   CircleAlert,
   LoaderCircle,
 } from "lucide-react";
@@ -119,36 +120,74 @@ export function Sidebar() {
   const availableVersion = info?.updateAvailable
     ? info.latestVersion
     : undefined;
-  const updateSummary = updateFailed
-    ? task.phase === "interrupted"
-      ? it.updateInterrupted
-      : task.phase === "rollback-succeeded"
-        ? it.updateRollbackSucceeded
-        : task.phase === "rollback-failed"
-          ? it.updateRollbackFailed
-          : it.updateFailed
-    : task.phase === "starting" || task.phase === "queued"
-      ? it.updateTaskStarting
-      : task.phase === "reconnecting"
-        ? it.updateReconnecting
-        : task.phase === "rolling-back"
-          ? it.updateRollingBack
-          : task.phase === "running"
-            ? it.updateInstalling
-            : task.phase === "verifying"
-              ? it.updateVerifyingTask
-              : availableVersion
-                ? check.phase === "failed"
-                  ? it.updateCheckStale.replace("{version}", availableVersion)
-                  : it.updateAvailable.replace("{version}", availableVersion)
-                : it.systemUpdate;
-  const updateLabel = `${currentVersion}: ${updateSummary}`;
+  const currentVersionLabel = `v${currentVersion.replace(/^v/i, "")}`;
+  const availableVersionLabel = availableVersion
+    ? `v${availableVersion.replace(/^v/i, "")}`
+    : undefined;
+  const sidebarStatus = it.sidebarUpdateStatus;
+  const updateSummary = (() => {
+    switch (task.phase) {
+      case "starting":
+      case "queued":
+        return sidebarStatus.updateStarting;
+      case "running":
+        return task.status?.stage === "checking"
+          ? sidebarStatus.checking
+          : sidebarStatus.updating;
+      case "reconnecting":
+        return sidebarStatus.reconnecting;
+      case "verifying":
+        return sidebarStatus.verifying;
+      case "rolling-back":
+        return sidebarStatus.rollingBack;
+      case "succeeded":
+        return it.updateSuccess;
+      case "failed":
+        return sidebarStatus.updateFailed;
+      case "rollback-succeeded":
+        return sidebarStatus.rollbackSucceeded;
+      case "rollback-failed":
+        return sidebarStatus.rollbackFailed;
+      case "interrupted":
+        return sidebarStatus.updateInterrupted;
+      case "idle":
+        break;
+    }
+
+    switch (check.phase) {
+      case "not-checked":
+        return sidebarStatus.notChecked;
+      case "checking":
+        return sidebarStatus.checking;
+      case "up-to-date":
+        return sidebarStatus.upToDate;
+      case "available":
+        return availableVersionLabel
+          ? sidebarStatus.available.replace("{version}", availableVersionLabel)
+          : sidebarStatus.unavailable;
+      case "failed":
+        return availableVersionLabel
+          ? sidebarStatus.checkFailedStale.replace(
+              "{version}",
+              availableVersionLabel,
+            )
+          : sidebarStatus.checkFailed;
+      case "not-installable":
+      case "not-installed":
+        return sidebarStatus.unavailable;
+      case "auth-required":
+        return sidebarStatus.authRequired;
+      default:
+        return sidebarStatus.notChecked;
+    }
+  })();
+  const updateLabel = `${currentVersionLabel}: ${updateSummary}`;
   const updateHref = "/settings/system-update";
   const UpdateIcon = updateFailed
     ? CircleAlert
     : updateRunning
       ? LoaderCircle
-      : CircleArrowUp;
+      : RefreshCw;
 
   return (
     <aside className="sidebar">
@@ -205,9 +244,14 @@ export function Sidebar() {
             )}
           </span>
           <span className="sidebar-update-copy">
-            <strong>v{currentVersion}</strong>
+            <strong>{currentVersionLabel}</strong>
             <small>{updateSummary}</small>
           </span>
+          <ChevronRight
+            className="sidebar-update-arrow"
+            size={16}
+            aria-hidden="true"
+          />
         </Link>
       </div>
       <div

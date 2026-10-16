@@ -556,6 +556,25 @@ export const it = {
   systemUpdate: "Aggiornamento sistema",
   systemUpdateHelp:
     "Controlla le nuove versioni nel repository GitHub privato; i dati vengono salvati prima dell'aggiornamento.",
+  sidebarUpdateStatus: {
+    notChecked: "Non ancora controllato",
+    checking: "Controllo in corso…",
+    upToDate: "Aggiornato",
+    available: "Nuova versione {version}",
+    checkFailed: "Controllo non riuscito",
+    checkFailedStale: "Controllo non riuscito · già disponibile {version}",
+    updateStarting: "Avvio aggiornamento…",
+    updating: "Aggiornamento in corso…",
+    reconnecting: "Riconnessione…",
+    verifying: "Verifica dell'attività…",
+    rollingBack: "Ripristino versione precedente…",
+    updateFailed: "Aggiornamento non riuscito",
+    updateInterrupted: "Aggiornamento interrotto",
+    rollbackSucceeded: "Aggiornamento non riuscito · versione ripristinata",
+    rollbackFailed: "Aggiornamento non riuscito · ripristino da verificare",
+    unavailable: "Aggiornamento non disponibile",
+    authRequired: "Autorizzazione richiesta",
+  },
   backToSettings: "Torna alle impostazioni",
   currentVersion: "Versione corrente",
   latestVersion: "Ultima versione",
@@ -602,6 +621,8 @@ export const it = {
     "L'attività non ha segnalato nuovi progressi; la verifica continua automaticamente.",
   updateInterrupted:
     "L'attività di aggiornamento si è interrotta. Verifica i dettagli prima di riprovare.",
+  updateManualReview:
+    "Il ripristino dell'ultimo aggiornamento non è verificabile e un nuovo aggiornamento è stato bloccato. Controlla il registro diagnostico, la versione attiva, il database e il contrassegno di manutenzione prima di riprovare.",
   updateRollingBack: "Ripristino della versione precedente…",
   updateRollbackSucceeded:
     "Aggiornamento non riuscito; la versione precedente è stata ripristinata e verificata.",

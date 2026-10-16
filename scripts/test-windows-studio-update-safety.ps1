@@ -85,6 +85,174 @@ try {
   } catch { $backupRejected = $true }
   if (-not $backupRejected) { throw "Backup validation accepted a modified database file." }
 
+  . (Join-Path $PSScriptRoot "windows-studio-common.ps1")
+  $processRoot = Join-Path $testRoot "process-fixture"
+  $processInstallRoot = Join-Path $processRoot "install"
+  $processReleaseRoot = Join-Path $processInstallRoot "releases\v-test"
+  $processDataRoot = Join-Path $processRoot "data"
+  $processStateDirectory = Join-Path $processReleaseRoot ".local"
+  New-Item -ItemType Directory -Path $processStateDirectory -Force | Out-Null
+  New-Item -ItemType Directory -Path (Join-Path $processReleaseRoot "runtime") -Force | Out-Null
+  Set-Content -LiteralPath (Join-Path $processReleaseRoot "runtime\node.exe") -Value "fixture" -Encoding ascii
+  Set-NgtStudioConfig -Path (Join-Path $processStateDirectory "studio.json") -Configuration ([pscustomobject]@{
+    dataRoot = $processDataRoot
+    installRoot = $processInstallRoot
+    activeRelease = $processReleaseRoot
+  })
+  $script:NgtStateDirectory = $processStateDirectory
+  $script:FixturePorts = @()
+  $script:FixtureProcesses = @{}
+  $script:FixtureStopCalls = @()
+  $script:FixtureScheduledTask = $null
+  $script:FixtureTaskStopCalls = @()
+  function Get-NgtStudioPortConnections([int]$Port) {
+    return @($script:FixturePorts | Where-Object { $_.LocalPort -eq $Port })
+  }
+  function Get-NgtStudioProcess([int]$ProcessId) {
+    return $script:FixtureProcesses[[int]$ProcessId]
+  }
+  function Get-ScheduledTask([string]$TaskName) { return $script:FixtureScheduledTask }
+  function Stop-ScheduledTask([string]$TaskName, [string]$ErrorAction) {
+    $script:FixtureTaskStopCalls += $TaskName
+    $script:FixtureScheduledTask = $null
+  }
+  function Stop-Process([int]$Id, [switch]$Force, [string]$ErrorAction) {
+    $script:FixtureStopCalls += $Id
+    $script:FixtureProcesses.Remove($Id)
+    $script:FixturePorts = @($script:FixturePorts | Where-Object { $_.OwningProcess -ne $Id })
+  }
+
+  $unrelatedNode = [pscustomobject]@{
+    ProcessId = 4101
+    ParentProcessId = 4
+    Name = "node.exe"
+    ExecutablePath = "C:\Other\node.exe"
+    CommandLine = '"C:\Other\node.exe" unrelated.js'
+    CreationDate = "2026-10-16T00:00:00Z"
+  }
+  $script:FixtureProcesses[4101] = $unrelatedNode
+  Set-Content -LiteralPath (Join-Path $processStateDirectory "application.pid") -Value "4101" -Encoding ascii
+  $script:FixturePorts = @([pscustomobject]@{ LocalPort = 3000; OwningProcess = 4101 })
+  $unrelatedPortRejected = $false
+  try { Stop-NgtStudioProcesses } catch {
+    $unrelatedPortRejected = $_.Exception.Message -match "unverified PID 4101"
+  }
+  if (-not $unrelatedPortRejected -or $script:FixtureStopCalls.Count -ne 0) {
+    throw "An unrelated Node listener was not preserved with a clear port diagnostic."
+  }
+  $unrelatedPostgres = [pscustomobject]@{
+    ProcessId = 4102
+    ParentProcessId = 4
+    Name = "postgres.exe"
+    ExecutablePath = "C:\Other\postgres.exe"
+    CommandLine = '"C:\Other\postgres.exe" -D C:\Other\data'
+    CreationDate = "2026-10-16T00:00:00Z"
+  }
+  $script:FixtureProcesses[4102] = $unrelatedPostgres
+  $script:FixturePorts = @([pscustomobject]@{ LocalPort = 55432; OwningProcess = 4102 })
+  $unrelatedDatabaseRejected = $false
+  try { Stop-NgtStudioProcesses } catch {
+    $unrelatedDatabaseRejected = $_.Exception.Message -match "unverified PID 4102"
+  }
+  if (-not $unrelatedDatabaseRejected -or $script:FixtureStopCalls.Count -ne 0) {
+    throw "An unrelated PostgreSQL listener was not preserved with a clear port diagnostic."
+  }
+
+  $applicationScript = Join-Path $processReleaseRoot "scripts\start.mjs"
+  $application = [pscustomobject]@{
+    ProcessId = 4200
+    ParentProcessId = 4
+    Name = "node.exe"
+    ExecutablePath = Join-Path $processReleaseRoot "runtime\node.exe"
+    CommandLine = '"' + (Join-Path $processReleaseRoot "runtime\node.exe") + '" "' + $applicationScript + '"'
+    CreationDate = "2026-10-16T00:00:00Z"
+  }
+  $listener = [pscustomobject]@{
+    ProcessId = 4201
+    ParentProcessId = 4200
+    Name = "node.exe"
+    ExecutablePath = $application.ExecutablePath
+    CommandLine = '"' + $application.ExecutablePath + '" .next\standalone\server.js'
+    CreationDate = "2026-10-16T00:00:01Z"
+  }
+  $script:FixtureProcesses[4200] = $application
+  $script:FixtureProcesses[4201] = $listener
+  Set-Content -LiteralPath (Join-Path $processStateDirectory "application.pid") -Value "4200" -Encoding ascii
+  $script:FixturePorts = @([pscustomobject]@{ LocalPort = 3000; OwningProcess = 4201 })
+  Stop-NgtStudioProcesses
+  if (($script:FixtureStopCalls -join ",") -ne "4201") {
+    throw "An identified NGT application listener was not stopped by its verified identity."
+  }
+
+  $postgresRuntime = Join-Path $processRoot "postgres-runtime"
+  $postgresExecutable = Join-Path $postgresRuntime "bin\postgres.exe"
+  $databaseDirectory = Join-Path $processDataRoot "data"
+  $postgresFixture = [pscustomobject]@{
+    Name = "postgres.exe"
+    ExecutablePath = $postgresExecutable
+    CommandLine = '"' + $postgresExecutable + '" -D "' + $databaseDirectory + '" -h 127.0.0.1'
+  }
+  if (-not (Test-NgtStudioPostgresProcess -Process $postgresFixture -RuntimeRoot $postgresRuntime -DataDirectory $databaseDirectory) -or
+      (Test-NgtStudioPostgresProcess -Process $postgresFixture -RuntimeRoot $postgresRuntime -DataDirectory (Join-Path $processRoot "other-data"))) {
+    throw "PostgreSQL process identity did not require the recorded executable and data directory."
+  }
+  $serviceScript = Join-Path $processInstallRoot "service\windows-service.ps1"
+  if (-not (Test-NgtStudioSupervisorProcess -Process ([pscustomobject]@{
+    Name = "powershell.exe"
+    CommandLine = 'powershell.exe -File "' + $serviceScript + '"'
+  }) -ServiceScript $serviceScript)) {
+    throw "A supervisor using the configured stable service script was not recognized."
+  }
+  $launcherPath = Join-Path $processInstallRoot "service\windows-studio-launcher.vbs"
+  $validScheduledTask = [pscustomobject]@{
+    Actions = @([pscustomobject]@{
+      Execute = Join-Path $env:WINDIR "System32\wscript.exe"
+      Arguments = '//B //Nologo "' + $launcherPath + '"'
+    })
+  }
+  if (-not (Test-NgtStudioScheduledTask -Task $validScheduledTask -LauncherPath $launcherPath)) {
+    throw "The configured NGT scheduled task was not recognized."
+  }
+  $script:FixtureScheduledTask = $validScheduledTask
+  $partialStopListener = [pscustomobject]@{
+    ProcessId = 4301
+    ParentProcessId = 4
+    Name = "node.exe"
+    ExecutablePath = "C:\Other\node.exe"
+    CommandLine = '"C:\Other\node.exe" unrelated.js'
+    CreationDate = "2026-10-16T00:00:02Z"
+  }
+  $script:FixtureProcesses[4301] = $partialStopListener
+  $script:FixturePorts = @([pscustomobject]@{ LocalPort = 3000; OwningProcess = 4301 })
+  $partialStopRejected = $false
+  try { Stop-NgtStudioProcesses } catch {
+    $partialStopRejected = $_.Exception.Message -match "unverified PID 4301"
+  }
+  if (-not $partialStopRejected -or
+      $script:FixtureTaskStopCalls.Count -ne 1 -or
+      $script:FixtureStopCalls -contains 4301 -or
+      -not $script:FixtureProcesses.ContainsKey(4301)) {
+    throw "A partial stop did not preserve the unrelated listener and stop only the verified task."
+  }
+  $script:FixturePorts = @()
+  Stop-NgtStudioProcesses
+  if ($script:FixtureTaskStopCalls.Count -ne 1) {
+    throw "Repeating a partial stop did not safely tolerate the already-stopped task."
+  }
+  if (Test-NgtStudioScheduledTask -Task ([pscustomobject]@{
+    Actions = @([pscustomobject]@{
+      Execute = Join-Path $env:WINDIR "System32\wscript.exe"
+      Arguments = '//B //Nologo "' + $launcherPath + '" -unrelated'
+    })
+  }) -LauncherPath $launcherPath) {
+    throw "An NGT scheduled task with unexpected command arguments was accepted."
+  }
+  if (Test-NgtStudioScheduledTask -Task ([pscustomobject]@{
+    Actions = @([pscustomobject]@{ Execute = "C:\Other\wscript.exe"; Arguments = '"' + $launcherPath + '"' })
+  }) -LauncherPath $launcherPath) {
+    throw "An unrelated scheduled-task executable was accepted as the NGT startup task."
+  }
+
   $eventsPath = Join-Path $testRoot "mutex-events.txt"
   $firstOutput = Join-Path $testRoot "mutex-one.out"
   $firstError = Join-Path $testRoot "mutex-one.err"

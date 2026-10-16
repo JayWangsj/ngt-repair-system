@@ -70,8 +70,10 @@ function Start-NgtProcess(
 
 while ($true) {
   try {
-    Start-NgtProcess -Name "database" -Script "scripts/windows-db.mjs" -Port 55432
-    Start-NgtProcess -Name "application" -Script "scripts/start.mjs" -Port 3000
+    Start-NgtProcess -Name "database" `
+      -Script (Join-Path $projectRoot "scripts\windows-db.mjs") -Port 55432
+    Start-NgtProcess -Name "application" `
+      -Script (Join-Path $projectRoot "scripts\start.mjs") -Port 3000
   } catch {
     $line = (Get-Date -Format o) + " " + $_.Exception.Message
     Add-Content -LiteralPath (Join-Path $stateDirectory "supervisor.error.log") -Value $line

@@ -4,8 +4,14 @@ import { describe, expect, it } from "vitest";
 describe("Windows persistent startup", () => {
   it("supervises both the database and application without machine-specific paths", async () => {
     const service = await readFile("scripts/windows-service.ps1", "utf8");
-    expect(service).toContain('"scripts/windows-db.mjs" -Port 55432');
-    expect(service).toContain('"scripts/start.mjs" -Port 3000');
+    expect(service).toContain(
+      'Join-Path $projectRoot "scripts\\windows-db.mjs"',
+    );
+    expect(service).toContain('Join-Path $projectRoot "scripts\\start.mjs"');
+    expect(service).toContain(
+      "Get-NetTCPConnection -LocalPort $Port -State Listen",
+    );
+    expect(service).toContain("$process.HasExited");
     expect(service).toContain("$PSScriptRoot");
     expect(service).not.toContain("D:\\NGT");
   });
@@ -62,8 +68,30 @@ describe("Windows persistent startup", () => {
     );
     expect(service).toContain('"test.env"');
     expect(service).toContain('$env:PORT = "3236"');
-    expect(service).toContain('"scripts/windows-test-db.mjs" -Port 55510');
-    expect(service).toContain('"scripts/start.mjs" -Port 3236');
+    expect(service).toContain(
+      'Join-Path $projectRoot "scripts\\windows-test-db.mjs"',
+    );
+    expect(service).toContain(
+      'Join-Path $projectRoot "node_modules\\next\\dist\\bin\\next"',
+    );
+    expect(service).toContain("dev --hostname 127.0.0.1 --port 3236");
+    expect(service).toContain(
+      "Get-NetTCPConnection -LocalPort $Port -State Listen",
+    );
+    expect(service).toContain("CmdletizationQuery_NotFound,*");
+    expect(service).toContain("Get-NgtPortConnections");
+    expect(service).toContain("Select-Object -ExpandProperty OwningProcess");
+    expect(service).toContain("Get-CimInstance -ClassName Win32_Process");
+    expect(service).toContain("Test-NgtListenerOwnership");
+    expect(service).toContain("Test-NgtProcessTree");
+    expect(service).toContain("Test-NgtProjectSupervisor");
+    expect(service).toContain("Test-NgtServiceHealth");
+    expect(service).toContain("127.0.0.1:3236/api/health");
+    expect(service).toContain("runtime\\bin\\pg_ctl.exe");
+    expect(service).toContain("TcpClient");
+    expect(service).toContain('"ngt_test"');
+    expect(service).toContain("refusing to reuse or stop it");
+    expect(service).not.toContain("Stop-Process");
     expect(testDatabase).toContain('"CREATE DATABASE ngt_test"');
     expect(testDatabase).toContain('"55510"');
     expect(testDatabase).not.toContain('CREATE DATABASE ngt"');
@@ -159,19 +187,16 @@ describe("Windows persistent startup", () => {
     expect(service).toContain('"studio.json"');
     expect(service).toContain('"runtime\\node.exe"');
     expect(service).toContain('"supervisor.pid"');
-    expect(common).toContain("Get-CimInstance Win32_Process");
+    expect(common).toContain("Get-CimInstance -ClassName Win32_Process");
     expect(common).toContain('"windows-service.ps1"');
     expect(common).toContain("$stateDirectories");
+    expect(common).toContain('$ErrorActionPreference = "Stop"');
+    expect(common).toContain("$stoppedDatabasePaths");
+    expect(common).toContain("Test-NgtStudioPostgresProcess");
+    expect(common).toContain("Test-NgtStudioProcessTree");
     expect(common).toContain(
-      "$databaseKey = [System.IO.Path]::GetFullPath($data)",
+      "Stop-NgtStudioProcessIfUnchanged -Process $databaseProcess",
     );
-    expect(common).toContain('$ErrorActionPreference = "SilentlyContinue"');
-    expect(common).toContain("$knownDatabasePaths");
-    expect(common).toContain('$databaseProcess.Name -ne "postgres.exe"');
-    expect(common).toContain(
-      "$databaseProcess.CommandLine.IndexOf($databasePath",
-    );
-    expect(common).toContain("Stop-Process -Id $databaseProcessId -Force");
     expect(installer).toContain('"releases\\v" + $release.version');
     expect(installer).toContain('"--max-old-space-size=1536"');
     expect(packager).toContain("--config.node-linker=hoisted");
@@ -262,6 +287,7 @@ describe("Windows persistent startup", () => {
       "scripts/test-windows-studio-package.ps1",
       "utf8",
     );
+    const ciWorkflow = await readFile(".github/workflows/ci.yml", "utf8");
     expect(backup).toContain('"SHA256SUMS.txt"');
     expect(backup).toContain("Stop-NgtStudioProcesses");
     expect(backup).toContain("$_.FullName.Substring($backupPrefix.Length)");
@@ -297,52 +323,27 @@ describe("Windows persistent startup", () => {
     );
     expect(workflow).toContain('tags:\n      - "v*"');
     expect(workflow).toContain("runs-on: windows-2022");
-    expect(workflow).toContain("--config.node-linker=hoisted");
-    expect(workflow).toContain("--config.package-import-method=copy");
-    expect(workflow).toContain("gh release create");
-    expect(workflow).toContain("--verify-tag --generate-notes --draft");
-    expect(workflow).toContain(
-      '$releaseListEndpoint = "repos/JayWangsj/ngt-repair-system/releases?per_page=100"',
+    expect(ciWorkflow).toContain("--config.node-linker=hoisted");
+    expect(ciWorkflow).toContain("--config.package-import-method=copy");
+    expect(ciWorkflow).toContain(
+      "node --test tests/release/windows-studio-release.node-test.mjs",
     );
-    expect(workflow).toContain("$_.tag_name -eq $env:GITHUB_REF_NAME");
-    expect(workflow).toContain("-not ($draftReleases[0].draft)");
-    expect(workflow).toContain("$draft = $existingRelease");
-    expect(
-      workflow.indexOf("$publishedJson = gh api $releaseEndpoint"),
-    ).toBeGreaterThan(
-      workflow.indexOf(
-        "gh release edit $env:GITHUB_REF_NAME --draft=false --verify-tag",
-      ),
-    );
-    expect(workflow).toContain("if (-not ($existingRelease.draft))");
-    expect(workflow).toContain("published versions are never overwritten");
-    expect(workflow).toContain('"{0}`t{1}`tsha256:{2}"');
-    expect(workflow).toContain("$draft.draft");
+    expect(workflow).toContain("actions/download-artifact@v4");
+    expect(workflow).toContain("windows-studio-package-${{ github.sha }}");
+    expect(workflow).toContain("prepare-candidate:");
     expect(workflow).toContain(
-      "for ($attempt = 0; $attempt -lt 60; $attempt++)",
+      "node scripts/windows-studio-release.mjs prepare-draft release-assets",
     );
     expect(workflow).toContain(
-      'Write-Host "Waiting for GitHub asset SHA256 digests',
+      "node scripts/windows-studio-release.mjs publish release-assets",
     );
-    expect(workflow).toContain('$_ -notmatch "`tsha256:[a-f0-9]{64}$"');
-    expect(workflow).toContain(
-      "GitHub did not calculate SHA256 digests for all draft release assets.",
+    expect(workflow).toMatch(
+      /needs:\s*\[\s*qualify,\s*build,\s*prepare-candidate,\s*online-update-acceptance,\s*installer-acceptance,?\s*\]/,
     );
-    expect(workflow).toContain(
-      "gh release edit $env:GITHUB_REF_NAME --draft=false --verify-tag",
-    );
+    expect(workflow).toContain("innosetup --version=6.7.1");
+    expect(workflow).toContain("windows-studio-release-metrics.mjs");
     expect(workflow).not.toContain("--clobber");
-    expect(workflow).toContain("package-manager-cache: false");
-    expect(workflow).toContain("pnpm/action-setup@v4");
-    expect(workflow).not.toContain("npm install -g pnpm");
-    expect(workflow).toContain("./scripts/test-windows-studio-package.ps1");
-    expect(workflow).toContain("-IntegrityOnly");
-    expect(workflow.indexOf("build-windows-studio-package.ps1")).toBeLessThan(
-      workflow.indexOf("test-windows-studio-package.ps1"),
-    );
-    expect(workflow.indexOf("test-windows-studio-package.ps1")).toBeLessThan(
-      workflow.indexOf("build-windows-studio-installer.ps1"),
-    );
+    expect(workflow).not.toContain("continue-on-error");
     expect(packageSmokeTest).toContain("Start-NgtStudioDatabase");
     expect(packageSmokeTest).toContain("[switch]$IntegrityOnly");
     expect(packageSmokeTest).toContain('"initdb.exe"');
@@ -472,7 +473,7 @@ describe("Windows persistent startup", () => {
       "utf8",
     );
     expect(service).toContain("studioConfig.activeRelease");
-    expect(startup).toContain('"NGT\\service\\windows-studio-launcher.vbs"');
+    expect(startup).toContain('"service\\windows-studio-launcher.vbs"');
     expect(installerScript).toContain("activeRelease = $projectRoot");
     expect(icon.readUInt16LE(0)).toBe(0);
     expect(icon.readUInt16LE(2)).toBe(1);

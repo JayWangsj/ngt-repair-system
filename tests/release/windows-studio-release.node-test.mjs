@@ -1,0 +1,376 @@
+import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import {
+  calculateBuildIdentity,
+  createLocalManifest,
+  createReleaseMarker,
+  createWindowsPackageManifest,
+  expectedAssetNames,
+  parseReleaseMarker,
+  prepareDraft,
+  publishRelease,
+  qualifyRelease,
+  verifyArtifact,
+  verifyWindowsPackageArtifact,
+} from "../../scripts/windows-studio-release.mjs";
+
+const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
+const sourceSha = "a".repeat(40);
+const version = "2.0.14";
+const tag = "v" + version;
+
+async function makeFixture(t) {
+  const root = await mkdtemp(path.join(os.tmpdir(), "ngt-release-test-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const assets = path.join(root, "assets");
+  await import("node:fs/promises").then(({ mkdir }) =>
+    mkdir(assets, { recursive: true }),
+  );
+  for (const name of expectedAssetNames(tag).filter(
+    (entry) => !entry.endsWith(".sha256"),
+  )) {
+    const bytes = Buffer.from("fixture asset: " + name);
+    await writeFile(path.join(assets, name), bytes);
+    await writeFile(
+      path.join(assets, name + ".sha256"),
+      sha256(bytes) + "  " + name + "\n",
+    );
+  }
+  const manifest = await createLocalManifest(assets, tag, sourceSha, version);
+  return { root, assets, manifest };
+}
+
+function makeApi({
+  release = null,
+  tagCommit = sourceSha,
+  ambiguousFirstUpload = false,
+} = {}) {
+  let state = release;
+  let nextId =
+    Math.max(0, ...(release?.assets || []).map((asset) => asset.id || 0)) + 1;
+  let uploadCount = 0;
+  const remoteContents = new Map();
+  const uploads = [];
+  return {
+    uploads,
+    remoteContents,
+    current: () => state,
+    resolveTagCommit: async () => tagCommit,
+    findRelease: async () => state,
+    generateReleaseNotes: async () => "Generated release notes",
+    createDraft: async ({ tag: candidateTag, sha, body }) => {
+      state = {
+        id: 77,
+        tag_name: candidateTag,
+        target_commitish: sha,
+        draft: true,
+        body,
+        assets: [],
+        upload_url:
+          "https://uploads.example.test/releases/77/assets{?name,label}",
+        html_url: "https://github.example.test/releases/tag/" + candidateTag,
+      };
+      return state;
+    },
+    updateRelease: async (_id, patch) => {
+      state = { ...state, ...patch };
+      return state;
+    },
+    uploadAsset: async (_draft, name, bytes) => {
+      uploadCount++;
+      uploads.push(name);
+      const data = Buffer.from(bytes);
+      const asset = {
+        id: nextId++,
+        name,
+        size: data.length,
+        digest: "sha256:" + sha256(data),
+        url: "asset:" + name,
+      };
+      remoteContents.set(asset.id, data);
+      state.assets.push(asset);
+      if (ambiguousFirstUpload && uploadCount === 1) {
+        throw Object.assign(new Error("upload response was lost"), {
+          retryable: true,
+        });
+      }
+      return asset;
+    },
+    downloadAsset: async (asset) => remoteContents.get(asset.id),
+  };
+}
+
+test("manifest ties the six release assets to their sidecars and source Commit", async (t) => {
+  const { assets, manifest } = await makeFixture(t);
+  assert.equal(manifest.sha, sourceSha);
+  assert.equal(manifest.version, version);
+  assert.equal(manifest.assets.length, 6);
+  assert.equal(manifest.buildIdentity, calculateBuildIdentity(manifest));
+  await verifyArtifact(assets, manifest, { sha: sourceSha, tag, version });
+  const target = path.join(
+    assets,
+    manifest.assets.find((entry) => entry.name.endsWith(".zip")).name,
+  );
+  await writeFile(target, "tampered");
+  await assert.rejects(verifyArtifact(assets, manifest), /SHA256 verification/);
+});
+
+test("Draft creation survives an ambiguous upload response without duplicating assets", async (t) => {
+  const { assets, manifest } = await makeFixture(t);
+  const api = makeApi({ ambiguousFirstUpload: true });
+  const result = await prepareDraft(api, assets, manifest);
+  assert.equal(result.draft, true);
+  assert.equal(api.uploads.length, 6);
+  assert.equal(new Set(api.uploads).size, 6);
+  assert.deepEqual(
+    result.assets.map((asset) => asset.name).sort(),
+    expectedAssetNames(tag),
+  );
+  assert.deepEqual(parseReleaseMarker(result.body), {
+    tag,
+    sha: sourceSha,
+    version,
+    buildIdentity: manifest.buildIdentity,
+  });
+});
+
+test("a legacy partial Draft resumes only missing assets after content verification", async (t) => {
+  const { assets, manifest } = await makeFixture(t);
+  const first = manifest.assets[0];
+  const firstBytes = await readFile(path.join(assets, first.name));
+  const existing = {
+    id: 1,
+    name: first.name,
+    size: first.size,
+    digest: null,
+    url: "asset:" + first.name,
+  };
+  const release = {
+    id: 42,
+    tag_name: tag,
+    draft: true,
+    body: "Existing release notes",
+    assets: [existing],
+    upload_url: "https://uploads.example.test/releases/42/assets{?name,label}",
+  };
+  const api = makeApi({ release });
+  api.remoteContents.set(existing.id, firstBytes);
+  const result = await prepareDraft(api, assets, manifest);
+  assert.equal(result.draft, true);
+  assert.equal(api.uploads.length, 5);
+  assert.equal(api.uploads.includes(first.name), false);
+  assert.equal(api.current().assets.length, 6);
+});
+
+test("mismatched or already public Releases fail closed without overwriting", async (t) => {
+  const { assets, manifest } = await makeFixture(t);
+  const badAsset = {
+    id: 8,
+    name: manifest.assets[0].name,
+    size: manifest.assets[0].size,
+    digest: "sha256:" + "f".repeat(64),
+  };
+  const mismatchApi = makeApi({
+    release: {
+      id: 8,
+      tag_name: tag,
+      draft: true,
+      body: "",
+      assets: [badAsset],
+    },
+  });
+  await assert.rejects(
+    prepareDraft(mismatchApi, assets, manifest),
+    /digest does not match/,
+  );
+  assert.equal(mismatchApi.uploads.length, 0);
+
+  const publicApi = makeApi({
+    release: { id: 9, tag_name: tag, draft: false, body: "", assets: [] },
+  });
+  await assert.rejects(
+    prepareDraft(publicApi, assets, manifest),
+    /published Release already uses this tag/,
+  );
+  assert.equal(publicApi.uploads.length, 0);
+});
+
+test("publication can be safely retried after an ambiguous successful response", async (t) => {
+  const { assets, manifest } = await makeFixture(t);
+  const releaseAssets = manifest.assets.map((asset, index) => ({
+    id: index + 1,
+    name: asset.name,
+    size: asset.size,
+    digest: "sha256:" + asset.sha256,
+  }));
+  const release = {
+    id: 77,
+    tag_name: tag,
+    draft: true,
+    body: createReleaseMarker(manifest),
+    assets: releaseAssets,
+  };
+  const api = makeApi({ release });
+  const updateRelease = api.updateRelease;
+  let loseFirstResponse = true;
+  api.updateRelease = async (...args) => {
+    const published = await updateRelease(...args);
+    if (loseFirstResponse) {
+      loseFirstResponse = false;
+      throw Object.assign(new Error("publish response was lost"), {
+        retryable: true,
+      });
+    }
+    return published;
+  };
+
+  await assert.rejects(
+    publishRelease(api, assets, manifest),
+    /publish response was lost/,
+  );
+  const retried = await publishRelease(api, assets, manifest);
+  assert.equal(retried.draft, false);
+  assert.equal(api.current().draft, false);
+});
+
+test("same-SHA qualification requires all named Verify MVP gates to succeed", async () => {
+  const run = {
+    id: 123,
+    path: ".github/workflows/ci.yml",
+    head_sha: sourceSha,
+    head_branch: "master",
+    event: "push",
+    status: "completed",
+    conclusion: "success",
+    created_at: "2026-10-16T00:00:00Z",
+  };
+  const names = ["verify", "full-verification", "windows-studio-smoke"];
+  const api = {
+    resolveTagCommit: async () => sourceSha,
+    findRelease: async () => null,
+    listVerifyRuns: async () => ({ workflow_runs: [run] }),
+    listRunJobs: async () => ({
+      jobs: names.map((name) => ({ name, conclusion: "success" })),
+    }),
+  };
+  const accepted = await qualifyRelease({
+    api,
+    tag,
+    sha: sourceSha,
+    version,
+    timeoutMs: 100,
+  });
+  assert.equal(accepted.run.id, run.id);
+
+  api.listRunJobs = async () => ({
+    jobs: names.map((name) => ({
+      name,
+      conclusion: name === "windows-studio-smoke" ? "cancelled" : "success",
+    })),
+  });
+  await assert.rejects(
+    qualifyRelease({ api, tag, sha: sourceSha, version, timeoutMs: 100 }),
+    /incomplete or failed required gates/,
+  );
+});
+
+test("Windows Smoke package provenance detects mutation and source mismatch", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "ngt-package-test-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const artifacts = path.join(root, "artifact");
+  const packageDirectory = path.join(root, "package");
+  await import("node:fs/promises").then(({ mkdir }) =>
+    mkdir(artifacts, { recursive: true }),
+  );
+  await import("node:fs/promises").then(({ mkdir }) =>
+    mkdir(packageDirectory, { recursive: true }),
+  );
+  const archiveName = "ngt-studio-windows-v" + version + ".zip";
+  const bytes = Buffer.from("smoke package bytes");
+  await writeFile(path.join(artifacts, archiveName), bytes);
+  await writeFile(
+    path.join(artifacts, archiveName + ".sha256"),
+    sha256(bytes) + "  " + archiveName + "\n",
+  );
+  await writeFile(
+    path.join(packageDirectory, "studio-release.json"),
+    JSON.stringify({
+      version,
+      commit: sourceSha,
+      runtimeHash: "b".repeat(64),
+    }),
+  );
+  const manifest = await createWindowsPackageManifest(
+    artifacts,
+    packageDirectory,
+    sourceSha,
+    version,
+  );
+  assert.equal(
+    (await verifyWindowsPackageArtifact(artifacts, { sha: sourceSha, version }))
+      .buildIdentity,
+    manifest.buildIdentity,
+  );
+  await assert.rejects(
+    verifyWindowsPackageArtifact(artifacts, { sha: "c".repeat(40), version }),
+    /sha does not match/,
+  );
+});
+
+test("workflow DAG gates publication and scopes Draft discovery to acceptance", async () => {
+  const { readFile: readText } = await import("node:fs/promises");
+  const ci = await readText(".github/workflows/ci.yml", "utf8");
+  const release = await readText(
+    ".github/workflows/windows-studio-release.yml",
+    "utf8",
+  );
+  const updater = await readText("scripts/update-windows-studio.ps1", "utf8");
+  const online = await readText(
+    "scripts/test-windows-studio-online-update.ps1",
+    "utf8",
+  );
+
+  assert.match(
+    ci,
+    /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/,
+  );
+  const pushTrigger = ci.slice(
+    ci.indexOf("\n  push:"),
+    ci.indexOf("\n  pull_request:"),
+  );
+  assert.doesNotMatch(pushTrigger, /paths-ignore:/);
+  assert.match(
+    ci,
+    /pull_request:\n    branches: \[master\]\n    paths-ignore:\n      - "\*\*\/\*\.md"/,
+  );
+  assert.match(ci, /queue: max/);
+  assert.match(
+    ci,
+    /full-verification:[\s\S]*needs: \[verify, windows-studio-smoke\]/,
+  );
+  assert.match(
+    release,
+    /online-update-acceptance:[\s\S]*needs: \[qualify, build, prepare-candidate\]/,
+  );
+  assert.match(
+    release,
+    /installer-acceptance:[\s\S]*needs: \[qualify, build, prepare-candidate\]/,
+  );
+  assert.match(
+    release,
+    /publish:[\s\S]*needs:\s*\[\s*qualify,\s*build,\s*prepare-candidate,\s*online-update-acceptance,\s*installer-acceptance,?\s*\]/,
+  );
+  assert.doesNotMatch(release, /continue-on-error:/);
+  assert.doesNotMatch(release, /--clobber/);
+  assert.match(release, /windows-studio-package-\$\{\{ github\.sha \}\}/);
+  assert.match(updater, /\$releaseArguments = @\("release", "view"\)/);
+  assert.match(updater, /if \(\$ExpectedTargetVersion\)/);
+  assert.match(online, /\$ExpectedCommitSha/);
+  assert.match(online, /\$ExpectedManifestPath/);
+  assert.match(release, /-ExpectedCommitSha/);
+  assert.match(release, /-ExpectedManifestPath/);
+});

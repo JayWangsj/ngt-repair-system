@@ -83,7 +83,27 @@ jobs:
             "C:\Program Files\Inno Setup 6\ISCC.exe"
           ) | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
           if (-not $compiler) { throw "Pinned Inno Setup compiler was not installed." }
-          $compilerVersion = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($compiler).ProductVersion
+          $compilerDirectory = [System.IO.Path]::GetDirectoryName([System.IO.Path]::GetFullPath($compiler))
+          $installedInnoSetup = @(
+            foreach ($registryRoot in @(
+              "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+              "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+            )) {
+              if (Test-Path -LiteralPath $registryRoot) {
+                Get-ChildItem -LiteralPath $registryRoot -ErrorAction SilentlyContinue | ForEach-Object {
+                  $entry = Get-ItemProperty -LiteralPath $_.PSPath -ErrorAction SilentlyContinue
+                  if ($entry.DisplayName -like "Inno Setup*" -and $entry.InstallLocation) {
+                    $installDirectory = [System.IO.Path]::GetFullPath([string]$entry.InstallLocation).TrimEnd('\')
+                    if ([string]::Equals($installDirectory, $compilerDirectory, [System.StringComparison]::OrdinalIgnoreCase)) {
+                      $entry
+                    }
+                  }
+                }
+              }
+            }
+          )
+          if ($installedInnoSetup.Count -ne 1) { throw "Could not identify the Inno Setup installation that owns $compiler." }
+          $compilerVersion = [string]$installedInnoSetup[0].DisplayVersion
           if ($compilerVersion -notlike "6.7.1*") { throw "Expected Inno Setup 6.7.1; found $compilerVersion." }
           ./scripts/build-windows-studio-installer.ps1
       - name: Generate candidate runtime archives and checksums

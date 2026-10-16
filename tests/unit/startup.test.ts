@@ -347,6 +347,8 @@ describe("Windows persistent startup", () => {
       /needs:\s*\[\s*qualify,\s*build,\s*online-update-acceptance,\s*installer-acceptance,?\s*\]/,
     );
     expect(workflow).toContain("innosetup --version=6.7.1");
+    expect(workflow).toContain("$installedInnoSetup[0].DisplayVersion");
+    expect(workflow).toContain("$compilerDirectory");
     expect(workflow).toContain("windows-studio-release-metrics.mjs");
     expect(workflow).not.toContain("--clobber");
     expect(workflow).not.toContain("continue-on-error");

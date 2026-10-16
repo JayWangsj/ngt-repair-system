@@ -730,8 +730,15 @@ export class GitHubReleaseApi {
         this.repoPath("/releases/tags/" + encodeURIComponent(tag)),
       );
     } catch (error) {
-      if (error.status === 404) return null;
-      throw error;
+      if (error.status !== 404) throw error;
+    }
+    for (let page = 1; ; page++) {
+      const releases = await this.json(
+        this.repoPath("/releases?per_page=100&page=" + page),
+      );
+      const release = releases.find((candidate) => candidate.tag_name === tag);
+      if (release) return release;
+      if (releases.length < 100) return null;
     }
   }
 

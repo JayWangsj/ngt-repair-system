@@ -66,6 +66,241 @@ async function mockIdleTask(page: Page) {
   );
 }
 
+test("shows concise sidebar update-check statuses in both locales", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("ngt-auto-update-check", "false");
+  });
+  await page.route("**/api/system-update/status", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "idle",
+        currentVersion: "2.0.13",
+        installInstanceId: "sidebar-summary-test",
+      }),
+    }),
+  );
+
+  const checkResponses = [
+    {
+      status: 200,
+      body: {
+        installed: true,
+        currentVersion: "2.0.13",
+        authRequired: false,
+        updateAvailable: false,
+        latestVersion: "2.0.13",
+        installInstanceId: "sidebar-summary-test",
+      },
+    },
+    { status: 503, body: { error: "check_failed" } },
+    {
+      status: 200,
+      body: {
+        installed: true,
+        currentVersion: "2.0.13",
+        authRequired: false,
+        updateAvailable: true,
+        latestVersion: "2.0.14",
+        installInstanceId: "sidebar-summary-test",
+      },
+    },
+    { status: 503, body: { error: "check_failed" } },
+    {
+      status: 200,
+      body: {
+        installed: true,
+        currentVersion: "2.0.13",
+        authRequired: false,
+        updateAvailable: false,
+        notInstallable: true,
+        latestVersion: "2.0.14",
+        installInstanceId: "sidebar-summary-test",
+      },
+    },
+    {
+      status: 200,
+      body: {
+        installed: true,
+        currentVersion: "2.0.13",
+        authRequired: true,
+        updateAvailable: false,
+        installInstanceId: "sidebar-summary-test",
+      },
+    },
+  ];
+  let checkRequests = 0;
+  let releaseInitialCheck!: () => void;
+  const initialCheckBlocked = new Promise<void>((resolve) => {
+    releaseInitialCheck = resolve;
+  });
+  await page.route("**/api/system-update", async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const index = checkRequests++;
+    if (index === 0) await initialCheckBlocked;
+    const response =
+      checkResponses[index] || checkResponses[checkResponses.length - 1];
+    return route.fulfill({
+      status: response.status,
+      contentType: "application/json",
+      body: JSON.stringify(response.body),
+    });
+  });
+
+  await page.goto("/settings");
+  await page.evaluate(() => {
+    document.cookie = "ngt-locale=zh; Path=/; SameSite=Lax";
+  });
+  await page.reload();
+  const summary = page.locator(".sidebar-update-copy small");
+  await expect(summary).toHaveText("尚未检查");
+  expect(checkRequests).toBe(0);
+
+  await page.locator(".sidebar-update-entry").click();
+  await expect(page).toHaveURL(/settings\/system-update/);
+  await expect(summary).toHaveText("正在检查…");
+  releaseInitialCheck();
+  await expect(summary).toHaveText("已是最新");
+
+  const chineseCheckButton = page.getByRole("button", {
+    name: "检查更新",
+    exact: true,
+  });
+  await chineseCheckButton.click();
+  await expect(summary).toHaveText("检查失败");
+  await chineseCheckButton.click();
+  await expect(summary).toHaveText("发现 v2.0.14");
+  await expect(page.locator(".sidebar-update-dot")).toBeVisible();
+  await chineseCheckButton.click();
+  await expect(summary).toHaveText("检查失败 · 上次发现 v2.0.14");
+  await chineseCheckButton.click();
+  await expect(summary).toHaveText("更新不可用");
+  await chineseCheckButton.click();
+  await expect(summary).toHaveText("需要授权");
+});
+
+test("prioritizes active and failed update-task statuses in the sidebar", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("ngt-auto-update-check", "false");
+  });
+  let taskStatus: Record<string, unknown> = {
+    status: "idle",
+    currentVersion: "2.0.13",
+    installInstanceId: "sidebar-task-summary-test",
+  };
+  await page.route("**/api/system-update/status", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(taskStatus),
+    }),
+  );
+  const checkResponses = [
+    {
+      status: 200,
+      body: {
+        installed: true,
+        currentVersion: "2.0.13",
+        authRequired: false,
+        updateAvailable: true,
+        latestVersion: "2.0.14",
+        installInstanceId: "sidebar-task-summary-test",
+      },
+    },
+    { status: 503, body: { error: "check_failed" } },
+    {
+      status: 200,
+      body: {
+        installed: true,
+        currentVersion: "2.0.13",
+        authRequired: false,
+        updateAvailable: false,
+        latestVersion: "2.0.13",
+        installInstanceId: "sidebar-task-summary-test",
+      },
+    },
+    { status: 503, body: { error: "check_failed" } },
+  ];
+  let checkRequests = 0;
+  await page.route("**/api/system-update", (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const response = checkResponses[checkRequests++];
+    return route.fulfill({
+      status: response.status,
+      contentType: "application/json",
+      body: JSON.stringify(response.body),
+    });
+  });
+
+  await page.goto("/settings");
+  await switchToItalian(page);
+  const summary = page.locator(".sidebar-update-copy small");
+  await expect(summary).toHaveText("Non ancora controllato");
+
+  await page.locator(".sidebar-update-entry").click();
+  await expect(summary).toHaveText("Nuova versione v2.0.14");
+  const italianCheckButton = page.getByRole("button", {
+    name: "Controlla aggiornamenti",
+    exact: true,
+  });
+  await italianCheckButton.click();
+  await expect(summary).toHaveText(
+    "Controllo non riuscito · già disponibile v2.0.14",
+  );
+  await italianCheckButton.click();
+  await expect(summary).toHaveText("Aggiornato");
+  await italianCheckButton.click();
+  await expect(summary).toHaveText("Controllo non riuscito");
+  await page.goto("/settings");
+
+  taskStatus = {
+    status: "running",
+    stage: "checking",
+    executorAlive: true,
+    currentVersion: "2.0.13",
+  };
+  await page.reload();
+  await expect(summary).toHaveText("Controllo in corso…");
+
+  taskStatus = {
+    status: "running",
+    stage: "installing",
+    executorAlive: true,
+    currentVersion: "2.0.13",
+  };
+  await page.reload();
+  await expect(summary).toHaveText("Aggiornamento in corso…");
+
+  taskStatus = {
+    status: "failed",
+    currentVersion: "2.0.13",
+  };
+  await page.reload();
+  await expect(summary).toHaveText("Aggiornamento non riuscito");
+
+  taskStatus = {
+    status: "failed",
+    recoveryStatus: "succeeded",
+    currentVersion: "2.0.13",
+  };
+  await page.reload();
+  await expect(summary).toHaveText(
+    "Aggiornamento non riuscito · versione ripristinata",
+  );
+
+  taskStatus = {
+    status: "interrupted",
+    currentVersion: "2.0.13",
+  };
+  await page.reload();
+  await expect(summary).toHaveText("Aggiornamento interrotto");
+});
+
 test("ignores a stale active status when already current", async ({ page }) => {
   await page.route("**/api/system-update", (route) =>
     route.fulfill({

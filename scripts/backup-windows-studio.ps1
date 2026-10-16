@@ -39,6 +39,24 @@ try {
     }
   }
 
+  $installRoot = [System.IO.Path]::GetFullPath([string]$config.installRoot)
+  $stableServiceDirectory = Join-Path $installRoot "service"
+  $serviceBackup = Join-Path $backupRoot "service"
+  New-Item -ItemType Directory -Path $serviceBackup -Force | Out-Null
+  foreach ($fileName in @(
+    "windows-service.ps1",
+    "windows-studio-common.ps1",
+    "windows-studio-launcher.vbs",
+    "uninstall-windows-studio.ps1",
+    "uninstall-windows-startup.ps1"
+  )) {
+    $source = Join-Path $stableServiceDirectory $fileName
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+      throw "Stable NGT service file is missing: $source"
+    }
+    Copy-Item -LiteralPath $source -Destination $serviceBackup -Force
+  }
+
   $backupPrefix = $backupRoot.TrimEnd("\") + "\"
   $manifest = Get-ChildItem -LiteralPath $backupRoot -File -Recurse | ForEach-Object {
     $relative = $_.FullName.Substring($backupPrefix.Length)

@@ -512,6 +512,8 @@ export const zh: typeof it = {
   updateReconnecting: "正在重新连接更新服务…",
   updateNoRecentProgress: "任务暂时没有新的进度回报，系统会继续自动核实。",
   updateInterrupted: "更新任务已中断。请先核实详情，再决定是否重试。",
+  updateManualReview:
+    "上次更新的恢复状态无法确认，已阻止再次更新。请查看诊断日志并核对运行版本、数据库和维护标记；确认安全前不要重试。",
   updateRollingBack: "正在恢复旧版本…",
   updateRollbackSucceeded: "更新失败，但已恢复并验证旧版本。",
   updateRollbackFailed: "更新失败，旧版本恢复未通过验证，需要检查处理。",

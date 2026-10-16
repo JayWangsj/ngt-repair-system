@@ -86,9 +86,49 @@ function Write-NgtUpdateMaintenance(
 
 function Clear-NgtUpdateMaintenance {
   if (-not $script:NgtUpdateMaintenanceFile) { return $false }
-  return [bool](Invoke-NgtUpdateOwnership {
-    Remove-Item -LiteralPath $script:NgtUpdateMaintenanceFile -Force -ErrorAction SilentlyContinue
-  })
+  if (-not (Test-Path -LiteralPath $script:NgtUpdateMaintenanceFile)) { return $true }
+  $owned = Invoke-NgtUpdateOwnership {
+    Remove-Item -LiteralPath $script:NgtUpdateMaintenanceFile -Force -ErrorAction Stop
+  }
+  return ([bool]$owned -and -not (Test-Path -LiteralPath $script:NgtUpdateMaintenanceFile))
+}
+
+function Restore-NgtStudioServiceFiles([string]$BackupRoot, [string]$InstallRoot) {
+  $serviceBackup = Join-Path $BackupRoot "service"
+  $serviceDirectory = Join-Path $InstallRoot "service"
+  foreach ($fileName in @(
+    "windows-service.ps1",
+    "windows-studio-common.ps1",
+    "windows-studio-launcher.vbs",
+    "uninstall-windows-studio.ps1",
+    "uninstall-windows-startup.ps1"
+  )) {
+    $source = Join-Path $serviceBackup $fileName
+    if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
+      throw "The verified backup is missing a stable service file: $fileName"
+    }
+    $destination = Join-Path $serviceDirectory $fileName
+    $temporaryPath = "$destination.$UpdateId.tmp"
+    Copy-Item -LiteralPath $source -Destination $temporaryPath -Force
+    if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne
+        (Get-FileHash -LiteralPath $temporaryPath -Algorithm SHA256).Hash) {
+      Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+      throw "The restored service file failed verification: $fileName"
+    }
+    try {
+      if (Test-Path -LiteralPath $destination) {
+        [System.IO.File]::Replace($temporaryPath, $destination, $null)
+      } else {
+        [System.IO.File]::Move($temporaryPath, $destination)
+      }
+    } finally {
+      Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+    }
+    if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne
+        (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash) {
+      throw "The restored service file could not be verified: $fileName"
+    }
+  }
 }
 
 function Write-NgtUpdateStatus(
@@ -137,6 +177,7 @@ function Write-NgtUpdateStatus(
       $maintenance = @{
         updateId = $UpdateId
         stage = $Status
+        stopAttempted = $true
         targetVersion = $script:NgtCurrentTargetVersion
         previousVersion = $previousVersion
         backupRoot = $backupRoot
@@ -212,8 +253,9 @@ function ConvertTo-NgtProcessArgument([string]$Value) {
   return '"' + $Value.Replace('"', '\"') + '"'
 }
 
-$studioStopped = $false
+$studioStopAttempted = $false
 $backupRoot = $null
+$backupVerified = $false
 $recoveryStatus = "not-started"
 $recoveryMessage = ""
 $previousVersion = ""
@@ -252,7 +294,17 @@ try {
   $currentStage = "reading-release"
   $script:NgtUpdateExecutorConfirmed = $true
   Write-NgtUpdateStatus "running" "" @{ stage = $currentStage; previousVersion = $previousVersion }
-  $releaseOutput = & $githubCli release view --repo $repository --json "tagName,assets"
+  $releaseArguments = @("release", "view")
+  if ($ExpectedTargetVersion) {
+    $requestedTag = if ($ExpectedTargetVersion -match "^v") {
+      $ExpectedTargetVersion
+    } else {
+      "v$ExpectedTargetVersion"
+    }
+    $releaseArguments += $requestedTag
+  }
+  $releaseArguments += @("--repo", $repository, "--json", "tagName,assets")
+  $releaseOutput = & $githubCli @releaseArguments
   if (($LASTEXITCODE -ne 0) -or (-not $releaseOutput)) {
     throw "Unable to read the latest private GitHub release."
   }
@@ -502,21 +554,27 @@ try {
   $currentStage = "backing-up"
   Assert-NgtUpdateSpace $installRoot ([string]$config.dataRoot) 0 0 $previousReleaseRoot
   New-Item -ItemType Directory -Path (Split-Path -Parent $script:NgtUpdateMaintenanceFile) -Force | Out-Null
-  Write-NgtUpdateMaintenance $currentStage @{ previousVersion = $previousVersion; targetVersion = $script:NgtCurrentTargetVersion }
+  $studioStopAttempted = $true
+  Write-NgtUpdateMaintenance $currentStage @{
+    previousVersion = $previousVersion
+    targetVersion = $script:NgtCurrentTargetVersion
+    stopAttempted = $true
+  }
   Write-NgtUpdateStatus "backing-up" "" @{
     stage = $currentStage
+    stopAttempted = $true
     latestVersion = $latestTag
     bytesDownloaded = $downloadedBytes
     totalBytes = $totalBytes
     progressKnown = ($totalBytes -gt 0)
   }
   Stop-NgtStudioProcesses
-  $studioStopped = $true
   $backupOutput = & (Join-Path $PSScriptRoot "backup-windows-studio.ps1") -LeaveStopped
   $backupLine = @($backupOutput | Where-Object { $_ -like "Studio backup created: *" } | Select-Object -Last 1)
   if (-not $backupLine) { throw "Studio backup did not return its destination." }
   $backupRoot = [string]$backupLine[0].Substring("Studio backup created: ".Length)
   & (Join-Path $PSScriptRoot "test-windows-studio-backup.ps1") -BackupRoot $backupRoot | Out-Null
+  $backupVerified = $true
   $backupOutput | Write-Output
   Complete-NgtUpdateStage "backing-up"
   $currentStage = "installing"
@@ -531,8 +589,12 @@ try {
   $nextStudioConfig | Add-Member -NotePropertyName activeRelease -NotePropertyValue $newReleaseRoot -Force
   $newReleaseState = Join-Path $newReleaseRoot ".local"
   New-Item -ItemType Directory -Path $newReleaseState -Force | Out-Null
-  $nextStudioConfig | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $newReleaseState "studio.json") -Encoding utf8
-  $nextStudioConfig | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $installRoot ".local\studio.json") -Encoding utf8
+  Set-NgtStudioConfig `
+    -Path (Join-Path $newReleaseState "studio.json") `
+    -Configuration $nextStudioConfig
+  Set-NgtStudioConfig `
+    -Path (Join-Path $installRoot ".local\studio.json") `
+    -Configuration $nextStudioConfig
   & (Join-Path $newReleaseRoot "scripts\install-windows-studio.ps1") `
     -DataRoot ([string]$config.dataRoot) `
     -InstallRoot $installRoot `
@@ -552,6 +614,9 @@ try {
   }
   Wait-NgtStudioHealth -ExpectedVersion ([string]$newRelease.version)
   Complete-NgtUpdateStage "validating"
+  if (-not (Clear-NgtUpdateMaintenance)) {
+    throw "The new release passed health checks, but the maintenance marker could not be verified as cleared."
+  }
   Write-NgtUpdateStatus "complete" "" @{
     stage = "complete"
     latestVersion = $latestTag
@@ -561,9 +626,6 @@ try {
     progressKnown = ($totalBytes -gt 0)
   }
   $script:NgtUpdateCommitted = $true
-  if (-not (Clear-NgtUpdateMaintenance)) {
-    Write-Warning "The update succeeded, but the maintenance marker could not be cleared."
-  }
   try {
     Remove-Item -LiteralPath $downloadRoot -Recurse -Force -ErrorAction Stop
     & (Join-Path $PSScriptRoot "retain-windows-studio-releases.ps1") `
@@ -596,7 +658,7 @@ try {
         cleanupWarning = $cleanupWarning
       }
     } catch { Write-Warning "The completed update status could not be refreshed." }
-  } elseif ($studioStopped) {
+  } elseif ($studioStopAttempted) {
     $recoveryStatus = "running"
     try {
       $currentStage = "rolling-back"
@@ -608,7 +670,7 @@ try {
         recoveryStatus = $recoveryStatus
       }
       Stop-NgtStudioProcesses
-      if ($backupRoot) {
+      if ($backupVerified) {
         & (Join-Path $PSScriptRoot "test-windows-studio-backup.ps1") -BackupRoot $backupRoot | Out-Null
         $dataDirectory = Join-Path ([string]$config.dataRoot) "data"
         $failedDataDirectory = $dataDirectory + ".failed-" + (Get-Date -Format "yyyyMMdd-HHmmss")
@@ -627,18 +689,22 @@ try {
         if (Test-Path -LiteralPath $backupEnvironment) {
           Copy-Item -LiteralPath $backupEnvironment -Destination $previousReleaseRoot -Force
         }
+        Restore-NgtStudioServiceFiles -BackupRoot $backupRoot -InstallRoot $installRoot
       }
       $previousStudioConfig | Add-Member -NotePropertyName activeRelease `
         -NotePropertyValue $previousReleaseRoot -Force
       $stableConfigPath = Join-Path $installRoot ".local\studio.json"
-      $previousStudioConfig | ConvertTo-Json | Set-Content -LiteralPath $stableConfigPath -Encoding utf8
-      $previousStudioConfig | ConvertTo-Json | Set-Content `
-        -LiteralPath (Join-Path $previousReleaseRoot ".local\studio.json") -Encoding utf8
-      & (Join-Path $previousReleaseRoot "scripts\install-windows-startup.ps1")
+      Set-NgtStudioConfig -Path $stableConfigPath -Configuration $previousStudioConfig
+      Set-NgtStudioConfig `
+        -Path (Join-Path $previousReleaseRoot ".local\studio.json") `
+        -Configuration $previousStudioConfig
+      & (Join-Path $previousReleaseRoot "scripts\install-windows-startup.ps1") -InstallRoot $installRoot
       Wait-NgtStudioHealth -ExpectedVersion $previousVersion
+      if (-not (Clear-NgtUpdateMaintenance)) {
+        throw "The previous release started, but the maintenance marker could not be verified as cleared."
+      }
       $recoveryStatus = "succeeded"
       $recoveryMessage = "The previous studio version was restored and verified."
-      [void](Clear-NgtUpdateMaintenance)
     } catch {
       $recoveryStatus = "failed"
       $recoveryMessage = $_.Exception.Message

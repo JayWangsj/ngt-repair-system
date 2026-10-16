@@ -62,6 +62,7 @@ async function studioRoot() {
     mkdir(path.join(root, "scripts"), { recursive: true }),
     mkdir(installRoot, { recursive: true }),
   ]);
+  await mkdir(path.join(installRoot, ".local"), { recursive: true });
   await Promise.all([
     writeFile(
       path.join(root, "studio-release.json"),
@@ -73,6 +74,7 @@ async function studioRoot() {
       path.join(root, ".local", "studio.json"),
       JSON.stringify({
         installRoot,
+        activeRelease: root,
         repository: "JayWangsj/ngt-repair-system",
       }),
     ),
@@ -279,6 +281,99 @@ describe("studio update", () => {
       status: "interrupted",
       previousStatus: "checking",
       currentVersion: "1.11.57",
+      manualReview: true,
+    });
+  });
+
+  it("allows retry after a verified pre-mutation interruption", async () => {
+    const { root, installRoot } = await studioRoot();
+    const updateId = "0bd7d5ac-4cd6-4a7e-9fd4-d11c136caf16";
+    const lockFile = path.join(installRoot, "update.lock");
+    await Promise.all([
+      writeFile(
+        lockFile,
+        JSON.stringify({
+          updateId,
+          createdAt: "2020-01-01T00:00:00.000Z",
+        }),
+      ),
+      writeFile(
+        path.join(installRoot, "update-status.json"),
+        JSON.stringify({
+          status: "downloading",
+          stage: "downloading",
+          updateId,
+          previousVersion: "1.11.57",
+          executorConfirmed: true,
+          updatedAt: "2020-01-01T00:00:00.000Z",
+        }),
+      ),
+    ]);
+
+    const child = updateProcess();
+    await expect(
+      startStudioUpdate({
+        root,
+        inspect: async () => false,
+        launch: () => child.process,
+      }),
+    ).resolves.toMatchObject({ status: "starting" });
+    const nextLock = JSON.parse(await readFile(lockFile, "utf8")) as {
+      updateId: string;
+    };
+    expect(nextLock.updateId).not.toBe(updateId);
+  });
+
+  it("blocks retry after an interrupted installation stage", async () => {
+    const { root, installRoot } = await studioRoot();
+    await writeFile(
+      path.join(installRoot, "update-status.json"),
+      JSON.stringify({
+        status: "installing",
+        stage: "installing",
+        updateId: "0bd7d5ac-4cd6-4a7e-9fd4-d11c136caf16",
+        previousVersion: "1.11.57",
+        executorConfirmed: true,
+        updatedAt: "2020-01-01T00:00:00.000Z",
+      }),
+    );
+
+    await expect(
+      startStudioUpdate({ root, inspect: async () => false }),
+    ).rejects.toThrow("studio_update_needs_manual_review");
+    await expect(
+      getStudioUpdateStatus(root, { inspect: async () => false }),
+    ).resolves.toMatchObject({
+      status: "interrupted",
+      manualReview: true,
+    });
+  });
+
+  it("blocks retry when the maintenance marker is damaged or belongs to another task", async () => {
+    const { root, installRoot } = await studioRoot();
+    const updateId = "0bd7d5ac-4cd6-4a7e-9fd4-d11c136caf16";
+    await Promise.all([
+      writeFile(
+        path.join(installRoot, "update-status.json"),
+        JSON.stringify({
+          status: "downloading",
+          stage: "downloading",
+          updateId,
+          previousVersion: "1.11.57",
+        }),
+      ),
+      writeFile(
+        path.join(installRoot, ".local", "update-maintenance.json"),
+        JSON.stringify({ updateId: "ba4e7a2e-5d35-4f8f-9f64-084d254c660a" }),
+      ),
+    ]);
+
+    await expect(
+      startStudioUpdate({ root, inspect: async () => false }),
+    ).rejects.toThrow("studio_update_needs_manual_review");
+    await expect(getStudioUpdateStatus(root)).resolves.toMatchObject({
+      status: "verifying-task",
+      manualReview: true,
     });
   });
 
@@ -298,6 +393,54 @@ describe("studio update", () => {
       status: "interrupted",
       actualVersion: "1.11.57",
       manualReview: true,
+    });
+  });
+
+  it("does not report completion until the updater lock is released", async () => {
+    const { root, installRoot } = await studioRoot();
+    const updateId = "0bd7d5ac-4cd6-4a7e-9fd4-d11c136caf16";
+    await Promise.all([
+      writeFile(
+        path.join(installRoot, "update.lock"),
+        JSON.stringify({
+          updateId,
+          executorPid: 4242,
+          executorScriptPath: path.join(
+            root,
+            "scripts",
+            "update-windows-studio.ps1",
+          ),
+          createdAt: "2020-01-01T00:00:00.000Z",
+        }),
+      ),
+      writeFile(
+        path.join(installRoot, "update-status.json"),
+        JSON.stringify({
+          status: "complete",
+          updateId,
+          targetVersion: "1.11.58",
+          actualVersion: "1.11.58",
+        }),
+      ),
+      writeFile(
+        path.join(root, "studio-release.json"),
+        JSON.stringify({ version: "1.11.58" }),
+      ),
+    ]);
+
+    await expect(
+      getStudioUpdateStatus(root, { inspect: async () => true }),
+    ).resolves.toMatchObject({
+      status: "verifying-task",
+      manualReview: false,
+    });
+    await expect(
+      getStudioUpdateStatus(root, { inspect: async () => false }),
+    ).resolves.toMatchObject({ status: "complete" });
+    await expect(
+      readFile(path.join(installRoot, "update.lock")),
+    ).rejects.toMatchObject({
+      code: "ENOENT",
     });
   });
 
@@ -348,10 +491,25 @@ describe("studio update", () => {
 
   it("starts only one updater when concurrent requests reclaim the same stale lock", async () => {
     const { root, installRoot } = await studioRoot();
+    const updateId = "0bd7d5ac-4cd6-4a7e-9fd4-d11c136caf16";
     const lockFile = path.join(installRoot, "update.lock");
     await writeFile(
       lockFile,
-      JSON.stringify({ createdAt: "2020-01-01T00:00:00.000Z" }),
+      JSON.stringify({
+        updateId,
+        createdAt: "2020-01-01T00:00:00.000Z",
+      }),
+    );
+    await writeFile(
+      path.join(installRoot, "update-status.json"),
+      JSON.stringify({
+        status: "downloading",
+        stage: "downloading",
+        updateId,
+        previousVersion: "1.11.57",
+        executorConfirmed: true,
+        updatedAt: "2020-01-01T00:00:00.000Z",
+      }),
     );
 
     let inspectionCount = 0;

@@ -621,6 +621,8 @@ export const it = {
     "L'attività non ha segnalato nuovi progressi; la verifica continua automaticamente.",
   updateInterrupted:
     "L'attività di aggiornamento si è interrotta. Verifica i dettagli prima di riprovare.",
+  updateManualReview:
+    "Il ripristino dell'ultimo aggiornamento non è verificabile e un nuovo aggiornamento è stato bloccato. Controlla il registro diagnostico, la versione attiva, il database e il contrassegno di manutenzione prima di riprovare.",
   updateRollingBack: "Ripristino della versione precedente…",
   updateRollbackSucceeded:
     "Aggiornamento non riuscito; la versione precedente è stata ripristinata e verificata.",

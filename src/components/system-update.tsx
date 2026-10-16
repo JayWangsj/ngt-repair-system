@@ -442,9 +442,11 @@ export function SystemUpdate({
           {taskPhase === "verifying" && (
             <>
               <span>
-                {task.message === "update_status_no_progress"
-                  ? it.updateNoRecentProgress
-                  : taskStatus?.message}
+                {taskStatus?.manualReview
+                  ? it.updateManualReview
+                  : task.message === "update_status_no_progress"
+                    ? it.updateNoRecentProgress
+                    : taskStatus?.message}
               </span>
               <button
                 type="button"
@@ -467,7 +469,9 @@ export function SystemUpdate({
       {taskPhase === "interrupted" && (
         <div className="message error update-task-compact" role="alert">
           <span>
-            {it.updateInterrupted}
+            {taskStatus?.manualReview
+              ? it.updateManualReview
+              : it.updateInterrupted}
             {taskStatus?.stage
               ? ` ${it.currentVersion}: ${stageLabel(taskStatus.stage, it)}`
               : ""}
@@ -512,7 +516,7 @@ export function SystemUpdate({
                   : startError === "task-in-progress"
                     ? it.updateTaskStarting
                     : startError === "task-verification-required"
-                      ? it.updateVerifyingTask
+                      ? it.updateManualReview
                       : startError || authError)}
           </p>
         )}

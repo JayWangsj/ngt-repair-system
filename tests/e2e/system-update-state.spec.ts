@@ -476,6 +476,38 @@ test("shows a newer but incomplete release without offering installation", async
   ).toHaveCount(0);
 });
 
+test("localizes the manual-review guidance for an interrupted update", async ({
+  page,
+}) => {
+  await mockAvailableCheck(page);
+  await page.route("**/api/system-update/status", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "verifying-task",
+        currentVersion: "2.0.9",
+        manualReview: true,
+        message: "The update lock and saved task do not match.",
+      }),
+    }),
+  );
+
+  await page.goto("/settings/system-update");
+  await switchToItalian(page);
+  await expect(page.locator(".update-task-compact")).toContainText(
+    "Il ripristino dell'ultimo aggiornamento non è verificabile",
+  );
+
+  await page.evaluate(() => {
+    document.cookie = "ngt-locale=zh; Path=/; SameSite=Lax";
+  });
+  await page.reload();
+  await expect(page.locator(".update-task-compact")).toContainText(
+    "上次更新的恢复状态无法确认，已阻止再次更新。",
+  );
+});
+
 test("keeps the version link and red dot usable when the sidebar is collapsed", async ({
   page,
 }) => {

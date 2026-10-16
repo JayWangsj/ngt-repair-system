@@ -16,7 +16,7 @@ concurrency:
 jobs:
   package:
     runs-on: windows-2022
-    timeout-minutes: 45
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v5
       - name: Validate release version
@@ -177,6 +177,9 @@ jobs:
           if (Compare-Object -ReferenceObject $localAssets -DifferenceObject $remoteAssets) {
             throw "Draft release asset names, sizes, or SHA256 digests do not match the verified local assets."
           }
+          ./scripts/test-windows-studio-online-update.ps1 -TargetTag $env:GITHUB_REF_NAME
+          $installerPath = Join-Path "dist" ("ngt-studio-windows-setup-" + $env:GITHUB_REF_NAME + ".exe")
+          ./scripts/test-windows-studio-installer.ps1 -InstallerPath $installerPath
           gh release edit $env:GITHUB_REF_NAME --draft=false --verify-tag
           if ($LASTEXITCODE -ne 0) { throw "Verified release could not be published." }
           $publishedJson = gh api $releaseEndpoint

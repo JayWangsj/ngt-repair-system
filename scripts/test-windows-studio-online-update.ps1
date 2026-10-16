@@ -1,0 +1,281 @@
+param(
+  [Parameter(Mandatory = $true)]
+  [string]$TargetTag
+)
+$ErrorActionPreference = "Stop"
+
+if ($env:GITHUB_ACTIONS -ne "true" -or $env:RUNNER_ENVIRONMENT -ne "github-hosted") {
+  throw "Online update acceptance is restricted to a disposable GitHub-hosted Windows runner."
+}
+
+$repository = "JayWangsj/ngt-repair-system"
+$githubCli = Get-Command gh -ErrorAction Stop | Select-Object -ExpandProperty Source
+$authOutput = & $githubCli auth status --hostname github.com 2>&1
+if ($LASTEXITCODE -ne 0) { throw "GitHub release read authorization is unavailable: $authOutput" }
+
+$candidateOutput = & $githubCli release view $TargetTag --repo $repository --json tagName,isDraft,assets
+if ($LASTEXITCODE -ne 0) { throw "Candidate release assets are not readable: $TargetTag" }
+$candidate = ($candidateOutput | Out-String) | ConvertFrom-Json
+if ($candidate.tagName -ne $TargetTag -or -not $candidate.isDraft) {
+  throw "Online update acceptance requires the current release to remain a draft."
+}
+
+$targetVersion = $TargetTag -replace "^v", ""
+if ($targetVersion -notmatch '^\d+\.\d+\.\d+$') {
+  throw "Online update acceptance requires a stable semantic version tag."
+}
+$candidateAssetNames = @($candidate.assets | ForEach-Object name)
+$candidateRequired = @(
+  "ngt-studio-windows-$TargetTag.zip",
+  "ngt-studio-windows-$TargetTag.zip.sha256",
+  "ngt-studio-runtime-$TargetTag.zip",
+  "ngt-studio-runtime-$TargetTag.zip.sha256"
+)
+if (@($candidateRequired | Where-Object { $_ -notin $candidateAssetNames }).Count -gt 0) {
+  throw "Candidate draft is missing an application/runtime archive or checksum."
+}
+
+$releaseList = & $githubCli release list --repo $repository --exclude-drafts --exclude-pre-releases --limit 100 --json tagName,isDraft
+if ($LASTEXITCODE -ne 0) { throw "Unable to find a supported published release for the update baseline." }
+$published = @(($releaseList | Out-String) | ConvertFrom-Json)
+$baseline = $null
+foreach ($entry in $published) {
+  if ($entry.isDraft -or $entry.tagName -eq $TargetTag -or $entry.tagName -notmatch '^v\d+\.\d+\.\d+$') { continue }
+  $view = & $githubCli release view $entry.tagName --repo $repository --json tagName,assets
+  if ($LASTEXITCODE -ne 0) { continue }
+  $release = ($view | Out-String) | ConvertFrom-Json
+  $names = @($release.assets | ForEach-Object name)
+  $required = @(
+    "ngt-studio-windows-$($entry.tagName).zip",
+    "ngt-studio-windows-$($entry.tagName).zip.sha256",
+    "ngt-studio-runtime-$($entry.tagName).zip",
+    "ngt-studio-runtime-$($entry.tagName).zip.sha256"
+  )
+  if (@($required | Where-Object { $_ -notin $names }).Count -eq 0) {
+    $baseline = $release
+    break
+  }
+}
+if (-not $baseline) { throw "No published release with supported online-update assets was found." }
+
+$baselineVersion = [version]($baseline.tagName -replace "^v", "")
+if ($baselineVersion -ge [version]$targetVersion) {
+  throw "The online update baseline $($baseline.tagName) is not older than $TargetTag."
+}
+
+foreach ($port in @(3000, 55432)) {
+  if (Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue) {
+    throw "Online update acceptance port $port is already in use."
+  }
+}
+if (Get-ScheduledTask -TaskName "NGT Management System" -ErrorAction SilentlyContinue) {
+  throw "The disposable runner already has an NGT startup task."
+}
+
+$testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ngt-online-update-" + [guid]::NewGuid().ToString("N"))
+$downloadRoot = Join-Path $testRoot "downloads"
+$baselineRoot = Join-Path $testRoot "baseline"
+$installRoot = Join-Path $testRoot "install"
+$dataRoot = Join-Path $testRoot "data-store"
+$updateLock = Join-Path $installRoot "update.lock"
+$updateStatus = Join-Path $installRoot "update-status.json"
+$updateLog = Join-Path $installRoot "logs\online-update.log"
+$updateProcess = $null
+$installationAttempted = $false
+$cleanupSafe = $true
+
+function Invoke-GhDownload([string]$Tag, [string]$Directory, [string[]]$AssetNames) {
+  New-Item -ItemType Directory -Path $Directory -Force | Out-Null
+  $arguments = @("release", "download", $Tag, "--repo", $repository, "--dir", $Directory)
+  foreach ($assetName in $AssetNames) { $arguments += @("--pattern", $assetName) }
+  & $githubCli @arguments
+  if ($LASTEXITCODE -ne 0) { throw "Release assets could not be downloaded for $Tag." }
+}
+
+function Assert-ReleaseChecksum([string]$ArchivePath, [string]$ChecksumPath) {
+  $line = (Get-Content -LiteralPath $ChecksumPath -Raw).Trim()
+  if ($line -notmatch '^([A-Fa-f0-9]{64})\s+(.+)$' -or
+      $Matches[2] -ne (Split-Path -Leaf $ArchivePath)) {
+    throw "Release checksum file is invalid: $(Split-Path -Leaf $ChecksumPath)"
+  }
+  if ((Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash -ne $Matches[1]) {
+    throw "Release checksum validation failed: $(Split-Path -Leaf $ArchivePath)"
+  }
+}
+
+function Invoke-BusinessDataProbe([string]$ReleaseRoot, [string]$Action, [string]$Code) {
+  $probePath = Join-Path $testRoot "business-data-probe.cjs"
+  @'
+const assert = require("node:assert/strict");
+const action = process.argv[2];
+const envFile = process.argv[3];
+const clientPath = process.argv[4];
+const code = process.argv[5];
+process.loadEnvFile(envFile);
+const { PrismaClient } = require(clientPath);
+const db = new PrismaClient();
+(async () => {
+  if (action === "seed") {
+    const customer = await db.customer.create({ data: { name: "Update acceptance customer", phone: "390000000000" } });
+    const device = await db.device.create({ data: { customerId: customer.id, brand: "NGT", model: "Update acceptance phone" } });
+    await db.workOrder.create({ data: { code, deviceId: device.id, fault: "Update acceptance record" } });
+    return;
+  }
+  const order = await db.workOrder.findUnique({ where: { code }, include: { device: { include: { customer: true } } } });
+  assert.equal(order?.fault, "Update acceptance record");
+  assert.equal(order?.device?.model, "Update acceptance phone");
+  assert.equal(order?.device?.customer?.name, "Update acceptance customer");
+  const written = await db.customer.create({ data: { name: "Post update write", phone: "390000000001" } });
+  assert.equal((await db.customer.findUnique({ where: { id: written.id } }))?.name, "Post update write");
+})().catch((error) => { console.error(error); process.exitCode = 1; }).finally(() => db.$disconnect());
+'@ | Set-Content -LiteralPath $probePath -Encoding utf8
+  $node = Join-Path $ReleaseRoot "runtime\node.exe"
+  $client = Join-Path $ReleaseRoot ".next\standalone\node_modules\@prisma\client"
+  & $node $probePath $Action (Join-Path $ReleaseRoot ".env") $client $Code
+  if ($LASTEXITCODE -ne 0) { throw "Isolated business database $Action probe failed for $ReleaseRoot." }
+}
+
+try {
+  $oldTag = $baseline.tagName
+  $appName = "ngt-studio-windows-$oldTag.zip"
+  $appChecksumName = "$appName.sha256"
+  $runtimeName = "ngt-studio-runtime-$oldTag.zip"
+  $runtimeChecksumName = "$runtimeName.sha256"
+  Invoke-GhDownload -Tag $oldTag -Directory $downloadRoot -AssetNames @(
+    $appName, $appChecksumName, $runtimeName, $runtimeChecksumName
+  )
+  $oldAppArchive = Join-Path $downloadRoot $appName
+  $oldRuntimeArchive = Join-Path $downloadRoot $runtimeName
+  Assert-ReleaseChecksum $oldAppArchive (Join-Path $downloadRoot $appChecksumName)
+  Assert-ReleaseChecksum $oldRuntimeArchive (Join-Path $downloadRoot $runtimeChecksumName)
+
+  New-Item -ItemType Directory -Path $baselineRoot -Force | Out-Null
+  & tar.exe -xf $oldAppArchive -C $baselineRoot
+  if ($LASTEXITCODE -ne 0) { throw "Baseline application archive extraction failed." }
+  & tar.exe -xf $oldRuntimeArchive -C $baselineRoot
+  if ($LASTEXITCODE -ne 0) { throw "Baseline runtime archive extraction failed." }
+  & (Join-Path $baselineRoot "scripts\verify-windows-studio-release.ps1") `
+    -ReleaseRoot $baselineRoot -ExpectedVersion $oldTag | Out-Null
+
+  $installationAttempted = $true
+  & (Join-Path $baselineRoot "scripts\install-windows-studio.ps1") `
+    -DataRoot $dataRoot -InstallRoot $installRoot
+  if ($LASTEXITCODE -ne 0) { throw "Baseline studio installation failed." }
+
+  $oldHealth = $null
+  for ($attempt = 0; $attempt -lt 120; $attempt++) {
+    try {
+      $oldHealth = Invoke-RestMethod -Uri "http://127.0.0.1:3000/api/health" -TimeoutSec 5
+      if ([string]$oldHealth.currentVersion -eq ($oldTag -replace "^v", "")) { break }
+    } catch { }
+    Start-Sleep -Seconds 1
+  }
+  if (-not $oldHealth -or [string]$oldHealth.currentVersion -ne ($oldTag -replace "^v", "")) {
+    throw "The previous studio version did not become healthy."
+  }
+  $ordersResponse = Invoke-WebRequest -Uri "http://127.0.0.1:3000/orders" -UseBasicParsing -TimeoutSec 30
+  if ($ordersResponse.StatusCode -ne 200) { throw "The previous studio orders page did not load." }
+  $oldUpdateCheck = Invoke-RestMethod -Uri "http://127.0.0.1:3000/api/system-update" `
+    -Headers @{ Origin = "http://127.0.0.1:3000"; "Sec-Fetch-Site" = "same-origin" } -TimeoutSec 45
+  if (-not $oldUpdateCheck.installed -or $oldUpdateCheck.currentVersion -ne ($oldTag -replace "^v", "")) {
+    throw "The previous version check did not identify the installed release."
+  }
+
+  $businessCode = "CI-UPDATE-" + [guid]::NewGuid().ToString("N")
+  Invoke-BusinessDataProbe -ReleaseRoot (Join-Path $installRoot ("releases\$oldTag")) -Action "seed" -Code $businessCode
+
+  $taskRoot = Join-Path $installRoot ("releases\$oldTag")
+  $taskConfig = Get-Content -LiteralPath (Join-Path $installRoot ".local\studio.json") -Raw | ConvertFrom-Json
+  if ([System.IO.Path]::GetFullPath([string]$taskConfig.activeRelease) -ne [System.IO.Path]::GetFullPath($taskRoot)) {
+    throw "The baseline release is not the configured active release."
+  }
+  $updateId = [guid]::NewGuid().ToString()
+  New-Item -ItemType Directory -Path (Split-Path -Parent $updateLog) -Force | Out-Null
+  @{ updateId = $updateId; createdAt = (Get-Date).ToUniversalTime().ToString("o") } |
+    ConvertTo-Json | Set-Content -LiteralPath $updateLock -Encoding utf8
+
+  $updaterPath = Join-Path $taskRoot "scripts\update-windows-studio.ps1"
+  $arguments = @(
+    "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $updaterPath,
+    "-UpdateId", $updateId, "-ExpectedTargetVersion", $TargetTag,
+    "-StatusFile", $updateStatus, "-UpdateLockFile", $updateLock, "-LogFile", $updateLog
+  )
+  $argumentLine = ($arguments | ForEach-Object { '"' + ([string]$_).Replace('"', '\"') + '"' }) -join " "
+  $updateProcess = Start-Process -FilePath (Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe") `
+    -ArgumentList $argumentLine -WindowStyle Hidden -PassThru
+
+  $deadline = (Get-Date).AddMinutes(50)
+  $finalStatus = $null
+  do {
+    if (Test-Path -LiteralPath $updateStatus) {
+      $finalStatus = Get-Content -LiteralPath $updateStatus -Raw | ConvertFrom-Json
+      if ($finalStatus.status -eq "failed") {
+        if (-not $updateProcess.HasExited) { [void]$updateProcess.WaitForExit(30000) }
+        throw "Online update failed at $($finalStatus.failedStage): $($finalStatus.message)"
+      }
+    }
+    if ($updateProcess.HasExited -and -not (Test-Path -LiteralPath $updateLock)) { break }
+    Start-Sleep -Seconds 2
+  } while ((Get-Date) -lt $deadline)
+  if (-not $updateProcess.HasExited) { throw "Online update executor exceeded its 50-minute limit." }
+  $updateProcess.WaitForExit()
+  if ($updateProcess.ExitCode -ne 0) { throw "Online update executor exited with code $($updateProcess.ExitCode)." }
+  if (-not $finalStatus -or $finalStatus.status -ne "complete" -or
+      $finalStatus.actualVersion -ne $targetVersion -or $finalStatus.cleanupWarning) {
+    throw "Online update did not reach a clean completed state for $TargetTag."
+  }
+  if (Test-Path -LiteralPath $updateLock) { throw "Online update lock was not released." }
+  $maintenanceFile = Join-Path $installRoot ".local\update-maintenance.json"
+  if (Test-Path -LiteralPath $maintenanceFile) { throw "Online update maintenance marker was not cleared." }
+
+  $activeConfig = Get-Content -LiteralPath (Join-Path $installRoot ".local\studio.json") -Raw | ConvertFrom-Json
+  $activeReleaseRoot = [System.IO.Path]::GetFullPath([string]$activeConfig.activeRelease)
+  if ($activeReleaseRoot -ne [System.IO.Path]::GetFullPath((Join-Path $installRoot "releases\$TargetTag"))) {
+    throw "The online update did not activate the candidate release."
+  }
+  $newHealth = Invoke-RestMethod -Uri "http://127.0.0.1:3000/api/health" -TimeoutSec 15
+  if ([string]$newHealth.currentVersion -ne $targetVersion) { throw "The new release health version is incorrect." }
+  $newOrders = Invoke-WebRequest -Uri "http://127.0.0.1:3000/orders" -UseBasicParsing -TimeoutSec 30
+  if ($newOrders.StatusCode -ne 200) { throw "The new release orders page did not load." }
+  Invoke-BusinessDataProbe -ReleaseRoot $activeReleaseRoot -Action "verify-and-write" -Code $businessCode
+  $node = Join-Path $activeReleaseRoot "runtime\node.exe"
+  $prisma = Join-Path $activeReleaseRoot "node_modules\prisma\build\index.js"
+  Push-Location -LiteralPath $activeReleaseRoot
+  try {
+    & $node $prisma migrate status
+    if ($LASTEXITCODE -ne 0) { throw "Post-update database migration status failed." }
+  } finally { Pop-Location }
+
+  $backupDirectory = Join-Path $dataRoot "backups"
+  $backup = Get-ChildItem -LiteralPath $backupDirectory -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $backup) { throw "Online update did not create a database and service backup." }
+  & (Join-Path $activeReleaseRoot "scripts\test-windows-studio-backup.ps1") -BackupRoot $backup.FullName | Out-Null
+  Write-Output "Windows online update acceptance passed: $oldTag -> $TargetTag."
+} finally {
+  if ($updateProcess -and -not $updateProcess.HasExited) {
+    $cleanupSafe = $false
+    Write-Warning "The update executor is still running; retained the isolated test files until the hosted runner is discarded."
+  }
+  if ($cleanupSafe -and $installationAttempted -and (Test-Path -LiteralPath (Join-Path $installRoot ".local\studio.json"))) {
+    try {
+      $activeConfig = Get-Content -LiteralPath (Join-Path $installRoot ".local\studio.json") -Raw | ConvertFrom-Json
+      $activeReleaseRoot = [string]$activeConfig.activeRelease
+      $commonScript = Join-Path $activeReleaseRoot "scripts\windows-studio-common.ps1"
+      if (Test-Path -LiteralPath $commonScript) {
+        . $commonScript
+        Set-Location -LiteralPath $script:NgtProjectRoot
+        Stop-NgtStudioProcesses
+      }
+      $startupUninstaller = Join-Path $installRoot "service\uninstall-windows-startup.ps1"
+      if (Test-Path -LiteralPath $startupUninstaller) { & $startupUninstaller -InstallRoot $installRoot }
+    } catch {
+      $cleanupSafe = $false
+      Write-Warning ("Isolated online-update cleanup needs attention: " + $_.Exception.Message)
+    }
+  }
+  if ($cleanupSafe -and (Test-Path -LiteralPath $testRoot)) {
+    Remove-Item -LiteralPath $testRoot -Recurse -Force
+  } elseif (Test-Path -LiteralPath $testRoot) {
+    Write-Warning "Retained the isolated test data at $testRoot because its services could not be verified stopped."
+  }
+}

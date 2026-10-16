@@ -9574,6 +9574,9 @@ summary.record-icon::-webkit-details-marker {
     opacity 150ms ease-out,
     transform 150ms ease-out;
 }
+.sidebar-update-copy strong::after {
+  bottom: 2px;
+}
 .order-list-body .order-link:hover,
 .order-list-body .order-link:focus-visible,
 .order-detail-card .order-customer-link:hover,

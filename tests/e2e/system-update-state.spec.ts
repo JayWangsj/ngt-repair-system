@@ -653,9 +653,11 @@ test("sidebar version entry hover stays contained and collapses cleanly", async 
       scaleX: new DOMMatrixReadOnly(style.transform).m11,
       underlineWidth: Number.parseFloat(style.width),
       textWidth: node.getBoundingClientRect().width,
+      bottom: style.bottom,
     };
   });
   expect(underlineGeometry.scaleX).toBe(1);
+  expect(underlineGeometry.bottom).toBe("2px");
   expect(underlineGeometry.underlineWidth).toBeCloseTo(
     underlineGeometry.textWidth,
     3,

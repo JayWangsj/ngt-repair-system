@@ -328,17 +328,23 @@ describe("Windows persistent startup", () => {
     expect(ciWorkflow).toContain(
       "node --test tests/release/windows-studio-release.node-test.mjs",
     );
-    expect(workflow).toContain("actions/download-artifact@v4");
-    expect(workflow).toContain("windows-studio-package-${{ github.sha }}");
-    expect(workflow).toContain("prepare-candidate:");
+    expect(workflow).not.toContain("actions/download-artifact@v4");
+    expect(workflow).not.toContain("windows-studio-package-${{ github.sha }}");
+    expect(workflow).not.toContain("prepare-candidate:");
     expect(workflow).toContain(
-      "node scripts/windows-studio-release.mjs prepare-draft release-assets",
+      "node scripts/windows-studio-release.mjs prepare-draft",
+    );
+    expect(workflow).toContain(
+      "node scripts/windows-studio-release.mjs download-draft release-assets",
+    );
+    expect(workflow).toContain(
+      "node scripts/windows-studio-release.mjs verify-artifact release-assets",
     );
     expect(workflow).toContain(
       "node scripts/windows-studio-release.mjs publish release-assets",
     );
     expect(workflow).toMatch(
-      /needs:\s*\[\s*qualify,\s*build,\s*prepare-candidate,\s*online-update-acceptance,\s*installer-acceptance,?\s*\]/,
+      /needs:\s*\[\s*qualify,\s*build,\s*online-update-acceptance,\s*installer-acceptance,?\s*\]/,
     );
     expect(workflow).toContain("innosetup --version=6.7.1");
     expect(workflow).toContain("windows-studio-release-metrics.mjs");

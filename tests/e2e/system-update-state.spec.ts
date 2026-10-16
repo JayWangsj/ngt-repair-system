@@ -582,3 +582,141 @@ test("continues monitoring an active update beyond the previous four-minute limi
     "Installazione",
   );
 });
+
+test("sidebar version entry hover stays contained and collapses cleanly", async ({
+  page,
+}) => {
+  await mockAvailableCheck(page);
+  await mockIdleTask(page);
+  await page.goto("/settings");
+  await switchToItalian(page);
+
+  const entry = page.locator(".sidebar-update-entry");
+  const icon = entry.locator(".sidebar-update-icon svg");
+  const version = entry.locator(".sidebar-update-copy strong");
+  const summary = entry.locator(".sidebar-update-copy small");
+  const arrow = entry.locator(".sidebar-update-arrow");
+  await expect(icon).toHaveClass(/lucide-refresh-cw/);
+  await expect(icon).toHaveAttribute("width", "19");
+  await expect(arrow).toBeVisible();
+  expect(await arrow.evaluate((node) => getComputedStyle(node).transform)).toBe(
+    "none",
+  );
+  const initialIconColor = await icon.evaluate(
+    (node) => getComputedStyle(node).color,
+  );
+
+  const initialGeometry = await Promise.all(
+    [icon, version, summary].map((node) => node.boundingBox()),
+  );
+  await entry.hover();
+  await expect
+    .poll(() =>
+      arrow.evaluate(
+        (node) => new DOMMatrixReadOnly(getComputedStyle(node).transform).m41,
+      ),
+    )
+    .toBe(3);
+  expect(
+    await entry.evaluate((node) => getComputedStyle(node).backgroundColor),
+  ).toBe("rgb(255, 248, 217)");
+  expect(await icon.evaluate((node) => getComputedStyle(node).color)).toBe(
+    "rgb(98, 93, 76)",
+  );
+  expect(initialIconColor).toBe("rgb(112, 107, 88)");
+  expect(
+    await entry.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return [
+        style.borderTopLeftRadius,
+        style.borderTopRightRadius,
+        style.borderBottomRightRadius,
+        style.borderBottomLeftRadius,
+      ];
+    }),
+  ).toEqual(["8px", "8px", "8px", "8px"]);
+  const underlineGeometry = await version.evaluate((node) => {
+      const style = getComputedStyle(node, "::after");
+      return {
+        scaleX: new DOMMatrixReadOnly(style.transform).m11,
+        underlineWidth: Number.parseFloat(style.width),
+        textWidth: node.getBoundingClientRect().width,
+      };
+  });
+  expect(underlineGeometry.scaleX).toBe(1);
+  expect(underlineGeometry.underlineWidth).toBeCloseTo(
+    underlineGeometry.textWidth,
+    3,
+  );
+  const hoverGeometry = await Promise.all(
+    [icon, version, summary].map((node) => node.boundingBox()),
+  );
+  expect(hoverGeometry).toEqual(initialGeometry);
+  await entry.screenshot({
+    path: path.join(screenshotDirectory, "07-sidebar-update-entry-hover.png"),
+  });
+
+  await page.mouse.move(0, 0);
+  await expect
+    .poll(() =>
+      arrow.evaluate(
+        (node) => new DOMMatrixReadOnly(getComputedStyle(node).transform).m41,
+      ),
+    )
+    .toBe(0);
+  await expect
+    .poll(() =>
+      version.evaluate(
+        (node) =>
+          new DOMMatrixReadOnly(getComputedStyle(node, "::after").transform)
+            .m11,
+      ),
+    )
+    .toBe(0);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await entry.hover();
+  await expect
+    .poll(() =>
+      arrow.evaluate((node) => {
+        const transform = getComputedStyle(node).transform;
+        return transform === "none" ? 0 : new DOMMatrixReadOnly(transform).m41;
+      }),
+    )
+    .toBe(0);
+  await expect
+    .poll(() =>
+      version.evaluate(
+        (node) =>
+          new DOMMatrixReadOnly(getComputedStyle(node, "::after").transform)
+            .m11,
+      ),
+    )
+    .toBe(1);
+  await page.mouse.move(0, 0);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+
+  await page.keyboard.press("Tab");
+  await entry.focus();
+  await expect
+    .poll(() => entry.evaluate((node) => node.matches(":focus-visible")))
+    .toBe(true);
+  await expect
+    .poll(() =>
+      version.evaluate(
+        (node) =>
+          new DOMMatrixReadOnly(getComputedStyle(node, "::after").transform)
+            .m11,
+      ),
+    )
+    .toBe(1);
+
+  await page.getByRole("button", { name: "Riduci barra laterale" }).click();
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-sidebar-collapsed",
+    "true",
+  );
+  await expect(icon).toBeVisible();
+  await expect(version).toBeHidden();
+  await expect(arrow).toBeHidden();
+});

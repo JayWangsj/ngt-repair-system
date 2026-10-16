@@ -328,7 +328,7 @@ small {
   margin: auto 0 18px;
   padding: 12px 14px 0;
   border-top: 1px solid var(--line);
-  border-radius: 0 0 8px 8px;
+  border-radius: 8px;
   color: var(--muted);
   transition:
     background-color 150ms ease-out,
@@ -336,7 +336,7 @@ small {
 }
 .sidebar-update-entry:hover {
   background: #fff8d9;
-  color: var(--ink);
+  color: #625d4c;
 }
 .sidebar-update-entry.active {
   color: var(--teal);
@@ -387,9 +387,16 @@ small {
   white-space: nowrap;
 }
 .sidebar-update-copy strong {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
   color: var(--ink);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+.sidebar-update-arrow {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 .sidebar-update-copy small {
   color: var(--muted);
@@ -2285,7 +2292,8 @@ html[data-sidebar-collapsed="true"] .sidebar-update-entry {
   justify-content: center;
   padding: 11px 12px 0;
 }
-html[data-sidebar-collapsed="true"] .sidebar-update-copy {
+html[data-sidebar-collapsed="true"] .sidebar-update-copy,
+html[data-sidebar-collapsed="true"] .sidebar-update-arrow {
   display: none;
 }
 html[data-sidebar-collapsed="true"] .nav-item:hover::after,
@@ -9536,14 +9544,16 @@ summary.record-icon::-webkit-details-marker {
 .order-detail-card .order-customer-link > span,
 .retail-history-dialog .order-code-link > span,
 .customer-name .order-link > span,
-.dashboard-action-link .dashboard-link-label {
+.dashboard-action-link .dashboard-link-label,
+.sidebar-update-copy strong {
   position: relative;
 }
 .order-list-body .order-link > span::after,
 .order-detail-card .order-customer-link > span::after,
 .retail-history-dialog .order-code-link > span::after,
 .customer-name .order-link > span::after,
-.dashboard-action-link .dashboard-link-label::after {
+.dashboard-action-link .dashboard-link-label::after,
+.sidebar-update-copy strong::after {
   position: absolute;
   right: 0;
   bottom: -2px;
@@ -9578,6 +9588,9 @@ summary.record-icon::-webkit-details-marker {
   color: #543e00;
   transform: none;
 }
+.sidebar-update-entry:focus-visible {
+  color: #625d4c;
+}
 .order-list-body .order-link:hover > span::after,
 .order-list-body .order-link:focus-visible > span::after,
 .order-detail-card .order-customer-link:hover > span::after,
@@ -9587,7 +9600,9 @@ summary.record-icon::-webkit-details-marker {
 .customer-name .order-link:hover > span::after,
 .customer-name .order-link:focus-visible > span::after,
 .dashboard-action-link:hover .dashboard-link-label::after,
-.dashboard-action-link:focus-visible .dashboard-link-label::after {
+.dashboard-action-link:focus-visible .dashboard-link-label::after,
+.sidebar-update-entry:hover .sidebar-update-copy strong::after,
+.sidebar-update-entry:focus-visible .sidebar-update-copy strong::after {
   opacity: 1;
   transform: scaleX(1);
 }
@@ -9596,7 +9611,8 @@ summary.record-icon::-webkit-details-marker {
 .order-detail-card .order-customer-link svg,
 .retail-history-dialog .order-code-link svg,
 .customer-name .order-link svg,
-.dashboard-action-link svg {
+.dashboard-action-link svg,
+.sidebar-update-arrow {
   transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 .order-list-body .order-code-link:hover svg,
@@ -9612,6 +9628,10 @@ summary.record-icon::-webkit-details-marker {
 .dashboard-action-link:hover svg,
 .dashboard-action-link:focus-visible svg {
   transform: translateX(4px);
+}
+.sidebar-update-entry:hover .sidebar-update-arrow,
+.sidebar-update-entry:focus-visible .sidebar-update-arrow {
+  transform: translateX(3px);
 }
 .table-panel tbody tr:has(.order-payment-values) {
   cursor: pointer;
@@ -9963,7 +9983,11 @@ summary.record-icon::-webkit-details-marker {
   html:not([data-motion="always"])
     .dashboard-action-link
     .dashboard-link-label::after,
-  html:not([data-motion="always"]) .order-link > span::after {
+  html:not([data-motion="always"]) .order-link > span::after,
+  html:not([data-motion="always"]) .sidebar-update-copy strong::after {
+    transition: none;
+  }
+  html:not([data-motion="always"]) .sidebar-update-arrow {
     transition: none;
   }
   html:not([data-motion="always"])
@@ -9983,5 +10007,13 @@ summary.record-icon::-webkit-details-marker {
     .inventory-history-card:focus-visible
     .inventory-history-arrow {
     transform: translateX(8px);
+  }
+  html:not([data-motion="always"])
+    .sidebar-update-entry:hover
+    .sidebar-update-arrow,
+  html:not([data-motion="always"])
+    .sidebar-update-entry:focus-visible
+    .sidebar-update-arrow {
+    transform: none;
   }
 }

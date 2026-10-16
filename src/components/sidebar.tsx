@@ -12,7 +12,8 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
-  CircleArrowUp,
+  ChevronRight,
+  RefreshCw,
   CircleAlert,
   LoaderCircle,
 } from "lucide-react";
@@ -148,7 +149,7 @@ export function Sidebar() {
     ? CircleAlert
     : updateRunning
       ? LoaderCircle
-      : CircleArrowUp;
+      : RefreshCw;
 
   return (
     <aside className="sidebar">
@@ -208,6 +209,11 @@ export function Sidebar() {
             <strong>v{currentVersion}</strong>
             <small>{updateSummary}</small>
           </span>
+          <ChevronRight
+            className="sidebar-update-arrow"
+            size={16}
+            aria-hidden="true"
+          />
         </Link>
       </div>
       <div

@@ -408,7 +408,9 @@ export async function downloadDraft(api, directory, { tag, sha, version }) {
   }
   const expectedSha = sha.toLowerCase();
   if ((await api.resolveTagCommit(tag)) !== expectedSha) {
-    throw new Error("Draft Release Git tag does not match the qualified Commit SHA.");
+    throw new Error(
+      "Draft Release Git tag does not match the qualified Commit SHA.",
+    );
   }
   const release = await api.findRelease(tag);
   const marker = parseReleaseMarker(release?.body);
@@ -419,7 +421,9 @@ export async function downloadDraft(api, directory, { tag, sha, version }) {
     marker.sha !== expectedSha ||
     marker.version !== version
   ) {
-    throw new Error("Draft Release is missing or has an unexpected identity marker.");
+    throw new Error(
+      "Draft Release is missing or has an unexpected identity marker.",
+    );
   }
   const expectedNames = expectedAssetNames(tag);
   const remoteAssets = release.assets || [];
@@ -432,7 +436,9 @@ export async function downloadDraft(api, directory, { tag, sha, version }) {
   }
   await mkdir(directory, { recursive: true });
   if ((await readdir(directory)).length !== 0) {
-    throw new Error("Refusing to overwrite a nonempty Draft download directory.");
+    throw new Error(
+      "Refusing to overwrite a nonempty Draft download directory.",
+    );
   }
   for (const name of expectedNames) {
     const remote = remoteAssets.find((asset) => asset.name === name);
@@ -444,17 +450,28 @@ export async function downloadDraft(api, directory, { tag, sha, version }) {
       (remote.digest &&
         String(remote.digest).toLowerCase() !== "sha256:" + sha256(bytes))
     ) {
-      throw new Error("Draft Release downloaded asset size or digest mismatch: " + name);
+      throw new Error(
+        "Draft Release downloaded asset size or digest mismatch: " + name,
+      );
     }
     await writeFile(path.join(directory, name), bytes, { flag: "wx" });
   }
-  const manifest = await createLocalManifest(directory, tag, expectedSha, version);
+  const manifest = await createLocalManifest(
+    directory,
+    tag,
+    expectedSha,
+    version,
+  );
   if (!markerMatches(release, manifest)) {
-    throw new Error("Draft Release downloaded bytes do not match the marked build identity.");
+    throw new Error(
+      "Draft Release downloaded bytes do not match the marked build identity.",
+    );
   }
   const latest = await api.findRelease(tag);
   if (!latest?.draft || !markerMatches(latest, manifest)) {
-    throw new Error("Draft Release changed identity or became public during download.");
+    throw new Error(
+      "Draft Release changed identity or became public during download.",
+    );
   }
   await verifyRemoteAssets(api, latest, manifest, true);
   return manifest;
@@ -967,8 +984,14 @@ async function main() {
     const api = new GitHubReleaseApi({
       token: process.env.GITHUB_TOKEN || process.env.GH_TOKEN,
     });
-    const manifest = await downloadDraft(api, directoryArg, { tag, sha, version });
-    console.log("Downloaded and verified Draft Release " + manifest.buildIdentity);
+    const manifest = await downloadDraft(api, directoryArg, {
+      tag,
+      sha,
+      version,
+    });
+    console.log(
+      "Downloaded and verified Draft Release " + manifest.buildIdentity,
+    );
     return;
   }
   if (

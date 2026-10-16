@@ -163,13 +163,7 @@ jobs:
 
   publish:
     name: Publish verified Release
-    needs:
-      [
-        qualify,
-        build,
-        online-update-acceptance,
-        installer-acceptance,
-      ]
+    needs: [qualify, build, online-update-acceptance, installer-acceptance]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -194,13 +188,7 @@ jobs:
   release-metrics:
     name: Record Release run metrics
     needs:
-      [
-        qualify,
-        build,
-        online-update-acceptance,
-        installer-acceptance,
-        publish,
-      ]
+      [qualify, build, online-update-acceptance, installer-acceptance, publish]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5

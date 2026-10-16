@@ -213,7 +213,12 @@ test("Draft Release handoff preserves provenance without Actions Artifacts", asy
   assert.equal(recovered.buildIdentity, manifest.buildIdentity);
   await verifyArtifact(downloaded, recovered, { tag, sha: sourceSha, version });
   const { readdir } = await import("node:fs/promises");
-  assert.deepEqual((await readdir(downloaded)).sort().filter((name) => name !== "release-manifest.json"), expectedAssetNames(tag));
+  assert.deepEqual(
+    (await readdir(downloaded))
+      .sort()
+      .filter((name) => name !== "release-manifest.json"),
+    expectedAssetNames(tag),
+  );
 });
 
 test("Draft handoff fails closed on altered bytes, identity, or published state", async (t) => {
@@ -225,19 +230,31 @@ test("Draft handoff fails closed on altered bytes, identity, or published state"
   const original = api.remoteContents.get(target.id);
   api.remoteContents.set(target.id, Buffer.alloc(original.length, 0));
   await assert.rejects(
-    downloadDraft(api, path.join(root, "tampered"), { tag, sha: sourceSha, version }),
+    downloadDraft(api, path.join(root, "tampered"), {
+      tag,
+      sha: sourceSha,
+      version,
+    }),
     /digest mismatch/,
   );
   api.remoteContents.set(target.id, original);
   release.body = "unexpected release metadata";
   await assert.rejects(
-    downloadDraft(api, path.join(root, "wrong-identity"), { tag, sha: sourceSha, version }),
+    downloadDraft(api, path.join(root, "wrong-identity"), {
+      tag,
+      sha: sourceSha,
+      version,
+    }),
     /identity marker/,
   );
   release.body = createReleaseMarker(manifest);
   release.draft = false;
   await assert.rejects(
-    downloadDraft(api, path.join(root, "published"), { tag, sha: sourceSha, version }),
+    downloadDraft(api, path.join(root, "published"), {
+      tag,
+      sha: sourceSha,
+      version,
+    }),
     /identity marker/,
   );
 });

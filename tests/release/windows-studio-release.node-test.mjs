@@ -11,6 +11,7 @@ import {
   downloadDraft,
   createWindowsPackageManifest,
   expectedAssetNames,
+  GitHubReleaseApi,
   parseReleaseMarker,
   prepareDraft,
   publishRelease,
@@ -118,6 +119,47 @@ test("manifest ties the six release assets to their sidecars and source Commit",
   );
   await writeFile(target, "tampered");
   await assert.rejects(verifyArtifact(assets, manifest), /SHA256 verification/);
+});
+
+test("findRelease discovers Draft Releases through the paginated release list", async () => {
+  const requests = [];
+  const api = new GitHubReleaseApi({
+    token: "test-token",
+    repository: "JayWangsj/ngt-repair-system",
+    fetchImpl: async (url) => {
+      const requestUrl = new URL(url);
+      requests.push(requestUrl.pathname + requestUrl.search);
+      if (requestUrl.pathname.endsWith("/releases/tags/" + tag)) {
+        return new Response(null, { status: 404 });
+      }
+      if (requestUrl.searchParams.get("page") === "1") {
+        return new Response(
+          JSON.stringify(
+            Array.from({ length: 100 }, (_, index) => ({
+              tag_name: "other-" + index,
+            })),
+          ),
+          { status: 200 },
+        );
+      }
+      if (requestUrl.searchParams.get("page") === "2") {
+        return new Response(
+          JSON.stringify([{ id: 123, tag_name: tag, draft: true }]),
+          { status: 200 },
+        );
+      }
+      throw new Error("Unexpected GitHub API request: " + requestUrl);
+    },
+  });
+
+  assert.deepEqual(await api.findRelease(tag), {
+    id: 123,
+    tag_name: tag,
+    draft: true,
+  });
+  assert.equal(requests.length, 3);
+  assert.match(requests[1], /\/releases\?per_page=100&page=1$/);
+  assert.match(requests[2], /\/releases\?per_page=100&page=2$/);
 });
 
 test("Draft creation survives an ambiguous upload response without duplicating assets", async (t) => {
@@ -383,16 +425,19 @@ test("Windows Smoke package provenance detects mutation and source mismatch", as
 
 test("workflow DAG gates publication and scopes Draft discovery to acceptance", async () => {
   const { readFile: readText } = await import("node:fs/promises");
-  const ci = await readText(".github/workflows/ci.yml", "utf8");
-  const release = await readText(
-    ".github/workflows/windows-studio-release.yml",
-    "utf8",
+  const ci = (await readText(".github/workflows/ci.yml", "utf8")).replace(
+    /\r\n/g,
+    "\n",
   );
-  const updater = await readText("scripts/update-windows-studio.ps1", "utf8");
-  const online = await readText(
-    "scripts/test-windows-studio-online-update.ps1",
-    "utf8",
-  );
+  const release = (
+    await readText(".github/workflows/windows-studio-release.yml", "utf8")
+  ).replace(/\r\n/g, "\n");
+  const updater = (
+    await readText("scripts/update-windows-studio.ps1", "utf8")
+  ).replace(/\r\n/g, "\n");
+  const online = (
+    await readText("scripts/test-windows-studio-online-update.ps1", "utf8")
+  ).replace(/\r\n/g, "\n");
 
   assert.match(
     ci,
@@ -419,6 +464,14 @@ test("workflow DAG gates publication and scopes Draft discovery to acceptance", 
   assert.match(
     release,
     /installer-acceptance:[\s\S]*needs: \[qualify, build\]/,
+  );
+  assert.match(
+    release,
+    /online-update-acceptance:[\s\S]*?permissions:\s*\n\s*# GitHub exposes draft releases only to users with push access\.\s*\n\s*contents: write/,
+  );
+  assert.match(
+    release,
+    /installer-acceptance:[\s\S]*?permissions:\s*\n\s*# GitHub exposes draft releases only to users with push access\.\s*\n\s*contents: write/,
   );
   assert.match(
     release,

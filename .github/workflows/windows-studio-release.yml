@@ -132,7 +132,8 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 120
     permissions:
-      contents: read
+      # GitHub exposes draft releases only to users with push access.
+      contents: write
     steps:
       - uses: actions/checkout@v5
         with:
@@ -159,7 +160,8 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 45
     permissions:
-      contents: read
+      # GitHub exposes draft releases only to users with push access.
+      contents: write
     steps:
       - uses: actions/checkout@v5
         with:

@@ -8,6 +8,7 @@ import {
   calculateBuildIdentity,
   createLocalManifest,
   createReleaseMarker,
+  downloadDraft,
   createWindowsPackageManifest,
   expectedAssetNames,
   parseReleaseMarker,
@@ -199,6 +200,48 @@ test("mismatched or already public Releases fail closed without overwriting", as
   assert.equal(publicApi.uploads.length, 0);
 });
 
+test("Draft Release handoff preserves provenance without Actions Artifacts", async (t) => {
+  const { root, assets, manifest } = await makeFixture(t);
+  const api = makeApi();
+  await prepareDraft(api, assets, manifest);
+  const downloaded = path.join(root, "downloaded");
+  const recovered = await downloadDraft(api, downloaded, {
+    tag,
+    sha: sourceSha,
+    version,
+  });
+  assert.equal(recovered.buildIdentity, manifest.buildIdentity);
+  await verifyArtifact(downloaded, recovered, { tag, sha: sourceSha, version });
+  const { readdir } = await import("node:fs/promises");
+  assert.deepEqual((await readdir(downloaded)).sort().filter((name) => name !== "release-manifest.json"), expectedAssetNames(tag));
+});
+
+test("Draft handoff fails closed on altered bytes, identity, or published state", async (t) => {
+  const { root, assets, manifest } = await makeFixture(t);
+  const api = makeApi();
+  await prepareDraft(api, assets, manifest);
+  const release = api.current();
+  const target = release.assets.find((asset) => asset.name.endsWith(".zip"));
+  const original = api.remoteContents.get(target.id);
+  api.remoteContents.set(target.id, Buffer.alloc(original.length, 0));
+  await assert.rejects(
+    downloadDraft(api, path.join(root, "tampered"), { tag, sha: sourceSha, version }),
+    /digest mismatch/,
+  );
+  api.remoteContents.set(target.id, original);
+  release.body = "unexpected release metadata";
+  await assert.rejects(
+    downloadDraft(api, path.join(root, "wrong-identity"), { tag, sha: sourceSha, version }),
+    /identity marker/,
+  );
+  release.body = createReleaseMarker(manifest);
+  release.draft = false;
+  await assert.rejects(
+    downloadDraft(api, path.join(root, "published"), { tag, sha: sourceSha, version }),
+    /identity marker/,
+  );
+});
+
 test("publication can be safely retried after an ambiguous successful response", async (t) => {
   const { assets, manifest } = await makeFixture(t);
   const releaseAssets = manifest.assets.map((asset, index) => ({
@@ -354,19 +397,23 @@ test("workflow DAG gates publication and scopes Draft discovery to acceptance", 
   );
   assert.match(
     release,
-    /online-update-acceptance:[\s\S]*needs: \[qualify, build, prepare-candidate\]/,
+    /online-update-acceptance:[\s\S]*needs: \[qualify, build\]/,
   );
   assert.match(
     release,
-    /installer-acceptance:[\s\S]*needs: \[qualify, build, prepare-candidate\]/,
+    /installer-acceptance:[\s\S]*needs: \[qualify, build\]/,
   );
   assert.match(
     release,
-    /publish:[\s\S]*needs:\s*\[\s*qualify,\s*build,\s*prepare-candidate,\s*online-update-acceptance,\s*installer-acceptance,?\s*\]/,
+    /publish:[\s\S]*needs:\s*\[\s*qualify,\s*build,\s*online-update-acceptance,\s*installer-acceptance,?\s*\]/,
   );
   assert.doesNotMatch(release, /continue-on-error:/);
   assert.doesNotMatch(release, /--clobber/);
-  assert.match(release, /windows-studio-package-\$\{\{ github\.sha \}\}/);
+  assert.match(release, /windows-studio-release\.mjs prepare-draft/);
+  assert.match(release, /windows-studio-release\.mjs download-draft/);
+  assert.doesNotMatch(release, /actions\/(?:upload|download)-artifact@v4/);
+  assert.doesNotMatch(ci, /actions\/upload-artifact@v4/);
+  assert.doesNotMatch(release, /prepare-candidate:/);
   assert.match(updater, /\$releaseArguments = @\("release", "view"\)/);
   assert.match(updater, /if \(\$ExpectedTargetVersion\)/);
   assert.match(online, /\$ExpectedCommitSha/);

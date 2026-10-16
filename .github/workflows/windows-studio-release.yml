@@ -17,8 +17,6 @@ jobs:
   qualify:
     name: Release qualification
     runs-on: ubuntu-latest
-    outputs:
-      verify_run_id: ${{ steps.qualification.outputs.run_id }}
     timeout-minutes: 25
     permissions:
       actions: read
@@ -32,71 +30,48 @@ jobs:
           node-version: 24
           package-manager-cache: false
       - name: Validate tag and exact-SHA Verify MVP
-        id: qualification
         env:
           GITHUB_TOKEN: ${{ github.token }}
           NGT_VERIFY_TIMEOUT_MINUTES: "20"
         run: node scripts/windows-studio-release.mjs qualify
-      - name: Record qualification failure metadata
-        if: failure()
-        shell: powershell
-        run: |
-          $directory = Join-Path $env:RUNNER_TEMP "release-qualification-diagnostics"
-          New-Item -ItemType Directory -Path $directory -Force | Out-Null
-          @{ stage = "qualification"; tag = $env:GITHUB_REF_NAME; commit = $env:GITHUB_SHA; runId = $env:GITHUB_RUN_ID } |
-            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory "summary.json") -Encoding utf8
-      - name: Upload qualification diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-qualification-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/release-qualification-diagnostics/
-          if-no-files-found: warn
-          retention-days: 14
 
   build:
-    name: Build verified Windows release artifact
+    name: Rebuild and stage verified Windows Release
     needs: qualify
     runs-on: windows-2022
     timeout-minutes: 120
     permissions:
-      actions: read
-      contents: read
+      contents: write
     steps:
       - uses: actions/checkout@v5
         with:
           ref: ${{ github.sha }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+          run_install: false
       - uses: actions/setup-node@v5
         with:
           node-version: 24
-          package-manager-cache: false
-      - name: Download package from the exact successful Verify MVP run
-        uses: actions/download-artifact@v4
-        with:
-          name: windows-studio-package-${{ github.sha }}
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: ${{ needs.qualify.outputs.verify_run_id }}
-          path: windows-package
-      - name: Verify package provenance and restore installer inputs
+          cache: pnpm
+      - name: Install pinned dependencies
+        run: pnpm install --frozen-lockfile --config.node-linker=hoisted --config.package-import-method=copy
+      - name: Build Windows application from qualified source
+        run: pnpm build
+        env:
+          DATABASE_URL: postgresql://ngt:ci-only@127.0.0.1:55432/ngt?schema=public
+          AUTH_SECRET: ci-only-secret-for-studio-smoke
+          AUTH_URL: http://127.0.0.1:3000
+          AUTH_TRUST_HOST: "true"
+          NEXT_TELEMETRY_DISABLED: "1"
+          NODE_OPTIONS: --max-old-space-size=2048
+      - name: Package and verify exact-commit Windows application
         shell: powershell
         run: |
-          node scripts/windows-studio-release.mjs verify-package windows-package
-          if ($LASTEXITCODE -ne 0) { throw "Same-SHA Windows package artifact verification failed." }
+          ./scripts/build-windows-studio-package.ps1
+          ./scripts/test-windows-studio-package.ps1 -IntegrityOnly
           $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
-          $archive = Join-Path "windows-package" ("ngt-studio-windows-v" + $version + ".zip")
-          $packageDirectory = Join-Path ".local" "studio-package"
-          New-Item -ItemType Directory -Path $packageDirectory -Force | Out-Null
-          & tar.exe -xf $archive -C $packageDirectory
-          if ($LASTEXITCODE -ne 0) { throw "Verified Windows package extraction failed." }
-          $metadata = Get-Content -LiteralPath (Join-Path $packageDirectory "studio-release.json") -Raw | ConvertFrom-Json
-          if ([string]$metadata.commit -ne $env:GITHUB_SHA -or [string]$metadata.version -ne $version) {
-            throw "Extracted Studio package does not match the release Commit SHA and package version."
-          }
-          New-Item -ItemType Directory -Path "dist" -Force | Out-Null
-          Copy-Item -LiteralPath $archive -Destination "dist"
-          Copy-Item -LiteralPath ($archive + ".sha256") -Destination "dist"
-          ./scripts/verify-windows-studio-release.ps1 -ReleaseRoot $packageDirectory -ExpectedVersion ("v" + $version) | Out-Null
+          ./scripts/verify-windows-studio-release.ps1 -ReleaseRoot ".local/studio-package" -ExpectedVersion ("v" + $version) | Out-Null
       - name: Install pinned Inno Setup and build installer
         shell: powershell
         run: |
@@ -114,7 +89,7 @@ jobs:
       - name: Generate candidate runtime archives and checksums
         shell: powershell
         run: ./scripts/prepare-windows-studio-update-assets.ps1
-      - name: Create exact-SHA internal release artifact
+      - name: Create verified Release asset manifest
         shell: powershell
         run: |
           $artifactDirectory = Join-Path $env:RUNNER_TEMP "ngt-windows-release-assets"
@@ -123,72 +98,17 @@ jobs:
           $env:NGT_RELEASE_ASSET_DIR = $artifactDirectory
           node scripts/windows-studio-release.mjs manifest
           if ($LASTEXITCODE -ne 0) { throw "Release artifact manifest creation failed." }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-studio-release-${{ github.run_id }}
-          path: ${{ runner.temp }}/ngt-windows-release-assets/
-          if-no-files-found: error
-          retention-days: 30
-      - name: Record build failure metadata
-        if: failure()
-        shell: powershell
-        run: |
-          $directory = Join-Path $env:RUNNER_TEMP "windows-release-build-diagnostics"
-          New-Item -ItemType Directory -Path $directory -Force | Out-Null
-          @{ stage = "windows-build"; tag = $env:GITHUB_REF_NAME; commit = $env:GITHUB_SHA; runId = $env:GITHUB_RUN_ID } |
-            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory "summary.json") -Encoding utf8
-      - name: Upload build diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-release-build-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/windows-release-build-diagnostics/
-          if-no-files-found: warn
-          retention-days: 14
-
-  prepare-candidate:
-    name: Prepare or safely resume Draft Release
-    needs: [qualify, build]
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          ref: ${{ github.sha }}
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          package-manager-cache: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-studio-release-${{ github.run_id }}
-          path: release-assets
-      - name: Verify artifact provenance and prepare resumable Draft
+      - name: Upload verified assets directly to a Draft Release
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/windows-studio-release.mjs prepare-draft release-assets
-      - name: Record Draft preparation diagnostics
-        if: failure()
         shell: powershell
         run: |
-          $directory = Join-Path $env:RUNNER_TEMP "draft-preparation-diagnostics"
-          New-Item -ItemType Directory -Path $directory -Force | Out-Null
-          @{ stage = "draft-preparation"; tag = $env:GITHUB_REF_NAME; commit = $env:GITHUB_SHA; runId = $env:GITHUB_RUN_ID } |
-            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory "summary.json") -Encoding utf8
-      - name: Upload Draft preparation diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: draft-preparation-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/draft-preparation-diagnostics/
-          if-no-files-found: warn
-          retention-days: 14
+          node scripts/windows-studio-release.mjs prepare-draft "$env:RUNNER_TEMP\ngt-windows-release-assets"
+          if ($LASTEXITCODE -ne 0) { throw "Direct Draft Release upload failed." }
 
   online-update-acceptance:
     name: Disposable Windows online-update acceptance
-    needs: [qualify, build, prepare-candidate]
+    needs: [qualify, build]
     runs-on: windows-2022
     timeout-minutes: 120
     permissions:
@@ -201,10 +121,10 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-studio-release-${{ github.run_id }}
-          path: release-assets
+      - name: Download and verify exact-SHA Draft Release assets
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/windows-studio-release.mjs download-draft release-assets
       - name: Verify exact artifact SHA and manifest
         run: node scripts/windows-studio-release.mjs verify-artifact release-assets
       - name: Exercise real online upgrade through the isolated Draft candidate channel
@@ -212,26 +132,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: ./scripts/test-windows-studio-online-update.ps1 -TargetTag $env:GITHUB_REF_NAME -ExpectedCommitSha $env:GITHUB_SHA -ExpectedManifestPath "release-assets\release-manifest.json"
-      - name: Record online-update failure metadata
-        if: failure()
-        shell: powershell
-        run: |
-          $directory = Join-Path $env:RUNNER_TEMP "ngt-online-update-diagnostics"
-          New-Item -ItemType Directory -Path $directory -Force | Out-Null
-          @{ stage = "online-update"; tag = $env:GITHUB_REF_NAME; commit = $env:GITHUB_SHA; runId = $env:GITHUB_RUN_ID } |
-            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory "summary.json") -Encoding utf8
-      - name: Upload sanitized online-update diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: online-update-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/ngt-online-update-diagnostics/
-          if-no-files-found: warn
-          retention-days: 14
 
   installer-acceptance:
     name: Disposable Windows installer acceptance
-    needs: [qualify, build, prepare-candidate]
+    needs: [qualify, build]
     runs-on: windows-2022
     timeout-minutes: 45
     permissions:
@@ -244,10 +148,10 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-studio-release-${{ github.run_id }}
-          path: release-assets
+      - name: Download and verify exact-SHA Draft Release assets
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/windows-studio-release.mjs download-draft release-assets
       - name: Verify exact artifact SHA and manifest
         run: node scripts/windows-studio-release.mjs verify-artifact release-assets
       - name: Install the exact installer from the verified artifact
@@ -256,22 +160,6 @@ jobs:
           $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
           $installerPath = "release-assets\ngt-studio-windows-setup-v$version.exe"
           ./scripts/test-windows-studio-installer.ps1 -InstallerPath $installerPath -ExpectedVersion $version
-      - name: Record installer failure metadata
-        if: failure()
-        shell: powershell
-        run: |
-          $directory = Join-Path $env:RUNNER_TEMP "ngt-installer-acceptance-diagnostics"
-          New-Item -ItemType Directory -Path $directory -Force | Out-Null
-          @{ stage = "installer-acceptance"; tag = $env:GITHUB_REF_NAME; commit = $env:GITHUB_SHA; runId = $env:GITHUB_RUN_ID } |
-            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory "summary.json") -Encoding utf8
-      - name: Upload sanitized installer diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: installer-acceptance-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/ngt-installer-acceptance-diagnostics/
-          if-no-files-found: warn
-          retention-days: 14
 
   publish:
     name: Publish verified Release
@@ -279,7 +167,6 @@ jobs:
       [
         qualify,
         build,
-        prepare-candidate,
         online-update-acceptance,
         installer-acceptance,
       ]
@@ -295,30 +182,14 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: windows-studio-release-${{ github.run_id }}
-          path: release-assets
+      - name: Download and verify exact-SHA Draft Release assets
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/windows-studio-release.mjs download-draft release-assets
       - name: Re-verify artifact, Draft identity, and every Release asset before publishing
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/windows-studio-release.mjs publish release-assets
-      - name: Record publication failure metadata
-        if: failure()
-        shell: powershell
-        run: |
-          $directory = Join-Path $env:RUNNER_TEMP "release-publication-diagnostics"
-          New-Item -ItemType Directory -Path $directory -Force | Out-Null
-          @{ stage = "publish"; tag = $env:GITHUB_REF_NAME; commit = $env:GITHUB_SHA; runId = $env:GITHUB_RUN_ID } |
-            ConvertTo-Json | Set-Content -LiteralPath (Join-Path $directory "summary.json") -Encoding utf8
-      - name: Upload publication diagnostics
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-publication-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/release-publication-diagnostics/
-          if-no-files-found: warn
-          retention-days: 14
 
   release-metrics:
     name: Record Release run metrics
@@ -326,7 +197,6 @@ jobs:
       [
         qualify,
         build,
-        prepare-candidate,
         online-update-acceptance,
         installer-acceptance,
         publish,
@@ -349,10 +219,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/windows-studio-release-metrics.mjs
-      - uses: actions/upload-artifact@v4
-        if: ${{ always() }}
-        with:
-          name: windows-studio-release-metrics-${{ github.run_id }}-${{ github.run_attempt }}
-          path: release-metrics.json
-          if-no-files-found: warn
-          retention-days: 90

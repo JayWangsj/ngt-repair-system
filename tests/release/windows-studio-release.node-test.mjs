@@ -560,6 +560,11 @@ test("workflow DAG gates publication and scopes Draft discovery to acceptance", 
     online,
     /node scripts\/windows-studio-release\.mjs find-update-baseline \$TargetTag/,
   );
+  assert.match(online, /\$installRoot = Join-Path \$env:LOCALAPPDATA "NGT"/);
+  assert.match(
+    online,
+    /if \(Test-Path -LiteralPath \$installRoot\)\s*\{\s*throw "The disposable runner already has an NGT installation\."/,
+  );
   assert.doesNotMatch(online, /\$githubCli (?:api|release list).*releases/);
   assert.match(online, /\$ExpectedCommitSha/);
   assert.match(online, /\$ExpectedManifestPath/);

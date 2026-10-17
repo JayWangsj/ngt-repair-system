@@ -91,6 +91,16 @@ describe("Windows persistent startup", () => {
       '"Start-Process -FilePath `$wscriptPath -ArgumentList `$launcherArguments -WindowStyle Hidden"',
     );
     expect(acceptance).toContain(
+      '$baselineMetadata.files.PSObject.Properties["scripts/install-windows-startup.ps1"]',
+    );
+    expect(acceptance).toContain(
+      "Baseline startup script failed integrity validation before runner adaptation.",
+    );
+    expect(acceptance).toContain(
+      "$startupManifestEntry.Value = (Get-FileHash -LiteralPath $baselineStartupScriptPath -Algorithm SHA256).Hash.ToLowerInvariant()",
+    );
+    expect(acceptance).toContain("ConvertTo-Json -Depth 100");
+    expect(acceptance).toContain(
       "Baseline startup script has no supported immediate launcher command.",
     );
   });

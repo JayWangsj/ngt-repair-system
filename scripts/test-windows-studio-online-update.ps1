@@ -189,8 +189,6 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "Baseline application archive extraction failed." }
   & tar.exe -xf $oldRuntimeArchive -C $baselineRoot
   if ($LASTEXITCODE -ne 0) { throw "Baseline runtime archive extraction failed." }
-  & (Join-Path $baselineRoot "scripts\verify-windows-studio-release.ps1") `
-    -ReleaseRoot $baselineRoot -ExpectedVersion $oldTag | Out-Null
 
   $installationAttempted = $true
   & (Join-Path $baselineRoot "scripts\install-windows-studio.ps1") `

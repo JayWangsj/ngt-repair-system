@@ -310,6 +310,10 @@ describe("Windows persistent startup", () => {
     expect(onlineUpdateTest).toContain(
       "Anonymous public Release asset download",
     );
+    expect(onlineUpdateTest).toContain("Assert-ReleaseChecksum $oldAppArchive");
+    expect(onlineUpdateTest).toContain(
+      "Assert-ReleaseChecksum $oldRuntimeArchive",
+    );
     const onlineTestRootCreation = onlineUpdateTest.indexOf(
       "New-Item -ItemType Directory -Path $testRoot -Force | Out-Null",
     );

@@ -111,6 +111,12 @@ describe("Windows persistent startup", () => {
     expect(acceptance).toContain(
       "$updaterManifestEntry.Value = (Get-FileHash -LiteralPath $baselineUpdaterScriptPath -Algorithm SHA256).Hash.ToLowerInvariant()",
     );
+    expect(acceptance).toContain(
+      "Adapted legacy baseline atomic file replacement for Windows PowerShell 5.1",
+    );
+    expect(acceptance).toContain(
+      "Baseline script failed integrity validation before runner adaptation",
+    );
     expect(acceptance).toContain("ConvertTo-Json -Depth 100");
     expect(acceptance).toContain(
       "Baseline startup script has no supported immediate launcher command.",
@@ -356,6 +362,10 @@ describe("Windows persistent startup", () => {
   it("backs up and verifies private releases before switching the studio", async () => {
     const backup = await readFile("scripts/backup-windows-studio.ps1", "utf8");
     const updater = await readFile("scripts/update-windows-studio.ps1", "utf8");
+    const studioCommon = await readFile(
+      "scripts/windows-studio-common.ps1",
+      "utf8",
+    );
     const workflow = (
       await readFile(".github/workflows/windows-studio-release.yml", "utf8")
     ).replace(/\r\n/g, "\n");
@@ -372,6 +382,14 @@ describe("Windows persistent startup", () => {
     expect(backup).toContain("Stop-NgtStudioProcesses");
     expect(backup).toContain("$_.FullName.Substring($backupPrefix.Length)");
     expect(backup).not.toContain("[System.IO.Path]::GetRelativePath");
+    const fileReplaceCalls = [
+      ...updater.matchAll(/\[System\.IO\.File\]::Replace\([^\r\n]+/g),
+      ...studioCommon.matchAll(/\[System\.IO\.File\]::Replace\([^\r\n]+/g),
+    ];
+    expect(fileReplaceCalls.length).toBeGreaterThan(0);
+    for (const replaceCall of fileReplaceCalls) {
+      expect(replaceCall[0]).not.toMatch(/,\s*\$null\s*\)/);
+    }
     expect(updater).toContain('"release", "download"');
     expect(updater).toContain("Get-FileHash");
     expect(updater).toContain("backup-windows-studio.ps1");

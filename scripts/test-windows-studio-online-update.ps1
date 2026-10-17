@@ -264,6 +264,34 @@ try {
     throw "Baseline updater script has no supported release lookup command."
   }
 
+  $baselineMetadataPath = Join-Path $baselineRoot "studio-release.json"
+  $baselineMetadata = Get-Content -LiteralPath $baselineMetadataPath -Raw | ConvertFrom-Json
+  $legacyReplacePattern = '\[System\.IO\.File\]::Replace\((\$[A-Za-z0-9_:]+),\s*(\$[A-Za-z0-9_:]+),\s*\$null\)'
+  $legacyReplaceFix = '[System.IO.File]::Replace($1, $2, "${1}.$([guid]::NewGuid().ToString(''N'')).bak")'
+  foreach ($relativePath in @(
+    "scripts/update-windows-studio.ps1",
+    "scripts/windows-studio-common.ps1"
+  )) {
+    $scriptPath = Join-Path $baselineRoot ($relativePath -replace '/', '\')
+    $manifestEntry = $baselineMetadata.files.PSObject.Properties[$relativePath]
+    if (-not $manifestEntry) {
+      throw "Baseline script is missing its integrity manifest entry: $relativePath"
+    }
+    $scriptHash = (Get-FileHash -LiteralPath $scriptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($scriptHash -ne ([string]$manifestEntry.Value).ToLowerInvariant()) {
+      throw "Baseline script failed integrity validation before runner adaptation: $relativePath"
+    }
+    $scriptContent = Get-Content -LiteralPath $scriptPath -Raw
+    $replaceCount = [regex]::Matches($scriptContent, $legacyReplacePattern).Count
+    if ($replaceCount -gt 0) {
+      $scriptContent = [regex]::Replace($scriptContent, $legacyReplacePattern, $legacyReplaceFix)
+      Set-Content -LiteralPath $scriptPath -Value $scriptContent -Encoding utf8
+      $manifestEntry.Value = (Get-FileHash -LiteralPath $scriptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+      Write-Output "Adapted legacy baseline atomic file replacement for Windows PowerShell 5.1: $relativePath ($replaceCount calls)."
+    }
+  }
+  $baselineMetadata | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $baselineMetadataPath -Encoding utf8
+
   $installationAttempted = $true
   & (Join-Path $baselineRoot "scripts\install-windows-studio.ps1") `
     -DataRoot $dataRoot -InstallRoot $installRoot

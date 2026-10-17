@@ -69,16 +69,18 @@ function Write-NgtUpdateMaintenance(
   foreach ($key in $Details.Keys) { $payload[$key] = $Details[$key] }
   $owned = Invoke-NgtUpdateOwnership {
     $temporaryFile = "$script:NgtUpdateMaintenanceFile.$UpdateId.tmp"
+    $backupFile = "$script:NgtUpdateMaintenanceFile.$UpdateId.$([guid]::NewGuid().ToString('N')).bak"
     $json = $payload | ConvertTo-Json -Depth 8
     [System.IO.File]::WriteAllText($temporaryFile, $json, (New-Object System.Text.UTF8Encoding($false)))
     try {
       if (Test-Path -LiteralPath $script:NgtUpdateMaintenanceFile) {
-        [System.IO.File]::Replace($temporaryFile, $script:NgtUpdateMaintenanceFile, $null)
+        [System.IO.File]::Replace($temporaryFile, $script:NgtUpdateMaintenanceFile, $backupFile)
       } else {
         [System.IO.File]::Move($temporaryFile, $script:NgtUpdateMaintenanceFile)
       }
     } finally {
       Remove-Item -LiteralPath $temporaryFile -Force -ErrorAction SilentlyContinue
+      Remove-Item -LiteralPath $backupFile -Force -ErrorAction SilentlyContinue
     }
   }
   if (-not $owned) { throw "Update task no longer owns the lock." }
@@ -109,6 +111,7 @@ function Restore-NgtStudioServiceFiles([string]$BackupRoot, [string]$InstallRoot
     }
     $destination = Join-Path $serviceDirectory $fileName
     $temporaryPath = "$destination.$UpdateId.tmp"
+    $backupPath = "$destination.$UpdateId.$([guid]::NewGuid().ToString('N')).bak"
     Copy-Item -LiteralPath $source -Destination $temporaryPath -Force
     if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne
         (Get-FileHash -LiteralPath $temporaryPath -Algorithm SHA256).Hash) {
@@ -117,12 +120,13 @@ function Restore-NgtStudioServiceFiles([string]$BackupRoot, [string]$InstallRoot
     }
     try {
       if (Test-Path -LiteralPath $destination) {
-        [System.IO.File]::Replace($temporaryPath, $destination, $null)
+        [System.IO.File]::Replace($temporaryPath, $destination, $backupPath)
       } else {
         [System.IO.File]::Move($temporaryPath, $destination)
       }
     } finally {
       Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+      Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
     }
     if ((Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash -ne
         (Get-FileHash -LiteralPath $destination -Algorithm SHA256).Hash) {
@@ -156,6 +160,7 @@ function Write-NgtUpdateStatus(
   }
   $owned = Invoke-NgtUpdateOwnership {
     $temporaryStatusFile = "$StatusFile.$UpdateId.tmp"
+    $statusBackupFile = "$StatusFile.$UpdateId.$([guid]::NewGuid().ToString('N')).bak"
     $json = $payload | ConvertTo-Json -Depth 8
     [System.IO.File]::WriteAllText(
       $temporaryStatusFile,
@@ -164,7 +169,7 @@ function Write-NgtUpdateStatus(
     )
     try {
       if (Test-Path -LiteralPath $StatusFile) {
-        [System.IO.File]::Replace($temporaryStatusFile, $StatusFile, $null)
+        [System.IO.File]::Replace($temporaryStatusFile, $StatusFile, $statusBackupFile)
       } else {
         [System.IO.File]::Move($temporaryStatusFile, $StatusFile)
       }
@@ -172,6 +177,7 @@ function Write-NgtUpdateStatus(
       Move-Item -LiteralPath $temporaryStatusFile -Destination $StatusFile -Force
     } finally {
       Remove-Item -LiteralPath $temporaryStatusFile -Force -ErrorAction SilentlyContinue
+      Remove-Item -LiteralPath $statusBackupFile -Force -ErrorAction SilentlyContinue
     }
     if ($script:NgtUpdateMaintenanceFile -and $Status -in @("backing-up", "installing", "validating", "rolling-back")) {
       $maintenance = @{
@@ -184,15 +190,17 @@ function Write-NgtUpdateStatus(
         updatedAt = (Get-Date).ToUniversalTime().ToString("o")
       } | ConvertTo-Json -Depth 8
       $maintenanceFile = "$script:NgtUpdateMaintenanceFile.$UpdateId.tmp"
+      $maintenanceBackupFile = "$script:NgtUpdateMaintenanceFile.$UpdateId.$([guid]::NewGuid().ToString('N')).bak"
       [System.IO.File]::WriteAllText($maintenanceFile, $maintenance, (New-Object System.Text.UTF8Encoding($false)))
       try {
         if (Test-Path -LiteralPath $script:NgtUpdateMaintenanceFile) {
-          [System.IO.File]::Replace($maintenanceFile, $script:NgtUpdateMaintenanceFile, $null)
+          [System.IO.File]::Replace($maintenanceFile, $script:NgtUpdateMaintenanceFile, $maintenanceBackupFile)
         } else {
           [System.IO.File]::Move($maintenanceFile, $script:NgtUpdateMaintenanceFile)
         }
       } finally {
         Remove-Item -LiteralPath $maintenanceFile -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $maintenanceBackupFile -Force -ErrorAction SilentlyContinue
       }
     }
   }

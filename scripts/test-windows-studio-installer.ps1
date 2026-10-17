@@ -6,6 +6,43 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
+function Wait-NgtInstallerProcess(
+  [System.Diagnostics.Process]$Process,
+  [string]$Description,
+  [int]$TimeoutMinutes,
+  [string[]]$ProgressPaths
+) {
+  $deadline = [DateTime]::UtcNow.AddMinutes($TimeoutMinutes)
+  $lastProgress = @{}
+  while (-not $Process.WaitForExit(15000)) {
+    foreach ($path in $ProgressPaths) {
+      if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { continue }
+      $lines = @(Get-Content -LiteralPath $path -Tail 3 -ErrorAction SilentlyContinue)
+      $progress = [string]::Join(" | ", $lines)
+      if (-not $progress -or $lastProgress[$path] -eq $progress) { continue }
+      $lastProgress[$path] = $progress
+      $progress = $progress `
+        -replace '(?i)(password|secret|token|authorization)(\s*[:=]\s*)[^\s,;"]+', '$1$2[REDACTED]' `
+        -replace '(?i)(postgres(?:ql)?://)[^:/\s]+:[^@\s]+@', '$1[REDACTED]@' `
+        -replace '(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+', 'Bearer [REDACTED]'
+      Write-Output ("{0} progress ({1}): {2}" -f $Description, (Split-Path -Leaf $path), $progress)
+    }
+    if ($Process.HasExited) { break }
+    if ([DateTime]::UtcNow -lt $deadline) { continue }
+
+    Write-Output ("{0} exceeded its {1}-minute acceptance limit; stopping its process tree." -f $Description, $TimeoutMinutes)
+    & (Join-Path $env:SystemRoot "System32\taskkill.exe") /PID $Process.Id /T /F | Out-Null
+    if (-not $Process.WaitForExit(5000)) {
+      Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+      if (-not $Process.WaitForExit(5000)) {
+        throw "$Description exceeded its acceptance limit and could not be stopped."
+      }
+    }
+    throw "$Description exceeded its $TimeoutMinutes-minute acceptance limit."
+  }
+  $Process.Refresh()
+}
+
 if ($env:GITHUB_ACTIONS -ne "true" -or $env:RUNNER_ENVIRONMENT -ne "github-hosted") {
   throw "Installer acceptance is restricted to a disposable GitHub-hosted Windows runner."
 }
@@ -39,11 +76,15 @@ foreach ($port in @(3000, 55432)) {
 $installationAttempted = $false
 $cleanupSafe = $true
 $installerLog = Join-Path $env:RUNNER_TEMP "installer.log"
+$installStagesLog = Join-Path $installRoot "install-stages.log"
 try {
   $installationAttempted = $true
+  Write-Output "Starting the verified Windows installer; progress will be reported from its install logs."
   $installer = Start-Process -FilePath $installerPath `
     -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=$installerLog") `
-    -WindowStyle Hidden -Wait -PassThru
+    -WindowStyle Hidden -PassThru
+  Wait-NgtInstallerProcess -Process $installer -Description "Windows installer" `
+    -TimeoutMinutes 30 -ProgressPaths @($installerLog, $installStagesLog)
   if ($installer.ExitCode -ne 0) {
     throw "The Windows installer exited with code $($installer.ExitCode)."
   }
@@ -84,9 +125,8 @@ try {
   if (-not $updateInfo.installed -or $updateInfo.currentVersion -ne [string]$metadata.version) {
     throw "The installed Studio update endpoint did not recognize the active version."
   }
-  $stageLog = Join-Path $installRoot "install-stages.log"
-  if (-not (Test-Path -LiteralPath $stageLog) -or
-      -not (Select-String -LiteralPath $stageLog -Pattern "COMPLETE health-validation" -Quiet)) {
+  if (-not (Test-Path -LiteralPath $installStagesLog) -or
+      -not (Select-String -LiteralPath $installStagesLog -Pattern "COMPLETE health-validation" -Quiet)) {
     throw "The installer did not complete its health-validation stage."
   }
   Write-Output "Windows installer acceptance passed for v$($metadata.version)."
@@ -102,9 +142,13 @@ try {
     $uninstaller = Join-Path $installRoot "uninstall\unins000.exe"
     if (Test-Path -LiteralPath $uninstaller -PathType Leaf) {
       try {
+        $uninstallerLog = Join-Path $env:RUNNER_TEMP "uninstaller.log"
         $uninstallProcess = Start-Process -FilePath $uninstaller `
-          -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART") `
-          -WindowStyle Hidden -Wait -PassThru
+          -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/LOG=$uninstallerLog") `
+          -WindowStyle Hidden -PassThru
+        Wait-NgtInstallerProcess -Process $uninstallProcess `
+          -Description "Windows installer acceptance uninstaller" `
+          -TimeoutMinutes 5 -ProgressPaths @($uninstallerLog)
         if ($uninstallProcess.ExitCode -ne 0) {
           throw "The Windows installer acceptance uninstaller exited with code $($uninstallProcess.ExitCode)."
         }

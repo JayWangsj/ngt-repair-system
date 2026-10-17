@@ -33,6 +33,10 @@ $standaloneDestination = Join-Path $stage ".next\standalone"
 if ($LASTEXITCODE -ne 0) {
   throw "Standalone build copy failed."
 }
+$standalonePnpmStore = Join-Path $standaloneDestination "node_modules\.pnpm"
+if (Test-Path -LiteralPath $standalonePnpmStore) {
+  Remove-Item -LiteralPath $standalonePnpmStore -Recurse -Force
+}
 $standaloneDocs = Join-Path $standaloneDestination "docs"
 if (Test-Path -LiteralPath $standaloneDocs) {
   Remove-Item -LiteralPath $standaloneDocs -Recurse -Force

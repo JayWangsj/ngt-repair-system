@@ -39,6 +39,9 @@ try {
   & (Join-Path $releaseRoot "scripts\verify-windows-studio-release.ps1") `
     -ReleaseRoot $releaseRoot -ExpectedVersion ([string]$package.version) | Out-Null
   & (Join-Path $releaseRoot "scripts\test-windows-studio-update-safety.ps1")
+  if (Test-Path -LiteralPath (Join-Path $releaseRoot ".next\standalone\node_modules\.pnpm")) {
+    throw "Studio package contains the redundant standalone pnpm store."
+  }
 
   $env:NGT_DATA_ROOT = $dataRoot
   Set-Location -LiteralPath $releaseRoot
@@ -67,9 +70,15 @@ try {
       }
     }
     Push-Location -LiteralPath (Join-Path $releaseRoot ".next\standalone")
+    $previousVerifyModules = $env:NGT_VERIFY_MODULES
     $previousPrismaPackage = $env:NGT_PRISMA_PACKAGE
+    $env:NGT_VERIFY_MODULES = "next,react,react-dom"
     $env:NGT_PRISMA_PACKAGE = "@prisma/client"
     try {
+      Invoke-NgtCommand $nodeExecutable @(
+        "-e",
+        'for (const name of process.env.NGT_VERIFY_MODULES.split(String.fromCharCode(44))) require.resolve(name);'
+      )
       Invoke-NgtCommand $nodeExecutable @(
         "-e",
         'const { PrismaClient } = require(process.env.NGT_PRISMA_PACKAGE); const db = new PrismaClient(); db.$disconnect();'
@@ -79,6 +88,11 @@ try {
         Remove-Item Env:\NGT_PRISMA_PACKAGE -ErrorAction SilentlyContinue
       } else {
         $env:NGT_PRISMA_PACKAGE = $previousPrismaPackage
+      }
+      if ($null -eq $previousVerifyModules) {
+        Remove-Item Env:\NGT_VERIFY_MODULES -ErrorAction SilentlyContinue
+      } else {
+        $env:NGT_VERIFY_MODULES = $previousVerifyModules
       }
       Pop-Location
     }

@@ -221,8 +221,20 @@ try {
   $scheduledTaskStart = "Start-ScheduledTask -TaskName `$taskName"
   $directLauncherStart = "Start-Process -FilePath `$wscriptPath -ArgumentList `$launcherArguments -WindowStyle Hidden"
   if ($baselineStartupScript.Contains($scheduledTaskStart)) {
+    $baselineMetadataPath = Join-Path $baselineRoot "studio-release.json"
+    $baselineMetadata = Get-Content -LiteralPath $baselineMetadataPath -Raw | ConvertFrom-Json
+    $startupManifestEntry = $baselineMetadata.files.PSObject.Properties["scripts/install-windows-startup.ps1"]
+    if (-not $startupManifestEntry) {
+      throw "Baseline startup script is missing its integrity manifest entry."
+    }
+    $originalStartupHash = (Get-FileHash -LiteralPath $baselineStartupScriptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($originalStartupHash -ne ([string]$startupManifestEntry.Value).ToLowerInvariant()) {
+      throw "Baseline startup script failed integrity validation before runner adaptation."
+    }
     $baselineStartupScript = $baselineStartupScript.Replace($scheduledTaskStart, $directLauncherStart)
     Set-Content -LiteralPath $baselineStartupScriptPath -Value $baselineStartupScript -Encoding utf8
+    $startupManifestEntry.Value = (Get-FileHash -LiteralPath $baselineStartupScriptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $baselineMetadata | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $baselineMetadataPath -Encoding utf8
     Write-Output "Adapted the legacy baseline launch for the non-interactive hosted acceptance."
   } elseif (-not $baselineStartupScript.Contains($directLauncherStart)) {
     throw "Baseline startup script has no supported immediate launcher command."

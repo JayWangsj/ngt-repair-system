@@ -58,7 +58,9 @@ function makeApi({
   let uploadCount = 0;
   const remoteContents = new Map();
   const uploads = [];
+  const deletions = [];
   return {
+    deletions,
     uploads,
     remoteContents,
     current: () => state,
@@ -82,6 +84,11 @@ function makeApi({
     updateRelease: async (_id, patch) => {
       state = { ...state, ...patch };
       return state;
+    },
+    deleteRelease: async (id) => {
+      assert.equal(state?.id, id);
+      deletions.push(id);
+      state = null;
     },
     uploadAsset: async (_draft, name, bytes) => {
       uploadCount++;
@@ -161,6 +168,22 @@ test("findRelease discovers Draft Releases through the paginated release list", 
   assert.equal(requests.length, 3);
   assert.match(requests[1], /\/releases\?per_page=100&page=1$/);
   assert.match(requests[2], /\/releases\?per_page=100&page=2$/);
+});
+
+test("deleteRelease removes a stale Draft by release ID", async () => {
+  const requests = [];
+  const api = new GitHubReleaseApi({
+    token: "test-token",
+    repository: "JayWangsj/ngt1",
+    fetchImpl: async (url, options) => {
+      requests.push({ url: new URL(url).pathname, method: options.method });
+      return new Response(null, { status: 204 });
+    },
+  });
+  await api.deleteRelease(42);
+  assert.deepEqual(requests, [
+    { url: "/repos/JayWangsj/ngt1/releases/42", method: "DELETE" },
+  ]);
 });
 
 test("findPublishedUpdateBaseline selects the newest supported stable release below the target", async () => {
@@ -268,6 +291,33 @@ test("a legacy partial Draft resumes only missing assets after content verificat
   assert.equal(api.uploads.length, 5);
   assert.equal(api.uploads.includes(first.name), false);
   assert.equal(api.current().assets.length, 6);
+});
+
+test("a retry replaces only a stale marked Draft for the same tag", async (t) => {
+  const { assets, manifest } = await makeFixture(t);
+  const staleManifest = { ...manifest, sha: "b".repeat(40) };
+  staleManifest.buildIdentity = calculateBuildIdentity(staleManifest);
+  const api = makeApi({
+    release: {
+      id: 43,
+      tag_name: tag,
+      draft: true,
+      body: createReleaseMarker(staleManifest),
+      assets: [],
+      upload_url:
+        "https://uploads.example.test/releases/43/assets{?name,label}",
+    },
+  });
+  const result = await prepareDraft(api, assets, manifest);
+  assert.deepEqual(api.deletions, [43]);
+  assert.equal(result.draft, true);
+  assert.deepEqual(parseReleaseMarker(result.body), {
+    tag,
+    sha: sourceSha,
+    version,
+    buildIdentity: manifest.buildIdentity,
+  });
+  assert.equal(api.uploads.length, 6);
 });
 
 test("mismatched or already public Releases fail closed without overwriting", async (t) => {

@@ -54,6 +54,7 @@ function Set-NgtStudioConfig([string]$Path, [object]$Configuration) {
   $fullPath = [System.IO.Path]::GetFullPath($Path)
   New-Item -ItemType Directory -Path (Split-Path -Parent $fullPath) -Force | Out-Null
   $temporaryPath = "$fullPath.$PID.$([guid]::NewGuid().ToString('N')).tmp"
+  $backupPath = "$fullPath.$PID.$([guid]::NewGuid().ToString('N')).bak"
   $json = $Configuration | ConvertTo-Json -Depth 8
   try {
     [System.IO.File]::WriteAllText(
@@ -62,7 +63,7 @@ function Set-NgtStudioConfig([string]$Path, [object]$Configuration) {
       (New-Object System.Text.UTF8Encoding($false))
     )
     if (Test-Path -LiteralPath $fullPath) {
-      [System.IO.File]::Replace($temporaryPath, $fullPath, $null)
+      [System.IO.File]::Replace($temporaryPath, $fullPath, $backupPath)
     } else {
       [System.IO.File]::Move($temporaryPath, $fullPath)
     }
@@ -74,6 +75,7 @@ function Set-NgtStudioConfig([string]$Path, [object]$Configuration) {
     }
   } finally {
     Remove-Item -LiteralPath $temporaryPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
   }
 }
 

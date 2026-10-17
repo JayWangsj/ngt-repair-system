@@ -67,24 +67,24 @@ foreach ($asset in $manifest.assets) {
   }
 }
 
-$releaseList = & $githubCli release list --repo $repository --exclude-drafts --exclude-pre-releases --limit 100 --json tagName,isDraft
+$releaseList = & $githubCli api "repos/$repository/releases?per_page=100"
 if ($LASTEXITCODE -ne 0) { throw "Unable to find a supported published release for the update baseline." }
-$published = @(($releaseList | Out-String) | ConvertFrom-Json)
+$published = @(($releaseList | Out-String) | ConvertFrom-Json | Where-Object {
+  -not $_.draft -and -not $_.prerelease
+})
 $baseline = $null
 foreach ($entry in $published) {
-  if ($entry.isDraft -or $entry.tagName -eq $TargetTag -or $entry.tagName -notmatch '^v\d+\.\d+\.\d+$') { continue }
-  $view = & $githubCli release view $entry.tagName --repo $repository --json tagName,assets
-  if ($LASTEXITCODE -ne 0) { continue }
-  $release = ($view | Out-String) | ConvertFrom-Json
-  $names = @($release.assets | ForEach-Object name)
+  $releaseTag = [string]$entry.tag_name
+  if ($releaseTag -eq $TargetTag -or $releaseTag -notmatch '^v\d+\.\d+\.\d+$') { continue }
+  $names = @($entry.assets | ForEach-Object name)
   $required = @(
-    "ngt-studio-windows-$($entry.tagName).zip",
-    "ngt-studio-windows-$($entry.tagName).zip.sha256",
-    "ngt-studio-runtime-$($entry.tagName).zip",
-    "ngt-studio-runtime-$($entry.tagName).zip.sha256"
+    "ngt-studio-windows-$releaseTag.zip",
+    "ngt-studio-windows-$releaseTag.zip.sha256",
+    "ngt-studio-runtime-$releaseTag.zip",
+    "ngt-studio-runtime-$releaseTag.zip.sha256"
   )
   if (@($required | Where-Object { $_ -notin $names }).Count -eq 0) {
-    $baseline = $release
+    $baseline = [pscustomobject]@{ tagName = $releaseTag; assets = $entry.assets }
     break
   }
 }

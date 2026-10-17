@@ -486,6 +486,13 @@ test("workflow DAG gates publication and scopes Draft discovery to acceptance", 
   assert.doesNotMatch(release, /prepare-candidate:/);
   assert.match(updater, /\$releaseArguments = @\("release", "view"\)/);
   assert.match(updater, /if \(\$ExpectedTargetVersion\)/);
+  assert.match(
+    online,
+    /\$githubCli api "repos\/\$repository\/releases\?per_page=100"/,
+  );
+  assert.match(online, /-not \$_.draft -and -not \$_.prerelease/);
+  assert.match(online, /\$entry\.assets \| ForEach-Object name/);
+  assert.doesNotMatch(online, /\$githubCli release list/);
   assert.match(online, /\$ExpectedCommitSha/);
   assert.match(online, /\$ExpectedManifestPath/);
   assert.match(release, /-ExpectedCommitSha/);

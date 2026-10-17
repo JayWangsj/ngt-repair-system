@@ -99,6 +99,18 @@ describe("Windows persistent startup", () => {
     expect(acceptance).toContain(
       "$startupManifestEntry.Value = (Get-FileHash -LiteralPath $baselineStartupScriptPath -Algorithm SHA256).Hash.ToLowerInvariant()",
     );
+    expect(acceptance).toContain(
+      '$baselineUpdaterScriptPath = Join-Path $baselineRoot "scripts\\update-windows-studio.ps1"',
+    );
+    expect(acceptance).toContain(
+      '$releaseOutput = & $githubCli release view $ExpectedTargetVersion --repo $repository --json "tagName,assets"',
+    );
+    expect(acceptance).toContain(
+      "Baseline updater script failed integrity validation before runner adaptation.",
+    );
+    expect(acceptance).toContain(
+      "$updaterManifestEntry.Value = (Get-FileHash -LiteralPath $baselineUpdaterScriptPath -Algorithm SHA256).Hash.ToLowerInvariant()",
+    );
     expect(acceptance).toContain("ConvertTo-Json -Depth 100");
     expect(acceptance).toContain(
       "Baseline startup script has no supported immediate launcher command.",

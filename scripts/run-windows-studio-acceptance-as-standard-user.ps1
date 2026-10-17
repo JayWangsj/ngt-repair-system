@@ -25,17 +25,19 @@ if ($Child) {
   foreach ($entry in $request.parameters.PSObject.Properties) {
     $arguments[$entry.Name] = $entry.Value
   }
+  $childExitCode = 0
   try {
     $global:LASTEXITCODE = 0
     & $request.scriptPath @arguments
     if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
-      exit $LASTEXITCODE
+      $childExitCode = [int]$LASTEXITCODE
     }
-    exit 0
   } catch {
     [Console]::Error.WriteLine($_.Exception.Message)
-    exit 1
+    $childExitCode = 1
   }
+  Set-Content -LiteralPath $request.resultPath -Value $childExitCode -Encoding ascii
+  exit $childExitCode
 }
 
 if ($env:GITHUB_ACTIONS -ne "true" -or $env:RUNNER_ENVIRONMENT -ne "github-hosted") {
@@ -72,6 +74,7 @@ $process = $null
 $workspaceAclPaths = @()
 $isolatedTemp = Join-Path $env:RUNNER_TEMP ("ngt-acceptance-" + $runId)
 $requestPath = Join-Path $isolatedTemp "request.json"
+$resultPath = Join-Path $isolatedTemp "acceptance.exit-code"
 $stdoutPath = Join-Path $isolatedTemp "acceptance.stdout.log"
 $stderrPath = Join-Path $isolatedTemp "acceptance.stderr.log"
 $powershellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
@@ -110,6 +113,7 @@ try {
   $request = @{
     scriptPath = $scriptPath
     parameters = $parameters
+    resultPath = $resultPath
     environment = @{
       GITHUB_ACTIONS = $env:GITHUB_ACTIONS
       RUNNER_ENVIRONMENT = $env:RUNNER_ENVIRONMENT
@@ -137,8 +141,17 @@ try {
   $process.Refresh()
   if (Test-Path -LiteralPath $stdoutPath) { Get-Content -LiteralPath $stdoutPath }
   if (Test-Path -LiteralPath $stderrPath) { Get-Content -LiteralPath $stderrPath | ForEach-Object { Write-Output ("Acceptance stderr: " + $_) } }
-  if ($process.ExitCode -ne 0) {
-    throw "The standard-user $Acceptance acceptance failed with exit code $($process.ExitCode)."
+  if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf)) {
+    throw "The standard-user $Acceptance acceptance did not write its exit result."
+  }
+  $resultText = (Get-Content -LiteralPath $resultPath -Raw).Trim()
+  [int]$childExitCode = 0
+  if (-not [int]::TryParse($resultText, [ref]$childExitCode)) {
+    throw "The standard-user $Acceptance acceptance wrote an invalid exit result."
+  }
+  $processExitCode = $process.ExitCode
+  if ($childExitCode -ne 0 -or ($null -ne $processExitCode -and $processExitCode -ne 0)) {
+    throw "The standard-user $Acceptance acceptance failed with child exit code $childExitCode and process exit code $processExitCode."
   }
 } finally {
   if ($process -and -not $process.HasExited) {

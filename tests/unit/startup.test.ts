@@ -58,6 +58,16 @@ describe("Windows persistent startup", () => {
     );
     expect(runner).toContain("-Credential $credential -LoadUserProfile");
     expect(runner).toContain("Windows acceptance must run as a standard user");
+    expect(runner).toContain("resultPath = $resultPath");
+    expect(runner).toContain(
+      "Set-Content -LiteralPath $request.resultPath -Value $childExitCode -Encoding ascii",
+    );
+    expect(runner).toContain(
+      "if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf))",
+    );
+    expect(runner).toContain(
+      "$childExitCode -ne 0 -or ($null -ne $processExitCode -and $processExitCode -ne 0)",
+    );
     expect(runner).toContain("Remove-LocalUser -Name $userName");
     expect(workflow).toContain(
       "run-windows-studio-acceptance-as-standard-user.ps1 -Acceptance online-update",
@@ -66,6 +76,23 @@ describe("Windows persistent startup", () => {
       "run-windows-studio-acceptance-as-standard-user.ps1 -Acceptance installer",
     );
     expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
+  });
+
+  it("adapts only legacy baseline startup for the non-interactive hosted runner", async () => {
+    const acceptance = await readFile(
+      "scripts/test-windows-studio-online-update.ps1",
+      "utf8",
+    );
+    expect(acceptance).toContain(
+      'Join-Path $baselineRoot "scripts\\install-windows-startup.ps1"',
+    );
+    expect(acceptance).toContain('"Start-ScheduledTask -TaskName `$taskName"');
+    expect(acceptance).toContain(
+      '"Start-Process -FilePath `$wscriptPath -ArgumentList `$launcherArguments -WindowStyle Hidden"',
+    );
+    expect(acceptance).toContain(
+      "Baseline startup script has no supported immediate launcher command.",
+    );
   });
 
   it("keeps the isolated test preview on a fixed restart-safe port", async () => {

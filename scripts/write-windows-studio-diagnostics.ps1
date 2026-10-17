@@ -52,11 +52,11 @@ foreach ($sourcePath in $SourcePaths) {
     "online-update" {
       if ((Split-Path -Leaf $sourcePath) -eq "online-update.log") { "online-update.log" }
       elseif ((Split-Path -Leaf $sourcePath) -eq "update-status.json") { "update-status.json" }
-      elseif ((Split-Path -Leaf $sourcePath) -in @("install.log", "install-stages.log", "studio-database.log", "studio-database.error.log", "supervisor.error.log", "application.error.log")) { Split-Path -Leaf $sourcePath }
+      elseif ((Split-Path -Leaf $sourcePath) -in @("install.log", "install-stages.log", "studio-database.log", "studio-database.error.log", "supervisor.error.log", "database.log", "database.error.log", "application.log", "application.error.log")) { Split-Path -Leaf $sourcePath }
       else { $null }
     }
     "installer-acceptance" {
-      if ((Split-Path -Leaf $sourcePath) -in @("installer.log", "install.log", "install-stages.log", "studio-database.log", "studio-database.error.log", "supervisor.error.log", "application.error.log")) { Split-Path -Leaf $sourcePath }
+      if ((Split-Path -Leaf $sourcePath) -in @("installer.log", "install.log", "install-stages.log", "studio-database.log", "studio-database.error.log", "supervisor.error.log", "database.log", "database.error.log", "application.log", "application.error.log")) { Split-Path -Leaf $sourcePath }
       else { $null }
     }
   }

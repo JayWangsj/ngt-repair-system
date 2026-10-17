@@ -588,6 +588,10 @@ test("workflow DAG gates publication and scopes Draft discovery to acceptance", 
   assert.match(installerAcceptance, /System32\\taskkill\.exe/);
   assert.doesNotMatch(installerAcceptance, /Start-Process[\s\S]*?-Wait/);
   assert.match(installerAcceptance, /-EmitToConsole/);
+  assert.match(
+    installerAcceptance,
+    /Join-Path \$installRoot "\.local\\application\.error\.log"/,
+  );
   assert.match(online, /Join-Path \$installRoot "\.local\\application\.log"/);
   assert.match(
     online,
@@ -601,6 +605,7 @@ test("workflow DAG gates publication and scopes Draft discovery to acceptance", 
   assert.match(diagnostics, /Select-Object -First 30/);
   assert.match(diagnostics, /Select-Object -Last 40/);
   assert.match(diagnostics, /lines matching failure indicators/);
+  assert.match(diagnostics, /"application\.log", "application\.error\.log"/);
   assert.match(diagnostics, /studio-database\.error\.log/);
   assert.match(
     release,

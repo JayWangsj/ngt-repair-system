@@ -593,7 +593,9 @@ test("workflow DAG gates publication and scopes Draft discovery to acceptance", 
     diagnostics,
     /github_pat_\[A-Za-z0-9_\]\+\|gh\[pousr\]_\[A-Za-z0-9\]\{20,\}/,
   );
-  assert.match(diagnostics, /Select-Object -Last 100/);
+  assert.match(diagnostics, /Select-Object -First 30/);
+  assert.match(diagnostics, /Select-Object -Last 40/);
+  assert.match(diagnostics, /lines matching failure indicators/);
   assert.match(diagnostics, /studio-database\.error\.log/);
   assert.match(
     release,

@@ -26,9 +26,19 @@ function Protect-DiagnosticText([string]$Text) {
 }
 
 function Write-NgtDiagnosticExcerpt([string]$Name, [string]$Text) {
-  $excerpt = [string]::Join("`n", @($Text -split "\r?\n" | Select-Object -Last 100))
-  if ($excerpt.Length -gt 20000) { $excerpt = $excerpt.Substring($excerpt.Length - 20000) }
-  Write-Output ("Sanitized release acceptance diagnostic ({0}, last 100 lines):" -f $Name)
+  $lines = @($Text -split "\r?\n")
+  $excerptLines = @($lines | Select-Object -First 30)
+  $failureLines = @($lines | Where-Object {
+      $_ -match '(?i)\b(error|failed?|failure|exception|denied|cannot|fatal|rollback|exit code)\b'
+    } | Select-Object -First 40)
+  if ($failureLines.Count -gt 0) {
+    $excerptLines += "-- lines matching failure indicators --"
+    $excerptLines += $failureLines
+  }
+  $excerptLines += @($lines | Select-Object -Last 40)
+  $excerpt = [string]::Join("`n", @($excerptLines | Select-Object -Unique))
+  if ($excerpt.Length -gt 20000) { $excerpt = $excerpt.Substring(0, 20000) }
+  Write-Output ("Sanitized release acceptance diagnostic ({0}, start, failure indicators, and tail):" -f $Name)
   Write-Output $excerpt
 }
 

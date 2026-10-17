@@ -508,6 +508,9 @@ test("workflow DAG gates publication and scopes Draft discovery to acceptance", 
       "utf8",
     )
   ).replace(/\r\n/g, "\n");
+  const diagnostics = (
+    await readText("scripts/write-windows-studio-diagnostics.ps1", "utf8")
+  ).replace(/\r\n/g, "\n");
 
   assert.match(
     ci,
@@ -584,6 +587,14 @@ test("workflow DAG gates publication and scopes Draft discovery to acceptance", 
   );
   assert.match(installerAcceptance, /System32\\taskkill\.exe/);
   assert.doesNotMatch(installerAcceptance, /Start-Process[\s\S]*?-Wait/);
+  assert.match(installerAcceptance, /-EmitToConsole/);
+  assert.match(online, /-EmitToConsole/);
+  assert.match(
+    diagnostics,
+    /github_pat_\[A-Za-z0-9_\]\+\|gh\[pousr\]_\[A-Za-z0-9\]\{20,\}/,
+  );
+  assert.match(diagnostics, /Select-Object -Last 100/);
+  assert.match(diagnostics, /studio-database\.error\.log/);
   assert.match(
     release,
     /run-windows-studio-acceptance-as-standard-user\.ps1 -Acceptance online-update/,

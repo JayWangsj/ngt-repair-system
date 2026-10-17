@@ -314,7 +314,21 @@ try {
     $diagnosticSources = @()
     if (Test-Path -LiteralPath $updateLog -PathType Leaf) { $diagnosticSources += $updateLog }
     if (Test-Path -LiteralPath $updateStatus -PathType Leaf) { $diagnosticSources += $updateStatus }
-    & (Join-Path $PSScriptRoot "write-windows-studio-diagnostics.ps1") -Stage "online-update" -Tag $TargetTag -Commit $ExpectedCommitSha -Version $targetVersion -Message $_.Exception.Message -SourcePaths $diagnosticSources
+    $diagnosticSources += @(
+      (Join-Path $installRoot "install.log"),
+      (Join-Path $installRoot "install-stages.log"),
+      (Join-Path $installRoot ".local\supervisor.error.log"),
+      (Join-Path $installRoot ("releases\$oldTag\.local\studio-database.log")),
+      (Join-Path $installRoot ("releases\$oldTag\.local\studio-database.error.log")),
+      (Join-Path $installRoot ("releases\$oldTag\.local\supervisor.error.log")),
+      (Join-Path $installRoot ("releases\$TargetTag\.local\studio-database.log")),
+      (Join-Path $installRoot ("releases\$TargetTag\.local\studio-database.error.log")),
+      (Join-Path $installRoot ("releases\$TargetTag\.local\supervisor.error.log")),
+      (Join-Path $installRoot ("releases\$TargetTag\.local\application.error.log"))
+    )
+    & (Join-Path $PSScriptRoot "write-windows-studio-diagnostics.ps1") `
+      -Stage "online-update" -Tag $TargetTag -Commit $ExpectedCommitSha -Version $targetVersion `
+      -Message $_.Exception.Message -SourcePaths $diagnosticSources -EmitToConsole
   } catch {
     Write-Warning "Sanitized online-update diagnostics could not be written."
   }

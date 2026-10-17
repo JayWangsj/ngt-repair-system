@@ -132,7 +132,19 @@ try {
   Write-Output "Windows installer acceptance passed for v$($metadata.version)."
 } catch {
   try {
-    & (Join-Path $PSScriptRoot "write-windows-studio-diagnostics.ps1") -Stage "installer-acceptance" -Tag ("v" + $ExpectedVersion) -Commit $env:GITHUB_SHA -Version $ExpectedVersion -Message $_.Exception.Message -SourcePaths @($installerLog)
+    $releaseStateDirectory = Join-Path $installRoot ("releases\v" + $ExpectedVersion + "\.local")
+    $diagnosticSources = @(
+      $installerLog,
+      (Join-Path $installRoot "install.log"),
+      $installStagesLog,
+      (Join-Path $releaseStateDirectory "studio-database.log"),
+      (Join-Path $releaseStateDirectory "studio-database.error.log"),
+      (Join-Path $releaseStateDirectory "supervisor.error.log"),
+      (Join-Path $releaseStateDirectory "application.error.log")
+    )
+    & (Join-Path $PSScriptRoot "write-windows-studio-diagnostics.ps1") `
+      -Stage "installer-acceptance" -Tag ("v" + $ExpectedVersion) -Commit $env:GITHUB_SHA `
+      -Version $ExpectedVersion -Message $_.Exception.Message -SourcePaths $diagnosticSources -EmitToConsole
   } catch {
     Write-Warning "Sanitized installer diagnostics could not be written."
   }

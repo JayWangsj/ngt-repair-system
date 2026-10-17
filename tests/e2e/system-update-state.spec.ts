@@ -833,7 +833,13 @@ test("continues monitoring an active update beyond the previous four-minute limi
   });
 
   await page.goto("/settings/system-update");
+  await expect.poll(() => completedStatusReads).toBeGreaterThan(0);
   const updateStartedAt = await page.evaluate(() => Date.now());
+  const updateStartResponse = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/system-update") &&
+      response.request().method() === "POST",
+  );
   await page
     .locator(".update-release-card")
     .getByRole("button", { name: "Aggiorna ora" })
@@ -842,6 +848,10 @@ test("continues monitoring an active update beyond the previous four-minute limi
     .getByRole("dialog")
     .getByRole("button", { name: "Aggiorna ora" })
     .click();
+  expect((await updateStartResponse).status()).toBe(202);
+  expect(started).toBe(true);
+  await page.clock.runFor(1_000);
+  await expect.poll(() => monitoringRequestTimes.length).toBeGreaterThan(0);
   await page.clock.runFor(5 * 60_000);
   await expect.poll(() => completedStatusReads).toBe(statusReads);
   expect(monitoringRequestTimes.length).toBeGreaterThan(0);

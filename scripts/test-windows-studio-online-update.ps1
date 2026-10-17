@@ -12,7 +12,7 @@ if ($env:GITHUB_ACTIONS -ne "true" -or $env:RUNNER_ENVIRONMENT -ne "github-hoste
   throw "Online update acceptance is restricted to a disposable GitHub-hosted Windows runner."
 }
 
-$repository = "JayWangsj/ngt-repair-system"
+$repository = "JayWangsj/ngt1"
 $githubCli = Get-Command gh -ErrorAction Stop | Select-Object -ExpandProperty Source
 $authOutput = & $githubCli auth status --hostname github.com 2>&1
 if ($LASTEXITCODE -ne 0) { throw "GitHub release read authorization is unavailable." }
@@ -67,27 +67,9 @@ foreach ($asset in $manifest.assets) {
   }
 }
 
-$releaseList = & $githubCli api "repos/$repository/releases?per_page=100"
+$baselineOutput = & node scripts/windows-studio-release.mjs find-update-baseline $TargetTag
 if ($LASTEXITCODE -ne 0) { throw "Unable to find a supported published release for the update baseline." }
-$published = @(($releaseList | Out-String) | ConvertFrom-Json | Where-Object {
-  -not $_.draft -and -not $_.prerelease
-})
-$baseline = $null
-foreach ($entry in $published) {
-  $releaseTag = [string]$entry.tag_name
-  if ($releaseTag -eq $TargetTag -or $releaseTag -notmatch '^v\d+\.\d+\.\d+$') { continue }
-  $names = @($entry.assets | ForEach-Object name)
-  $required = @(
-    "ngt-studio-windows-$releaseTag.zip",
-    "ngt-studio-windows-$releaseTag.zip.sha256",
-    "ngt-studio-runtime-$releaseTag.zip",
-    "ngt-studio-runtime-$releaseTag.zip.sha256"
-  )
-  if (@($required | Where-Object { $_ -notin $names }).Count -eq 0) {
-    $baseline = [pscustomobject]@{ tagName = $releaseTag; assets = $entry.assets }
-    break
-  }
-}
+$baseline = ($baselineOutput | Out-String) | ConvertFrom-Json
 if (-not $baseline) { throw "No published release with supported online-update assets was found." }
 
 $baselineVersion = [version]($baseline.tagName -replace "^v", "")
@@ -185,6 +167,14 @@ try {
   $appChecksumName = "$appName.sha256"
   $runtimeName = "ngt-studio-runtime-$oldTag.zip"
   $runtimeChecksumName = "$runtimeName.sha256"
+  $anonymousChecksumPath = Join-Path $testRoot "anonymous-runtime-checksum.sha256"
+  $anonymousAssetUrl = "https://github.com/$repository/releases/download/$oldTag/$runtimeChecksumName"
+  & (Join-Path $PSScriptRoot "download-public-release-asset.ps1") `
+    -AssetUrl $anonymousAssetUrl -Destination $anonymousChecksumPath
+  $anonymousChecksum = (Get-Content -LiteralPath $anonymousChecksumPath -Raw).Trim()
+  if ($anonymousChecksum -notmatch "^[A-Fa-f0-9]{64}\s+$([regex]::Escape($runtimeName))$") {
+    throw "Anonymous public Release asset download did not return the expected checksum file."
+  }
   Invoke-GhDownload -Tag $oldTag -Directory $downloadRoot -AssetNames @(
     $appName, $appChecksumName, $runtimeName, $runtimeChecksumName
   )

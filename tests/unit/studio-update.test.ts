@@ -52,7 +52,7 @@ function updateProcess() {
   };
 }
 
-async function studioRoot() {
+async function studioRoot(repository = "JayWangsj/ngt1") {
   const root = await mkdtemp(path.join(tmpdir(), "ngt-studio-update-"));
   temporaryRoots.push(root);
   const installRoot = path.join(root, "installed");
@@ -75,7 +75,7 @@ async function studioRoot() {
       JSON.stringify({
         installRoot,
         activeRelease: root,
-        repository: "JayWangsj/ngt-repair-system",
+        repository,
       }),
     ),
   ]);
@@ -96,7 +96,7 @@ describe("studio update", () => {
   });
 
   it("requires GitHub authorization before reading a private release", async () => {
-    const { root } = await studioRoot();
+    const { root } = await studioRoot("example/private");
     const result = await checkStudioUpdate({
       root,
       run: async () => {
@@ -134,21 +134,43 @@ describe("studio update", () => {
     const result = await checkStudioUpdate({
       root,
       inspect: async () => true,
-      run: async () => {
-        throw new Error("You are not logged into any GitHub hosts.");
+      fetchImpl: async (input, init) => {
+        expect(String(input)).toBe(
+          "https://api.github.com/repos/JayWangsj/ngt1/releases/latest",
+        );
+        expect(init?.headers).not.toHaveProperty("Authorization");
+        return new Response(
+          JSON.stringify({
+            tag_name: "v1.11.58",
+            name: "NGT 1.11.58",
+            body: "Correzioni e miglioramenti",
+            html_url: "https://github.com/JayWangsj/ngt1/releases/tag/v1.11.58",
+            published_at: "2026-10-17T00:00:00Z",
+            assets: [
+              { name: "ngt-studio-windows-v1.11.58.zip", size: 240_000_000 },
+              { name: "ngt-studio-windows-v1.11.58.zip.sha256" },
+              { name: "ngt-studio-runtime-v1.11.58.zip" },
+              { name: "ngt-studio-runtime-v1.11.58.zip.sha256" },
+            ],
+          }),
+          { status: 200 },
+        );
       },
     });
 
     expect(result).toMatchObject({
       installed: true,
       currentVersion: "1.11.57",
-      authRequired: true,
+      authRequired: false,
+      updateAvailable: true,
+      latestVersion: "1.11.58",
+      releaseUrl: "https://github.com/JayWangsj/ngt1/releases/tag/v1.11.58",
       status: { status: "checking" },
     });
   });
 
   it("uses the installed studio root after the standalone server changes directories", async () => {
-    const { root } = await studioRoot();
+    const { root } = await studioRoot("example/private");
     const previousRoot = process.env.NGT_STUDIO_ROOT;
     process.env.NGT_STUDIO_ROOT = root;
     try {
@@ -169,7 +191,7 @@ describe("studio update", () => {
   });
 
   it("detects a newer private release after authorization", async () => {
-    const { root } = await studioRoot();
+    const { root } = await studioRoot("example/private");
     const calls: string[][] = [];
     const result = await checkStudioUpdate({
       root,
@@ -206,7 +228,7 @@ describe("studio update", () => {
       "github.com",
       "--active",
     ]);
-    expect(calls[1]).toContain("JayWangsj/ngt-repair-system");
+    expect(calls[1]).toContain("example/private");
     expect(result).toMatchObject({
       authRequired: false,
       updateAvailable: true,
@@ -222,29 +244,27 @@ describe("studio update", () => {
     const { root } = await studioRoot();
     const result = await checkStudioUpdate({
       root,
-      run: async (_executable, args) => ({
-        stdout:
-          args[0] === "release"
-            ? JSON.stringify({
-                tagName: "v1.11.58",
-                assets: [
-                  { name: "ngt-studio-windows-v1.11.58.zip" },
-                  { name: "ngt-studio-windows-v1.11.58.zip.sha256" },
-                ],
-              })
-            : "",
-        stderr: "",
-      }),
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            tag_name: "v1.11.58",
+            assets: [
+              { name: "ngt-studio-windows-v1.11.58.zip" },
+              { name: "ngt-studio-windows-v1.11.58.zip.sha256" },
+            ],
+          }),
+          { status: 200 },
+        ),
     });
     expect(result).toMatchObject({ updateAvailable: false });
   });
 
-  it("does not treat GitHub CLI network errors as missing authorization", async () => {
+  it("reports public Release API network errors", async () => {
     const { root } = await studioRoot();
     await expect(
       checkStudioUpdate({
         root,
-        run: async () => {
+        fetchImpl: async () => {
           throw new Error("connection timed out");
         },
       }),
@@ -754,7 +774,7 @@ describe("studio update", () => {
       "github.com",
       "--active",
     ]);
-    expect(calls[1]).toContain("JayWangsj/ngt-repair-system");
+    expect(calls[1]).toContain("JayWangsj/ngt1");
 
     const updateLaunches: { executable: string; args: string[] }[] = [];
     const updateChild = updateProcess();
@@ -846,7 +866,7 @@ describe("studio update", () => {
         "github.com",
         "--active",
       ]);
-      expect(calls[1]).toContain("JayWangsj/ngt-repair-system");
+      expect(calls[1]).toContain("JayWangsj/ngt1");
     } finally {
       if (previousToken === undefined) delete process.env.GH_TOKEN;
       else process.env.GH_TOKEN = previousToken;

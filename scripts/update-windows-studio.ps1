@@ -278,7 +278,6 @@ try {
   . (Join-Path $PSScriptRoot "studio-runtime.ps1")
   Set-Location -LiteralPath $script:NgtProjectRoot
   $config = Set-NgtStudioEnvironment
-  $githubCli = Get-NgtGitHubCli
   $releaseFile = Join-Path $script:NgtProjectRoot "studio-release.json"
   if (-not (Test-Path -LiteralPath $releaseFile)) {
     throw "One-click studio updates require an installed Windows studio release."
@@ -288,7 +287,14 @@ try {
   $script:NgtCurrentTargetVersion = $ExpectedTargetVersion
   $previousReleaseRoot = $script:NgtProjectRoot
   $previousStudioConfig = Get-Content -LiteralPath (Join-Path $script:NgtStateDirectory "studio.json") -Raw | ConvertFrom-Json
-  $repository = if ($config.repository) { [string]$config.repository } else { "JayWangsj/ngt-repair-system" }
+  $repository = if ($config.repository -and $config.repository -ne "JayWangsj/ngt-repair-system") {
+    [string]$config.repository
+  } else { "JayWangsj/ngt1" }
+  $isPublicRepository = $repository -eq "JayWangsj/ngt1"
+  if ($isPublicRepository) {
+    $previousStudioConfig | Add-Member -NotePropertyName repository -NotePropertyValue $repository -Force
+  }
+  $githubCli = if ($isPublicRepository) { $null } else { Get-NgtGitHubCli }
   $installRoot = [System.IO.Path]::GetFullPath([string]$config.installRoot)
   $script:NgtUpdateMaintenanceFile = Join-Path (Join-Path $installRoot ".local") "update-maintenance.json"
   $currentStage = "reading-release"
@@ -303,12 +309,27 @@ try {
     }
     $releaseArguments += $requestedTag
   }
-  $releaseArguments += @("--repo", $repository, "--json", "tagName,assets")
-  $releaseOutput = & $githubCli @releaseArguments
-  if (($LASTEXITCODE -ne 0) -or (-not $releaseOutput)) {
-    throw "Unable to read the latest private GitHub release."
+  if ($isPublicRepository) {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    $releaseEndpoint = if ($ExpectedTargetVersion) {
+      "https://api.github.com/repos/$repository/releases/tags/$requestedTag"
+    } else {
+      "https://api.github.com/repos/$repository/releases/latest"
+    }
+    $release = Invoke-RestMethod -Uri $releaseEndpoint -Headers @{
+      Accept = "application/vnd.github+json"
+      "X-GitHub-Api-Version" = "2022-11-28"
+      "User-Agent" = "NGT-Studio-Updater"
+    } -TimeoutSec 30
+    $release | Add-Member -NotePropertyName tagName -NotePropertyValue $release.tag_name -Force
+  } else {
+    $releaseArguments += @("--repo", $repository, "--json", "tagName,assets")
+    $releaseOutput = & $githubCli @releaseArguments
+    if (($LASTEXITCODE -ne 0) -or (-not $releaseOutput)) {
+      throw "Unable to read the latest GitHub release."
+    }
+    $release = ($releaseOutput | Out-String) | ConvertFrom-Json
   }
-  $release = ($releaseOutput | Out-String) | ConvertFrom-Json
   $latestTag = [string]$release.tagName
   $script:NgtCurrentTargetVersion = $latestTag -replace "^v", ""
   if ($ExpectedTargetVersion -and ($script:NgtCurrentTargetVersion -ne ($ExpectedTargetVersion -replace "^v", ""))) {
@@ -359,12 +380,18 @@ try {
       Remove-Item -LiteralPath $downloadRoot -Recurse -Force
     }
     New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
-    Invoke-NgtCommand $githubCli @(
-      "release", "download", $latestTag,
-      "--repo", $repository,
-      "--pattern", ([string]$checksumAsset.name),
-      "--dir", $downloadRoot
-    )
+    if ($isPublicRepository) {
+      & (Join-Path $PSScriptRoot "download-public-release-asset.ps1") `
+        -AssetUrl ([string]$checksumAsset.browser_download_url) `
+        -Destination (Join-Path $downloadRoot ([string]$checksumAsset.name))
+    } else {
+      Invoke-NgtCommand $githubCli @(
+        "release", "download", $latestTag,
+        "--repo", $repository,
+        "--pattern", ([string]$checksumAsset.name),
+        "--dir", $downloadRoot
+      )
+    }
   }
   New-Item -ItemType Directory -Path $downloadRoot -Force | Out-Null
 
@@ -381,15 +408,26 @@ try {
     bytesPerSecond = 0
     progressKnown = $false
   }
-  $downloadArguments = @(
-    "release", "download", $latestTag,
-    "--repo", $repository,
-    "--pattern", ([string]$archiveAsset.name),
-    "--dir", $downloadRoot
-  ) | ForEach-Object { ConvertTo-NgtProcessArgument ([string]$_) }
+  if ($isPublicRepository) {
+    $downloadArguments = @(
+      "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+      "-File", (Join-Path $PSScriptRoot "download-public-release-asset.ps1"),
+      "-AssetUrl", ([string]$archiveAsset.browser_download_url),
+      "-Destination", $archivePath
+    ) | ForEach-Object { ConvertTo-NgtProcessArgument ([string]$_) }
+    $downloadExecutable = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
+  } else {
+    $downloadArguments = @(
+      "release", "download", $latestTag,
+      "--repo", $repository,
+      "--pattern", ([string]$archiveAsset.name),
+      "--dir", $downloadRoot
+    ) | ForEach-Object { ConvertTo-NgtProcessArgument ([string]$_) }
+    $downloadExecutable = $githubCli
+  }
   $downloadStart = Get-Date
   $processInfo = New-Object System.Diagnostics.ProcessStartInfo
-  $processInfo.FileName = $githubCli
+  $processInfo.FileName = $downloadExecutable
   $processInfo.Arguments = $downloadArguments -join " "
   $processInfo.WorkingDirectory = $script:NgtProjectRoot
   $processInfo.UseShellExecute = $false
@@ -533,11 +571,20 @@ try {
     }
   }
   if (-not (Test-Path -LiteralPath $sharedRuntime)) {
-    Invoke-NgtCommand $githubCli @(
-      "release", "download", $latestTag, "--repo", $repository,
-      "--pattern", $runtimeChecksumName, "--pattern", $runtimeArchiveName,
-      "--dir", $downloadRoot
-    )
+    if ($isPublicRepository) {
+      & (Join-Path $PSScriptRoot "download-public-release-asset.ps1") `
+        -AssetUrl ([string]$runtimeChecksumAsset.browser_download_url) `
+        -Destination (Join-Path $downloadRoot $runtimeChecksumName)
+      & (Join-Path $PSScriptRoot "download-public-release-asset.ps1") `
+        -AssetUrl ([string]$runtimeArchiveAsset.browser_download_url) `
+        -Destination (Join-Path $downloadRoot $runtimeArchiveName)
+    } else {
+      Invoke-NgtCommand $githubCli @(
+        "release", "download", $latestTag, "--repo", $repository,
+        "--pattern", $runtimeChecksumName, "--pattern", $runtimeArchiveName,
+        "--dir", $downloadRoot
+      )
+    }
     $runtimeArchivePath = Join-Path $downloadRoot $runtimeArchiveName
     $runtimeChecksumPath = Join-Path $downloadRoot $runtimeChecksumName
     $expectedRuntimeHash = ((Get-Content -LiteralPath $runtimeChecksumPath -Raw).Trim() -split "\s+")[0]

@@ -11,6 +11,7 @@ import {
   downloadDraft,
   createWindowsPackageManifest,
   expectedAssetNames,
+  findPublishedUpdateBaseline,
   GitHubReleaseApi,
   parseReleaseMarker,
   prepareDraft,
@@ -125,7 +126,7 @@ test("findRelease discovers Draft Releases through the paginated release list", 
   const requests = [];
   const api = new GitHubReleaseApi({
     token: "test-token",
-    repository: "JayWangsj/ngt-repair-system",
+    repository: "JayWangsj/ngt1",
     fetchImpl: async (url) => {
       const requestUrl = new URL(url);
       requests.push(requestUrl.pathname + requestUrl.search);
@@ -160,6 +161,66 @@ test("findRelease discovers Draft Releases through the paginated release list", 
   assert.equal(requests.length, 3);
   assert.match(requests[1], /\/releases\?per_page=100&page=1$/);
   assert.match(requests[2], /\/releases\?per_page=100&page=2$/);
+});
+
+test("findPublishedUpdateBaseline selects the newest supported stable release below the target", async () => {
+  const requests = [];
+  const assetsFor = (tag) =>
+    [
+      `ngt-studio-windows-${tag}.zip`,
+      `ngt-studio-windows-${tag}.zip.sha256`,
+      `ngt-studio-runtime-${tag}.zip`,
+      `ngt-studio-runtime-${tag}.zip.sha256`,
+    ].map((name) => ({ name }));
+  const api = new GitHubReleaseApi({
+    token: "test-token",
+    repository: "JayWangsj/ngt1",
+    fetchImpl: async (url) => {
+      const requestUrl = new URL(url);
+      requests.push(requestUrl.pathname + requestUrl.search);
+      return new Response(
+        JSON.stringify([
+          {
+            tag_name: "v2.0.14",
+            draft: true,
+            assets: assetsFor("v2.0.14"),
+          },
+          {
+            tag_name: "v2.0.15",
+            draft: false,
+            assets: assetsFor("v2.0.15"),
+          },
+          {
+            tag_name: "v2.0.13-rc.1",
+            draft: false,
+            prerelease: true,
+            assets: assetsFor("v2.0.13-rc.1"),
+          },
+          {
+            tag_name: "v2.0.12",
+            draft: false,
+            assets: assetsFor("v2.0.12").slice(0, 3),
+          },
+          {
+            tag_name: "v2.0.11",
+            draft: false,
+            assets: assetsFor("v2.0.11"),
+          },
+          {
+            tag_name: "v2.0.13",
+            draft: false,
+            assets: assetsFor("v2.0.13"),
+          },
+        ]),
+        { status: 200 },
+      );
+    },
+  });
+
+  const baseline = await findPublishedUpdateBaseline(api, "v2.0.14");
+  assert.equal(baseline.tag_name, "v2.0.13");
+  assert.equal(requests.length, 1);
+  assert.match(requests[0], /\/releases\?per_page=100&page=1$/);
 });
 
 test("Draft creation survives an ambiguous upload response without duplicating assets", async (t) => {
@@ -491,11 +552,9 @@ test("workflow DAG gates publication and scopes Draft discovery to acceptance", 
   assert.match(updater, /if \(\$ExpectedTargetVersion\)/);
   assert.match(
     online,
-    /\$githubCli api "repos\/\$repository\/releases\?per_page=100"/,
+    /node scripts\/windows-studio-release\.mjs find-update-baseline \$TargetTag/,
   );
-  assert.match(online, /-not \$_.draft -and -not \$_.prerelease/);
-  assert.match(online, /\$entry\.assets \| ForEach-Object name/);
-  assert.doesNotMatch(online, /\$githubCli release list/);
+  assert.doesNotMatch(online, /\$githubCli (?:api|release list).*releases/);
   assert.match(online, /\$ExpectedCommitSha/);
   assert.match(online, /\$ExpectedManifestPath/);
   assert.match(installerAcceptance, /function Wait-NgtInstallerProcess/);

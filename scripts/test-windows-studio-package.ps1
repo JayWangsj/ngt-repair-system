@@ -48,7 +48,7 @@ try {
     dataRoot = $dataRoot
     installRoot = $smokeInstallRoot
     activeRelease = $releaseRoot
-    repository = "JayWangsj/ngt-repair-system"
+    repository = "JayWangsj/ngt1"
   })
 
   & (Join-Path $releaseRoot "scripts\check-windows-credential-store.ps1") | Out-Null

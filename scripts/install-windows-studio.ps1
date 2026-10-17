@@ -90,7 +90,7 @@ $studioConfig = [pscustomobject]@{
   dataRoot = $stableDataRoot
   installRoot = $stableInstallRoot
   activeRelease = $projectRoot
-  repository = "JayWangsj/ngt-repair-system"
+  repository = "JayWangsj/ngt1"
 }
 Set-NgtStudioConfig `
   -Path (Join-Path $script:NgtStateDirectory "studio.json") `

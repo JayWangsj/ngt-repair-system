@@ -58,6 +58,16 @@ describe("Windows persistent startup", () => {
     );
     expect(runner).toContain("-Credential $credential -LoadUserProfile");
     expect(runner).toContain("Windows acceptance must run as a standard user");
+    expect(runner).toContain("resultPath = $resultPath");
+    expect(runner).toContain(
+      "Set-Content -LiteralPath $request.resultPath -Value $childExitCode -Encoding ascii",
+    );
+    expect(runner).toContain(
+      "if (-not (Test-Path -LiteralPath $resultPath -PathType Leaf))",
+    );
+    expect(runner).toContain(
+      "$childExitCode -ne 0 -or ($null -ne $processExitCode -and $processExitCode -ne 0)",
+    );
     expect(runner).toContain("Remove-LocalUser -Name $userName");
     expect(workflow).toContain(
       "run-windows-studio-acceptance-as-standard-user.ps1 -Acceptance online-update",

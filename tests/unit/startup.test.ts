@@ -40,6 +40,28 @@ describe("Windows persistent startup", () => {
     expect(uninstaller).toContain("Remove-ItemProperty");
   });
 
+  it("runs real Windows release acceptance with a disposable standard user", async () => {
+    const runner = await readFile(
+      "scripts/run-windows-studio-acceptance-as-standard-user.ps1",
+      "utf8",
+    );
+    const workflow = await readFile(
+      ".github/workflows/windows-studio-release.yml",
+      "utf8",
+    );
+    expect(runner).toContain("New-LocalUser -Name $userName");
+    expect(runner).toContain("-Credential $credential -LoadUserProfile");
+    expect(runner).toContain("Windows acceptance must run as a standard user");
+    expect(runner).toContain("Remove-LocalUser -Name $userName");
+    expect(workflow).toContain(
+      "run-windows-studio-acceptance-as-standard-user.ps1 -Acceptance online-update",
+    );
+    expect(workflow).toContain(
+      "run-windows-studio-acceptance-as-standard-user.ps1 -Acceptance installer",
+    );
+    expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
+  });
+
   it("keeps the isolated test preview on a fixed restart-safe port", async () => {
     const service = await readFile(
       "scripts/windows-preview-service.ps1",

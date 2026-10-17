@@ -152,7 +152,7 @@ jobs:
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
-        run: ./scripts/test-windows-studio-online-update.ps1 -TargetTag $env:GITHUB_REF_NAME -ExpectedCommitSha $env:GITHUB_SHA -ExpectedManifestPath "release-assets\release-manifest.json"
+        run: ./scripts/run-windows-studio-acceptance-as-standard-user.ps1 -Acceptance online-update
 
   installer-acceptance:
     name: Disposable Windows installer acceptance
@@ -179,9 +179,7 @@ jobs:
       - name: Install the exact installer from the verified artifact
         shell: powershell
         run: |
-          $version = (Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json).version
-          $installerPath = "release-assets\ngt-studio-windows-setup-v$version.exe"
-          ./scripts/test-windows-studio-installer.ps1 -InstallerPath $installerPath -ExpectedVersion $version
+          ./scripts/run-windows-studio-acceptance-as-standard-user.ps1 -Acceptance installer
 
   publish:
     name: Publish verified Release

@@ -352,10 +352,13 @@ function Stop-NgtStudioProcesses {
     $stoppedDatabasePaths[$databaseKey] = $true
     $runtime = [System.IO.Path]::GetFullPath((Get-Content -LiteralPath $runtimeLocation -Raw).Trim())
     $pgCtl = Join-Path $runtime "bin\pg_ctl.exe"
+    $postmasterPid = Join-Path $recordedData "postmaster.pid"
     if (Test-Path -LiteralPath $pgCtl) {
-      & $pgCtl -D $recordedData -m fast stop 2>$null
-      if ($LASTEXITCODE -ne 0) {
-        Write-Warning "The recorded NGT database did not stop cleanly; verifying its listener identity."
+      if (Test-Path -LiteralPath $postmasterPid -PathType Leaf) {
+        & $pgCtl -D $recordedData -m fast stop 2>$null
+        if ($LASTEXITCODE -ne 0) {
+          Write-Warning "The recorded NGT database did not stop cleanly; verifying its listener identity."
+        }
       }
     }
   }

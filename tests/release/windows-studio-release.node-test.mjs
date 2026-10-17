@@ -589,7 +589,10 @@ test("workflow DAG gates publication and scopes Draft discovery to acceptance", 
   assert.doesNotMatch(installerAcceptance, /Start-Process[\s\S]*?-Wait/);
   assert.match(installerAcceptance, /-EmitToConsole/);
   assert.match(online, /Join-Path \$installRoot "\.local\\application\.log"/);
-  assert.match(online, /Join-Path \$installRoot "\.local\\application\.error\.log"/);
+  assert.match(
+    online,
+    /Join-Path \$installRoot "\.local\\application\.error\.log"/,
+  );
   assert.match(online, /-EmitToConsole/);
   assert.match(
     diagnostics,

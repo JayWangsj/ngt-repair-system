@@ -5,7 +5,8 @@ import { open, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { appVersion } from "./version";
 
-const repository = "JayWangsj/ngt-repair-system";
+const repository = "JayWangsj/ngt1";
+const previousRepositoryName = "JayWangsj/ngt-repair-system";
 
 type CommandResult = { stdout: string; stderr: string };
 type StudioUpdateLock = {
@@ -574,7 +575,10 @@ async function getStudioContext(root: string) {
       .update(path.resolve(config?.installRoot || root).toLowerCase())
       .digest("hex")
       .slice(0, 16),
-    repository: config?.repository || repository,
+    repository:
+      config?.repository === previousRepositoryName
+        ? repository
+        : config?.repository || repository,
   };
 }
 
@@ -1047,10 +1051,12 @@ async function performStudioUpdateCheck(
     root?: string;
     run?: CommandRunner;
     inspect?: ProcessInspector;
+    fetchImpl?: typeof fetch;
   } = {},
 ): Promise<StudioUpdateInfo> {
   const root = resolveStudioRoot(options.root);
   const run = options.run || runCommand;
+  const fetchImpl = options.fetchImpl || fetch;
   const context = await getStudioContext(root);
   const status = await getStudioUpdateStatus(root, {
     inspect: options.inspect,
@@ -1067,37 +1073,7 @@ async function performStudioUpdateCheck(
     };
   }
 
-  const githubCli = resolveGitHubCli(root);
-  try {
-    await run(githubCli, [
-      "auth",
-      "status",
-      "--hostname",
-      "github.com",
-      "--active",
-    ]);
-  } catch (cause) {
-    if (!isGitHubAuthRequired(cause)) throw cause;
-    return {
-      installed: true,
-      currentVersion: context.currentVersion,
-      authRequired: true,
-      updateAvailable: false,
-      installInstanceId: context.installInstanceId,
-      buildCommit: context.buildCommit,
-      status,
-    };
-  }
-
-  const result = await run(githubCli, [
-    "release",
-    "view",
-    "--repo",
-    context.repository,
-    "--json",
-    "tagName,name,body,url,publishedAt,assets",
-  ]);
-  const latest = JSON.parse(result.stdout) as {
+  let latest: {
     tagName: string;
     name?: string;
     body?: string;
@@ -1105,6 +1081,71 @@ async function performStudioUpdateCheck(
     publishedAt?: string;
     assets?: { name?: string; size?: number }[];
   };
+  if (context.repository === repository) {
+    const response = await fetchImpl(
+      `https://api.github.com/repos/${repository}/releases/latest`,
+      {
+        headers: {
+          Accept: "application/vnd.github+json",
+          "X-GitHub-Api-Version": "2022-11-28",
+          "User-Agent": "NGT-Studio-Updater",
+        },
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    if (!response.ok)
+      throw new Error(
+        `Unable to read the public GitHub release: HTTP ${response.status}.`,
+      );
+    const release = (await response.json()) as {
+      tag_name: string;
+      name?: string;
+      body?: string;
+      html_url?: string;
+      published_at?: string;
+      assets?: { name?: string; size?: number }[];
+    };
+    latest = {
+      tagName: release.tag_name,
+      name: release.name,
+      body: release.body,
+      url: release.html_url,
+      publishedAt: release.published_at,
+      assets: release.assets,
+    };
+  } else {
+    const githubCli = resolveGitHubCli(root);
+    try {
+      await run(githubCli, [
+        "auth",
+        "status",
+        "--hostname",
+        "github.com",
+        "--active",
+      ]);
+    } catch (cause) {
+      if (!isGitHubAuthRequired(cause)) throw cause;
+      return {
+        installed: true,
+        currentVersion: context.currentVersion,
+        authRequired: true,
+        updateAvailable: false,
+        installInstanceId: context.installInstanceId,
+        buildCommit: context.buildCommit,
+        status,
+      };
+    }
+
+    const result = await run(githubCli, [
+      "release",
+      "view",
+      "--repo",
+      context.repository,
+      "--json",
+      "tagName,name,body,url,publishedAt,assets",
+    ]);
+    latest = JSON.parse(result.stdout) as typeof latest;
+  }
   const latestVersion = normalizeVersion(latest.tagName);
   const studioArchive = latest.assets?.find(
     (asset) => asset.name === `ngt-studio-windows-${latest.tagName}.zip`,
@@ -1146,6 +1187,7 @@ export function checkStudioUpdate(
     root?: string;
     run?: CommandRunner;
     inspect?: ProcessInspector;
+    fetchImpl?: typeof fetch;
   } = {},
 ): Promise<StudioUpdateInfo> {
   const root = resolveStudioRoot(options.root);

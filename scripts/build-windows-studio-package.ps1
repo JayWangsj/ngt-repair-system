@@ -128,6 +128,7 @@ Copy-Item -LiteralPath "assets\ngt-studio.ico" -Destination $stageAssets -Force
 $runtimeScripts = @(
   "backup-windows-studio.ps1",
   "check-windows-credential-store.ps1",
+  "download-public-release-asset.ps1",
   "test-windows-studio-backup.ps1",
   "test-windows-studio-update-safety.ps1",
   "install-windows-startup.ps1",

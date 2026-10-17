@@ -12,7 +12,7 @@ if ($env:GITHUB_ACTIONS -ne "true" -or $env:RUNNER_ENVIRONMENT -ne "github-hoste
   throw "Online update acceptance is restricted to a disposable GitHub-hosted Windows runner."
 }
 
-$repository = "JayWangsj/ngt-repair-system"
+$repository = "JayWangsj/ngt1"
 $githubCli = Get-Command gh -ErrorAction Stop | Select-Object -ExpandProperty Source
 $authOutput = & $githubCli auth status --hostname github.com 2>&1
 if ($LASTEXITCODE -ne 0) { throw "GitHub release read authorization is unavailable." }
@@ -167,6 +167,14 @@ try {
   $appChecksumName = "$appName.sha256"
   $runtimeName = "ngt-studio-runtime-$oldTag.zip"
   $runtimeChecksumName = "$runtimeName.sha256"
+  $anonymousChecksumPath = Join-Path $testRoot "anonymous-runtime-checksum.sha256"
+  $anonymousAssetUrl = "https://github.com/$repository/releases/download/$oldTag/$runtimeChecksumName"
+  & (Join-Path $PSScriptRoot "download-public-release-asset.ps1") `
+    -AssetUrl $anonymousAssetUrl -Destination $anonymousChecksumPath
+  $anonymousChecksum = (Get-Content -LiteralPath $anonymousChecksumPath -Raw).Trim()
+  if ($anonymousChecksum -notmatch "^[A-Fa-f0-9]{64}\s+$([regex]::Escape($runtimeName))$") {
+    throw "Anonymous public Release asset download did not return the expected checksum file."
+  }
   Invoke-GhDownload -Tag $oldTag -Directory $downloadRoot -AssetNames @(
     $appName, $appChecksumName, $runtimeName, $runtimeChecksumName
   )

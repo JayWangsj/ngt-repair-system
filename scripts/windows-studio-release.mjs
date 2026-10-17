@@ -3,8 +3,7 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-const REPOSITORY =
-  process.env.GITHUB_REPOSITORY || "JayWangsj/ngt-repair-system";
+const REPOSITORY = process.env.GITHUB_REPOSITORY || "JayWangsj/ngt1";
 const API_ROOT = "https://api.github.com";
 const REQUIRED_GATES = ["verify", "full-verification", "windows-studio-smoke"];
 const delay = (milliseconds) =>

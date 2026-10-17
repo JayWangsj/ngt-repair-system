@@ -279,12 +279,15 @@ describe("Windows persistent startup", () => {
   it("backs up and verifies private releases before switching the studio", async () => {
     const backup = await readFile("scripts/backup-windows-studio.ps1", "utf8");
     const updater = await readFile("scripts/update-windows-studio.ps1", "utf8");
-    const workflow = await readFile(
-      ".github/workflows/windows-studio-release.yml",
-      "utf8",
-    );
+    const workflow = (
+      await readFile(".github/workflows/windows-studio-release.yml", "utf8")
+    ).replace(/\r\n/g, "\n");
     const packageSmokeTest = await readFile(
       "scripts/test-windows-studio-package.ps1",
+      "utf8",
+    );
+    const onlineUpdateTest = await readFile(
+      "scripts/test-windows-studio-online-update.ps1",
       "utf8",
     );
     const ciWorkflow = await readFile(".github/workflows/ci.yml", "utf8");
@@ -297,6 +300,16 @@ describe("Windows persistent startup", () => {
     expect(updater).toContain("backup-windows-studio.ps1");
     expect(updater).toContain("Wait-NgtStudioHealth");
     expect(updater).toContain('Write-NgtUpdateStatus "downloading"');
+    expect(updater).toContain(
+      "https://api.github.com/repos/$repository/releases/latest",
+    );
+    expect(updater).toContain("download-public-release-asset.ps1");
+    expect(updater).toContain('"JayWangsj/ngt-repair-system"');
+    expect(updater).toContain('"JayWangsj/ngt1"');
+    expect(onlineUpdateTest).toContain("download-public-release-asset.ps1");
+    expect(onlineUpdateTest).toContain(
+      "Anonymous public Release asset download",
+    );
     expect(updater).toContain("bytesDownloaded");
     expect(updater).toContain("bytesPerSecond");
     expect(updater).toContain("bytesDownloaded = $downloadedBytes");
@@ -327,6 +340,18 @@ describe("Windows persistent startup", () => {
     expect(ciWorkflow).toContain("--config.package-import-method=copy");
     expect(ciWorkflow).toContain(
       "node --test tests/release/windows-studio-release.node-test.mjs",
+    );
+    const packageBuilder = await readFile(
+      "scripts/build-windows-studio-package.ps1",
+      "utf8",
+    );
+    const releaseVerifier = await readFile(
+      "scripts/verify-windows-studio-release.ps1",
+      "utf8",
+    );
+    expect(packageBuilder).toContain('"download-public-release-asset.ps1"');
+    expect(releaseVerifier).toContain(
+      '"scripts/download-public-release-asset.ps1"',
     );
     expect(workflow).not.toContain("actions/download-artifact@v4");
     expect(workflow).not.toContain("windows-studio-package-${{ github.sha }}");

@@ -382,6 +382,14 @@ describe("Windows persistent startup", () => {
     expect(backup).toContain("Stop-NgtStudioProcesses");
     expect(backup).toContain("$_.FullName.Substring($backupPrefix.Length)");
     expect(backup).not.toContain("[System.IO.Path]::GetRelativePath");
+    expect(studioCommon).toContain(
+      "if (Test-Path -LiteralPath $postmasterPid -PathType Leaf) {",
+    );
+    expect(
+      studioCommon.indexOf("if (Test-Path -LiteralPath $postmasterPid"),
+    ).toBeLessThan(
+      studioCommon.indexOf("& $pgCtl -D $recordedData -m fast stop 2>$null"),
+    );
     const fileReplaceCalls = [
       ...updater.matchAll(/\[System\.IO\.File\]::Replace\([^\r\n]+/g),
       ...studioCommon.matchAll(/\[System\.IO\.File\]::Replace\([^\r\n]+/g),

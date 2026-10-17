@@ -317,6 +317,7 @@ try {
     }
   }
   if ($cleanupSafe -and (Test-Path -LiteralPath $testRoot)) {
+    Set-Location -LiteralPath ([System.IO.Path]::GetTempPath())
     Remove-Item -LiteralPath $testRoot -Recurse -Force
   } elseif (Test-Path -LiteralPath $testRoot) {
     Write-Warning "Retained the isolated test data at $testRoot because its services could not be verified stopped."

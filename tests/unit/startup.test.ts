@@ -321,6 +321,14 @@ describe("Windows persistent startup", () => {
     expect(onlineTestRootCreation).toBeLessThan(
       onlineUpdateTest.indexOf("$anonymousChecksumPath = Join-Path $testRoot"),
     );
+    const onlineTestCleanupDirectoryReset = onlineUpdateTest.indexOf(
+      "Set-Location -LiteralPath ([System.IO.Path]::GetTempPath())",
+    );
+    const onlineTestRootCleanup = onlineUpdateTest.indexOf(
+      "Remove-Item -LiteralPath $testRoot -Recurse -Force",
+    );
+    expect(onlineTestCleanupDirectoryReset).toBeGreaterThanOrEqual(0);
+    expect(onlineTestCleanupDirectoryReset).toBeLessThan(onlineTestRootCleanup);
     expect(updater).toContain("bytesDownloaded");
     expect(updater).toContain("bytesPerSecond");
     expect(updater).toContain("bytesDownloaded = $downloadedBytes");

@@ -314,6 +314,27 @@ describe("Windows persistent startup", () => {
     expect(onlineUpdateTest).toContain(
       "Assert-ReleaseChecksum $oldRuntimeArchive",
     );
+    const baselinePathNormalization = onlineUpdateTest.indexOf(
+      "Normalize-LegacyBaselineDocumentationPaths -Root $baselineRoot",
+    );
+    const baselineInstallation = onlineUpdateTest.indexOf(
+      '& (Join-Path $baselineRoot "scripts\\install-windows-studio.ps1")',
+    );
+    expect(baselinePathNormalization).toBeGreaterThanOrEqual(0);
+    expect(baselinePathNormalization).toBeLessThan(baselineInstallation);
+    const normalizationFunctionStart = onlineUpdateTest.indexOf(
+      "function Normalize-LegacyBaselineDocumentationPaths",
+    );
+    const normalizationFunctionEnd = onlineUpdateTest.indexOf(
+      "function Invoke-BusinessDataProbe",
+      normalizationFunctionStart,
+    );
+    const normalizationFunction = onlineUpdateTest.slice(
+      normalizationFunctionStart,
+      normalizationFunctionEnd,
+    );
+    expect(normalizationFunction).toContain("Get-FileHash");
+    expect(normalizationFunction).toContain("Move-Item");
     const onlineTestRootCreation = onlineUpdateTest.indexOf(
       "New-Item -ItemType Directory -Path $testRoot -Force | Out-Null",
     );

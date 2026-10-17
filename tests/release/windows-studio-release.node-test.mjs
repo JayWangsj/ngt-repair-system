@@ -502,6 +502,12 @@ test("workflow DAG gates publication and scopes Draft discovery to acceptance", 
   const installerAcceptance = (
     await readText("scripts/test-windows-studio-installer.ps1", "utf8")
   ).replace(/\r\n/g, "\n");
+  const standardUserAcceptance = (
+    await readText(
+      "scripts/run-windows-studio-acceptance-as-standard-user.ps1",
+      "utf8",
+    )
+  ).replace(/\r\n/g, "\n");
 
   assert.match(
     ci,
@@ -557,6 +563,10 @@ test("workflow DAG gates publication and scopes Draft discovery to acceptance", 
   assert.doesNotMatch(online, /\$githubCli (?:api|release list).*releases/);
   assert.match(online, /\$ExpectedCommitSha/);
   assert.match(online, /\$ExpectedManifestPath/);
+  assert.match(standardUserAcceptance, /TargetTag = \$env:GITHUB_REF_NAME/);
+  assert.match(standardUserAcceptance, /ExpectedCommitSha = \$env:GITHUB_SHA/);
+  assert.match(standardUserAcceptance, /ExpectedManifestPath = Join-Path/);
+  assert.match(standardUserAcceptance, /InstallerPath = Join-Path/);
   assert.match(installerAcceptance, /function Wait-NgtInstallerProcess/);
   assert.match(installerAcceptance, /\.WaitForExit\(15000\)/);
   assert.match(
@@ -569,6 +579,12 @@ test("workflow DAG gates publication and scopes Draft discovery to acceptance", 
   );
   assert.match(installerAcceptance, /System32\\taskkill\.exe/);
   assert.doesNotMatch(installerAcceptance, /Start-Process[\s\S]*?-Wait/);
-  assert.match(release, /-ExpectedCommitSha/);
-  assert.match(release, /-ExpectedManifestPath/);
+  assert.match(
+    release,
+    /run-windows-studio-acceptance-as-standard-user\.ps1 -Acceptance online-update/,
+  );
+  assert.match(
+    release,
+    /run-windows-studio-acceptance-as-standard-user\.ps1 -Acceptance installer/,
+  );
 });

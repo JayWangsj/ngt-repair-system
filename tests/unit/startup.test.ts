@@ -78,6 +78,23 @@ describe("Windows persistent startup", () => {
     expect(workflow).toContain("GH_TOKEN: ${{ github.token }}");
   });
 
+  it("adapts only legacy baseline startup for the non-interactive hosted runner", async () => {
+    const acceptance = await readFile(
+      "scripts/test-windows-studio-online-update.ps1",
+      "utf8",
+    );
+    expect(acceptance).toContain(
+      'Join-Path $baselineRoot "scripts\\install-windows-startup.ps1"',
+    );
+    expect(acceptance).toContain('"Start-ScheduledTask -TaskName `$taskName"');
+    expect(acceptance).toContain(
+      '"Start-Process -FilePath `$wscriptPath -ArgumentList `$launcherArguments -WindowStyle Hidden"',
+    );
+    expect(acceptance).toContain(
+      "Baseline startup script has no supported immediate launcher command.",
+    );
+  });
+
   it("keeps the isolated test preview on a fixed restart-safe port", async () => {
     const service = await readFile(
       "scripts/windows-preview-service.ps1",

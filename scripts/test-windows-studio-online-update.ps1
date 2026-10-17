@@ -215,15 +215,23 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "Baseline runtime archive extraction failed." }
   Normalize-LegacyBaselineDocumentationPaths -Root $baselineRoot
 
+  # GitHub's disposable standard user has no interactive Task Scheduler session.
+  $baselineStartupScriptPath = Join-Path $baselineRoot "scripts\install-windows-startup.ps1"
+  $baselineStartupScript = Get-Content -LiteralPath $baselineStartupScriptPath -Raw
+  $scheduledTaskStart = "Start-ScheduledTask -TaskName `$taskName"
+  $directLauncherStart = "Start-Process -FilePath `$wscriptPath -ArgumentList `$launcherArguments -WindowStyle Hidden"
+  if ($baselineStartupScript.Contains($scheduledTaskStart)) {
+    $baselineStartupScript = $baselineStartupScript.Replace($scheduledTaskStart, $directLauncherStart)
+    Set-Content -LiteralPath $baselineStartupScriptPath -Value $baselineStartupScript -Encoding utf8
+    Write-Output "Adapted the legacy baseline launch for the non-interactive hosted acceptance."
+  } elseif (-not $baselineStartupScript.Contains($directLauncherStart)) {
+    throw "Baseline startup script has no supported immediate launcher command."
+  }
+
   $installationAttempted = $true
   & (Join-Path $baselineRoot "scripts\install-windows-studio.ps1") `
     -DataRoot $dataRoot -InstallRoot $installRoot
   if ($LASTEXITCODE -ne 0) { throw "Baseline studio installation failed." }
-
-  # This disposable standard user has no interactive logon session for Task Scheduler.
-  $baselineLauncher = Join-Path $installRoot "service\windows-studio-launcher.vbs"
-  Start-Process -FilePath (Join-Path $env:WINDIR "System32\wscript.exe") `
-    -ArgumentList ('//B //Nologo "' + $baselineLauncher + '"') -WindowStyle Hidden
 
   $oldHealth = $null
   for ($attempt = 0; $attempt -lt 120; $attempt++) {

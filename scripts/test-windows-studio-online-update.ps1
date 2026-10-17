@@ -311,6 +311,15 @@ try {
   Write-Output "Windows online update acceptance passed: $oldTag -> $TargetTag."
 } catch {
   try {
+    $startupTask = Get-ScheduledTask -TaskName "NGT Management System" -ErrorAction SilentlyContinue
+    if ($startupTask) {
+      Write-Output "--- NGT startup task status ---"
+      Get-ScheduledTaskInfo -TaskName "NGT Management System" |
+        Select-Object TaskName, LastRunTime, LastTaskResult, NextRunTime | Format-List
+      $startupTask.Actions | Select-Object Execute, Arguments, WorkingDirectory | Format-List
+    } else {
+      Write-Output "NGT startup task was not registered."
+    }
     $diagnosticSources = @()
     if (Test-Path -LiteralPath $updateLog -PathType Leaf) { $diagnosticSources += $updateLog }
     if (Test-Path -LiteralPath $updateStatus -PathType Leaf) { $diagnosticSources += $updateStatus }

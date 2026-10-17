@@ -35,7 +35,7 @@ try {
   }
   Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description "Starts and monitors the local NGT database and web application." -Force | Out-Null
   Remove-ItemProperty -LiteralPath $runKey -Name $runValueName -ErrorAction SilentlyContinue
-  Start-ScheduledTask -TaskName $taskName
+  Start-Process -FilePath $wscriptPath -ArgumentList $launcherArguments -WindowStyle Hidden
   Write-Output "NGT startup task installed and started."
 } catch {
   New-Item -Path $runKey -Force | Out-Null

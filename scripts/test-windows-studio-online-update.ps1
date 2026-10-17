@@ -220,6 +220,11 @@ try {
     -DataRoot $dataRoot -InstallRoot $installRoot
   if ($LASTEXITCODE -ne 0) { throw "Baseline studio installation failed." }
 
+  # This disposable standard user has no interactive logon session for Task Scheduler.
+  $baselineLauncher = Join-Path $installRoot "service\windows-studio-launcher.vbs"
+  Start-Process -FilePath (Join-Path $env:WINDIR "System32\wscript.exe") `
+    -ArgumentList ('//B //Nologo "' + $baselineLauncher + '"') -WindowStyle Hidden
+
   $oldHealth = $null
   for ($attempt = 0; $attempt -lt 120; $attempt++) {
     try {

@@ -50,6 +50,9 @@ describe("Windows persistent startup", () => {
       "utf8",
     );
     expect(runner).toContain("New-LocalUser -Name $userName");
+    expect(runner).toContain(
+      '-Description "NGT release acceptance standard account"',
+    );
     expect(runner).toContain("-Credential $credential -LoadUserProfile");
     expect(runner).toContain("Windows acceptance must run as a standard user");
     expect(runner).toContain("Remove-LocalUser -Name $userName");

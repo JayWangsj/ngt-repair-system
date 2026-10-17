@@ -78,7 +78,7 @@ $powershellPath = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\pow
 
 try {
   $user = New-LocalUser -Name $userName -Password $password `
-    -Description "Disposable standard user for NGT release acceptance" -PasswordNeverExpires
+    -Description "NGT release acceptance standard account" -PasswordNeverExpires
   New-Item -ItemType Directory -Path $isolatedTemp -Force | Out-Null
 
   $tempAcl = Get-Acl -LiteralPath $isolatedTemp

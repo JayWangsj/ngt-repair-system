@@ -491,6 +491,14 @@ export async function prepareDraft(api, directory, manifest) {
       "A published Release already uses this tag; published versions are never overwritten.",
     );
   }
+  if (
+    release &&
+    parseReleaseMarker(release.body) &&
+    !markerMatches(release, manifest)
+  ) {
+    await api.deleteRelease(release.id);
+    release = null;
+  }
   if (!release) {
     const marker = createReleaseMarker(manifest);
     const notes = await api.generateReleaseNotes(manifest.tag, manifest.sha);
@@ -786,6 +794,14 @@ export class GitHubReleaseApi {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
+  }
+
+  async deleteRelease(id) {
+    await this.json(
+      this.repoPath("/releases/" + id),
+      { method: "DELETE" },
+      false,
+    );
   }
 
   async uploadAsset(release, name, bytes) {

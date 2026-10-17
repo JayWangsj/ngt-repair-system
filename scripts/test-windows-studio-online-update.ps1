@@ -240,6 +240,30 @@ try {
     throw "Baseline startup script has no supported immediate launcher command."
   }
 
+  $baselineUpdaterScriptPath = Join-Path $baselineRoot "scripts\update-windows-studio.ps1"
+  $baselineUpdaterScript = Get-Content -LiteralPath $baselineUpdaterScriptPath -Raw
+  $latestReleaseView = '$releaseOutput = & $githubCli release view --repo $repository --json "tagName,assets"'
+  $confirmedReleaseView = '$releaseOutput = & $githubCli release view $ExpectedTargetVersion --repo $repository --json "tagName,assets"'
+  if ($baselineUpdaterScript.Contains($latestReleaseView)) {
+    $baselineMetadataPath = Join-Path $baselineRoot "studio-release.json"
+    $baselineMetadata = Get-Content -LiteralPath $baselineMetadataPath -Raw | ConvertFrom-Json
+    $updaterManifestEntry = $baselineMetadata.files.PSObject.Properties["scripts/update-windows-studio.ps1"]
+    if (-not $updaterManifestEntry) {
+      throw "Baseline updater script is missing its integrity manifest entry."
+    }
+    $originalUpdaterHash = (Get-FileHash -LiteralPath $baselineUpdaterScriptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($originalUpdaterHash -ne ([string]$updaterManifestEntry.Value).ToLowerInvariant()) {
+      throw "Baseline updater script failed integrity validation before runner adaptation."
+    }
+    $baselineUpdaterScript = $baselineUpdaterScript.Replace($latestReleaseView, $confirmedReleaseView)
+    Set-Content -LiteralPath $baselineUpdaterScriptPath -Value $baselineUpdaterScript -Encoding utf8
+    $updaterManifestEntry.Value = (Get-FileHash -LiteralPath $baselineUpdaterScriptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $baselineMetadata | ConvertTo-Json -Depth 100 | Set-Content -LiteralPath $baselineMetadataPath -Encoding utf8
+    Write-Output "Adapted the legacy baseline release lookup to the confirmed Draft tag."
+  } elseif (-not $baselineUpdaterScript.Contains($confirmedReleaseView)) {
+    throw "Baseline updater script has no supported release lookup command."
+  }
+
   $installationAttempted = $true
   & (Join-Path $baselineRoot "scripts\install-windows-studio.ps1") `
     -DataRoot $dataRoot -InstallRoot $installRoot

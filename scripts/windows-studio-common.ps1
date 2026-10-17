@@ -325,70 +325,10 @@ function Stop-NgtStudioProcesses {
     }
   }
 
-  if (Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue) {
-    $task = Get-ScheduledTask -TaskName $script:NgtTaskName -ErrorAction SilentlyContinue
-    if ($task) {
-      $launcherPath = Join-Path $installRoot "service\windows-studio-launcher.vbs"
-      if (-not (Test-NgtStudioScheduledTask -Task $task -LauncherPath $launcherPath)) {
-        throw "The NGT startup task has an unexpected action; refusing to stop it."
-      }
-      Stop-ScheduledTask -TaskName $script:NgtTaskName -ErrorAction Stop
-    }
-  }
-  if ($supervisorProcess) {
-    Stop-NgtStudioProcessIfUnchanged -Process $supervisorProcess
-  }
-
-  $stoppedDatabasePaths = @{}
-  foreach ($stateDirectory in $stateDirectories) {
-    $databaseLocation = Join-Path $stateDirectory "database-location.txt"
-    $runtimeLocation = Join-Path $stateDirectory "database-runtime-location.txt"
-    if (-not (Test-Path -LiteralPath $databaseLocation) -or
-        -not (Test-Path -LiteralPath $runtimeLocation)) { continue }
-    $recordedData = [System.IO.Path]::GetFullPath((Get-Content -LiteralPath $databaseLocation -Raw).Trim())
-    if (-not (Test-NgtStudioPathEquals -Actual $recordedData -Expected $dataDirectory)) { continue }
-    $databaseKey = $recordedData.ToLowerInvariant()
-    if ($stoppedDatabasePaths.ContainsKey($databaseKey)) { continue }
-    $stoppedDatabasePaths[$databaseKey] = $true
-    $runtime = [System.IO.Path]::GetFullPath((Get-Content -LiteralPath $runtimeLocation -Raw).Trim())
-    $pgCtl = Join-Path $runtime "bin\pg_ctl.exe"
-    $postmasterPid = Join-Path $recordedData "postmaster.pid"
-    if (Test-Path -LiteralPath $pgCtl) {
-      if (Test-Path -LiteralPath $postmasterPid -PathType Leaf) {
-        & $pgCtl -D $recordedData -m fast stop 2>$null
-        if ($LASTEXITCODE -ne 0) {
-          Write-Warning "The recorded NGT database did not stop cleanly; verifying its listener identity."
-        }
-      }
-    }
-  }
-
   $applicationStateDirectories = @((Join-Path $installRoot ".local")) + @(
     $releaseRoots | ForEach-Object { Join-Path $_ ".local" }
   )
-  foreach ($stateDirectory in $applicationStateDirectories) {
-    $pidFile = Join-Path $stateDirectory "database.pid"
-    if (-not (Test-Path -LiteralPath $pidFile)) { continue }
-    [int]$databaseRootId = 0
-    if (-not [int]::TryParse((Get-Content -LiteralPath $pidFile -Raw).Trim(), [ref]$databaseRootId)) {
-      continue
-    }
-    $databaseRoot = Get-NgtStudioProcess -ProcessId $databaseRootId
-    if (-not $databaseRoot) { continue }
-    foreach ($releaseRoot in $releaseRoots) {
-      $nodePaths = Get-NgtStudioNodePaths -ReleaseRoot $releaseRoot -InstallRoot $installRoot
-      if (Test-NgtStudioDatabaseLauncherProcess `
-        -Process $databaseRoot `
-        -ReleaseRoot $releaseRoot `
-        -AllowedNodePaths $nodePaths `
-        -ActiveRelease $activeRelease `
-        -SupervisorId $verifiedSupervisorId) {
-        Stop-NgtStudioProcessIfUnchanged -Process $databaseRoot
-        break
-      }
-    }
-  }
-
+  $verifiedApplicationListeners = @{}
   foreach ($connection in (Get-NgtStudioPortConnections -Port 3000)) {
     $listenerId = [int]$connection.OwningProcess
     $listener = Get-NgtStudioProcess -ProcessId $listenerId
@@ -427,7 +367,81 @@ function Stop-NgtStudioProcesses {
       $executable = if ($listener) { [string]$listener.ExecutablePath } else { "executable unavailable" }
       throw "Port 3000 is occupied by unverified PID $listenerId ($name, $executable); it was left running."
     }
+    $verifiedApplicationListeners[$listenerId] = $listener
+  }
+
+  if (Get-Command Get-ScheduledTask -ErrorAction SilentlyContinue) {
+    $task = Get-ScheduledTask -TaskName $script:NgtTaskName -ErrorAction SilentlyContinue
+    if ($task) {
+      $launcherPath = Join-Path $installRoot "service\windows-studio-launcher.vbs"
+      if (-not (Test-NgtStudioScheduledTask -Task $task -LauncherPath $launcherPath)) {
+        throw "The NGT startup task has an unexpected action; refusing to stop it."
+      }
+      Stop-ScheduledTask -TaskName $script:NgtTaskName -ErrorAction Stop
+    }
+  }
+  if ($supervisorProcess) {
+    Stop-NgtStudioProcessIfUnchanged -Process $supervisorProcess
+  }
+
+  $stoppedDatabasePaths = @{}
+  foreach ($stateDirectory in $stateDirectories) {
+    $databaseLocation = Join-Path $stateDirectory "database-location.txt"
+    $runtimeLocation = Join-Path $stateDirectory "database-runtime-location.txt"
+    if (-not (Test-Path -LiteralPath $databaseLocation) -or
+        -not (Test-Path -LiteralPath $runtimeLocation)) { continue }
+    $recordedData = [System.IO.Path]::GetFullPath((Get-Content -LiteralPath $databaseLocation -Raw).Trim())
+    if (-not (Test-NgtStudioPathEquals -Actual $recordedData -Expected $dataDirectory)) { continue }
+    $databaseKey = $recordedData.ToLowerInvariant()
+    if ($stoppedDatabasePaths.ContainsKey($databaseKey)) { continue }
+    $stoppedDatabasePaths[$databaseKey] = $true
+    $runtime = [System.IO.Path]::GetFullPath((Get-Content -LiteralPath $runtimeLocation -Raw).Trim())
+    $pgCtl = Join-Path $runtime "bin\pg_ctl.exe"
+    $postmasterPid = Join-Path $recordedData "postmaster.pid"
+    if (Test-Path -LiteralPath $pgCtl) {
+      if (Test-Path -LiteralPath $postmasterPid -PathType Leaf) {
+        & $pgCtl -D $recordedData -m fast stop 2>$null
+        if ($LASTEXITCODE -ne 0) {
+          Write-Warning "The recorded NGT database did not stop cleanly; verifying its listener identity."
+        }
+      }
+    }
+  }
+
+  foreach ($stateDirectory in $applicationStateDirectories) {
+    $pidFile = Join-Path $stateDirectory "database.pid"
+    if (-not (Test-Path -LiteralPath $pidFile)) { continue }
+    [int]$databaseRootId = 0
+    if (-not [int]::TryParse((Get-Content -LiteralPath $pidFile -Raw).Trim(), [ref]$databaseRootId)) {
+      continue
+    }
+    $databaseRoot = Get-NgtStudioProcess -ProcessId $databaseRootId
+    if (-not $databaseRoot) { continue }
+    foreach ($releaseRoot in $releaseRoots) {
+      $nodePaths = Get-NgtStudioNodePaths -ReleaseRoot $releaseRoot -InstallRoot $installRoot
+      if (Test-NgtStudioDatabaseLauncherProcess `
+        -Process $databaseRoot `
+        -ReleaseRoot $releaseRoot `
+        -AllowedNodePaths $nodePaths `
+        -ActiveRelease $activeRelease `
+        -SupervisorId $verifiedSupervisorId) {
+        Stop-NgtStudioProcessIfUnchanged -Process $databaseRoot
+        break
+      }
+    }
+  }
+
+  foreach ($listener in $verifiedApplicationListeners.Values) {
     Stop-NgtStudioProcessIfUnchanged -Process $listener
+  }
+  foreach ($connection in (Get-NgtStudioPortConnections -Port 3000)) {
+    $listenerId = [int]$connection.OwningProcess
+    if (-not $verifiedApplicationListeners.ContainsKey($listenerId)) {
+      $listener = Get-NgtStudioProcess -ProcessId $listenerId
+      $name = if ($listener) { [string]$listener.Name } else { "unknown process" }
+      $executable = if ($listener) { [string]$listener.ExecutablePath } else { "executable unavailable" }
+      throw "Port 3000 is occupied by unverified PID $listenerId ($name, $executable); it was left running."
+    }
   }
 
   foreach ($connection in (Get-NgtStudioPortConnections -Port 55432)) {

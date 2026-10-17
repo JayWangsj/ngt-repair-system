@@ -66,11 +66,13 @@ if (Test-Path -LiteralPath $existingStableConfig) {
     $previousActiveRelease = [string](Get-Content -LiteralPath $existingStableConfig -Raw | ConvertFrom-Json).activeRelease
   }
   $sourceStateDirectory = $script:NgtStateDirectory
-  $script:NgtStateDirectory = $stableStateDirectory
-  try {
-    Stop-NgtStudioProcesses
-  } finally {
-    $script:NgtStateDirectory = $sourceStateDirectory
+  Invoke-NgtInstallStage "stop-existing" {
+    $script:NgtStateDirectory = $stableStateDirectory
+    try {
+      Stop-NgtStudioProcesses
+    } finally {
+      $script:NgtStateDirectory = $sourceStateDirectory
+    }
   }
 }
 Copy-Item -LiteralPath (Join-Path $script:NgtProjectRoot "scripts\windows-service.ps1") `

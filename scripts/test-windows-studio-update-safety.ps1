@@ -185,6 +185,71 @@ try {
     throw "An identified NGT application listener was not stopped by its verified identity."
   }
 
+  $legacyReleaseRoot = Join-Path $processInstallRoot "releases\v2.0.11"
+  $candidateReleaseRoot = Join-Path $processInstallRoot "releases\v2.0.14"
+  $stableStateDirectory = Join-Path $processInstallRoot ".local"
+  $candidateStateDirectory = Join-Path $candidateReleaseRoot ".local"
+  New-Item -ItemType Directory -Path (Join-Path $legacyReleaseRoot "runtime") -Force | Out-Null
+  New-Item -ItemType Directory -Path $stableStateDirectory -Force | Out-Null
+  New-Item -ItemType Directory -Path $candidateStateDirectory -Force | Out-Null
+  Set-Content -LiteralPath (Join-Path $legacyReleaseRoot "runtime\node.exe") -Value "fixture" -Encoding ascii
+  Set-NgtStudioConfig -Path (Join-Path $stableStateDirectory "studio.json") -Configuration ([pscustomobject]@{
+    dataRoot = $processDataRoot
+    installRoot = $processInstallRoot
+    activeRelease = $legacyReleaseRoot
+  })
+  Set-Content -LiteralPath (Join-Path $stableStateDirectory "supervisor.pid") -Value "4199" -Encoding ascii
+  Set-Content -LiteralPath (Join-Path $stableStateDirectory "application.pid") -Value "4200" -Encoding ascii
+  $legacySupervisor = [pscustomobject]@{
+    ProcessId = 4199
+    ParentProcessId = 4
+    Name = "powershell.exe"
+    ExecutablePath = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    CommandLine = 'powershell.exe -File "' + (Join-Path $processInstallRoot "service\windows-service.ps1") + '"'
+    CreationDate = "2026-10-16T00:00:03Z"
+  }
+  $legacyApplication = [pscustomobject]@{
+    ProcessId = 4200
+    ParentProcessId = 4199
+    Name = "node.exe"
+    ExecutablePath = Join-Path $legacyReleaseRoot "runtime\node.exe"
+    CommandLine = '"' + (Join-Path $legacyReleaseRoot "runtime\node.exe") + '" scripts/start.mjs'
+    CreationDate = "2026-10-16T00:00:04Z"
+  }
+  $legacyListener = [pscustomobject]@{
+    ProcessId = 4201
+    ParentProcessId = 4200
+    Name = "node.exe"
+    ExecutablePath = $legacyApplication.ExecutablePath
+    CommandLine = '"' + $legacyApplication.ExecutablePath + '" .next/standalone/server.js'
+    CreationDate = "2026-10-16T00:00:05Z"
+  }
+  $script:FixtureProcesses[4199] = $legacySupervisor
+  $script:FixtureProcesses[4200] = $legacyApplication
+  $script:FixtureProcesses[4201] = $legacyListener
+  $script:FixtureScheduledTask = [pscustomobject]@{
+    Actions = @([pscustomobject]@{
+      Execute = Join-Path $env:WINDIR "System32\wscript.exe"
+      Arguments = '//B //Nologo "' + (Join-Path $processInstallRoot "service\windows-studio-launcher.vbs") + '"'
+    })
+  }
+  $previousInstallRoot = $installRoot
+  $installRoot = $processInstallRoot
+  $script:NgtStateDirectory = $candidateStateDirectory
+  $script:FixtureStopCalls = @()
+  $script:FixtureTaskStopCalls = @()
+  $script:FixturePorts = @([pscustomobject]@{ LocalPort = 3000; OwningProcess = 4201 })
+  try {
+    Stop-NgtStudioProcesses
+  } finally {
+    $installRoot = $previousInstallRoot
+    $script:NgtStateDirectory = $processStateDirectory
+    $script:FixtureTaskStopCalls = @()
+  }
+  if (($script:FixtureStopCalls -join ",") -ne "4199,4201") {
+    throw "A v2.0.11 relative-path application listener was not stopped after its supervisor exited."
+  }
+
   $postgresRuntime = Join-Path $processRoot "postgres-runtime"
   $postgresExecutable = Join-Path $postgresRuntime "bin\postgres.exe"
   $databaseDirectory = Join-Path $processDataRoot "data"
@@ -230,15 +295,16 @@ try {
     $partialStopRejected = $_.Exception.Message -match "unverified PID 4301"
   }
   if (-not $partialStopRejected -or
-      $script:FixtureTaskStopCalls.Count -ne 1 -or
+      $script:FixtureTaskStopCalls.Count -ne 0 -or
+      -not $script:FixtureScheduledTask -or
       $script:FixtureStopCalls -contains 4301 -or
       -not $script:FixtureProcesses.ContainsKey(4301)) {
-    throw "A partial stop did not preserve the unrelated listener and stop only the verified task."
+    throw "An unverified listener was rejected before stopping the task or listener."
   }
   $script:FixturePorts = @()
   Stop-NgtStudioProcesses
   if ($script:FixtureTaskStopCalls.Count -ne 1) {
-    throw "Repeating a partial stop did not safely tolerate the already-stopped task."
+    throw "A retry with the port clear did not safely stop the startup task."
   }
   if (Test-NgtStudioScheduledTask -Task ([pscustomobject]@{
     Actions = @([pscustomobject]@{

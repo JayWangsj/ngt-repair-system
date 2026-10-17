@@ -117,6 +117,27 @@ function Assert-ReleaseChecksum([string]$ArchivePath, [string]$ChecksumPath) {
   }
 }
 
+function Normalize-LegacyBaselineDocumentationPaths([string]$Root) {
+  $metadata = Get-Content -LiteralPath (Join-Path $Root "studio-release.json") -Raw | ConvertFrom-Json
+  $docsRoot = Join-Path $Root ".next\standalone\docs"
+  $docsPrefix = ".next/standalone/docs/"
+  foreach ($entry in $metadata.files.PSObject.Properties) {
+    $relativePath = [string]$entry.Name
+    if (-not $relativePath.StartsWith($docsPrefix, [System.StringComparison]::Ordinal)) { continue }
+    $expectedPath = Join-Path $Root ($relativePath.Replace("/", "\"))
+    if (Test-Path -LiteralPath $expectedPath -PathType Leaf) { continue }
+    $matchingFiles = @(Get-ChildItem -LiteralPath $docsRoot -File -Recurse -Force | Where-Object {
+      (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash -ieq [string]$entry.Value
+    })
+    if ($matchingFiles.Count -ne 1) {
+      throw "Legacy baseline documentation could not be matched to its manifest SHA256: $relativePath"
+    }
+    New-Item -ItemType Directory -Path (Split-Path -Parent $expectedPath) -Force | Out-Null
+    Move-Item -LiteralPath $matchingFiles[0].FullName -Destination $expectedPath
+    Write-Output ("Normalized legacy baseline documentation path by manifest SHA256: {0}" -f $relativePath)
+  }
+}
+
 function Invoke-BusinessDataProbe([string]$ReleaseRoot, [string]$Action, [string]$Code) {
   $probePath = Join-Path $testRoot "business-data-probe.cjs"
   @'
@@ -189,6 +210,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "Baseline application archive extraction failed." }
   & tar.exe -xf $oldRuntimeArchive -C $baselineRoot
   if ($LASTEXITCODE -ne 0) { throw "Baseline runtime archive extraction failed." }
+  Normalize-LegacyBaselineDocumentationPaths -Root $baselineRoot
 
   $installationAttempted = $true
   & (Join-Path $baselineRoot "scripts\install-windows-studio.ps1") `

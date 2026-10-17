@@ -9,6 +9,7 @@ param(
   [string]$Version = "",
   [string]$Message = "",
   [string[]]$SourcePaths = @(),
+  [switch]$EmitToConsole,
   [string]$OutputDirectory = (Join-Path $env:RUNNER_TEMP ("ngt-" + $Stage + "-diagnostics"))
 )
 $ErrorActionPreference = "Stop"
@@ -17,10 +18,18 @@ function Protect-DiagnosticText([string]$Text) {
   $safe = $Text
   $safe = [regex]::Replace($safe, "(?is)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", "[REDACTED PRIVATE KEY]")
   $safe = [regex]::Replace($safe, '(?i)(password|secret|token|authorization)(\s*[:=]\s*)[^\s,;"]+', '$1$2[REDACTED]')
+  $safe = [regex]::Replace($safe, 'github_pat_[A-Za-z0-9_]+|gh[pousr]_[A-Za-z0-9]{20,}', '[REDACTED TOKEN]')
   $safe = [regex]::Replace($safe, "(?i)(postgres(?:ql)?://)[^:/\s]+:[^@/\s]+@", '$1[REDACTED]@')
   $safe = [regex]::Replace($safe, "(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+", "Bearer [REDACTED]")
   if ($safe.Length -gt 700000) { $safe = $safe.Substring($safe.Length - 700000) }
   return $safe
+}
+
+function Write-NgtDiagnosticExcerpt([string]$Name, [string]$Text) {
+  $excerpt = [string]::Join("`n", @($Text -split "\r?\n" | Select-Object -Last 100))
+  if ($excerpt.Length -gt 20000) { $excerpt = $excerpt.Substring($excerpt.Length - 20000) }
+  Write-Output ("Sanitized release acceptance diagnostic ({0}, last 100 lines):" -f $Name)
+  Write-Output $excerpt
 }
 
 if ($Tag -notmatch '^v\d+\.\d+\.\d+$' -or $Commit -notmatch '^[a-fA-F0-9]{40}$') {
@@ -33,16 +42,18 @@ foreach ($sourcePath in $SourcePaths) {
     "online-update" {
       if ((Split-Path -Leaf $sourcePath) -eq "online-update.log") { "online-update.log" }
       elseif ((Split-Path -Leaf $sourcePath) -eq "update-status.json") { "update-status.json" }
+      elseif ((Split-Path -Leaf $sourcePath) -in @("install.log", "install-stages.log", "studio-database.log", "studio-database.error.log", "supervisor.error.log", "application.error.log")) { Split-Path -Leaf $sourcePath }
       else { $null }
     }
     "installer-acceptance" {
-      if ((Split-Path -Leaf $sourcePath) -eq "installer.log") { "installer.log" }
+      if ((Split-Path -Leaf $sourcePath) -in @("installer.log", "install.log", "install-stages.log", "studio-database.log", "studio-database.error.log", "supervisor.error.log", "application.error.log")) { Split-Path -Leaf $sourcePath }
       else { $null }
     }
   }
   if (-not $name) { continue }
   $text = Protect-DiagnosticText ([System.IO.File]::ReadAllText($sourcePath))
   [System.IO.File]::WriteAllText((Join-Path $OutputDirectory $name), $text, [System.Text.UTF8Encoding]::new($false))
+  if ($EmitToConsole) { Write-NgtDiagnosticExcerpt -Name $name -Text $text }
 }
 $summary = [ordered]@{
   stage = $Stage
@@ -59,3 +70,6 @@ $summary = [ordered]@{
   ($summary | ConvertTo-Json -Depth 4),
   [System.Text.UTF8Encoding]::new($false)
 )
+if ($EmitToConsole) {
+  Write-NgtDiagnosticExcerpt -Name "summary.json" -Text ($summary | ConvertTo-Json -Depth 4)
+}

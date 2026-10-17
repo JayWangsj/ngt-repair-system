@@ -85,11 +85,14 @@ foreach ($port in @(3000, 55432)) {
 if (Get-ScheduledTask -TaskName "NGT Management System" -ErrorAction SilentlyContinue) {
   throw "The disposable runner already has an NGT startup task."
 }
+$installRoot = Join-Path $env:LOCALAPPDATA "NGT"
+if (Test-Path -LiteralPath $installRoot) {
+  throw "The disposable runner already has an NGT installation."
+}
 
 $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("ngt-online-update-" + [guid]::NewGuid().ToString("N"))
 $downloadRoot = Join-Path $testRoot "downloads"
 $baselineRoot = Join-Path $testRoot "baseline"
-$installRoot = Join-Path $testRoot "install"
 $dataRoot = Join-Path $testRoot "data-store"
 $updateLock = Join-Path $installRoot "update.lock"
 $updateStatus = Join-Path $installRoot "update-status.json"
@@ -311,7 +314,21 @@ try {
     $diagnosticSources = @()
     if (Test-Path -LiteralPath $updateLog -PathType Leaf) { $diagnosticSources += $updateLog }
     if (Test-Path -LiteralPath $updateStatus -PathType Leaf) { $diagnosticSources += $updateStatus }
-    & (Join-Path $PSScriptRoot "write-windows-studio-diagnostics.ps1") -Stage "online-update" -Tag $TargetTag -Commit $ExpectedCommitSha -Version $targetVersion -Message $_.Exception.Message -SourcePaths $diagnosticSources
+    $diagnosticSources += @(
+      (Join-Path $installRoot "install.log"),
+      (Join-Path $installRoot "install-stages.log"),
+      (Join-Path $installRoot ".local\supervisor.error.log"),
+      (Join-Path $installRoot ("releases\$oldTag\.local\studio-database.log")),
+      (Join-Path $installRoot ("releases\$oldTag\.local\studio-database.error.log")),
+      (Join-Path $installRoot ("releases\$oldTag\.local\supervisor.error.log")),
+      (Join-Path $installRoot ("releases\$TargetTag\.local\studio-database.log")),
+      (Join-Path $installRoot ("releases\$TargetTag\.local\studio-database.error.log")),
+      (Join-Path $installRoot ("releases\$TargetTag\.local\supervisor.error.log")),
+      (Join-Path $installRoot ("releases\$TargetTag\.local\application.error.log"))
+    )
+    & (Join-Path $PSScriptRoot "write-windows-studio-diagnostics.ps1") `
+      -Stage "online-update" -Tag $TargetTag -Commit $ExpectedCommitSha -Version $targetVersion `
+      -Message $_.Exception.Message -SourcePaths $diagnosticSources -EmitToConsole
   } catch {
     Write-Warning "Sanitized online-update diagnostics could not be written."
   }

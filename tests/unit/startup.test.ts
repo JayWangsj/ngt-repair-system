@@ -345,11 +345,18 @@ describe("Windows persistent startup", () => {
       "scripts/build-windows-studio-package.ps1",
       "utf8",
     );
+    const updateSafetyTest = await readFile(
+      "scripts/test-windows-studio-update-safety.ps1",
+      "utf8",
+    );
     const releaseVerifier = await readFile(
       "scripts/verify-windows-studio-release.ps1",
       "utf8",
     );
     expect(packageBuilder).toContain('"download-public-release-asset.ps1"');
+    expect(updateSafetyTest).toContain(
+      '"scripts/download-public-release-asset.ps1"',
+    );
     expect(releaseVerifier).toContain(
       '"scripts/download-public-release-asset.ps1"',
     );

@@ -742,6 +742,17 @@ export class GitHubReleaseApi {
     }
   }
 
+  async listReleases() {
+    const releases = [];
+    for (let page = 1; ; page++) {
+      const entries = await this.json(
+        this.repoPath("/releases?per_page=100&page=" + page),
+      );
+      releases.push(...entries);
+      if (entries.length < 100) return releases;
+    }
+  }
+
   async generateReleaseNotes(tag, sha) {
     const result = await this.json(this.repoPath("/releases/generate-notes"), {
       method: "POST",
@@ -823,6 +834,51 @@ export class GitHubReleaseApi {
       this.repoPath("/actions/runs/" + runId + "/jobs?per_page=100"),
     );
   }
+}
+
+function stableReleaseVersion(tag) {
+  const match = /^v(\d+)\.(\d+)\.(\d+)$/.exec(tag || "");
+  return match ? match.slice(1).map(Number) : null;
+}
+
+function compareReleaseVersions(left, right) {
+  for (let index = 0; index < left.length; index++) {
+    if (left[index] !== right[index]) return left[index] - right[index];
+  }
+  return 0;
+}
+
+export async function findPublishedUpdateBaseline(api, targetTag) {
+  const targetVersion = stableReleaseVersion(targetTag);
+  if (!targetVersion)
+    throw new Error("Online update target must be a stable release tag.");
+
+  const candidates = (await api.listReleases()).filter((release) => {
+    const version = stableReleaseVersion(release.tag_name);
+    if (
+      release.draft ||
+      release.prerelease ||
+      !version ||
+      compareReleaseVersions(version, targetVersion) >= 0
+    ) {
+      return false;
+    }
+    const names = new Set((release.assets || []).map((asset) => asset.name));
+    return [
+      "ngt-studio-windows-" + release.tag_name + ".zip",
+      "ngt-studio-windows-" + release.tag_name + ".zip.sha256",
+      "ngt-studio-runtime-" + release.tag_name + ".zip",
+      "ngt-studio-runtime-" + release.tag_name + ".zip.sha256",
+    ].every((name) => names.has(name));
+  });
+
+  candidates.sort((left, right) =>
+    compareReleaseVersions(
+      stableReleaseVersion(right.tag_name),
+      stableReleaseVersion(left.tag_name),
+    ),
+  );
+  return candidates[0] || null;
 }
 
 export async function qualifyRelease({
@@ -944,6 +1000,20 @@ async function readExpectedEnvironment() {
 
 async function main() {
   const [command, directoryArg] = process.argv.slice(2);
+  if (command === "find-update-baseline") {
+    if (!directoryArg)
+      throw new Error("find-update-baseline requires the target release tag.");
+    const api = new GitHubReleaseApi({
+      token: process.env.GITHUB_TOKEN || process.env.GH_TOKEN,
+    });
+    const baseline = await findPublishedUpdateBaseline(api, directoryArg);
+    if (!baseline)
+      throw new Error(
+        "No published release with supported online-update assets was found.",
+      );
+    console.log(JSON.stringify({ tagName: baseline.tag_name }));
+    return;
+  }
   if (command === "manifest") {
     const directory = directoryArg || process.env.NGT_RELEASE_ASSET_DIR;
     if (!directory)

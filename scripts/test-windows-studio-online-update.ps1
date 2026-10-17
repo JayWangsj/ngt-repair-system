@@ -67,27 +67,9 @@ foreach ($asset in $manifest.assets) {
   }
 }
 
-$releaseList = & $githubCli api "repos/$repository/releases?per_page=100"
+$baselineOutput = & node scripts/windows-studio-release.mjs find-update-baseline $TargetTag
 if ($LASTEXITCODE -ne 0) { throw "Unable to find a supported published release for the update baseline." }
-$published = @(($releaseList | Out-String) | ConvertFrom-Json | Where-Object {
-  -not $_.draft -and -not $_.prerelease
-})
-$baseline = $null
-foreach ($entry in $published) {
-  $releaseTag = [string]$entry.tag_name
-  if ($releaseTag -eq $TargetTag -or $releaseTag -notmatch '^v\d+\.\d+\.\d+$') { continue }
-  $names = @($entry.assets | ForEach-Object name)
-  $required = @(
-    "ngt-studio-windows-$releaseTag.zip",
-    "ngt-studio-windows-$releaseTag.zip.sha256",
-    "ngt-studio-runtime-$releaseTag.zip",
-    "ngt-studio-runtime-$releaseTag.zip.sha256"
-  )
-  if (@($required | Where-Object { $_ -notin $names }).Count -eq 0) {
-    $baseline = [pscustomobject]@{ tagName = $releaseTag; assets = $entry.assets }
-    break
-  }
-}
+$baseline = ($baselineOutput | Out-String) | ConvertFrom-Json
 if (-not $baseline) { throw "No published release with supported online-update assets was found." }
 
 $baselineVersion = [version]($baseline.tagName -replace "^v", "")

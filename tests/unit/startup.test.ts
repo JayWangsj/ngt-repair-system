@@ -31,7 +31,10 @@ describe("Windows persistent startup", () => {
     );
     expect(installer).toContain("//B //Nologo");
     expect(installer).toContain("Register-ScheduledTask");
-    expect(installer).toContain("Start-ScheduledTask");
+    expect(installer).not.toContain("Start-ScheduledTask");
+    expect(installer).toContain(
+      "Start-Process -FilePath $wscriptPath -ArgumentList $launcherArguments -WindowStyle Hidden",
+    );
     expect(installer).toContain(
       "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
     );

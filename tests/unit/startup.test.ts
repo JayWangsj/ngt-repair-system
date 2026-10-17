@@ -310,6 +310,13 @@ describe("Windows persistent startup", () => {
     expect(onlineUpdateTest).toContain(
       "Anonymous public Release asset download",
     );
+    const onlineTestRootCreation = onlineUpdateTest.indexOf(
+      "New-Item -ItemType Directory -Path $testRoot -Force | Out-Null",
+    );
+    expect(onlineTestRootCreation).toBeGreaterThanOrEqual(0);
+    expect(onlineTestRootCreation).toBeLessThan(
+      onlineUpdateTest.indexOf("$anonymousChecksumPath = Join-Path $testRoot"),
+    );
     expect(updater).toContain("bytesDownloaded");
     expect(updater).toContain("bytesPerSecond");
     expect(updater).toContain("bytesDownloaded = $downloadedBytes");

@@ -150,6 +150,7 @@ const db = new PrismaClient();
 }
 
 try {
+  New-Item -ItemType Directory -Path $testRoot -Force | Out-Null
   if ($candidateNeedsContentCheck) {
     $candidateVerifyRoot = Join-Path $testRoot "candidate-assets"
     Invoke-GhDownload -Tag $TargetTag -Directory $candidateVerifyRoot -AssetNames $candidateRequired
